@@ -20,7 +20,7 @@ const highlights = [
 
 export function BrandingPanel() {
   return (
-    <aside className="relative hidden w-1/2 overflow-hidden bg-[#0F2C59] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+    <aside className="relative hidden w-1/2 overflow-hidden bg-[#0F2C59] p-10 text-white lg:flex lg:flex-col lg:justify-between font-familjen-grotesk">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-30"

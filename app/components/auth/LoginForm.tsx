@@ -1,7 +1,14 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  getAuthErrorMessage,
+  signInWithCredentials,
+  signInWithGoogle,
+} from "@/lib/queries/auth-client";
 import { Button } from "./Button";
 import { Divider } from "./Divider";
 import { InputField } from "./InputField";
@@ -16,17 +23,88 @@ interface Credentials {
   password: string;
 }
 
+type AuthMessageTone = "success" | "error";
+
+interface AuthMessage {
+  tone: AuthMessageTone;
+  text: string;
+}
+
 const initialCredentials: Credentials = {
   email: "",
   password: "",
 };
 
 export function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [credentials, setCredentials] = useState<Credentials>(initialCredentials);
   const [errors, setErrors] = useState<LoginErrors>({});
   const [showPassword, setShowPassword] = useState(false);
-  const [isCredentialsLoading, setIsCredentialsLoading] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState<AuthMessage | null>(null);
+  const oauthErrorCode = searchParams.get("error");
+
+  useEffect(() => {
+    if (oauthErrorCode) {
+      setAuthMessage({
+        tone: "error",
+        text: getAuthErrorMessage(oauthErrorCode),
+      });
+      return;
+    }
+
+    setAuthMessage(null);
+  }, [oauthErrorCode]);
+
+  const credentialsMutation = useMutation({
+    mutationFn: signInWithCredentials,
+    onSuccess: async (response) => {
+      setAuthMessage({
+        tone: "success",
+        text: "Signed in successfully. Redirecting...",
+      });
+      setCredentials(initialCredentials);
+
+      const destination = response.url ?? "/dashboard";
+      router.push(destination);
+      router.refresh();
+    },
+    onError: (error) => {
+      setAuthMessage({
+        tone: "error",
+        text: error.message,
+      });
+    },
+  });
+
+  const googleMutation = useMutation({
+    mutationFn: async () => {
+      setAuthMessage({
+        tone: "success",
+        text: "Redirecting to Google...",
+      });
+
+      await signInWithGoogle();
+    },
+    onError: () => {
+      setAuthMessage({
+        tone: "error",
+        text: "Could not start Google sign-in. Please try again.",
+      });
+    },
+  });
+
+  const isCredentialsLoading = credentialsMutation.isPending;
+  const isGoogleLoading = googleMutation.isPending;
+  const isAnyLoading = isCredentialsLoading || isGoogleLoading;
+
+  const messageClasses = useMemo(() => {
+    if (!authMessage) {
+      return "max-h-0 translate-y-1 opacity-0";
+    }
+
+    return "max-h-24 translate-y-0 opacity-100";
+  }, [authMessage]);
 
   const validate = (): LoginErrors => {
     const nextErrors: LoginErrors = {};
@@ -51,30 +129,18 @@ export function LoginForm() {
     event.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
+    setAuthMessage(null);
 
     if (Object.keys(nextErrors).length > 0) {
       return;
     }
 
-    setIsCredentialsLoading(true);
-    try {
-      // Replace with your auth provider sign-in call.
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      console.log("Credentials login submitted", credentials);
-    } finally {
-      setIsCredentialsLoading(false);
-    }
+    credentialsMutation.mutate(credentials);
   };
 
   const handleGoogleSignIn = async () => {
-    setIsGoogleLoading(true);
-    try {
-      // Replace with your Google OAuth flow.
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      console.log("Google OAuth started");
-    } finally {
-      setIsGoogleLoading(false);
-    }
+    setAuthMessage(null);
+    googleMutation.mutate();
   };
 
   return (
@@ -91,6 +157,7 @@ export function LoginForm() {
       <Button
         variant="social"
         isLoading={isGoogleLoading}
+        disabled={isAnyLoading}
         onClick={handleGoogleSignIn}
         aria-label="Continue with Google"
         icon={
@@ -111,6 +178,17 @@ export function LoginForm() {
       </Button>
 
       <Divider text="Or continue with" />
+
+      <div
+        aria-live="polite"
+        className={`overflow-hidden rounded-lg border px-3 py-2 text-sm transition-all duration-300 ease-out ${messageClasses} ${
+          authMessage?.tone === "success"
+            ? "border-[#10B981]/35 bg-[#10B981]/10 text-[#0F2C59]"
+            : "border-[#E07A5F]/35 bg-[#E07A5F]/10 text-[#0F172A]"
+        }`}
+      >
+        {authMessage?.text ?? ""}
+      </div>
 
       <form
         noValidate
@@ -169,6 +247,7 @@ export function LoginForm() {
             type="submit"
             variant="primary"
             isLoading={isCredentialsLoading}
+            disabled={isAnyLoading}
             aria-label="Sign in with credentials"
           >
             Sign In
