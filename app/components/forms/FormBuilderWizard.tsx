@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import CategoryAssignmentStep from "./steps/CategoryAssignmentStep";
 import FormDesignStep from "./steps/FormDesignStep";
@@ -83,10 +83,10 @@ export default function FormBuilderWizard({
   const [cycleId, setCycleId] = useState<number | null>(
     initialState?.cycleId ?? null,
   );
-  const [incrementMatrices, setIncrementMatrices] = useState<
-    IncrementMatrixInput[]
-  >(initialState?.incrementMatrices ?? createDefaultIncrementMatrix());
-  const [cycles, setCycles] = useState<AppraisalCycleRecord[]>([]);
+  const [matrixOverrides, setMatrixOverrides] = useState<
+    IncrementMatrixInput[] | null
+  >(null);
+  const [addedCycles, setAddedCycles] = useState<AppraisalCycleRecord[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -101,17 +101,27 @@ export default function FormBuilderWizard({
     enabled: Boolean(cycleId) && !initialData,
   });
 
-  useEffect(() => {
-    if (cyclesQuery.data) {
-      setCycles(cyclesQuery.data);
-    }
-  }, [cyclesQuery.data]);
+  const cycles = useMemo(
+    () => [...addedCycles, ...(cyclesQuery.data ?? [])],
+    [addedCycles, cyclesQuery.data],
+  );
 
-  useEffect(() => {
-    if (matricesQuery.data && matricesQuery.data.length > 0) {
-      setIncrementMatrices(matricesQuery.data);
+  const incrementMatrices = useMemo(() => {
+    if (matrixOverrides) return matrixOverrides;
+    if (!initialData && matricesQuery.data && matricesQuery.data.length > 0) {
+      return matricesQuery.data;
     }
-  }, [matricesQuery.data]);
+    return initialState?.incrementMatrices ?? createDefaultIncrementMatrix();
+  }, [matrixOverrides, initialData, matricesQuery.data, initialState]);
+
+  const handleCycleChange = useCallback((nextCycleId: number) => {
+    setCycleId(nextCycleId);
+    setMatrixOverrides(null);
+  }, []);
+
+  const handleMatricesChange = useCallback((matrices: IncrementMatrixInput[]) => {
+    setMatrixOverrides(matrices);
+  }, []);
 
   const payload = useMemo<FormTemplateInput | null>(() => {
     if (!targetCategory || !targetSubCategory || !cycleId) {
@@ -265,7 +275,7 @@ export default function FormBuilderWizard({
   };
 
   const handleCycleCreated = (cycle: AppraisalCycleRecord) => {
-    setCycles((current) => [cycle, ...current]);
+    setAddedCycles((current) => [cycle, ...current]);
   };
 
   return (
@@ -329,8 +339,8 @@ export default function FormBuilderWizard({
             cycleId={cycleId}
             incrementMatrices={incrementMatrices}
             errors={errors}
-            onCycleChange={setCycleId}
-            onMatricesChange={setIncrementMatrices}
+            onCycleChange={handleCycleChange}
+            onMatricesChange={handleMatricesChange}
             onCycleCreated={handleCycleCreated}
           />
         ) : null}

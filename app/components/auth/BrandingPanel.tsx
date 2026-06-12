@@ -2,16 +2,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  TrendingUp,
-  Target,
-  BarChart3,
-  Landmark,
-  ShieldCheck,
-  ArrowUpRight,
-  UsersRound,
-  Award,
-} from "lucide-react";
+import { TrendingUp, Target, BarChart3, Landmark } from "lucide-react";
 import Image from "next/image";
 
 const highlights = [
@@ -54,7 +45,7 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.7, ease: [0.23, 1, 0.32, 1] },
+    transition: { duration: 0.7, ease: [0.23, 1, 0.32, 1] as const },
   },
 };
 

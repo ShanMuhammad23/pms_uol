@@ -4,7 +4,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Eye, EyeOff, Lock, Mail, GraduationCap } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   getAuthErrorMessage,
@@ -43,24 +43,18 @@ export function LoginForm() {
   const [credentials, setCredentials] = useState<Credentials>(initialCredentials);
   const [errors, setErrors] = useState<LoginErrors>({});
   const [showPassword, setShowPassword] = useState(false);
-  const [authMessage, setAuthMessage] = useState<AuthMessage | null>(null);
+  const [submissionMessage, setSubmissionMessage] = useState<AuthMessage | null>(null);
   const oauthErrorCode = searchParams.get("error");
-
-  useEffect(() => {
-    if (oauthErrorCode) {
-      setAuthMessage({
-        tone: "error",
-        text: getAuthErrorMessage(oauthErrorCode),
-      });
-      return;
-    }
-    setAuthMessage(null);
+  const oauthMessage = useMemo<AuthMessage | null>(() => {
+    if (!oauthErrorCode) return null;
+    return { tone: "error", text: getAuthErrorMessage(oauthErrorCode) };
   }, [oauthErrorCode]);
+  const authMessage = submissionMessage ?? oauthMessage;
 
   const credentialsMutation = useMutation({
     mutationFn: signInWithCredentials,
     onSuccess: async (response) => {
-      setAuthMessage({
+      setSubmissionMessage({
         tone: "success",
         text: "Signed in successfully. Redirecting...",
       });
@@ -71,7 +65,7 @@ export function LoginForm() {
       router.refresh();
     },
     onError: (error) => {
-      setAuthMessage({
+      setSubmissionMessage({
         tone: "error",
         text: error.message,
       });
@@ -80,14 +74,14 @@ export function LoginForm() {
 
   const googleMutation = useMutation({
     mutationFn: async () => {
-      setAuthMessage({
+      setSubmissionMessage({
         tone: "success",
         text: "Redirecting to Google...",
       });
       await signInWithGoogle();
     },
     onError: () => {
-      setAuthMessage({
+      setSubmissionMessage({
         tone: "error",
         text: "Could not start Google sign-in. Please try again.",
       });
@@ -97,11 +91,6 @@ export function LoginForm() {
   const isCredentialsLoading = credentialsMutation.isPending;
   const isGoogleLoading = googleMutation.isPending;
   const isAnyLoading = isCredentialsLoading || isGoogleLoading;
-
-  const messageClasses = useMemo(() => {
-    if (!authMessage) return "max-h-0 translate-y-1 opacity-0";
-    return "max-h-24 translate-y-0 opacity-100";
-  }, [authMessage]);
 
   const validate = (): LoginErrors => {
     const nextErrors: LoginErrors = {};
@@ -126,7 +115,7 @@ export function LoginForm() {
     event.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
-    setAuthMessage(null);
+    setSubmissionMessage(null);
 
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -134,7 +123,7 @@ export function LoginForm() {
   };
 
   const handleGoogleSignIn = async () => {
-    setAuthMessage(null);
+    setSubmissionMessage(null);
     googleMutation.mutate();
   };
 

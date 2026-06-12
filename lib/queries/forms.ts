@@ -9,7 +9,6 @@ import type {
   FormTemplateInput,
   FormTemplateListItem,
   FormTemplateRecord,
-  PerformanceRating,
   SubCategory,
 } from "@/types/forms";
 

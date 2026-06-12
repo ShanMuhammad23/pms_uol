@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart,
@@ -23,14 +23,11 @@ import {
   Scale,
   Banknote,
   Search,
-  Filter,
   Eye,
   CheckCircle2,
   Clock,
   XCircle,
   ChevronDown,
-  Download,
-  RefreshCw,
   User,
   Building2,
   Layers,
@@ -541,12 +538,25 @@ function ChartCard({
 /* ──────────────────────────────────────────────
    Custom Tooltip
    ────────────────────────────────────────────── */
-function CustomTooltip({ active, payload, label }: any) {
+interface TooltipPayloadEntry {
+  color?: string;
+  fill?: string;
+  name?: string;
+  value?: number | string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  label?: string;
+}
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-white/10 dark:bg-slate-800">
       <p className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">{label}</p>
-      {payload.map((entry: any, i: number) => (
+      {payload.map((entry, i) => (
         <div key={i} className="flex items-center gap-2 text-xs">
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color || entry.fill }} />
           <span className="text-slate-600 dark:text-slate-400">{entry.name}:</span>
@@ -628,20 +638,18 @@ export default function HRDashboardPage() {
   const totalApprovedIncrement = MOCK_EMPLOYEES.reduce((sum, e) => sum + (e.approvedIncrement ?? 0), 0);
 
   /* ── Filtered Table ── */
-  const filteredEmployees = useMemo(() => {
-    return MOCK_EMPLOYEES.filter((e) => {
-      const matchesSearch =
-        !searchQuery ||
-        e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesFunction = selectedFunction === "ALL" || e.function === selectedFunction;
-      const matchesSubFunction = selectedSubFunction === "ALL" || e.subFunction === selectedSubFunction;
-      const matchesCategory = selectedCategory === "ALL" || e.category === selectedCategory;
-      const matchesFormState = selectedFormState === "ALL" || e.formState === selectedFormState;
-      return matchesSearch && matchesFunction && matchesSubFunction && matchesCategory && matchesFormState;
-    });
-  }, [searchQuery, selectedFunction, selectedSubFunction, selectedCategory, selectedFormState]);
+  const filteredEmployees = MOCK_EMPLOYEES.filter((e) => {
+    const matchesSearch =
+      !searchQuery ||
+      e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      e.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      e.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFunction = selectedFunction === "ALL" || e.function === selectedFunction;
+    const matchesSubFunction = selectedSubFunction === "ALL" || e.subFunction === selectedSubFunction;
+    const matchesCategory = selectedCategory === "ALL" || e.category === selectedCategory;
+    const matchesFormState = selectedFormState === "ALL" || e.formState === selectedFormState;
+    return matchesSearch && matchesFunction && matchesSubFunction && matchesCategory && matchesFormState;
+  });
 
   /* ── Active Filters for Display ── */
   const activeFilters = useMemo(() => {

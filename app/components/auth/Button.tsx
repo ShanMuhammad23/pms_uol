@@ -1,17 +1,17 @@
 // Button.tsx
 "use client";
 
-import { motion } from "framer-motion";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { motion, type HTMLMotionProps } from "framer-motion";
+import type { ReactNode } from "react";
 
 type ButtonVariant = "primary" | "outline" | "social";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+type ButtonProps = Omit<HTMLMotionProps<"button">, "children"> & {
   variant?: ButtonVariant;
   isLoading?: boolean;
   icon?: ReactNode;
   children: ReactNode;
-}
+};
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
