@@ -1,3 +1,7 @@
+// Button.tsx
+"use client";
+
+import { motion } from "framer-motion";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 type ButtonVariant = "primary" | "outline" | "social";
@@ -11,11 +15,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-[#0F2C59] text-white hover:bg-[#12366d] focus-visible:ring-[#0F2C59] border border-transparent",
+    "bg-slate-800 text-white hover:bg-slate-700 focus-visible:ring-slate-600 border border-transparent dark:bg-amber-600 dark:hover:bg-amber-500 dark:focus-visible:ring-amber-500",
   outline:
-    "bg-white text-[#0F2C59] border border-[#0F2C59] hover:bg-[#0F2C59]/5 focus-visible:ring-[#0F2C59]",
+    "bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 focus-visible:ring-slate-600 dark:bg-transparent dark:text-white dark:border-white/20 dark:hover:bg-white/5",
   social:
-    "bg-white text-[#0F172A] border border-slate-300 hover:bg-slate-50 focus-visible:ring-[#0F2C59]",
+    "bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 focus-visible:ring-slate-600 dark:bg-slate-800 dark:text-white dark:border-white/10 dark:hover:bg-slate-700",
 };
 
 export function Button({
@@ -31,21 +35,24 @@ export function Button({
   const isDisabled = disabled || isLoading;
 
   return (
-    <button
+    <motion.button
       type={type}
       disabled={isDisabled}
-      className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${variantClasses[variant]} ${className}`}
+      whileHover={!isDisabled ? { scale: 1.02, y: -1 } : undefined}
+      whileTap={!isDisabled ? { scale: 0.98 } : undefined}
+      className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${variantClasses[variant]} ${className}`}
       {...props}
     >
       {isLoading ? (
-        <span
-          aria-hidden="true"
-          className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+        <motion.span
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="h-4 w-4 rounded-full border-2 border-current border-t-transparent"
         />
       ) : (
         icon
       )}
       <span>{children}</span>
-    </button>
+    </motion.button>
   );
 }

@@ -1,9 +1,11 @@
+// LoginForm.tsx
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, GraduationCap } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   getAuthErrorMessage,
   signInWithCredentials,
@@ -52,7 +54,6 @@ export function LoginForm() {
       });
       return;
     }
-
     setAuthMessage(null);
   }, [oauthErrorCode]);
 
@@ -83,7 +84,6 @@ export function LoginForm() {
         tone: "success",
         text: "Redirecting to Google...",
       });
-
       await signInWithGoogle();
     },
     onError: () => {
@@ -99,10 +99,7 @@ export function LoginForm() {
   const isAnyLoading = isCredentialsLoading || isGoogleLoading;
 
   const messageClasses = useMemo(() => {
-    if (!authMessage) {
-      return "max-h-0 translate-y-1 opacity-0";
-    }
-
+    if (!authMessage) return "max-h-0 translate-y-1 opacity-0";
     return "max-h-24 translate-y-0 opacity-100";
   }, [authMessage]);
 
@@ -131,9 +128,7 @@ export function LoginForm() {
     setErrors(nextErrors);
     setAuthMessage(null);
 
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
+    if (Object.keys(nextErrors).length > 0) return;
 
     credentialsMutation.mutate(credentials);
   };
@@ -144,13 +139,18 @@ export function LoginForm() {
   };
 
   return (
-    <section className="w-full max-w-md">
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, delay: 0.4, ease: [0.23, 1, 0.32, 1] }}
+      className="w-full max-w-md"
+    >
       <header className="mb-8 space-y-2">
-        <h2 className="text-2xl font-bold tracking-tight text-[#0F172A]">
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
           Welcome back
         </h2>
-        <p className="text-sm text-slate-600">
-          Sign in to continue managing goals, reviews, and succession plans.
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Sign in to the University of Lahore faculty portal
         </p>
       </header>
 
@@ -161,12 +161,7 @@ export function LoginForm() {
         onClick={handleGoogleSignIn}
         aria-label="Continue with Google"
         icon={
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            className="h-4 w-4"
-            fill="currentColor"
-          >
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
             <path d="M21.8 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.5c-.2 1.3-.9 2.5-2 3.3v2.8h3.2c1.9-1.8 3.1-4.4 3.1-8.1Z" />
             <path d="M12 22c2.7 0 5-1 6.7-2.6l-3.2-2.8c-.9.6-2 .9-3.5.9-2.6 0-4.8-1.8-5.6-4.2H3.1v2.9A10 10 0 0 0 12 22Z" />
             <path d="M6.4 13.3A6 6 0 0 1 6.1 12c0-.5.1-.9.2-1.3V7.8H3.1A10 10 0 0 0 2 12c0 1.7.4 3.3 1.1 4.7l3.3-2.9Z" />
@@ -177,18 +172,24 @@ export function LoginForm() {
         Continue with Google
       </Button>
 
-      <Divider text="Or continue with" />
+      <Divider text="Or sign in with email" />
 
-      <div
-        aria-live="polite"
-        className={`overflow-hidden rounded-lg border px-3 py-2 text-sm transition-all duration-300 ease-out ${messageClasses} ${
-          authMessage?.tone === "success"
-            ? "border-[#10B981]/35 bg-[#10B981]/10 text-[#0F2C59]"
-            : "border-[#E07A5F]/35 bg-[#E07A5F]/10 text-[#0F172A]"
-        }`}
-      >
-        {authMessage?.text ?? ""}
-      </div>
+      <AnimatePresence>
+        {authMessage && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className={`overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+              authMessage.tone === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
+                : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
+            }`}
+          >
+            {authMessage.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <form
         noValidate
@@ -199,9 +200,9 @@ export function LoginForm() {
         <InputField
           id="email"
           name="email"
-          label="Email address"
+          label="University Email"
           type="email"
-          placeholder="you@organization.edu"
+          placeholder="name@uol.edu.pk"
           value={credentials.email}
           autoComplete="email"
           required
@@ -230,7 +231,7 @@ export function LoginForm() {
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="rounded-sm text-slate-500 transition hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F2C59]"
+              className="rounded-sm text-slate-400 transition-colors hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 dark:hover:text-slate-300"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? (
@@ -242,18 +243,47 @@ export function LoginForm() {
           }
         />
 
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/20 dark:border-white/10 dark:bg-slate-950"
+            />
+            <span className="text-xs text-slate-500 dark:text-slate-400">Keep me signed in</span>
+          </label>
+          <a
+            href="/forgot-password"
+            className="text-xs font-medium text-slate-500 transition-colors hover:text-amber-700 dark:text-slate-400 dark:hover:text-amber-400"
+          >
+            Forgot password?
+          </a>
+        </div>
+
         <div className="pt-2">
           <Button
             type="submit"
             variant="primary"
             isLoading={isCredentialsLoading}
             disabled={isAnyLoading}
+            icon={<GraduationCap className="h-4 w-4" />}
             aria-label="Sign in with credentials"
           >
-            Sign In
+            Sign In to Portal
           </Button>
         </div>
       </form>
-    </section>
+
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1 }}
+        className="mt-8 text-center text-xs text-slate-400 dark:text-slate-600"
+      >
+        Protected by university authentication protocols. Need help?{" "}
+        <a href="/support" className="text-amber-600 hover:underline dark:text-amber-400">
+          Contact IT Support
+        </a>
+      </motion.p>
+    </motion.section>
   );
 }
