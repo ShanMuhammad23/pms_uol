@@ -182,13 +182,20 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        ft.target_category,
        ft.target_sub_category,
        COUNT(DISTINCT fq.id)::text AS question_count,
-       COUNT(DISTINCT ap.id)::text AS appraisal_count,
+       COUNT(DISTINCT ap_linked.appraisal_id)::text AS appraisal_count,
        ft.created_at::text,
        ft.updated_at::text
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
-     LEFT JOIN appraisals ap ON ap.template_id = ft.id
+     LEFT JOIN (
+       SELECT ap.id AS appraisal_id, ft_match.id AS template_id
+       FROM appraisals ap
+       INNER JOIN users u ON u.id = ap.employee_id
+       INNER JOIN form_templates ft_match ON ft_match.cycle_id = ap.cycle_id
+         AND ft_match.target_category = u.emp_category
+         AND ft_match.target_sub_category = u.emp_sub_category
+     ) ap_linked ON ap_linked.template_id = ft.id
      GROUP BY ft.id, ac.fiscal_year
      ORDER BY ft.updated_at DESC`,
   );
@@ -377,7 +384,13 @@ export async function deleteFormTemplate(id: number): Promise<{
   appraisalCount: number;
 }> {
   const appraisalResult = await db.query<{ count: string }>(
-    `SELECT COUNT(*)::text AS count FROM appraisals WHERE template_id = $1`,
+    `SELECT COUNT(*)::text AS count
+     FROM appraisals ap
+     INNER JOIN users u ON u.id = ap.employee_id
+     INNER JOIN form_templates ft ON ft.id = $1
+     WHERE ap.cycle_id = ft.cycle_id
+       AND u.emp_category = ft.target_category
+       AND u.emp_sub_category = ft.target_sub_category`,
     [id],
   );
 

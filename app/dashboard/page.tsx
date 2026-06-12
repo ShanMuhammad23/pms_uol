@@ -262,9 +262,8 @@ const MOCK_EMPLOYEES: Employee[] = [
    ────────────────────────────────────────────── */
 const calibrationData = [
   { rating: "Unsatisfactory", quota: 5, actual: 8 },
-  { rating: "Needs Improvement", quota: 10, actual: 12 },
-  { rating: "Satisfactory", quota: 25, actual: 22 },
-  { rating: "Good", quota: 35, actual: 38 },
+  { rating: "Improvement Needed", quota: 10, actual: 12 },
+  { rating: "Strong", quota: 25, actual: 22 },
   { rating: "Excellent", quota: 20, actual: 15 },
   { rating: "Outstanding", quota: 5, actual: 5 },
 ];

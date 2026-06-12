@@ -32,6 +32,12 @@ async function main() {
       console.log("Schema applied successfully.");
     } else {
       console.log("users table already exists, skipping schema.");
+      await client.query(`
+        ALTER TABLE appraisals
+        ADD COLUMN IF NOT EXISTS template_id BIGINT
+        REFERENCES form_templates(id) ON DELETE SET NULL
+      `);
+      console.log("Ensured appraisals.template_id column exists.");
     }
 
     await client.query(
