@@ -185,3 +185,19 @@ CREATE INDEX idx_appraisals_cycle_status ON appraisals(cycle_id, status);
 CREATE INDEX idx_questions_lookup ON form_questions(template_id, sort_order);
 CREATE INDEX idx_options_lookup ON question_options(question_id);
 CREATE INDEX idx_answers_lookup ON appraisal_answers(appraisal_id, question_id);
+CREATE TABLE entity_categories (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(2) NOT NULL UNIQUE CHECK (code IN ('C1', 'C2', 'C3')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE entities (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    entity_category_id INT NOT NULL REFERENCES entity_categories(id) ON DELETE RESTRICT,
+    parent_entity_id BIGINT REFERENCES entities(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_entities_parent ON entities(parent_entity_id);

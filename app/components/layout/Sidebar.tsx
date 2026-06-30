@@ -2,7 +2,7 @@
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { FileText, LayoutDashboard, LogOut,SquareUserRound,UserRound} from 'lucide-react'
+import { FileText, LayoutDashboard, LogOut,SquareUserRound,UserRound,List} from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
@@ -14,6 +14,7 @@ const Sidebar = () => {
   const isProfile = pathname === '/dashboard/profile'
   const isForms = pathname.startsWith('/dashboard/forms')
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
+  const isEntityCategories = pathname === '/dashboard/entity-categories'
   return (
     <aside
     className="bg-surface border  border-r border-slate-300/80 dark:border-white/15 w-full h-full flex flex-col fixed top-0 left-0 max-w-[264px] py-6 overflow-auto transition-colors">
@@ -34,7 +35,7 @@ const Sidebar = () => {
        <ul className="space-y-0.5 text-sm text-foreground/75 font-medium">
           <li>
              <Link href="/dashboard" aria-current={isDashboard ? 'page' : undefined}
-                className={`flex items-center gap-2.5 text-text-primary px-6 py-3 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                className={`sidebar-nav-link ${
                   isDashboard ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
                 }`}>
                 <LayoutDashboard className="size-4" />
@@ -48,7 +49,7 @@ const Sidebar = () => {
           {isSuperAdmin ? (
           <li>
              <Link href="/dashboard/forms" aria-current={isForms ? 'page' : undefined}
-                className={`flex items-center gap-2.5 text-text-primary px-6 py-3 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                className={`sidebar-nav-link ${
                   isForms ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
                 }`}>
                 <FileText className="size-4" />
@@ -59,19 +60,27 @@ const Sidebar = () => {
 
           <li>
              <Link href="/dashboard/profile" aria-current={isProfile ? 'page' : undefined}
-                className={`flex items-center gap-2.5 text-text-primary px-6 py-3 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                className={`sidebar-nav-link ${
                   isProfile ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
                 }`}>
                 <SquareUserRound className="size-4" />
                 Profile
              </Link>
           </li>
-          
+          <li>
+            <Link href="/dashboard/entity-categories" aria-current={isEntityCategories ? 'page' : undefined}
+              className={`sidebar-nav-link ${
+                isEntityCategories ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
+              }`}>
+              <List className="size-4" />
+              Entity & Categories
+            </Link>
+          </li>
        </ul>
     </nav>
  
     <a href="#" onClick={() => signOut()}
-       className="flex  items-center gap-1 cursor-pointer mt-6 px-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 border-t border-slate-300/80 dark:border-white/15 pt-4">
+       className="flex  items-center justify-between cursor-pointer mt-6 px-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 border-t border-slate-300/80 dark:border-white/15 pt-4">
        <UserRound className='size-4' />
        <div>
           <p className="text-xs text-text-primary font-medium">{user?.name}</p>

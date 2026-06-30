@@ -42,3 +42,6 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+.sidebar-nav-link {
+  @apply flex items-center gap-2.5 text-text-primary px-6 py-3 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:bg-primary/10 hover:border-r-4 border-primary;
+}
