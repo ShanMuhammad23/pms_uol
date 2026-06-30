@@ -2,7 +2,7 @@
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { FileText, LayoutDashboard, LogOut,SquareUserRound,UserRound,List} from 'lucide-react'
+import { FileText, LayoutDashboard, LogOut,SquareUserRound,UserRound,List, Users} from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
@@ -13,6 +13,7 @@ const Sidebar = () => {
   const isDashboard = pathname === '/dashboard'
   const isProfile = pathname === '/dashboard/profile'
   const isForms = pathname.startsWith('/dashboard/forms')
+  const isUsers = pathname.startsWith('/dashboard/users')
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
   const isEntityCategories = pathname === '/dashboard/entity-categories'
   return (
@@ -54,6 +55,18 @@ const Sidebar = () => {
                 }`}>
                 <FileText className="size-4" />
                 Forms
+             </Link>
+          </li>
+          ) : null}
+
+          {isSuperAdmin ? (
+          <li>
+             <Link href="/dashboard/users" aria-current={isUsers ? 'page' : undefined}
+                className={`sidebar-nav-link ${
+                  isUsers ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
+                }`}>
+                <Users className="size-4" />
+                Users
              </Link>
           </li>
           ) : null}

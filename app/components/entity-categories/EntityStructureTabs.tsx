@@ -8,7 +8,7 @@ import EntityCategoriesManager from "./EntityCategoriesManager";
 type TabId = "categories" | "entities";
 
 const tabs: Array<{ id: TabId; label: string; icon: typeof List }> = [
-  { id: "categories", label: "Categories", icon: List },
+  { id: "categories", label: "Entity Categories", icon: List },
   { id: "entities", label: "Entities", icon: Building2 },
 ];
 
