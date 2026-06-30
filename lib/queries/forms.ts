@@ -44,6 +44,9 @@ interface QuestionRow {
   input_type: FieldType;
   is_required: boolean;
   sort_order: number;
+  self_assessment_enabled: boolean;
+  hod_assessment_enabled: boolean;
+  total_marks: number;
 }
 
 interface OptionRow {
@@ -103,8 +106,16 @@ async function insertQuestionsAndOptions(
 ): Promise<void> {
   for (const question of input.questions) {
     const questionResult = await client.query<{ id: string }>(
-      `INSERT INTO form_questions (template_id, question_text, input_type, is_required, sort_order)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO form_questions (
+         template_id,
+         question_text,
+         input_type,
+         is_required,
+         sort_order,
+         self_assessment_enabled,
+         hod_assessment_enabled,
+         total_marks
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
       [
         templateId,
@@ -112,6 +123,9 @@ async function insertQuestionsAndOptions(
         question.inputType,
         question.isRequired,
         question.sortOrder,
+        question.selfAssessmentEnabled,
+        question.hodAssessmentEnabled,
+        question.totalMarks,
       ],
     );
 
@@ -134,7 +148,15 @@ async function getQuestionsForTemplate(
   const executor = client ?? db;
 
   const questionsResult = await executor.query<QuestionRow>(
-    `SELECT id, question_text, input_type, is_required, sort_order
+    `SELECT
+       id,
+       question_text,
+       input_type,
+       is_required,
+       sort_order,
+       self_assessment_enabled,
+       hod_assessment_enabled,
+       total_marks
      FROM form_questions
      WHERE template_id = $1
      ORDER BY sort_order ASC`,
@@ -158,6 +180,9 @@ async function getQuestionsForTemplate(
       inputType: question.input_type,
       isRequired: question.is_required,
       sortOrder: question.sort_order,
+      selfAssessmentEnabled: question.self_assessment_enabled,
+      hodAssessmentEnabled: question.hod_assessment_enabled,
+      totalMarks: question.total_marks,
       options: optionsResult.rows.map((option) => ({
         id: Number(option.id),
         optionLabel: option.option_label,

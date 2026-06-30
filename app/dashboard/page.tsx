@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart,
@@ -16,6 +16,7 @@ import {
   Cell,
   PieChart,
   Pie,
+  LabelList,
 } from "recharts";
 import {
   TrendingUp,
@@ -255,24 +256,8 @@ const MOCK_EMPLOYEES: Employee[] = [
 ];
 
 /* ──────────────────────────────────────────────
-   Chart Data
+   Chart Data (legacy mock — kept for reference charts)
    ────────────────────────────────────────────── */
-const calibrationData = [
-  { rating: "Unsatisfactory", quota: 5, actual: 8 },
-  { rating: "Improvement Needed", quota: 10, actual: 12 },
-  { rating: "Strong", quota: 25, actual: 22 },
-  { rating: "Excellent", quota: 20, actual: 15 },
-  { rating: "Outstanding", quota: 5, actual: 5 },
-];
-
-const completionByCategory = [
-  { category: "Academic", draft: 5, selfAssessment: 80, headReview: 65, hrCalibration: 40, approved: 30, rejected: 2 },
-  { category: "Administrative", draft: 8, selfAssessment: 70, headReview: 55, hrCalibration: 30, approved: 20, rejected: 3 },
-  { category: "Support Staff", draft: 12, selfAssessment: 60, headReview: 45, hrCalibration: 25, approved: 15, rejected: 1 },
-  { category: "Blue-Collar", draft: 20, selfAssessment: 40, headReview: 30, hrCalibration: 15, approved: 10, rejected: 0 },
-  { category: "Management", draft: 2, selfAssessment: 90, headReview: 85, hrCalibration: 70, approved: 60, rejected: 1 },
-];
-
 const functionPerformance = [
   { function: "Teaching & Learning", avgScore: 82, headcount: 45 },
   { function: "Student Affairs", avgScore: 71, headcount: 12 },
@@ -282,12 +267,155 @@ const functionPerformance = [
 ];
 
 const categoryDistribution = [
-  { name: "Academic", value: 45, color: "#0f172a" },
-  { name: "Administrative", value: 18, color: "#d97706" },
-  { name: "Support Staff", value: 15, color: "#64748b" },
-  { name: "Blue-Collar", value: 28, color: "#059669" },
-  { name: "Management", value: 8, color: "#7c3aed" },
+  { name: "Academic", light: "#0f172a", dark: "#60a5fa" },
+  { name: "Administrative", light: "#d97706", dark: "#fbbf24" },
+  { name: "Support Staff", light: "#64748b", dark: "#94a3b8" },
+  { name: "Blue-Collar", light: "#059669", dark: "#34d399" },
+  { name: "Management", light: "#7c3aed", dark: "#a78bfa" },
+] as const;
+
+const INSTITUTIONAL_QUOTA = [
+  { rating: "Unsatisfactory", quota: 5 },
+  { rating: "Improvement Needed", quota: 10 },
+  { rating: "Strong", quota: 25 },
+  { rating: "Excellent", quota: 20 },
+  { rating: "Outstanding", quota: 5 },
 ];
+
+const ALL_EMPLOYEE_CATEGORIES: EmployeeCategory[] = [
+  "Academic",
+  "Administrative",
+  "Support Staff",
+  "Blue-Collar",
+  "Management",
+];
+
+const RATING_NORMALIZE: Record<string, string> = {
+  Unsatisfactory: "Unsatisfactory",
+  "Improvement Needed": "Improvement Needed",
+  Satisfactory: "Improvement Needed",
+  Good: "Strong",
+  Strong: "Strong",
+  Excellent: "Excellent",
+  Outstanding: "Outstanding",
+};
+
+function getEffectiveRating(employee: Employee): string {
+  return employee.calibratedRating || employee.initialRating;
+}
+
+function normalizeRating(rating: string): string {
+  return RATING_NORMALIZE[rating] ?? "Strong";
+}
+
+function matchesEmployeeFilters(
+  employee: Employee,
+  filters: {
+    searchQuery: string;
+    selectedFunction: string;
+    selectedSubFunction: string;
+    selectedCategory: EmployeeCategory | "ALL";
+    selectedFormState: FormState | "ALL";
+  },
+): boolean {
+  const query = filters.searchQuery.toLowerCase();
+  const matchesSearch =
+    !filters.searchQuery ||
+    employee.name.toLowerCase().includes(query) ||
+    employee.employeeId.toLowerCase().includes(query) ||
+    employee.email.toLowerCase().includes(query);
+  const matchesFunction =
+    filters.selectedFunction === "ALL" || employee.function === filters.selectedFunction;
+  const matchesSubFunction =
+    filters.selectedSubFunction === "ALL" || employee.subFunction === filters.selectedSubFunction;
+  const matchesCategory =
+    filters.selectedCategory === "ALL" || employee.category === filters.selectedCategory;
+  const matchesFormState =
+    filters.selectedFormState === "ALL" || employee.formState === filters.selectedFormState;
+
+  return (
+    matchesSearch &&
+    matchesFunction &&
+    matchesSubFunction &&
+    matchesCategory &&
+    matchesFormState
+  );
+}
+
+function buildCalibrationData(employees: Employee[]) {
+  const total = employees.length;
+  const counts = new Map(INSTITUTIONAL_QUOTA.map((row) => [row.rating, 0]));
+
+  employees.forEach((employee) => {
+    const bucket = normalizeRating(getEffectiveRating(employee));
+    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+  });
+
+  return INSTITUTIONAL_QUOTA.map((row) => ({
+    rating: row.rating,
+    quota: row.quota,
+    actual: total === 0 ? 0 : Math.round(((counts.get(row.rating) ?? 0) / total) * 100),
+  }));
+}
+
+function buildCompletionByCategory(employees: Employee[]) {
+  const categories =
+    employees.length > 0
+      ? ALL_EMPLOYEE_CATEGORIES.filter((category) =>
+          employees.some((employee) => employee.category === category),
+        )
+      : ALL_EMPLOYEE_CATEGORIES;
+
+  return categories.map((category) => {
+    const inCategory = employees.filter((employee) => employee.category === category);
+    const total = inCategory.length || 1;
+
+    const countStates = (states: FormState[]) =>
+      inCategory.filter((employee) => states.includes(employee.formState)).length;
+
+    return {
+      category,
+      draft: Math.round((countStates(["DRAFT"]) / total) * 100),
+      selfAssessment: Math.round((countStates(["PENDING_SELF_ASSESSMENT"]) / total) * 100),
+      headReview: Math.round((countStates(["PENDING_HEAD_REVIEW"]) / total) * 100),
+      hrCalibration: Math.round((countStates(["PENDING_HR_CALIBRATION"]) / total) * 100),
+      approved: Math.round(
+        (countStates(["APPROVED", "PENDING_BOARD_APPROVAL"]) / total) * 100,
+      ),
+      rejected: Math.round((countStates(["REJECTED"]) / total) * 100),
+    };
+  });
+}
+
+function buildCategoryCounts(employees: Employee[]) {
+  return categoryDistribution
+    .map((entry) => ({
+      ...entry,
+      value: employees.filter((employee) => employee.category === entry.name).length,
+    }))
+    .filter((entry) => entry.value > 0);
+}
+
+function subscribeToTheme(onStoreChange: () => void) {
+  const observer = new MutationObserver(onStoreChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+  return () => observer.disconnect();
+}
+
+function getIsDarkMode() {
+  return document.documentElement.classList.contains("dark");
+}
+
+function getServerDarkMode() {
+  return false;
+}
+
+function useIsDarkMode() {
+  return useSyncExternalStore(subscribeToTheme, getIsDarkMode, getServerDarkMode);
+}
 
 /* ──────────────────────────────────────────────
    Animation Variants
@@ -502,6 +630,7 @@ function ChartCard({
   delay,
   className,
   action,
+  clipOverflow = true,
 }: {
   title: string;
   subtitle?: string;
@@ -509,13 +638,15 @@ function ChartCard({
   delay: number;
   className?: string;
   action?: React.ReactNode;
+  clipOverflow?: boolean;
 }) {
   return (
     <motion.div
       variants={itemVariants}
       transition={{ delay }}
       className={cn(
-        "overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900",
+        "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900",
+        clipOverflow ? "overflow-hidden" : "overflow-visible",
         className
       )}
     >
@@ -533,6 +664,53 @@ function ChartCard({
       {children}
     </motion.div>
   );
+}
+
+function formatStackBarLabel(value: unknown) {
+  const numericValue = Number(value);
+  return numericValue >= 5 ? numericValue : "";
+}
+
+interface PieLabelProps {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  outerRadius?: number;
+  name?: string;
+  value?: number;
+  percent?: number;
+}
+
+function createPieLabelRenderer(labelColor: string) {
+  return function renderPieLabel({
+    cx = 0,
+    cy = 0,
+    midAngle = 0,
+    outerRadius = 0,
+    name = "",
+    value = 0,
+    percent = 0,
+  }: PieLabelProps) {
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 16;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    const textAnchor = x > cx ? "start" : "end";
+
+    return (
+      <text
+        x={x}
+        y={y}
+        fill={labelColor}
+        textAnchor={textAnchor}
+        dominantBaseline="central"
+        fontSize={10}
+        fontWeight={600}
+      >
+        {`${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+      </text>
+    );
+  };
 }
 
 /* ──────────────────────────────────────────────
@@ -601,6 +779,8 @@ function FilterChip({
    Main Dashboard
    ────────────────────────────────────────────── */
 export default function HRDashboardPage() {
+  const isDarkMode = useIsDarkMode();
+
   /* ── Filter State ── */
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFunction, setSelectedFunction] = useState<string>("ALL");
@@ -622,6 +802,51 @@ export default function HRDashboardPage() {
     return Array.from(subs).sort();
   }, [selectedFunction]);
 
+  const filteredEmployees = useMemo(
+    () =>
+      MOCK_EMPLOYEES.filter((employee) =>
+        matchesEmployeeFilters(employee, {
+          searchQuery,
+          selectedFunction,
+          selectedSubFunction,
+          selectedCategory,
+          selectedFormState,
+        }),
+      ),
+    [
+      searchQuery,
+      selectedFunction,
+      selectedSubFunction,
+      selectedCategory,
+      selectedFormState,
+    ],
+  );
+
+  const themedCategoryDistribution = useMemo(
+    () =>
+      buildCategoryCounts(filteredEmployees).map((entry) => ({
+        name: entry.name,
+        value: entry.value,
+        color: isDarkMode ? entry.dark : entry.light,
+      })),
+    [filteredEmployees, isDarkMode],
+  );
+
+  const filteredCalibrationData = useMemo(
+    () => buildCalibrationData(filteredEmployees),
+    [filteredEmployees],
+  );
+
+  const filteredCompletionByCategory = useMemo(
+    () => buildCompletionByCategory(filteredEmployees),
+    [filteredEmployees],
+  );
+
+  const pieLabelRenderer = useMemo(
+    () => createPieLabelRenderer(isDarkMode ? "#cbd5e1" : "#475569"),
+    [isDarkMode],
+  );
+
   /* Reset sub-function when function changes */
   const handleFunctionChange = (func: string) => {
     setSelectedFunction(func);
@@ -636,20 +861,6 @@ export default function HRDashboardPage() {
   const pendingHeadCount = MOCK_EMPLOYEES.filter((e) => e.formState === "PENDING_HEAD_REVIEW").length;
   const pendingCalibrationCount = MOCK_EMPLOYEES.filter((e) => e.formState === "PENDING_HR_CALIBRATION").length;
   const totalApprovedIncrement = MOCK_EMPLOYEES.reduce((sum, e) => sum + (e.approvedIncrement ?? 0), 0);
-
-  /* ── Filtered Table ── */
-  const filteredEmployees = MOCK_EMPLOYEES.filter((e) => {
-    const matchesSearch =
-      !searchQuery ||
-      e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFunction = selectedFunction === "ALL" || e.function === selectedFunction;
-    const matchesSubFunction = selectedSubFunction === "ALL" || e.subFunction === selectedSubFunction;
-    const matchesCategory = selectedCategory === "ALL" || e.category === selectedCategory;
-    const matchesFormState = selectedFormState === "ALL" || e.formState === selectedFormState;
-    return matchesSearch && matchesFunction && matchesSubFunction && matchesCategory && matchesFormState;
-  });
 
   /* ── Active Filters for Display ── */
   const activeFilters = useMemo(() => {
@@ -750,143 +961,7 @@ export default function HRDashboardPage() {
           />
         </motion.div>
 
-        {/* ── Charts ── */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-12"
-        >
-          {/* Calibration Curve */}
-          <ChartCard
-            title="Rating Calibration Curve"
-            subtitle="Institutional Quota vs. Actual Distribution — Identifies Grade Inflation"
-            delay={0.35}
-            className="lg:col-span-7"
-          >
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={calibrationData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="quotaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
-                      <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#d97706" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis dataKey="rating" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
-                  <Area type="monotone" dataKey="quota" name="Institutional Quota" stroke="#64748b" strokeWidth={2} fill="url(#quotaGrad)" dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }} />
-                  <Area type="monotone" dataKey="actual" name="Actual Distribution" stroke="#d97706" strokeWidth={2} fill="url(#actualGrad)" dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-
-          {/* Category Distribution */}
-          <ChartCard
-            title="Employee Category Mix"
-            subtitle="Headcount distribution across university staff types"
-            delay={0.4}
-            className="lg:col-span-5"
-          >
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoryDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={3}
-                    dataKey="value"
-                    nameKey="name"
-                  >
-                    {categoryDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend
-                    verticalAlign="middle"
-                    align="right"
-                    layout="vertical"
-                    wrapperStyle={{ fontSize: "12px", lineHeight: "24px" }}
-                    iconType="circle"
-                    iconSize={8}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-        </motion.div>
-
-        {/* Completion by Category */}
-        <motion.div variants={containerVariants} initial="hidden" animate="visible">
-          <ChartCard
-            title="Workflow Progress by Employee Category"
-            subtitle="Form state advancement across organizational tiers"
-            delay={0.45}
-            className="mb-8"
-          >
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={completionByCategory} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis dataKey="category" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} unit="%" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
-                  <Bar dataKey="draft" name="Draft" stackId="a" fill="#94a3b8" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="selfAssessment" name="Self Assessment" stackId="a" fill="#cbd5e1" />
-                  <Bar dataKey="headReview" name="Function Head Review" stackId="a" fill="#d97706" />
-                  <Bar dataKey="hrCalibration" name="HR Calibration" stackId="a" fill="#ea580c" />
-                  <Bar dataKey="approved" name="Approved" stackId="a" fill="#059669" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-        </motion.div>
-
-        {/* Function Performance */}
-        <motion.div variants={containerVariants} initial="hidden" animate="visible">
-          <ChartCard
-            title="Performance by Function"
-            subtitle="Average raw score and headcount across university functions"
-            delay={0.5}
-            className="mb-8"
-            action={
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                Avg: {Math.round(functionPerformance.reduce((a, b) => a + b.avgScore, 0) / functionPerformance.length)}
-              </span>
-            }
-          >
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={functionPerformance} layout="vertical" margin={{ left: 0, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                  <YAxis dataKey="function" type="category" width={140} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="avgScore" name="Avg Score" radius={[0, 4, 4, 0]} barSize={24}>
-                    {functionPerformance.map((_, i) => (
-                      <Cell key={i} fill={i % 2 === 0 ? "#0f172a" : "#d97706"} fillOpacity={0.85} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-        </motion.div>
-
-        {/* ── Filter Bar ── */}
+                {/* ── Filter Bar ── */}
         <motion.div
           variants={itemVariants}
           initial="hidden"
@@ -1086,6 +1161,164 @@ export default function HRDashboardPage() {
             )}
           </AnimatePresence>
         </motion.div>
+
+        {/* ── Charts ── */}
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="mb-8 "
+        >
+          {/* Calibration Curve */}
+          <ChartCard
+            title="Rating Calibration Curve"
+            subtitle="Institutional Quota vs. Actual Distribution — Identifies Grade Inflation"
+            delay={0.35}
+            className="lg:col-span-7"
+          >
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={filteredCalibrationData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="quotaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
+                      <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#d97706" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis dataKey="rating" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
+                  <Area type="monotone" dataKey="quota" name="Institutional Quota" stroke="#64748b" strokeWidth={2} fill="url(#quotaGrad)" dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}>
+                    <LabelList dataKey="quota" position="top" offset={8} style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }} />
+                  </Area>
+                  <Area type="monotone" dataKey="actual" name="Actual Distribution" stroke="#d97706" strokeWidth={2} fill="url(#actualGrad)" dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}>
+                    <LabelList dataKey="actual" position="bottom" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
+                  </Area>
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+
+
+        </motion.div>
+
+        {/* Completion by Category */}
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12"
+        >
+          <ChartCard
+            title="Employee Category Mix"
+            subtitle="Headcount distribution across university staff types"
+            delay={0.4}
+            className="lg:col-span-5"
+            clipOverflow={false}
+          >
+            <div className="h-[360px] overflow-visible px-1">
+              {themedCategoryDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 20, right: 24, bottom: 20, left: 24 }}>
+                  <Pie
+                    data={themedCategoryDistribution}
+                    cx="52%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={82}
+                    paddingAngle={3}
+                    dataKey="value"
+                    nameKey="name"
+                    label={pieLabelRenderer}
+                    labelLine={{ stroke: isDarkMode ? "#64748b" : "#94a3b8", strokeWidth: 1 }}
+                  >
+                    {themedCategoryDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                  No employees match the current filters
+                </div>
+              )}
+            </div>
+          </ChartCard>
+          <ChartCard
+            title="Workflow Progress by Employee Category"
+            subtitle="Form state advancement across organizational tiers"
+            delay={0.45}
+            className="lg:col-span-7"
+          >
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={filteredCompletionByCategory} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis dataKey="category" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} unit="%" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
+                  <Bar dataKey="draft" name="Draft" stackId="a" fill="#94a3b8" radius={[0, 0, 0, 0]}>
+                    <LabelList dataKey="draft" position="center" formatter={formatStackBarLabel} style={{ fill: "#fff", fontSize: 10, fontWeight: 600 }} />
+                  </Bar>
+                  <Bar dataKey="selfAssessment" name="Self Assessment" stackId="a" fill="#cbd5e1">
+                    <LabelList dataKey="selfAssessment" position="center" formatter={formatStackBarLabel} style={{ fill: "#334155", fontSize: 10, fontWeight: 600 }} />
+                  </Bar>
+                  <Bar dataKey="headReview" name="Function Head Review" stackId="a" fill="#d97706">
+                    <LabelList dataKey="headReview" position="center" formatter={formatStackBarLabel} style={{ fill: "#fff", fontSize: 10, fontWeight: 600 }} />
+                  </Bar>
+                  <Bar dataKey="hrCalibration" name="HR Calibration" stackId="a" fill="#ea580c">
+                    <LabelList dataKey="hrCalibration" position="center" formatter={formatStackBarLabel} style={{ fill: "#fff", fontSize: 10, fontWeight: 600 }} />
+                  </Bar>
+                  <Bar dataKey="approved" name="Approved" stackId="a" fill="#059669" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="approved" position="center" formatter={formatStackBarLabel} style={{ fill: "#fff", fontSize: 10, fontWeight: 600 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </motion.div>
+
+        {/* Function Performance */}
+        {/* <motion.div variants={containerVariants} initial="hidden" animate="visible">
+          <ChartCard
+            title="Performance by Function"
+            subtitle="Average raw score and headcount across university functions"
+            delay={0.5}
+            className="mb-8"
+            action={
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                Avg: {Math.round(functionPerformance.reduce((a, b) => a + b.avgScore, 0) / functionPerformance.length)}
+              </span>
+            }
+          >
+            <div className="h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={functionPerformance} layout="vertical" margin={{ left: 0, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                  <YAxis dataKey="function" type="category" width={140} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="avgScore" name="Avg Score" radius={[0, 4, 4, 0]} barSize={24}>
+                    {functionPerformance.map((_, i) => (
+                      <Cell key={i} fill={i % 2 === 0 ? "#0f172a" : "#d97706"} fillOpacity={0.85} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </motion.div> */}
+
+
 
         {/* ── Data Table ── */}
         <motion.div

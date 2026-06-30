@@ -48,6 +48,9 @@ function mapRecordToState(record: FormTemplateRecord) {
       inputType: question.inputType,
       isRequired: question.isRequired,
       sortOrder: question.sortOrder,
+      selfAssessmentEnabled: question.selfAssessmentEnabled,
+      hodAssessmentEnabled: question.hodAssessmentEnabled,
+      totalMarks: question.totalMarks,
       options: question.options.map((option) => ({
         optionLabel: option.optionLabel,
         pointsAssigned: option.pointsAssigned,
@@ -178,6 +181,16 @@ export default function FormBuilderWizard({
     questions.forEach((question, index) => {
       if (!question.questionText.trim()) {
         nextErrors[`question-${index}`] = "Question text is required.";
+      }
+
+      if (
+        question.totalMarks === undefined ||
+        question.totalMarks === null ||
+        Number.isNaN(Number(question.totalMarks)) ||
+        Number(question.totalMarks) <= 0
+      ) {
+        nextErrors[`question-${index}-marks`] =
+          "Total marks is required and must be greater than 0.";
       }
 
       if (["RADIO", "SELECT"].includes(question.inputType)) {

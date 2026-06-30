@@ -46,6 +46,18 @@ export function validateFormTemplateInput(
       return `Question ${index + 1} has an invalid input type.`;
     }
 
+    if (
+      question.totalMarks === undefined ||
+      question.totalMarks === null ||
+      Number.isNaN(Number(question.totalMarks))
+    ) {
+      return `Question ${index + 1}: total marks is required.`;
+    }
+
+    if (Number(question.totalMarks) <= 0) {
+      return `Question ${index + 1}: total marks must be greater than 0.`;
+    }
+
     if (["RADIO", "SELECT"].includes(question.inputType)) {
       if (!question.options || question.options.length < 2) {
         return `Question ${index + 1} requires at least two options.`;

@@ -38,6 +38,20 @@ async function main() {
         REFERENCES form_templates(id) ON DELETE SET NULL
       `);
       console.log("Ensured appraisals.template_id column exists.");
+
+      await client.query(`
+        ALTER TABLE form_questions
+        ADD COLUMN IF NOT EXISTS self_assessment_enabled BOOLEAN NOT NULL DEFAULT FALSE
+      `);
+      await client.query(`
+        ALTER TABLE form_questions
+        ADD COLUMN IF NOT EXISTS hod_assessment_enabled BOOLEAN NOT NULL DEFAULT FALSE
+      `);
+      await client.query(`
+        ALTER TABLE form_questions
+        ADD COLUMN IF NOT EXISTS total_marks INT NOT NULL DEFAULT 0
+      `);
+      console.log("Ensured form_questions assessment columns exist.");
     }
 
     await client.query(

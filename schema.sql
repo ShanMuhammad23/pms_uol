@@ -93,6 +93,9 @@ CREATE TABLE form_questions (
     input_type field_type NOT NULL,
     is_required BOOLEAN DEFAULT TRUE,
     sort_order INT NOT NULL DEFAULT 0, -- Controls UI sequence layout on frontend
+    self_assessment_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    hod_assessment_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    total_marks INT NOT NULL DEFAULT 0 CHECK (total_marks >= 0),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -185,3 +188,54 @@ CREATE INDEX idx_appraisals_cycle_status ON appraisals(cycle_id, status);
 CREATE INDEX idx_questions_lookup ON form_questions(template_id, sort_order);
 CREATE INDEX idx_options_lookup ON question_options(question_id);
 CREATE INDEX idx_answers_lookup ON appraisal_answers(appraisal_id, question_id);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- Create an initial department (if you don't already have one)
+INSERT INTO departments (name)
+VALUES ('Head Office')
+ON CONFLICT (name) DO NOTHING;
+
+-- Create a SUPER_ADMIN user
+INSERT INTO users (
+    employee_id,
+    email,
+    password_hash,
+    first_name,
+    last_name,
+    system_role,
+    emp_category,
+    emp_sub_category,
+    department_id,
+    head_id,
+    is_active
+)
+VALUES (
+    'EMP-0001',
+    'superadmin@uol.edu.pk',
+    -- TODO: replace with a real hash (e.g. bcrypt) for your chosen password
+    '$2b$10$REPLACE_THIS_WITH_REAL_BCRYPT_HASH',
+    'Super',
+    'Admin',
+    'SUPER_ADMIN',
+    'ADMINISTRATION',
+    'SYSTEM_ADMIN',
+    (SELECT id FROM departments WHERE name = 'Head Office'),
+    NULL,
+    TRUE
+);
