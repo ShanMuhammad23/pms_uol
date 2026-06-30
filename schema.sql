@@ -93,6 +93,9 @@ CREATE TABLE form_questions (
     input_type field_type NOT NULL,
     is_required BOOLEAN DEFAULT TRUE,
     sort_order INT NOT NULL DEFAULT 0, -- Controls UI sequence layout on frontend
+    self_assessment_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    hod_assessment_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    total_marks INT NOT NULL DEFAULT 0 CHECK (total_marks >= 0),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

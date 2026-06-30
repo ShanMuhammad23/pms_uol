@@ -131,6 +131,7 @@ export default function FormDesignStep({
               onMoveUp={() => moveQuestion(index, "up")}
               onMoveDown={() => moveQuestion(index, "down")}
               error={errors[`question-${index}`]}
+              totalMarksError={errors[`question-${index}-marks`]}
             />
           ))
         )}

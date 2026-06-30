@@ -80,6 +80,19 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
               {question.isRequired ? (
                 <span className="text-[11px] text-foreground/60">Required</span>
               ) : null}
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-white/10 dark:text-slate-300">
+                {question.totalMarks} marks
+              </span>
+              {question.selfAssessmentEnabled ? (
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
+                  Self Assessment
+                </span>
+              ) : null}
+              {question.hodAssessmentEnabled ? (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                  HOD Assessment
+                </span>
+              ) : null}
             </div>
             <p className="mt-2 text-sm font-medium text-text-primary">
               {question.questionText}

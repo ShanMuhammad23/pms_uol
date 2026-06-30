@@ -130,6 +130,9 @@ export interface QuestionInput {
   inputType: FieldType;
   isRequired: boolean;
   sortOrder: number;
+  selfAssessmentEnabled: boolean;
+  hodAssessmentEnabled: boolean;
+  totalMarks: number;
   options: QuestionOptionInput[];
 }
 
@@ -162,6 +165,9 @@ export interface QuestionRecord {
   inputType: FieldType;
   isRequired: boolean;
   sortOrder: number;
+  selfAssessmentEnabled: boolean;
+  hodAssessmentEnabled: boolean;
+  totalMarks: number;
   options: QuestionOptionRecord[];
 }
 
@@ -238,6 +244,9 @@ export function createEmptyQuestion(sortOrder: number): QuestionInput {
     inputType: "TEXT",
     isRequired: true,
     sortOrder,
+    selfAssessmentEnabled: false,
+    hodAssessmentEnabled: false,
+    totalMarks: 0,
     options: [],
   };
 }

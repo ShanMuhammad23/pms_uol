@@ -14,6 +14,7 @@ interface QuestionEditorProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   error?: string;
+  totalMarksError?: string;
 }
 
 function needsOptions(inputType: QuestionInput["inputType"]): boolean {
@@ -29,6 +30,7 @@ export default function QuestionEditor({
   onMoveUp,
   onMoveDown,
   error,
+  totalMarksError,
 }: QuestionEditorProps) {
   const showOptions = needsOptions(question.inputType);
 
@@ -179,6 +181,69 @@ export default function QuestionEditor({
             />
             Required field
           </label>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-300/60 p-4 dark:border-white/10">
+        <p className="mb-3 text-sm font-medium text-text-primary">
+          Assessment Settings
+        </p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <label className="flex items-center gap-2 text-sm text-text-primary">
+            <input
+              type="checkbox"
+              checked={question.selfAssessmentEnabled}
+              onChange={(event) =>
+                onChange({
+                  ...question,
+                  selfAssessmentEnabled: event.target.checked,
+                })
+              }
+              className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            Self Assessment
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-text-primary">
+            <input
+              type="checkbox"
+              checked={question.hodAssessmentEnabled}
+              onChange={(event) =>
+                onChange({
+                  ...question,
+                  hodAssessmentEnabled: event.target.checked,
+                })
+              }
+              className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            HOD Assessment
+          </label>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-text-primary">
+              Total Marks
+            </label>
+            <input
+              type="number"
+              min={1}
+              required
+              value={question.totalMarks || ""}
+              onChange={(event) =>
+                onChange({
+                  ...question,
+                  totalMarks: Number(event.target.value || 0),
+                })
+              }
+              className={cn(
+                "h-10 w-full rounded-lg border bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15",
+                totalMarksError ? "border-red-400" : "border-slate-300",
+              )}
+              placeholder="e.g. 10"
+            />
+            {totalMarksError ? (
+              <p className="mt-1 text-xs text-red-600">{totalMarksError}</p>
+            ) : null}
+          </div>
         </div>
       </div>
 
