@@ -204,3 +204,37 @@ CREATE TABLE entities (
 );
 
 CREATE INDEX idx_entities_parent ON entities(parent_entity_id);
+CREATE TABLE financial_years (
+    id SERIAL PRIMARY KEY,
+    year INT NOT NULL UNIQUE,
+    label VARCHAR(20) NOT NULL UNIQUE,       -- e.g. 'FY 2024-25'
+    is_active BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE performance_levels (
+    id BIGSERIAL PRIMARY KEY,
+    financial_year_id INT NOT NULL REFERENCES financial_years(id) ON DELETE RESTRICT,
+    name VARCHAR(100) NOT NULL,              -- e.g. 'Excellent', 'Satisfactory'
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_level_per_year UNIQUE (financial_year_id, name)
+);
+
+CREATE TABLE performance_quartiles (
+    id BIGSERIAL PRIMARY KEY,
+    performance_level_id BIGINT NOT NULL REFERENCES performance_levels(id) ON DELETE RESTRICT,
+    name VARCHAR(100) NOT NULL,              -- e.g. 'Q1', 'Upper Quartile'
+    score_min INT NOT NULL,
+    score_max INT NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT check_score_range CHECK (score_min < score_max),
+    CONSTRAINT unique_quartile_per_level UNIQUE (performance_level_id, name)
+);
+
+CREATE INDEX idx_levels_financial_year ON performance_levels(financial_year_id);
+CREATE INDEX idx_quartiles_level ON performance_quartiles(performance_level_id);

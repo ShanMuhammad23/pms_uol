@@ -2,7 +2,7 @@
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { FileText, LayoutDashboard, LogOut,SquareUserRound,UserRound,List, Users} from 'lucide-react'
+import { FileText, Grid3X3, LayoutDashboard, LogOut,SquareUserRound,UserRound,List, Users} from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
@@ -16,6 +16,7 @@ const Sidebar = () => {
   const isUsers = pathname.startsWith('/dashboard/users')
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
   const isEntityCategories = pathname === '/dashboard/entity-categories'
+  const isMatricesAndCycles = pathname.startsWith('/dashboard/matrices-and-cycles')
   return (
     <aside
     className="bg-surface border  border-r border-slate-300/80 dark:border-white/15 w-full h-full flex flex-col fixed top-0 left-0 max-w-[264px] py-6 overflow-auto transition-colors">
@@ -67,6 +68,18 @@ const Sidebar = () => {
                 }`}>
                 <Users className="size-4" />
                 Users
+             </Link>
+          </li>
+          ) : null}
+
+          {isSuperAdmin ? (
+          <li>
+             <Link href="/dashboard/matrices-and-cycles" aria-current={isMatricesAndCycles ? 'page' : undefined}
+                className={`sidebar-nav-link ${
+                  isMatricesAndCycles ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
+                }`}>
+                <Grid3X3 className="size-4" />
+                Matrices and Cycles
              </Link>
           </li>
           ) : null}
