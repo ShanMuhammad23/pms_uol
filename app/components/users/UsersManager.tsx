@@ -8,18 +8,11 @@ import {
   createUser,
   deleteUser,
   fetchEntities,
+  fetchStaffCategoriesForUsers,
   fetchUsers,
   updateUser,
 } from "@/lib/queries/users-client";
 import {
-  CATEGORY_LABELS,
-  SUB_CATEGORY_LABELS,
-  type EmployeeCategory,
-  type SubCategory,
-} from "@/types/forms";
-import {
-  EMPLOYEE_CATEGORIES,
-  getSubCategoriesForCategory,
   USER_ROLE_LABELS,
   USER_ROLES,
   type UserRecord,
@@ -42,15 +35,14 @@ interface UserFormState {
   firstName: string;
   lastName: string;
   systemRole: UserRole;
-  empCategory: EmployeeCategory;
-  empSubCategory: SubCategory;
+  empCategory: string;
+  empSubCategory: string;
+  staffCategoryId: string;
+  staffSubCategoryId: string;
   entityId: string;
   headId: string;
   isActive: boolean;
 }
-
-const defaultCategory: EmployeeCategory = "ACADEMIC";
-const defaultSubCategory = getSubCategoriesForCategory(defaultCategory)[0];
 
 const emptyForm: UserFormState = {
   employeeId: "",
@@ -59,8 +51,10 @@ const emptyForm: UserFormState = {
   firstName: "",
   lastName: "",
   systemRole: "EMPLOYEE",
-  empCategory: defaultCategory,
-  empSubCategory: defaultSubCategory,
+  empCategory: "ADMINISTRATION",
+  empSubCategory: "SYSTEM_ADMIN",
+  staffCategoryId: "",
+  staffSubCategoryId: "",
   entityId: "",
   headId: "",
   isActive: true,
@@ -77,6 +71,10 @@ export default function UsersManager() {
     queryKey: ["entities"],
     queryFn: fetchEntities,
   });
+  const { data: staffCategories = [], isLoading: staffCategoriesLoading } = useQuery({
+    queryKey: ["staff-categories-for-users"],
+    queryFn: fetchStaffCategoriesForUsers,
+  });
 
   const {
     data: users,
@@ -87,10 +85,14 @@ export default function UsersManager() {
     queryFn: fetchUsers,
   });
 
-  const subCategoryOptions = useMemo(
-    () => getSubCategoriesForCategory(form.empCategory),
-    [form.empCategory],
+  const selectedStaffCategory = useMemo(
+    () =>
+      staffCategories.find(
+        (staffCategory) => String(staffCategory.id) === form.staffCategoryId,
+      ),
+    [staffCategories, form.staffCategoryId],
   );
+  const subCategoryOptions = selectedStaffCategory?.subCategories ?? [];
 
   const headOptions = useMemo(() => {
     if (!users) {
@@ -101,12 +103,13 @@ export default function UsersManager() {
   }, [users, editingUser]);
 
   const categoryStats = useMemo(() => {
-    return EMPLOYEE_CATEGORIES.map((category) => ({
-      category,
-      label: CATEGORY_LABELS[category],
-      count: users?.filter((user) => user.empCategory === category).length ?? 0,
+    return staffCategories.map((category) => ({
+      category: category.id,
+      label: category.name,
+      count:
+        users?.filter((user) => user.staffCategoryId === category.id).length ?? 0,
     }));
-  }, [users]);
+  }, [staffCategories, users]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -171,23 +174,25 @@ export default function UsersManager() {
   });
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
-  const isLoading = entitiesLoading || usersLoading;
-
-  const handleCategoryChange = (empCategory: EmployeeCategory) => {
-    const nextSubCategories = getSubCategoriesForCategory(empCategory);
-
-    setForm((current) => ({
-      ...current,
-      empCategory,
-      empSubCategory: nextSubCategories.includes(current.empSubCategory)
-        ? current.empSubCategory
-        : nextSubCategories[0],
-    }));
-  };
+  const isLoading = entitiesLoading || usersLoading || staffCategoriesLoading;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormMessage(null);
+    const staffCategory = staffCategories.find(
+      (item) => String(item.id) === form.staffCategoryId,
+    );
+    const staffSubCategory = staffCategory?.subCategories.find(
+      (item) => String(item.id) === form.staffSubCategoryId,
+    );
+
+    if (!staffCategory || !staffSubCategory) {
+      setFormMessage({
+        tone: "error",
+        text: "Please select a valid staff category and sub-category.",
+      });
+      return;
+    }
 
     const payload = {
       employeeId: form.employeeId.trim(),
@@ -195,8 +200,13 @@ export default function UsersManager() {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       systemRole: form.systemRole,
-      empCategory: form.empCategory,
-      empSubCategory: form.empSubCategory,
+      // Legacy enum fields retained for backward compatibility until DB enum migration is removed.
+      empCategory: "ADMINISTRATION",
+      empSubCategory: "SYSTEM_ADMIN",
+      staffCategoryId: form.staffCategoryId ? Number(form.staffCategoryId) : null,
+      staffSubCategoryId: form.staffSubCategoryId
+        ? Number(form.staffSubCategoryId)
+        : null,
       entityId: form.entityId ? Number(form.entityId) : null,
       headId: form.headId ? Number(form.headId) : null,
       isActive: form.isActive,
@@ -231,6 +241,10 @@ export default function UsersManager() {
       systemRole: user.systemRole,
       empCategory: user.empCategory,
       empSubCategory: user.empSubCategory,
+      staffCategoryId: user.staffCategoryId ? String(user.staffCategoryId) : "",
+      staffSubCategoryId: user.staffSubCategoryId
+        ? String(user.staffSubCategoryId)
+        : "",
       entityId: user.entityId ? String(user.entityId) : "",
       headId: user.headId ? String(user.headId) : "",
       isActive: user.isActive,
@@ -420,43 +434,55 @@ export default function UsersManager() {
           </div>
 
           <div>
-            <label htmlFor="user-emp-category" className="mb-1.5 block text-sm font-medium text-text-primary">
-              Employee Category
+            <label htmlFor="user-staff-category" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Staff Category
             </label>
             <select
-              id="user-emp-category"
-              value={form.empCategory}
+              id="user-staff-category"
+              value={form.staffCategoryId}
               onChange={(event) =>
-                handleCategoryChange(event.target.value as EmployeeCategory)
+                setForm((current) => ({
+                  ...current,
+                  staffCategoryId: event.target.value,
+                  staffSubCategoryId: "",
+                }))
               }
+              required
               className={inputClassName}
             >
-              {EMPLOYEE_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {CATEGORY_LABELS[category]}
+              <option value="" disabled>
+                Select category
+              </option>
+              {staffCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label htmlFor="user-emp-sub-category" className="mb-1.5 block text-sm font-medium text-text-primary">
-              Sub-Category
+            <label htmlFor="user-staff-sub-category" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Staff Sub-Category
             </label>
             <select
-              id="user-emp-sub-category"
-              value={form.empSubCategory}
+              id="user-staff-sub-category"
+              value={form.staffSubCategoryId}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
-                  empSubCategory: event.target.value as SubCategory,
+                  staffSubCategoryId: event.target.value,
                 }))
               }
+              required
               className={inputClassName}
             >
+              <option value="" disabled>
+                Select sub-category
+              </option>
               {subCategoryOptions.map((subCategory) => (
-                <option key={subCategory} value={subCategory}>
-                  {SUB_CATEGORY_LABELS[subCategory]}
+                <option key={subCategory.id} value={subCategory.id}>
+                  {subCategory.name}
                 </option>
               ))}
             </select>
@@ -575,19 +601,19 @@ export default function UsersManager() {
 
       {activeTab === "add" || editingUser ? renderFormCard() : null}
 
-      {isLoading ? (
+      {activeTab === "list" && isLoading ? (
         <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
           Loading users...
         </div>
       ) : null}
 
-      {error ? (
+      {activeTab === "list" && error ? (
         <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           Failed to load users.
         </div>
       ) : null}
 
-      {!isLoading && !error && (!users || users.length === 0) ? (
+      {activeTab === "list" && !isLoading && !error && (!users || users.length === 0) ? (
         <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
           <Users className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">No users yet</p>
@@ -597,7 +623,7 @@ export default function UsersManager() {
         </div>
       ) : null}
 
-      {!isLoading && !error && users && users.length > 0 ? (
+      {activeTab === "list" && !isLoading && !error && users && users.length > 0 ? (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {categoryStats.map((stat) => (
@@ -648,9 +674,9 @@ export default function UsersManager() {
                       {USER_ROLE_LABELS[user.systemRole]}
                     </td>
                     <td className="px-4 py-3 text-text-primary">
-                      {CATEGORY_LABELS[user.empCategory]}
+                      {user.staffCategoryName ?? user.empCategory}
                       <span className="block text-xs text-foreground/70">
-                        {SUB_CATEGORY_LABELS[user.empSubCategory]}
+                        {user.staffSubCategoryName ?? user.empSubCategory}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-text-primary">

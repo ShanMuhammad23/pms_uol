@@ -2,7 +2,7 @@
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { FileText, Grid3X3, LayoutDashboard, LogOut,SquareUserRound,UserRound,List, Users} from 'lucide-react'
+import { FileText, Grid3X3, LayoutDashboard, LogOut,SquareUserRound,UserRound,List, Users, Layers } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
@@ -16,6 +16,7 @@ const Sidebar = () => {
   const isUsers = pathname.startsWith('/dashboard/users')
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
   const isEntityCategories = pathname === '/dashboard/entity-categories'
+  const isStaffCategories = pathname.startsWith('/dashboard/staff-categories')
   const isMatricesAndCycles = pathname.startsWith('/dashboard/matrices-and-cycles')
   return (
     <aside
@@ -102,6 +103,17 @@ const Sidebar = () => {
               Entity & Categories
             </Link>
           </li>
+          {isSuperAdmin ? (
+          <li>
+            <Link href="/dashboard/staff-categories" aria-current={isStaffCategories ? 'page' : undefined}
+              className={`sidebar-nav-link ${
+                isStaffCategories ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
+              }`}>
+              <Layers className="size-4" />
+              Staff Categories
+            </Link>
+          </li>
+          ) : null}
        </ul>
     </nav>
  

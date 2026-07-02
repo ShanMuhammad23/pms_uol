@@ -1,8 +1,3 @@
-import type { EmployeeCategory, SubCategory } from "@/types/forms";
-import {
-  CATEGORY_SUB_MAP,
-  EMPLOYEE_CATEGORIES,
-} from "@/types/forms";
 import type { CreateUserInput, UpdateUserInput, UserRole } from "@/types/users";
 import { USER_ROLES } from "@/types/users";
 
@@ -34,19 +29,6 @@ function parseOptionalId(value: unknown): number | null | undefined {
   }
 
   return id;
-}
-
-function validateSubCategory(
-  empCategory: EmployeeCategory,
-  empSubCategory: SubCategory,
-): string | null {
-  const allowed = CATEGORY_SUB_MAP[empCategory];
-
-  if (!allowed.includes(empSubCategory)) {
-    return "Sub-category does not match the selected employee category.";
-  }
-
-  return null;
 }
 
 function validateSharedFields(body: CreateUserInput | UpdateUserInput): string | null {
@@ -90,20 +72,25 @@ function validateSharedFields(body: CreateUserInput | UpdateUserInput): string |
     return "A valid system role is required.";
   }
 
-  if (!isValidEnumValue(body.empCategory, EMPLOYEE_CATEGORIES)) {
+  if (!body.empCategory || typeof body.empCategory !== "string" || !body.empCategory.trim()) {
     return "A valid employee category is required.";
   }
 
-  if (!isValidEnumValue(body.empSubCategory, CATEGORY_SUB_MAP[body.empCategory])) {
+  if (!body.empSubCategory || typeof body.empSubCategory !== "string" || !body.empSubCategory.trim()) {
     return "A valid sub-category is required.";
   }
 
-  const subCategoryError = validateSubCategory(body.empCategory, body.empSubCategory);
-  if (subCategoryError) {
-    return subCategoryError;
+  const entityId = parseOptionalId(body.entityId);
+  const staffCategoryId = parseOptionalId(body.staffCategoryId);
+  if (staffCategoryId !== undefined && Number.isNaN(staffCategoryId)) {
+    return "staffCategoryId must be a positive integer or null.";
   }
 
-  const entityId = parseOptionalId(body.entityId);
+  const staffSubCategoryId = parseOptionalId(body.staffSubCategoryId);
+  if (staffSubCategoryId !== undefined && Number.isNaN(staffSubCategoryId)) {
+    return "staffSubCategoryId must be a positive integer or null.";
+  }
+
   if (entityId !== undefined && Number.isNaN(entityId)) {
     return "Entity id must be a positive integer or null.";
   }
@@ -172,13 +159,17 @@ export function normalizeUserInput(
   firstName: string;
   lastName: string;
   systemRole: UserRole;
-  empCategory: EmployeeCategory;
-  empSubCategory: SubCategory;
+  empCategory: string;
+  empSubCategory: string;
+  staffCategoryId: number | null;
+  staffSubCategoryId: number | null;
   entityId: number | null;
   headId: number | null;
   isActive: boolean;
 } {
   const entityId = parseOptionalId(body.entityId);
+  const staffCategoryId = parseOptionalId(body.staffCategoryId);
+  const staffSubCategoryId = parseOptionalId(body.staffSubCategoryId);
   const headId = parseOptionalId(body.headId);
 
   return {
@@ -187,8 +178,10 @@ export function normalizeUserInput(
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
     systemRole: body.systemRole,
-    empCategory: body.empCategory,
-    empSubCategory: body.empSubCategory,
+    empCategory: body.empCategory.trim(),
+    empSubCategory: body.empSubCategory.trim(),
+    staffCategoryId: staffCategoryId ?? null,
+    staffSubCategoryId: staffSubCategoryId ?? null,
     entityId: entityId ?? null,
     headId: headId ?? null,
     isActive: body.isActive ?? true,

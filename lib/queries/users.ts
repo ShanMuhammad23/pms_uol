@@ -19,6 +19,10 @@ interface UserRow {
   system_role: UserRecord["systemRole"];
   emp_category: UserRecord["empCategory"];
   emp_sub_category: UserRecord["empSubCategory"];
+  staff_category_id: number | null;
+  staff_category_name: string | null;
+  staff_sub_category_id: number | null;
+  staff_sub_category_name: string | null;
   entity_id: number | null;
   entity_name: string | null;
   department_id?: number | null;
@@ -30,8 +34,10 @@ interface UserRow {
 }
 
 type UserOrgMode = "entity" | "department";
+type UserStaffMode = "dynamic" | "legacy";
 
 let cachedUserOrgMode: UserOrgMode | null = null;
+let cachedUserStaffMode: UserStaffMode | null = null;
 
 async function getUserOrgMode(): Promise<UserOrgMode> {
   if (cachedUserOrgMode) {
@@ -57,9 +63,46 @@ async function getUserOrgMode(): Promise<UserOrgMode> {
   return cachedUserOrgMode;
 }
 
-function buildUserSelect(mode: UserOrgMode): string {
+async function getUserStaffMode(): Promise<UserStaffMode> {
+  if (cachedUserStaffMode) {
+    return cachedUserStaffMode;
+  }
+
+  const result = await db.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'staff_sub_category_id'
+      ) AS exists
+    `,
+  );
+
+  cachedUserStaffMode = result.rows[0]?.exists ? "dynamic" : "legacy";
+  return cachedUserStaffMode;
+}
+
+function buildUserSelect(mode: UserOrgMode, staffMode: UserStaffMode): string {
   const orgIdColumn = mode === "entity" ? "u.entity_id" : "u.department_id";
   const orgJoinTable = mode === "entity" ? "entities" : "departments";
+  const staffSelect =
+    staffMode === "dynamic"
+      ? `u.staff_category_id,
+         sc.name AS staff_category_name,
+         u.staff_sub_category_id,
+         ssc.name AS staff_sub_category_name`
+      : `NULL::int AS staff_category_id,
+         NULL::text AS staff_category_name,
+         NULL::int AS staff_sub_category_id,
+         NULL::text AS staff_sub_category_name`;
+  const staffJoin =
+    staffMode === "dynamic"
+      ? `
+    LEFT JOIN staff_categories sc ON sc.id = u.staff_category_id
+    LEFT JOIN staff_sub_categories ssc ON ssc.id = u.staff_sub_category_id`
+      : "";
 
   return `
     SELECT
@@ -71,6 +114,7 @@ function buildUserSelect(mode: UserOrgMode): string {
       u.system_role,
       u.emp_category,
       u.emp_sub_category,
+      ${staffSelect},
       ${orgIdColumn} AS entity_id,
       org.name AS entity_name,
       u.head_id,
@@ -78,6 +122,7 @@ function buildUserSelect(mode: UserOrgMode): string {
       u.is_active,
       u.created_at::text
     FROM users u
+    ${staffJoin}
     LEFT JOIN ${orgJoinTable} org ON org.id = ${orgIdColumn}
     LEFT JOIN users h ON h.id = u.head_id
   `;
@@ -103,6 +148,10 @@ function mapUserRow(row: UserRow): UserRecord {
     systemRole: row.system_role,
     empCategory: row.emp_category,
     empSubCategory: row.emp_sub_category,
+    staffCategoryId: row.staff_category_id,
+    staffCategoryName: row.staff_category_name,
+    staffSubCategoryId: row.staff_sub_category_id,
+    staffSubCategoryName: row.staff_sub_category_name,
     entityId: row.entity_id,
     entityName: row.entity_name,
     headId: row.head_id ? Number(row.head_id) : null,
@@ -180,8 +229,9 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 
 export async function listUsers(): Promise<UserRecord[]> {
   const mode = await getUserOrgMode();
+  const staffMode = await getUserStaffMode();
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode)}
+    `${buildUserSelect(mode, staffMode)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
 
@@ -190,8 +240,9 @@ export async function listUsers(): Promise<UserRecord[]> {
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
   const mode = await getUserOrgMode();
+  const staffMode = await getUserStaffMode();
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode)}
+    `${buildUserSelect(mode, staffMode)}
      WHERE u.id = $1`,
     [id],
   );
@@ -206,6 +257,7 @@ export async function getUserById(id: number): Promise<UserRecord | null> {
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
+  const staffMode = await getUserStaffMode();
 
   await assertEntityExists(normalized.entityId);
   await assertValidHead(null, normalized.headId);
@@ -223,25 +275,43 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
          system_role,
          emp_category,
          emp_sub_category,
+         ${staffMode === "dynamic" ? "staff_category_id," : ""}
+         ${staffMode === "dynamic" ? "staff_sub_category_id," : ""}
          ${mode === "entity" ? "entity_id" : "department_id"},
          head_id,
          is_active
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       VALUES (${staffMode === "dynamic" ? "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13" : "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11"})
        RETURNING id`,
-      [
-        normalized.employeeId,
-        normalized.email,
-        passwordHash,
-        normalized.firstName,
-        normalized.lastName,
-        normalized.systemRole,
-        normalized.empCategory,
-        normalized.empSubCategory,
-        normalized.entityId,
-        normalized.headId,
-        normalized.isActive,
-      ],
+      staffMode === "dynamic"
+        ? [
+            normalized.employeeId,
+            normalized.email,
+            passwordHash,
+            normalized.firstName,
+            normalized.lastName,
+            normalized.systemRole,
+            normalized.empCategory,
+            normalized.empSubCategory,
+            normalized.staffCategoryId,
+            normalized.staffSubCategoryId,
+            normalized.entityId,
+            normalized.headId,
+            normalized.isActive,
+          ]
+        : [
+            normalized.employeeId,
+            normalized.email,
+            passwordHash,
+            normalized.firstName,
+            normalized.lastName,
+            normalized.systemRole,
+            normalized.empCategory,
+            normalized.empSubCategory,
+            normalized.entityId,
+            normalized.headId,
+            normalized.isActive,
+          ],
     );
 
     const created = await getUserById(Number(result.rows[0].id));
@@ -279,6 +349,7 @@ export async function updateUser(
 ): Promise<UserRecord> {
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
+  const staffMode = await getUserStaffMode();
 
   await assertEntityExists(normalized.entityId);
   await assertValidHead(id, normalized.headId);
@@ -299,24 +370,43 @@ export async function updateUser(
                system_role = $6,
                emp_category = $7,
                emp_sub_category = $8,
-               ${mode === "entity" ? "entity_id" : "department_id"} = $9,
-               head_id = $10,
-               is_active = $11
-           WHERE id = $12`,
-          [
-            normalized.employeeId,
-            normalized.email,
-            passwordHash,
-            normalized.firstName,
-            normalized.lastName,
-            normalized.systemRole,
-            normalized.empCategory,
-            normalized.empSubCategory,
-            normalized.entityId,
-            normalized.headId,
-            normalized.isActive,
-            id,
-          ],
+               ${staffMode === "dynamic" ? "staff_category_id = $9," : ""}
+               ${staffMode === "dynamic" ? "staff_sub_category_id = $10," : ""}
+               ${mode === "entity" ? "entity_id" : "department_id"} = ${staffMode === "dynamic" ? "$11" : "$9"},
+               head_id = ${staffMode === "dynamic" ? "$12" : "$10"},
+               is_active = ${staffMode === "dynamic" ? "$13" : "$11"}
+           WHERE id = ${staffMode === "dynamic" ? "$14" : "$12"}`,
+          staffMode === "dynamic"
+            ? [
+                normalized.employeeId,
+                normalized.email,
+                passwordHash,
+                normalized.firstName,
+                normalized.lastName,
+                normalized.systemRole,
+                normalized.empCategory,
+                normalized.empSubCategory,
+                normalized.staffCategoryId,
+                normalized.staffSubCategoryId,
+                normalized.entityId,
+                normalized.headId,
+                normalized.isActive,
+                id,
+              ]
+            : [
+                normalized.employeeId,
+                normalized.email,
+                passwordHash,
+                normalized.firstName,
+                normalized.lastName,
+                normalized.systemRole,
+                normalized.empCategory,
+                normalized.empSubCategory,
+                normalized.entityId,
+                normalized.headId,
+                normalized.isActive,
+                id,
+              ],
         )
       : await db.query(
           `UPDATE users
@@ -327,23 +417,41 @@ export async function updateUser(
                system_role = $5,
                emp_category = $6,
                emp_sub_category = $7,
-               ${mode === "entity" ? "entity_id" : "department_id"} = $8,
-               head_id = $9,
-               is_active = $10
-           WHERE id = $11`,
-          [
-            normalized.employeeId,
-            normalized.email,
-            normalized.firstName,
-            normalized.lastName,
-            normalized.systemRole,
-            normalized.empCategory,
-            normalized.empSubCategory,
-            normalized.entityId,
-            normalized.headId,
-            normalized.isActive,
-            id,
-          ],
+               ${staffMode === "dynamic" ? "staff_category_id = $8," : ""}
+               ${staffMode === "dynamic" ? "staff_sub_category_id = $9," : ""}
+               ${mode === "entity" ? "entity_id" : "department_id"} = ${staffMode === "dynamic" ? "$10" : "$8"},
+               head_id = ${staffMode === "dynamic" ? "$11" : "$9"},
+               is_active = ${staffMode === "dynamic" ? "$12" : "$10"}
+           WHERE id = ${staffMode === "dynamic" ? "$13" : "$11"}`,
+          staffMode === "dynamic"
+            ? [
+                normalized.employeeId,
+                normalized.email,
+                normalized.firstName,
+                normalized.lastName,
+                normalized.systemRole,
+                normalized.empCategory,
+                normalized.empSubCategory,
+                normalized.staffCategoryId,
+                normalized.staffSubCategoryId,
+                normalized.entityId,
+                normalized.headId,
+                normalized.isActive,
+                id,
+              ]
+            : [
+                normalized.employeeId,
+                normalized.email,
+                normalized.firstName,
+                normalized.lastName,
+                normalized.systemRole,
+                normalized.empCategory,
+                normalized.empSubCategory,
+                normalized.entityId,
+                normalized.headId,
+                normalized.isActive,
+                id,
+              ],
         );
 
     if (result.rowCount === 0) {

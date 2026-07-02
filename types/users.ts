@@ -1,9 +1,3 @@
-import type { EmployeeCategory, SubCategory } from "@/types/forms";
-import {
-  CATEGORY_SUB_MAP,
-  EMPLOYEE_CATEGORIES,
-} from "@/types/forms";
-
 export type UserRole =
   | "EMPLOYEE"
   | "HEAD"
@@ -39,8 +33,12 @@ export interface UserRecord {
   firstName: string;
   lastName: string;
   systemRole: UserRole;
-  empCategory: EmployeeCategory;
-  empSubCategory: SubCategory;
+  empCategory: string;
+  empSubCategory: string;
+  staffCategoryId: number | null;
+  staffCategoryName: string | null;
+  staffSubCategoryId: number | null;
+  staffSubCategoryName: string | null;
   entityId: number | null;
   entityName: string | null;
   headId: number | null;
@@ -56,8 +54,10 @@ export interface CreateUserInput {
   firstName: string;
   lastName: string;
   systemRole: UserRole;
-  empCategory: EmployeeCategory;
-  empSubCategory: SubCategory;
+  empCategory: string;
+  empSubCategory: string;
+  staffCategoryId?: number | null;
+  staffSubCategoryId?: number | null;
   entityId?: number | null;
   headId?: number | null;
   isActive?: boolean;
@@ -70,17 +70,12 @@ export interface UpdateUserInput {
   firstName: string;
   lastName: string;
   systemRole: UserRole;
-  empCategory: EmployeeCategory;
-  empSubCategory: SubCategory;
+  empCategory: string;
+  empSubCategory: string;
+  staffCategoryId?: number | null;
+  staffSubCategoryId?: number | null;
   entityId?: number | null;
   headId?: number | null;
   isActive?: boolean;
 }
 
-export function getSubCategoriesForCategory(
-  category: EmployeeCategory,
-): SubCategory[] {
-  return CATEGORY_SUB_MAP[category];
-}
-
-export { EMPLOYEE_CATEGORIES, CATEGORY_SUB_MAP };
