@@ -23,6 +23,21 @@ function formatEnumLabel(value: string): string {
 }
 
 export async function getUserProfileByEmail(email: string): Promise<UserProfile> {
+  const orgModeResult = await db.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'entity_id'
+      ) AS exists
+    `,
+  );
+  const useEntity = orgModeResult.rows[0]?.exists ?? false;
+  const orgIdColumn = useEntity ? "u.entity_id" : "u.department_id";
+  const orgTable = useEntity ? "entities" : "departments";
+
   const result = await db.query<{
     employee_id: string;
     email: string;
@@ -31,7 +46,7 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile>
     system_role: string;
     emp_category: string;
     emp_sub_category: string;
-    department_name: string | null;
+    entity_name: string | null;
     is_active: boolean;
   }>(
     `
@@ -43,10 +58,10 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile>
         u.system_role,
         u.emp_category,
         u.emp_sub_category,
-        d.name AS department_name,
+        org.name AS entity_name,
         u.is_active
       FROM users u
-      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN ${orgTable} org ON org.id = ${orgIdColumn}
       WHERE lower(u.email) = lower($1)
       LIMIT 1
     `,
@@ -63,7 +78,7 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile>
     firstName: row.first_name,
     lastName: row.last_name,
     emailAddress: row.email,
-    department: row.department_name,
+    entity: row.entity_name,
     designation: formatEnumLabel(row.emp_sub_category),
     mobileNumber: null,
     employmentStatus: row.is_active ? "1" : "0",

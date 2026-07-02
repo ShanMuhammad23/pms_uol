@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { List, Pencil, Plus, Trash2, X } from "lucide-react";
+import { List, Pencil, Plus, Table2, Trash2, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import {
   createEntityCategory,
@@ -23,6 +23,8 @@ interface FormMessage {
   text: string;
 }
 
+type CategorySectionTab = "list" | "add";
+
 const initialCode: EntityCategoryCode = "C1";
 
 export default function EntityCategoriesManager() {
@@ -31,6 +33,7 @@ export default function EntityCategoriesManager() {
   const [editingCategory, setEditingCategory] =
     useState<EntityCategoryRecord | null>(null);
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+  const [activeTab, setActiveTab] = useState<CategorySectionTab>("list");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["entity-categories"],
@@ -123,6 +126,7 @@ export default function EntityCategoriesManager() {
   };
 
   const handleEdit = (category: EntityCategoryRecord) => {
+    setActiveTab("list");
     setEditingCategory(category);
     setCode(category.code);
     setFormMessage(null);
@@ -146,103 +150,146 @@ export default function EntityCategoriesManager() {
     setFormMessage(null);
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary">
-              {editingCategory ? "Edit Category" : "Add Category"}
-            </h2>
-            <p className="mt-1 text-sm text-foreground/70">
-              Entity categories use codes C1, C2, and C3 as defined in the
-              system schema.
-            </p>
-          </div>
+  const handleSwitchTab = (tab: CategorySectionTab) => {
+    setActiveTab(tab);
+    setFormMessage(null);
+    if (tab === "add") {
+      resetForm();
+    }
+  };
 
-          {editingCategory ? (
-            <button
-              type="button"
-              onClick={handleCancelEdit}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-            >
-              <X className="size-3.5" />
-              Cancel
-            </button>
+  const renderFormCard = () => (
+    <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-text-primary">
+            {editingCategory ? "Edit Category" : "Add Category"}
+          </h2>
+          <p className="mt-1 text-sm text-foreground/70">
+            Entity categories use codes C1, C2, and C3 as defined in the system
+            schema.
+          </p>
+        </div>
+
+        {editingCategory ? (
+          <button
+            type="button"
+            onClick={handleCancelEdit}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+          >
+            <X className="size-3.5" />
+            Cancel
+          </button>
+        ) : null}
+      </div>
+
+      <AnimatePresence>
+        {formMessage ? (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
+              formMessage.tone === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
+                : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
+            }`}
+          >
+            {formMessage.text}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <div>
+          <label
+            htmlFor="entity-category-code"
+            className="mb-1.5 block text-sm font-medium text-text-primary"
+          >
+            Category Code
+          </label>
+          <select
+            id="entity-category-code"
+            value={code}
+            onChange={(event) =>
+              setCode(event.target.value as EntityCategoryCode)
+            }
+            disabled={availableCodes.length === 0 && !editingCategory}
+            className="w-full max-w-xs rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+          >
+            {(editingCategory ? ENTITY_CATEGORY_CODES : availableCodes).map(
+              (option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ),
+            )}
+          </select>
+          {!editingCategory && availableCodes.length === 0 ? (
+            <p className="mt-2 text-sm text-foreground/70">
+              All category codes are already in use.
+            </p>
           ) : null}
         </div>
 
-        <AnimatePresence>
-          {formMessage ? (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
-                formMessage.tone === "success"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
-                  : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
-              }`}
-            >
-              {formMessage.text}
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+        <button
+          type="submit"
+          disabled={isSubmitting || (!editingCategory && availableCodes.length === 0)}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+        >
+          {editingCategory ? (
+            <>
+              <Pencil className="size-4" />
+              Update Category
+            </>
+          ) : (
+            <>
+              <Plus className="size-4" />
+              Add Category
+            </>
+          )}
+        </button>
+      </form>
+    </div>
+  );
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label
-              htmlFor="entity-category-code"
-              className="mb-1.5 block text-sm font-medium text-text-primary"
-            >
-              Category Code
-            </label>
-            <select
-              id="entity-category-code"
-              value={code}
-              onChange={(event) =>
-                setCode(event.target.value as EntityCategoryCode)
-              }
-              disabled={availableCodes.length === 0 && !editingCategory}
-              className="w-full max-w-xs rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-            >
-              {(editingCategory ? ENTITY_CATEGORY_CODES : availableCodes).map(
-                (option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ),
-              )}
-            </select>
-            {!editingCategory && availableCodes.length === 0 ? (
-              <p className="mt-2 text-sm text-foreground/70">
-                All category codes are already in use.
-              </p>
-            ) : null}
-          </div>
+  return (
+    <div className="space-y-6">
+      <div className="border-b border-slate-300/80 dark:border-white/15">
+        <nav
+          aria-label="Category section tabs"
+          className="-mb-px flex gap-1"
+        >
+          {(
+            [
+              { id: "list", label: "Categories", icon: Table2 },
+              { id: "add", label: "Add Category", icon: Plus },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
 
-          <button
-            type="submit"
-            disabled={
-              isSubmitting ||
-              (!editingCategory && availableCodes.length === 0)
-            }
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
-          >
-            {editingCategory ? (
-              <>
-                <Pencil className="size-4" />
-                Update Category
-              </>
-            ) : (
-              <>
-                <Plus className="size-4" />
-                Add Category
-              </>
-            )}
-          </button>
-        </form>
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleSwitchTab(tab.id)}
+                aria-current={isActive ? "page" : undefined}
+                className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "border-primary text-primary"
+                    : "border-transparent text-foreground/70 hover:border-primary/40 hover:text-text-primary"
+                }`}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
       </div>
+
+      {activeTab === "add" || editingCategory ? renderFormCard() : null}
 
       {isLoading ? (
         <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
@@ -263,7 +310,7 @@ export default function EntityCategoriesManager() {
             No entity categories yet
           </p>
           <p className="mt-1 text-sm text-foreground/70">
-            Add your first category using the form above.
+            Add your first category from the Add Category tab.
           </p>
         </div>
       ) : null}

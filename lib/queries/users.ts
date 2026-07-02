@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { db } from "../db";
 import type {
   CreateUserInput,
-  DepartmentRecord,
+  EntityOptionRecord,
   UpdateUserInput,
   UserRecord,
 } from "@/types/users";
@@ -19,34 +19,69 @@ interface UserRow {
   system_role: UserRecord["systemRole"];
   emp_category: UserRecord["empCategory"];
   emp_sub_category: UserRecord["empSubCategory"];
-  department_id: number | null;
-  department_name: string | null;
+  entity_id: number | null;
+  entity_name: string | null;
+  department_id?: number | null;
+  department_name?: string | null;
   head_id: string | null;
   head_name: string | null;
   is_active: boolean;
   created_at: string;
 }
 
-const USER_SELECT = `
-  SELECT
-    u.id,
-    u.employee_id,
-    u.email,
-    u.first_name,
-    u.last_name,
-    u.system_role,
-    u.emp_category,
-    u.emp_sub_category,
-    u.department_id,
-    d.name AS department_name,
-    u.head_id,
-    CONCAT(h.first_name, ' ', h.last_name) AS head_name,
-    u.is_active,
-    u.created_at::text
-  FROM users u
-  LEFT JOIN departments d ON d.id = u.department_id
-  LEFT JOIN users h ON h.id = u.head_id
-`;
+type UserOrgMode = "entity" | "department";
+
+let cachedUserOrgMode: UserOrgMode | null = null;
+
+async function getUserOrgMode(): Promise<UserOrgMode> {
+  if (cachedUserOrgMode) {
+    return cachedUserOrgMode;
+  }
+
+  const entityColumnResult = await db.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'entity_id'
+      ) AS exists
+    `,
+  );
+
+  cachedUserOrgMode = entityColumnResult.rows[0]?.exists
+    ? "entity"
+    : "department";
+
+  return cachedUserOrgMode;
+}
+
+function buildUserSelect(mode: UserOrgMode): string {
+  const orgIdColumn = mode === "entity" ? "u.entity_id" : "u.department_id";
+  const orgJoinTable = mode === "entity" ? "entities" : "departments";
+
+  return `
+    SELECT
+      u.id,
+      u.employee_id,
+      u.email,
+      u.first_name,
+      u.last_name,
+      u.system_role,
+      u.emp_category,
+      u.emp_sub_category,
+      ${orgIdColumn} AS entity_id,
+      org.name AS entity_name,
+      u.head_id,
+      CONCAT(h.first_name, ' ', h.last_name) AS head_name,
+      u.is_active,
+      u.created_at::text
+    FROM users u
+    LEFT JOIN ${orgJoinTable} org ON org.id = ${orgIdColumn}
+    LEFT JOIN users h ON h.id = u.head_id
+  `;
+}
 
 export class UserError extends Error {
   constructor(
@@ -68,8 +103,8 @@ function mapUserRow(row: UserRow): UserRecord {
     systemRole: row.system_role,
     empCategory: row.emp_category,
     empSubCategory: row.emp_sub_category,
-    departmentId: row.department_id,
-    departmentName: row.department_name,
+    entityId: row.entity_id,
+    entityName: row.entity_name,
     headId: row.head_id ? Number(row.head_id) : null,
     headName: row.head_name,
     isActive: row.is_active,
@@ -95,17 +130,22 @@ function isForeignKeyViolation(error: unknown): boolean {
   );
 }
 
-async function assertDepartmentExists(departmentId: number | null): Promise<void> {
-  if (departmentId === null) {
+async function assertEntityExists(entityId: number | null): Promise<void> {
+  if (entityId === null) {
     return;
   }
 
-  const result = await db.query(`SELECT id FROM departments WHERE id = $1`, [
-    departmentId,
+  const mode = await getUserOrgMode();
+  const sourceTable = mode === "entity" ? "entities" : "departments";
+  const result = await db.query(`SELECT id FROM ${sourceTable} WHERE id = $1`, [
+    entityId,
   ]);
 
   if (result.rows.length === 0) {
-    throw new UserError("Department not found.", 404);
+    throw new UserError(
+      mode === "entity" ? "Entity not found." : "Department not found.",
+      404,
+    );
   }
 }
 
@@ -128,17 +168,20 @@ async function assertValidHead(
   }
 }
 
-export async function listDepartments(): Promise<DepartmentRecord[]> {
+export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
+  const mode = await getUserOrgMode();
+  const sourceTable = mode === "entity" ? "entities" : "departments";
   const result = await db.query<{ id: number; name: string }>(
-    `SELECT id, name FROM departments ORDER BY name ASC`,
+    `SELECT id, name FROM ${sourceTable} ORDER BY name ASC`,
   );
 
   return result.rows;
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
+  const mode = await getUserOrgMode();
   const result = await db.query<UserRow>(
-    `${USER_SELECT}
+    `${buildUserSelect(mode)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
 
@@ -146,8 +189,9 @@ export async function listUsers(): Promise<UserRecord[]> {
 }
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
+  const mode = await getUserOrgMode();
   const result = await db.query<UserRow>(
-    `${USER_SELECT}
+    `${buildUserSelect(mode)}
      WHERE u.id = $1`,
     [id],
   );
@@ -161,8 +205,9 @@ export async function getUserById(id: number): Promise<UserRecord | null> {
 
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {
   const normalized = normalizeUserInput(input);
+  const mode = await getUserOrgMode();
 
-  await assertDepartmentExists(normalized.departmentId);
+  await assertEntityExists(normalized.entityId);
   await assertValidHead(null, normalized.headId);
 
   const passwordHash = await bcrypt.hash(input.password, 10);
@@ -178,7 +223,7 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
          system_role,
          emp_category,
          emp_sub_category,
-         department_id,
+         ${mode === "entity" ? "entity_id" : "department_id"},
          head_id,
          is_active
        )
@@ -193,7 +238,7 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
         normalized.systemRole,
         normalized.empCategory,
         normalized.empSubCategory,
-        normalized.departmentId,
+        normalized.entityId,
         normalized.headId,
         normalized.isActive,
       ],
@@ -216,7 +261,12 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
     }
 
     if (isForeignKeyViolation(error)) {
-      throw new UserError("Invalid department or head reference.", 400);
+      throw new UserError(
+        mode === "entity"
+          ? "Invalid entity or head reference."
+          : "Invalid department or head reference.",
+        400,
+      );
     }
 
     throw error;
@@ -228,8 +278,9 @@ export async function updateUser(
   input: UpdateUserInput,
 ): Promise<UserRecord> {
   const normalized = normalizeUserInput(input);
+  const mode = await getUserOrgMode();
 
-  await assertDepartmentExists(normalized.departmentId);
+  await assertEntityExists(normalized.entityId);
   await assertValidHead(id, normalized.headId);
 
   const passwordHash = input.password
@@ -248,7 +299,7 @@ export async function updateUser(
                system_role = $6,
                emp_category = $7,
                emp_sub_category = $8,
-               department_id = $9,
+               ${mode === "entity" ? "entity_id" : "department_id"} = $9,
                head_id = $10,
                is_active = $11
            WHERE id = $12`,
@@ -261,7 +312,7 @@ export async function updateUser(
             normalized.systemRole,
             normalized.empCategory,
             normalized.empSubCategory,
-            normalized.departmentId,
+            normalized.entityId,
             normalized.headId,
             normalized.isActive,
             id,
@@ -276,7 +327,7 @@ export async function updateUser(
                system_role = $5,
                emp_category = $6,
                emp_sub_category = $7,
-               department_id = $8,
+               ${mode === "entity" ? "entity_id" : "department_id"} = $8,
                head_id = $9,
                is_active = $10
            WHERE id = $11`,
@@ -288,7 +339,7 @@ export async function updateUser(
             normalized.systemRole,
             normalized.empCategory,
             normalized.empSubCategory,
-            normalized.departmentId,
+            normalized.entityId,
             normalized.headId,
             normalized.isActive,
             id,
@@ -316,7 +367,12 @@ export async function updateUser(
     }
 
     if (isForeignKeyViolation(error)) {
-      throw new UserError("Invalid department or head reference.", 400);
+      throw new UserError(
+        mode === "entity"
+          ? "Invalid entity or head reference."
+          : "Invalid department or head reference.",
+        400,
+      );
     }
 
     throw error;

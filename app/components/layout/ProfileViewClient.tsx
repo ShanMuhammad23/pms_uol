@@ -150,7 +150,7 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
               {profile.designation || "—"}
             </p>
             <p className="text-sm text-slate-400 dark:text-slate-500">
-              {profile.department || "—"}
+              {profile.entity || "—"}
             </p>
           </div>
         </div>
@@ -189,8 +189,8 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
         />
         <ProfileField
           icon={Building2}
-          label="Department"
-          value={profile.department || "—"}
+          label="Entity"
+          value={profile.entity || "—"}
           delay={0.32}
         />
         <ProfileField

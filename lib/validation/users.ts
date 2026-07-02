@@ -103,9 +103,9 @@ function validateSharedFields(body: CreateUserInput | UpdateUserInput): string |
     return subCategoryError;
   }
 
-  const departmentId = parseOptionalId(body.departmentId);
-  if (departmentId !== undefined && Number.isNaN(departmentId)) {
-    return "Department id must be a positive integer or null.";
+  const entityId = parseOptionalId(body.entityId);
+  if (entityId !== undefined && Number.isNaN(entityId)) {
+    return "Entity id must be a positive integer or null.";
   }
 
   const headId = parseOptionalId(body.headId);
@@ -174,11 +174,11 @@ export function normalizeUserInput(
   systemRole: UserRole;
   empCategory: EmployeeCategory;
   empSubCategory: SubCategory;
-  departmentId: number | null;
+  entityId: number | null;
   headId: number | null;
   isActive: boolean;
 } {
-  const departmentId = parseOptionalId(body.departmentId);
+  const entityId = parseOptionalId(body.entityId);
   const headId = parseOptionalId(body.headId);
 
   return {
@@ -189,7 +189,7 @@ export function normalizeUserInput(
     systemRole: body.systemRole,
     empCategory: body.empCategory,
     empSubCategory: body.empSubCategory,
-    departmentId: departmentId ?? null,
+    entityId: entityId ?? null,
     headId: headId ?? null,
     isActive: body.isActive ?? true,
   };

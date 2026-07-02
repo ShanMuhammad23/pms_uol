@@ -1,6 +1,6 @@
 import type {
   CreateUserInput,
-  DepartmentRecord,
+  EntityOptionRecord,
   UpdateUserInput,
   UserRecord,
 } from "@/types/users";
@@ -20,9 +20,9 @@ export async function fetchUsers(): Promise<UserRecord[]> {
   return parseResponse<UserRecord[]>(response);
 }
 
-export async function fetchDepartments(): Promise<DepartmentRecord[]> {
-  const response = await fetch("/api/admin/departments");
-  return parseResponse<DepartmentRecord[]>(response);
+export async function fetchEntities(): Promise<EntityOptionRecord[]> {
+  const response = await fetch("/api/admin/entities");
+  return parseResponse<EntityOptionRecord[]>(response);
 }
 
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {

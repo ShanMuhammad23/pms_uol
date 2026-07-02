@@ -2,12 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import { Pencil, Plus, Table2, Trash2, Users, X } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import {
   createUser,
   deleteUser,
-  fetchDepartments,
+  fetchEntities,
   fetchUsers,
   updateUser,
 } from "@/lib/queries/users-client";
@@ -33,6 +33,8 @@ interface FormMessage {
   text: string;
 }
 
+type UserSectionTab = "list" | "add";
+
 interface UserFormState {
   employeeId: string;
   email: string;
@@ -42,7 +44,7 @@ interface UserFormState {
   systemRole: UserRole;
   empCategory: EmployeeCategory;
   empSubCategory: SubCategory;
-  departmentId: string;
+  entityId: string;
   headId: string;
   isActive: boolean;
 }
@@ -59,7 +61,7 @@ const emptyForm: UserFormState = {
   systemRole: "EMPLOYEE",
   empCategory: defaultCategory,
   empSubCategory: defaultSubCategory,
-  departmentId: "",
+  entityId: "",
   headId: "",
   isActive: true,
 };
@@ -69,10 +71,11 @@ export default function UsersManager() {
   const [form, setForm] = useState<UserFormState>(emptyForm);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+  const [activeTab, setActiveTab] = useState<UserSectionTab>("list");
 
-  const { data: departments, isLoading: departmentsLoading } = useQuery({
-    queryKey: ["departments"],
-    queryFn: fetchDepartments,
+  const { data: entities, isLoading: entitiesLoading } = useQuery({
+    queryKey: ["entities"],
+    queryFn: fetchEntities,
   });
 
   const {
@@ -96,6 +99,14 @@ export default function UsersManager() {
 
     return users.filter((user) => !editingUser || user.id !== editingUser.id);
   }, [users, editingUser]);
+
+  const categoryStats = useMemo(() => {
+    return EMPLOYEE_CATEGORIES.map((category) => ({
+      category,
+      label: CATEGORY_LABELS[category],
+      count: users?.filter((user) => user.empCategory === category).length ?? 0,
+    }));
+  }, [users]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -160,7 +171,7 @@ export default function UsersManager() {
   });
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
-  const isLoading = departmentsLoading || usersLoading;
+  const isLoading = entitiesLoading || usersLoading;
 
   const handleCategoryChange = (empCategory: EmployeeCategory) => {
     const nextSubCategories = getSubCategoriesForCategory(empCategory);
@@ -186,7 +197,7 @@ export default function UsersManager() {
       systemRole: form.systemRole,
       empCategory: form.empCategory,
       empSubCategory: form.empSubCategory,
-      departmentId: form.departmentId ? Number(form.departmentId) : null,
+      entityId: form.entityId ? Number(form.entityId) : null,
       headId: form.headId ? Number(form.headId) : null,
       isActive: form.isActive,
     };
@@ -209,6 +220,7 @@ export default function UsersManager() {
   };
 
   const handleEdit = (user: UserRecord) => {
+    setActiveTab("list");
     setEditingUser(user);
     setForm({
       employeeId: user.employeeId,
@@ -219,7 +231,7 @@ export default function UsersManager() {
       systemRole: user.systemRole,
       empCategory: user.empCategory,
       empSubCategory: user.empSubCategory,
-      departmentId: user.departmentId ? String(user.departmentId) : "",
+      entityId: user.entityId ? String(user.entityId) : "",
       headId: user.headId ? String(user.headId) : "",
       isActive: user.isActive,
     });
@@ -247,278 +259,321 @@ export default function UsersManager() {
   const inputClassName =
     "w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15";
 
-  return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary">
-              {editingUser ? "Edit User" : "Add User"}
-            </h2>
-            <p className="mt-1 text-sm text-foreground/70">
-              Manage employee accounts, roles, categories, and reporting lines.
-            </p>
-          </div>
+  const handleSwitchTab = (tab: UserSectionTab) => {
+    setActiveTab(tab);
+    setFormMessage(null);
+    if (tab === "add") {
+      resetForm();
+    }
+  };
 
-          {editingUser ? (
-            <button
-              type="button"
-              onClick={handleCancelEdit}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-            >
-              <X className="size-3.5" />
-              Cancel
-            </button>
-          ) : null}
+  const renderFormCard = () => (
+    <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-text-primary">
+            {editingUser ? "Edit User" : "Add User"}
+          </h2>
+          <p className="mt-1 text-sm text-foreground/70">
+            Manage employee accounts, roles, categories, and reporting lines.
+          </p>
         </div>
 
-        <AnimatePresence>
-          {formMessage ? (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
-                formMessage.tone === "success"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
-                  : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
-              }`}
-            >
-              {formMessage.text}
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+        {editingUser ? (
+          <button
+            type="button"
+            onClick={handleCancelEdit}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+          >
+            <X className="size-3.5" />
+            Cancel
+          </button>
+        ) : null}
+      </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <div>
-              <label htmlFor="user-employee-id" className="mb-1.5 block text-sm font-medium text-text-primary">
-                Employee ID
-              </label>
-              <input
-                id="user-employee-id"
-                type="text"
-                value={form.employeeId}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, employeeId: event.target.value }))
-                }
-                maxLength={30}
-                required
-                className={inputClassName}
-              />
-            </div>
+      <AnimatePresence>
+        {formMessage ? (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
+              formMessage.tone === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
+                : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
+            }`}
+          >
+            {formMessage.text}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
-            <div>
-              <label htmlFor="user-email" className="mb-1.5 block text-sm font-medium text-text-primary">
-                Email
-              </label>
-              <input
-                id="user-email"
-                type="email"
-                value={form.email}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, email: event.target.value }))
-                }
-                maxLength={150}
-                required
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="user-password" className="mb-1.5 block text-sm font-medium text-text-primary">
-                Password
-              </label>
-              <input
-                id="user-password"
-                type="password"
-                value={form.password}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, password: event.target.value }))
-                }
-                required={!editingUser}
-                minLength={editingUser ? undefined : 8}
-                placeholder={editingUser ? "Leave blank to keep current password" : ""}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="user-first-name" className="mb-1.5 block text-sm font-medium text-text-primary">
-                First Name
-              </label>
-              <input
-                id="user-first-name"
-                type="text"
-                value={form.firstName}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, firstName: event.target.value }))
-                }
-                maxLength={50}
-                required
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="user-last-name" className="mb-1.5 block text-sm font-medium text-text-primary">
-                Last Name
-              </label>
-              <input
-                id="user-last-name"
-                type="text"
-                value={form.lastName}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, lastName: event.target.value }))
-                }
-                maxLength={50}
-                required
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="user-system-role" className="mb-1.5 block text-sm font-medium text-text-primary">
-                System Role
-              </label>
-              <select
-                id="user-system-role"
-                value={form.systemRole}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    systemRole: event.target.value as UserRole,
-                  }))
-                }
-                className={inputClassName}
-              >
-                {USER_ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {USER_ROLE_LABELS[role]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="user-emp-category" className="mb-1.5 block text-sm font-medium text-text-primary">
-                Employee Category
-              </label>
-              <select
-                id="user-emp-category"
-                value={form.empCategory}
-                onChange={(event) =>
-                  handleCategoryChange(event.target.value as EmployeeCategory)
-                }
-                className={inputClassName}
-              >
-                {EMPLOYEE_CATEGORIES.map((category) => (
-                  <option key={category} value={category}>
-                    {CATEGORY_LABELS[category]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="user-emp-sub-category" className="mb-1.5 block text-sm font-medium text-text-primary">
-                Sub-Category
-              </label>
-              <select
-                id="user-emp-sub-category"
-                value={form.empSubCategory}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    empSubCategory: event.target.value as SubCategory,
-                  }))
-                }
-                className={inputClassName}
-              >
-                {subCategoryOptions.map((subCategory) => (
-                  <option key={subCategory} value={subCategory}>
-                    {SUB_CATEGORY_LABELS[subCategory]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="user-department" className="mb-1.5 block text-sm font-medium text-text-primary">
-                Department
-              </label>
-              <select
-                id="user-department"
-                value={form.departmentId}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, departmentId: event.target.value }))
-                }
-                className={inputClassName}
-              >
-                <option value="">None</option>
-                {departments?.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="user-head" className="mb-1.5 block text-sm font-medium text-text-primary">
-                Reporting Head
-              </label>
-              <select
-                id="user-head"
-                value={form.headId}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, headId: event.target.value }))
-                }
-                className={inputClassName}
-              >
-                <option value="">None</option>
-                {headOptions.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.firstName} {user.lastName} ({user.employeeId})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-end">
-              <label className="inline-flex items-center gap-2 text-sm font-medium text-text-primary">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, isActive: event.target.checked }))
-                  }
-                  className="size-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-white/15"
-                />
-                Active account
-              </label>
-            </div>
+      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <label htmlFor="user-employee-id" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Employee ID
+            </label>
+            <input
+              id="user-employee-id"
+              type="text"
+              value={form.employeeId}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, employeeId: event.target.value }))
+              }
+              maxLength={30}
+              required
+              className={inputClassName}
+            />
           </div>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
-          >
-            {editingUser ? (
-              <>
-                <Pencil className="size-4" />
-                Update User
-              </>
-            ) : (
-              <>
-                <Plus className="size-4" />
-                Add User
-              </>
-            )}
-          </button>
-        </form>
+          <div>
+            <label htmlFor="user-email" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Email
+            </label>
+            <input
+              id="user-email"
+              type="email"
+              value={form.email}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, email: event.target.value }))
+              }
+              maxLength={150}
+              required
+              className={inputClassName}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="user-password" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Password
+            </label>
+            <input
+              id="user-password"
+              type="password"
+              value={form.password}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, password: event.target.value }))
+              }
+              required={!editingUser}
+              minLength={editingUser ? undefined : 8}
+              placeholder={editingUser ? "Leave blank to keep current password" : ""}
+              className={inputClassName}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="user-first-name" className="mb-1.5 block text-sm font-medium text-text-primary">
+              First Name
+            </label>
+            <input
+              id="user-first-name"
+              type="text"
+              value={form.firstName}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, firstName: event.target.value }))
+              }
+              maxLength={50}
+              required
+              className={inputClassName}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="user-last-name" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Last Name
+            </label>
+            <input
+              id="user-last-name"
+              type="text"
+              value={form.lastName}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, lastName: event.target.value }))
+              }
+              maxLength={50}
+              required
+              className={inputClassName}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="user-system-role" className="mb-1.5 block text-sm font-medium text-text-primary">
+              System Role
+            </label>
+            <select
+              id="user-system-role"
+              value={form.systemRole}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  systemRole: event.target.value as UserRole,
+                }))
+              }
+              className={inputClassName}
+            >
+              {USER_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {USER_ROLE_LABELS[role]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="user-emp-category" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Employee Category
+            </label>
+            <select
+              id="user-emp-category"
+              value={form.empCategory}
+              onChange={(event) =>
+                handleCategoryChange(event.target.value as EmployeeCategory)
+              }
+              className={inputClassName}
+            >
+              {EMPLOYEE_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {CATEGORY_LABELS[category]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="user-emp-sub-category" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Sub-Category
+            </label>
+            <select
+              id="user-emp-sub-category"
+              value={form.empSubCategory}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  empSubCategory: event.target.value as SubCategory,
+                }))
+              }
+              className={inputClassName}
+            >
+              {subCategoryOptions.map((subCategory) => (
+                <option key={subCategory} value={subCategory}>
+                  {SUB_CATEGORY_LABELS[subCategory]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="user-entity" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Entity
+            </label>
+            <select
+              id="user-entity"
+              value={form.entityId}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, entityId: event.target.value }))
+              }
+              className={inputClassName}
+            >
+              <option value="">None</option>
+              {entities?.map((entity) => (
+                <option key={entity.id} value={entity.id}>
+                  {entity.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="user-head" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Reporting Head
+            </label>
+            <select
+              id="user-head"
+              value={form.headId}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, headId: event.target.value }))
+              }
+              className={inputClassName}
+            >
+              <option value="">None</option>
+              {headOptions.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.firstName} {user.lastName} ({user.employeeId})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-text-primary">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, isActive: event.target.checked }))
+                }
+                className="size-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-white/15"
+              />
+              Active account
+            </label>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+        >
+          {editingUser ? (
+            <>
+              <Pencil className="size-4" />
+              Update User
+            </>
+          ) : (
+            <>
+              <Plus className="size-4" />
+              Add User
+            </>
+          )}
+        </button>
+      </form>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="border-b border-slate-300/80 dark:border-white/15">
+        <nav aria-label="User section tabs" className="-mb-px flex gap-1">
+          {(
+            [
+              { id: "list", label: "Users", icon: Table2 },
+              { id: "add", label: "Add User", icon: Plus },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleSwitchTab(tab.id)}
+                aria-current={isActive ? "page" : undefined}
+                className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "border-primary text-primary"
+                    : "border-transparent text-foreground/70 hover:border-primary/40 hover:text-text-primary"
+                }`}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
       </div>
+
+      {activeTab === "add" || editingUser ? renderFormCard() : null}
 
       {isLoading ? (
         <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
@@ -537,89 +592,110 @@ export default function UsersManager() {
           <Users className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">No users yet</p>
           <p className="mt-1 text-sm text-foreground/70">
-            Add your first user using the form above.
+            Add your first user from the Add User tab.
           </p>
         </div>
       ) : null}
 
       {!isLoading && !error && users && users.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
-          <table className="min-w-full text-sm">
-            <thead className="bg-primary/5">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">Employee</th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">Role</th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">Category</th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">Department</th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">Head</th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">Status</th>
-                <th className="px-4 py-3 text-right font-semibold text-text-primary">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr
-                  key={user.id}
-                  className="border-t border-slate-300/80 dark:border-white/15"
-                >
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-text-primary">
-                      {user.firstName} {user.lastName}
-                    </p>
-                    <p className="mt-0.5 text-xs text-foreground/70">{user.employeeId}</p>
-                    <p className="text-xs text-foreground/70">{user.email}</p>
-                  </td>
-                  <td className="px-4 py-3 text-text-primary">
-                    {USER_ROLE_LABELS[user.systemRole]}
-                  </td>
-                  <td className="px-4 py-3 text-text-primary">
-                    {CATEGORY_LABELS[user.empCategory]}
-                    <span className="block text-xs text-foreground/70">
-                      {SUB_CATEGORY_LABELS[user.empSubCategory]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-text-primary">
-                    {user.departmentName ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-text-primary">
-                    {user.headName ?? "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                        user.isActive
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                          : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-foreground/70"
-                      }`}
-                    >
-                      {user.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(user)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-                      >
-                        <Pencil className="size-3.5" />
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(user)}
-                        disabled={deleteMutation.isPending}
-                        className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
-                      >
-                        <Trash2 className="size-3.5" />
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {categoryStats.map((stat) => (
+              <div
+                key={stat.category}
+                className="rounded-xl border border-slate-300/80 p-4 dark:border-white/15"
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-foreground/70">
+                  {stat.label}
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-text-primary">
+                  {stat.count}
+                </p>
+                <p className="mt-1 text-xs text-foreground/70">
+                  {stat.count === 1 ? "Employee" : "Employees"}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
+            <table className="min-w-full text-sm">
+              <thead className="bg-primary/5">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Employee</th>
+                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Role</th>
+                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Category</th>
+                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Entity</th>
+                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Head</th>
+                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Status</th>
+                  <th className="px-4 py-3 text-right font-semibold text-text-primary">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr
+                    key={user.id}
+                    className="border-t border-slate-300/80 dark:border-white/15"
+                  >
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-text-primary">
+                        {user.firstName} {user.lastName}
+                      </p>
+                      <p className="mt-0.5 text-xs text-foreground/70">{user.employeeId}</p>
+                      <p className="text-xs text-foreground/70">{user.email}</p>
+                    </td>
+                    <td className="px-4 py-3 text-text-primary">
+                      {USER_ROLE_LABELS[user.systemRole]}
+                    </td>
+                    <td className="px-4 py-3 text-text-primary">
+                      {CATEGORY_LABELS[user.empCategory]}
+                      <span className="block text-xs text-foreground/70">
+                        {SUB_CATEGORY_LABELS[user.empSubCategory]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-text-primary">
+                      {user.entityName ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-text-primary">
+                      {user.headName ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                          user.isActive
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                            : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-foreground/70"
+                        }`}
+                      >
+                        {user.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(user)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                        >
+                          <Pencil className="size-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(user)}
+                          disabled={deleteMutation.isPending}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
     </div>

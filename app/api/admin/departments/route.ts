@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
-import { listDepartments } from "@/lib/queries/users";
+import { listEntitiesForUsers } from "@/lib/queries/users";
 
 export async function GET() {
   const auth = await requireSuperAdminApi();
@@ -9,12 +9,12 @@ export async function GET() {
   }
 
   try {
-    const departments = await listDepartments();
-    return NextResponse.json(departments);
+    const entities = await listEntitiesForUsers();
+    return NextResponse.json(entities);
   } catch (error) {
-    console.error("Failed to list departments:", error);
+    console.error("Failed to list entities:", error);
     return NextResponse.json(
-      { error: "Failed to load departments." },
+      { error: "Failed to load entities." },
       { status: 500 },
     );
   }

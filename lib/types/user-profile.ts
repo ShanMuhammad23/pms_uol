@@ -3,7 +3,7 @@ export interface UserProfile {
   firstName: string;
   lastName: string;
   emailAddress: string;
-  department: string | null;
+  entity: string | null;
   designation: string | null;
   mobileNumber: string | null;
   employmentStatus: string;

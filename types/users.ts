@@ -27,7 +27,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
 };
 
-export interface DepartmentRecord {
+export interface EntityOptionRecord {
   id: number;
   name: string;
 }
@@ -41,8 +41,8 @@ export interface UserRecord {
   systemRole: UserRole;
   empCategory: EmployeeCategory;
   empSubCategory: SubCategory;
-  departmentId: number | null;
-  departmentName: string | null;
+  entityId: number | null;
+  entityName: string | null;
   headId: number | null;
   headName: string | null;
   isActive: boolean;
@@ -58,7 +58,7 @@ export interface CreateUserInput {
   systemRole: UserRole;
   empCategory: EmployeeCategory;
   empSubCategory: SubCategory;
-  departmentId?: number | null;
+  entityId?: number | null;
   headId?: number | null;
   isActive?: boolean;
 }
@@ -72,7 +72,7 @@ export interface UpdateUserInput {
   systemRole: UserRole;
   empCategory: EmployeeCategory;
   empSubCategory: SubCategory;
-  departmentId?: number | null;
+  entityId?: number | null;
   headId?: number | null;
   isActive?: boolean;
 }
