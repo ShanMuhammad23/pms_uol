@@ -227,8 +227,8 @@ CREATE TABLE performance_quartiles (
     id BIGSERIAL PRIMARY KEY,
     performance_level_id BIGINT NOT NULL REFERENCES performance_levels(id) ON DELETE RESTRICT,
     name VARCHAR(100) NOT NULL,              -- e.g. 'Q1', 'Upper Quartile'
-    score_min INT NOT NULL,
-    score_max INT NOT NULL,
+    score_min NUMERIC(10, 2) NOT NULL,
+    score_max NUMERIC(10, 2) NOT NULL,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

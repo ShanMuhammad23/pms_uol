@@ -47,3 +47,15 @@ export interface UpdatePerformanceQuartileInput {
   scoreMax: number;
   sortOrder?: number;
 }
+
+export function formatPerformanceScore(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "—";
+  }
+
+  if (Number.isInteger(value)) {
+    return value.toString();
+  }
+
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}

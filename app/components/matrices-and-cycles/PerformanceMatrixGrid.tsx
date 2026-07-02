@@ -1,6 +1,9 @@
 "use client";
 
-import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
+import {
+  formatPerformanceScore,
+  type PerformanceLevelWithQuartiles,
+} from "@/types/performance-matrices";
 
 interface PerformanceMatrixGridProps {
   levels: PerformanceLevelWithQuartiles[];
@@ -67,28 +70,28 @@ export default function PerformanceMatrixGrid({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
+    <div className="border border-slate-200 dark:border-neutral-700 rounded-md overflow-x-auto ">
       <table className="min-w-full text-sm">
-        <thead className="bg-primary/5">
-          <tr>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+        <thead className="bg-primary text-white">
+          <tr className="divide-x divide-slate-300 dark:divide-neutral-600">
+            <th className=" dark:text-slate-50 text-left text-sm font-semibold border-b border-slate-300 dark:border-neutral-600 whitespace-nowrap px-4 py-3">
               Performance Level
             </th>
             {columnHeaders.map((header, index) => (
               <th
                 key={`${header}-${index}`}
-                className="px-4 py-3 text-left font-semibold text-text-primary"
+                className=" dark:text-slate-50 text-left text-sm font-semibold border-b border-slate-300 dark:border-neutral-600 whitespace-nowrap px-4 py-3"
               >
                 {header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="text-sm divide-y divide-slate-200 dark:divide-neutral-700">
           {levels.map((level) => (
             <tr
               key={level.id}
-              className="border-t border-slate-300/80 dark:border-white/15"
+              className="divide-x divide-slate-200 dark:divide-neutral-700"
             >
               <td className="px-4 py-3 font-medium text-text-primary">
                 {level.name}
@@ -104,7 +107,8 @@ export default function PerformanceMatrixGrid({
                           {quartile.name}
                         </p>
                         <p className="text-xs text-foreground/70">
-                          {quartile.scoreMin} – {quartile.scoreMax}
+                          {formatPerformanceScore(quartile.scoreMin)} –{" "}
+                          {formatPerformanceScore(quartile.scoreMax)}
                         </p>
                       </div>
                     ) : (

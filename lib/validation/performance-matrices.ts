@@ -89,12 +89,16 @@ function validateQuartileFields(
     return "Quartile name must be 100 characters or fewer.";
   }
 
-  if (!Number.isInteger(input.scoreMin)) {
-    return "Minimum score must be an integer.";
+  if (!Number.isFinite(input.scoreMin)) {
+    return "Minimum score must be a valid number.";
   }
 
-  if (!Number.isInteger(input.scoreMax)) {
-    return "Maximum score must be an integer.";
+  if (!Number.isFinite(input.scoreMax)) {
+    return "Maximum score must be a valid number.";
+  }
+
+  if (input.scoreMin < 0 || input.scoreMax < 0) {
+    return "Scores must be zero or greater.";
   }
 
   if (input.scoreMin >= input.scoreMax) {

@@ -14,10 +14,11 @@ import {
   updatePerformanceLevel,
   updatePerformanceQuartile,
 } from "@/lib/queries/performance-matrices-client";
-import type {
-  PerformanceLevelRecord,
-  PerformanceLevelWithQuartiles,
-  PerformanceQuartileRecord,
+import {
+  formatPerformanceScore,
+  type PerformanceLevelRecord,
+  type PerformanceLevelWithQuartiles,
+  type PerformanceQuartileRecord,
 } from "@/types/performance-matrices";
 import PerformanceMatrixGrid from "./PerformanceMatrixGrid";
 
@@ -273,10 +274,18 @@ export default function PerformanceMatricesManager() {
     const parsedMax = Number(scoreMax);
     const sortOrder = Number(quartileSortOrder);
 
-    if (!Number.isInteger(parsedMin) || !Number.isInteger(parsedMax)) {
+    if (!Number.isFinite(parsedMin) || !Number.isFinite(parsedMax)) {
       setFormMessage({
         tone: "error",
-        text: "Score min and max must be integers.",
+        text: "Score min and max must be valid numbers.",
+      });
+      return;
+    }
+
+    if (parsedMin < 0 || parsedMax < 0) {
+      setFormMessage({
+        tone: "error",
+        text: "Scores must be zero or greater.",
       });
       return;
     }
@@ -341,8 +350,8 @@ export default function PerformanceMatricesManager() {
   const handleEditQuartile = (quartile: PerformanceQuartileRecord) => {
     setEditingQuartile(quartile);
     setQuartileName(quartile.name);
-    setScoreMin(String(quartile.scoreMin));
-    setScoreMax(String(quartile.scoreMax));
+    setScoreMin(formatPerformanceScore(quartile.scoreMin));
+    setScoreMax(formatPerformanceScore(quartile.scoreMax));
     setQuartileSortOrder(String(quartile.sortOrder));
     setFormMessage(null);
   };
@@ -532,9 +541,7 @@ export default function PerformanceMatricesManager() {
                     <th className="px-4 py-3 text-left font-semibold text-text-primary">
                       Sort
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                      Quartiles
-                    </th>
+                   
                     <th className="px-4 py-3 text-right font-semibold text-text-primary">
                       Actions
                     </th>
@@ -554,9 +561,7 @@ export default function PerformanceMatricesManager() {
                       <td className="px-4 py-3 text-text-primary">
                         {level.sortOrder}
                       </td>
-                      <td className="px-4 py-3 text-text-primary">
-                        {level.quartiles.length}
-                      </td>
+                      
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
                           <button
@@ -680,6 +685,8 @@ export default function PerformanceMatricesManager() {
                 <input
                   id="score-min"
                   type="number"
+                  min={0}
+                  step="0.01"
                   value={scoreMin}
                   onChange={(event) => setScoreMin(event.target.value)}
                   required
@@ -698,6 +705,8 @@ export default function PerformanceMatricesManager() {
                 <input
                   id="score-max"
                   type="number"
+                  min={0}
+                  step="0.01"
                   value={scoreMax}
                   onChange={(event) => setScoreMax(event.target.value)}
                   required
@@ -773,7 +782,8 @@ export default function PerformanceMatricesManager() {
                         {quartile.name}
                       </td>
                       <td className="px-4 py-3 text-text-primary">
-                        {quartile.scoreMin} – {quartile.scoreMax}
+                        {formatPerformanceScore(quartile.scoreMin)} –{" "}
+                        {formatPerformanceScore(quartile.scoreMax)}
                       </td>
                       <td className="px-4 py-3 text-text-primary">
                         {quartile.sortOrder}
