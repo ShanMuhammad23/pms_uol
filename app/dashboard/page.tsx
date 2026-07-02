@@ -19,10 +19,8 @@ import {
   LabelList,
 } from "recharts";
 import {
-  TrendingUp,
   AlertTriangle,
   Scale,
-  Banknote,
   Search,
   Eye,
   CheckCircle2,
@@ -396,6 +394,54 @@ function buildCategoryCounts(employees: Employee[]) {
     .filter((entry) => entry.value > 0);
 }
 
+type EligibilityStatus = "Fully Eligible" | "Partially Eligible" | "Not Eligible";
+
+const ELIGIBILITY_CONFIG: Record<
+  EligibilityStatus,
+  { light: string; dark: string }
+> = {
+  "Fully Eligible": { light: "#059669", dark: "#34d399" },
+  "Partially Eligible": { light: "#d97706", dark: "#fbbf24" },
+  "Not Eligible": { light: "#64748b", dark: "#94a3b8" },
+};
+
+function getEligibilityStatus(employee: Employee): EligibilityStatus {
+  if (
+    employee.formState === "PENDING_HR_CALIBRATION" ||
+    employee.formState === "PENDING_BOARD_APPROVAL" ||
+    employee.formState === "APPROVED"
+  ) {
+    return "Fully Eligible";
+  }
+
+  if (
+    employee.formState === "PENDING_SELF_ASSESSMENT" ||
+    employee.formState === "PENDING_HEAD_REVIEW"
+  ) {
+    return "Partially Eligible";
+  }
+
+  return "Not Eligible";
+}
+
+function buildEligibilityData(employees: Employee[], isDarkMode: boolean) {
+  const counts: Record<EligibilityStatus, number> = {
+    "Fully Eligible": 0,
+    "Partially Eligible": 0,
+    "Not Eligible": 0,
+  };
+
+  employees.forEach((employee) => {
+    counts[getEligibilityStatus(employee)] += 1;
+  });
+
+  return (Object.keys(counts) as EligibilityStatus[]).map((name) => ({
+    name,
+    value: counts[name],
+    color: isDarkMode ? ELIGIBILITY_CONFIG[name].dark : ELIGIBILITY_CONFIG[name].light,
+  }));
+}
+
 function subscribeToTheme(onStoreChange: () => void) {
   const observer = new MutationObserver(onStoreChange);
   observer.observe(document.documentElement, {
@@ -616,6 +662,81 @@ function StatCard({
           <Icon className="h-5 w-5" />
         </div>
       </div>
+    </motion.div>
+  );
+}
+
+function EligibilityStatCard({
+  data,
+  delay,
+}: {
+  data: Array<{ name: string; value: number; color: string }>;
+  delay: number;
+}) {
+  const hasData = data.some((entry) => entry.value > 0);
+
+  return (
+    <motion.div
+      variants={itemVariants}
+      transition={{ delay }}
+      whileHover={{ y: -3, transition: { duration: 0.2 } }}
+      className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+    >
+      <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600" />
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        Appraisal Eligibility
+      </p>
+
+      {hasData ? (
+        <div className="mt-3 flex items-center gap-3">
+          <div className="h-[88px] w-[88px] shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={24}
+                  outerRadius={40}
+                  paddingAngle={2}
+                  dataKey="value"
+                  nameKey="name"
+                  strokeWidth={0}
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`eligibility-mini-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <ul className="min-w-0 flex-1 space-y-1.5">
+            {data.map((entry) => (
+              <li
+                key={entry.name}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: entry.color }}
+                  />
+                  <span className="truncate">{entry.name}</span>
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums text-slate-900 dark:text-white">
+                  {entry.value}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+          No employees match the current filters
+        </p>
+      )}
     </motion.div>
   );
 }
@@ -847,20 +968,27 @@ export default function HRDashboardPage() {
     [isDarkMode],
   );
 
+  const eligibilityData = useMemo(
+    () => buildEligibilityData(filteredEmployees, isDarkMode),
+    [filteredEmployees, isDarkMode],
+  );
+
   /* Reset sub-function when function changes */
   const handleFunctionChange = (func: string) => {
     setSelectedFunction(func);
     setSelectedSubFunction("ALL");
   };
 
-  /* ── Stats ── */
-  const totalEmployees = MOCK_EMPLOYEES.length;
-  const submittedCount = MOCK_EMPLOYEES.filter((e) => e.formState !== "DRAFT" && e.formState !== "PENDING_SELF_ASSESSMENT").length;
-  const completionRate = ((submittedCount / totalEmployees) * 100).toFixed(1);
-
-  const pendingHeadCount = MOCK_EMPLOYEES.filter((e) => e.formState === "PENDING_HEAD_REVIEW").length;
-  const pendingCalibrationCount = MOCK_EMPLOYEES.filter((e) => e.formState === "PENDING_HR_CALIBRATION").length;
-  const totalApprovedIncrement = MOCK_EMPLOYEES.reduce((sum, e) => sum + (e.approvedIncrement ?? 0), 0);
+  /* ── Workflow Stats ── */
+  const selfAssessmentCount = filteredEmployees.filter(
+    (employee) => employee.formState === "PENDING_SELF_ASSESSMENT",
+  ).length;
+  const managerReviewCount = filteredEmployees.filter(
+    (employee) => employee.formState === "PENDING_HEAD_REVIEW",
+  ).length;
+  const hrAlignmentCount = filteredEmployees.filter(
+    (employee) => employee.formState === "PENDING_HR_CALIBRATION",
+  ).length;
 
   /* ── Active Filters for Display ── */
   const activeFilters = useMemo(() => {
@@ -916,48 +1044,43 @@ export default function HRDashboardPage() {
           </div>
         </motion.div>
 
-        {/* ── Stat Cards ── */}
+        {/* ── Eligibility + Workflow Stats ── */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
         >
+          <EligibilityStatCard data={eligibilityData} delay={0} />
           <StatCard
-            title="Cycle Progress"
-            value={`${completionRate}%`}
-            subtitle={`${submittedCount} / ${totalEmployees} Forms Advanced`}
-            tone="navy"
-            icon={TrendingUp}
-            delay={0}
+            title="Self Assessment"
+            value={selfAssessmentCount.toString()}
+            subtitle="Awaiting employee submission"
+            tone="slate"
+            icon={User}
+            delay={0.1}
+            onClick={() => filterByFormState("PENDING_SELF_ASSESSMENT")}
+            active={selectedFormState === "PENDING_SELF_ASSESSMENT"}
           />
           <StatCard
-            title="Function Head Review"
-            value={pendingHeadCount.toString()}
-            subtitle="Awaiting Line Manager Confirmation"
+            title="Manager Review"
+            value={managerReviewCount.toString()}
+            subtitle="Awaiting line manager review"
             tone="amber"
             icon={AlertTriangle}
-            delay={0.1}
+            delay={0.2}
             onClick={() => filterByFormState("PENDING_HEAD_REVIEW")}
             active={selectedFormState === "PENDING_HEAD_REVIEW"}
           />
           <StatCard
-            title="HR Calibration"
-            value={pendingCalibrationCount.toString()}
-            subtitle="Ready for Curve Adjustment"
+            title="HR Alignment"
+            value={hrAlignmentCount.toString()}
+            subtitle="Ready for HR calibration"
             tone="orange"
             icon={Scale}
-            delay={0.2}
+            delay={0.3}
             onClick={() => filterByFormState("PENDING_HR_CALIBRATION")}
             active={selectedFormState === "PENDING_HR_CALIBRATION"}
-          />
-          <StatCard
-            title="Approved Increment Load"
-            value={`${totalApprovedIncrement.toFixed(1)}%`}
-            subtitle="Based on Finalized Appraisals"
-            tone="emerald"
-            icon={Banknote}
-            delay={0.3}
           />
         </motion.div>
 
