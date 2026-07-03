@@ -8,10 +8,6 @@ import {
   deleteFormTemplate,
   fetchFormTemplates,
 } from "@/lib/queries/forms-client";
-import {
-  CATEGORY_LABELS,
-  SUB_CATEGORY_LABELS,
-} from "@/types/forms";
 
 export default function FormsListTable() {
   const queryClient = useQueryClient();
@@ -100,10 +96,7 @@ export default function FormsListTable() {
                 Title
               </th>
               <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                Category
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                Cycle
+                Staff Category
               </th>
               <th className="px-4 py-3 text-left font-semibold text-text-primary">
                 Questions
@@ -131,13 +124,10 @@ export default function FormsListTable() {
                   ) : null}
                 </td>
                 <td className="px-4 py-3 text-text-primary">
-                  {CATEGORY_LABELS[template.targetCategory]}
+                  {template.staffCategoryName ?? "—"}
                   <span className="block text-xs text-foreground/70">
-                    {SUB_CATEGORY_LABELS[template.targetSubCategory]}
+                    {template.staffSubCategoryName ?? "—"}
                   </span>
-                </td>
-                <td className="px-4 py-3 text-text-primary">
-                  FY {template.fiscalYear}
                 </td>
                 <td className="px-4 py-3 text-text-primary">
                   {template.questionCount}

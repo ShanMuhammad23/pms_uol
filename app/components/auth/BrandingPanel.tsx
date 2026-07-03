@@ -114,7 +114,7 @@ export function BrandingPanel() {
           <motion.div variants={itemVariants} className="space-y-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400">
               <Landmark className="h-3.5 w-3.5" />
-              Fiscal Year 2026
+              Performance Year 2026
             </div>
             <h1 className="text-[2.75rem] font-bold leading-[1.1] tracking-tight">
               Performance {" "}

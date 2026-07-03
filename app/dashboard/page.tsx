@@ -1016,33 +1016,9 @@ export default function HRDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <div className="mx-auto  px-4  sm:px-6">
+      <div className="mx-auto  ">
         {/* ── Header ── */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-8 "
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 dark:bg-amber-600">
-                  <BarChart3 className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-                    Performance Management System
-                  </h1>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Fiscal Year 2026 — University-wide Appraisal Cycle
-                  </p>
-                </div>
-              </div>
-            </div>
-           
-          </div>
-        </motion.div>
+       
 
         {/* ── Eligibility + Workflow Stats ── */}
         <motion.div

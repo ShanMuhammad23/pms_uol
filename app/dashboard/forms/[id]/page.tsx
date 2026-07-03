@@ -28,7 +28,7 @@ export default async function EditFormPage({ params }: EditFormPageProps) {
       <div>
         <h1 className="text-2xl font-bold">Edit Form</h1>
         <p className="mt-1 text-sm text-foreground/70">
-          Update the form design, category routing, or procedure configuration.
+          Update the form questions or staff category assignment.
         </p>
       </div>
 

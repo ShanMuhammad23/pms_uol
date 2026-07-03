@@ -1,35 +1,24 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import CategoryAssignmentStep from "./steps/CategoryAssignmentStep";
 import FormDesignStep from "./steps/FormDesignStep";
-import ProcedureSetupStep from "./steps/ProcedureSetupStep";
 import {
   createFormTemplate,
-  fetchAppraisalCycles,
-  fetchIncrementMatrices,
   updateFormTemplate,
 } from "@/lib/queries/forms-client";
 import type {
-  AppraisalCycleRecord,
-  EmployeeCategory,
   FormTemplateInput,
   FormTemplateRecord,
-  IncrementMatrixInput,
   QuestionInput,
-  SubCategory,
 } from "@/types/forms";
-import {
-  CATEGORY_SUB_MAP,
-  createDefaultIncrementMatrix,
-  createEmptyQuestion,
-} from "@/types/forms";
+import { createEmptyQuestion } from "@/types/forms";
 import { cn } from "@/lib/utils";
 
-const STEPS = ["Design", "Category", "Procedure"] as const;
+const STEPS = ["Design", "Category"] as const;
 
 interface FormBuilderWizardProps {
   templateId?: number;
@@ -40,9 +29,8 @@ function mapRecordToState(record: FormTemplateRecord) {
   return {
     title: record.title,
     description: record.description ?? "",
-    targetCategory: record.targetCategory,
-    targetSubCategory: record.targetSubCategory,
-    cycleId: record.cycleId,
+    staffCategoryId: record.staffCategoryId,
+    staffSubCategoryId: record.staffSubCategoryId,
     questions: record.questions.map((question) => ({
       questionText: question.questionText,
       inputType: question.inputType,
@@ -57,10 +45,6 @@ function mapRecordToState(record: FormTemplateRecord) {
         sortOrder: option.sortOrder,
       })),
     })),
-    incrementMatrices:
-      record.incrementMatrices.length > 0
-        ? record.incrementMatrices
-        : createDefaultIncrementMatrix(),
   };
 }
 
@@ -77,78 +61,28 @@ export default function FormBuilderWizard({
   const [questions, setQuestions] = useState<QuestionInput[]>(
     initialState?.questions ?? [createEmptyQuestion(0)],
   );
-  const [targetCategory, setTargetCategory] = useState<EmployeeCategory | "">(
-    initialState?.targetCategory ?? "",
+  const [staffCategoryId, setStaffCategoryId] = useState<number | "">(
+    initialState?.staffCategoryId ?? "",
   );
-  const [targetSubCategory, setTargetSubCategory] = useState<SubCategory | "">(
-    initialState?.targetSubCategory ?? "",
+  const [staffSubCategoryId, setStaffSubCategoryId] = useState<number | "">(
+    initialState?.staffSubCategoryId ?? "",
   );
-  const [cycleId, setCycleId] = useState<number | null>(
-    initialState?.cycleId ?? null,
-  );
-  const [matrixOverrides, setMatrixOverrides] = useState<
-    IncrementMatrixInput[] | null
-  >(null);
-  const [addedCycles, setAddedCycles] = useState<AppraisalCycleRecord[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const cyclesQuery = useQuery({
-    queryKey: ["appraisal-cycles"],
-    queryFn: fetchAppraisalCycles,
-  });
-
-  const matricesQuery = useQuery({
-    queryKey: ["increment-matrices", cycleId],
-    queryFn: () => fetchIncrementMatrices(cycleId as number),
-    enabled: Boolean(cycleId) && !initialData,
-  });
-
-  const cycles = useMemo(
-    () => [...addedCycles, ...(cyclesQuery.data ?? [])],
-    [addedCycles, cyclesQuery.data],
-  );
-
-  const incrementMatrices = useMemo(() => {
-    if (matrixOverrides) return matrixOverrides;
-    if (!initialData && matricesQuery.data && matricesQuery.data.length > 0) {
-      return matricesQuery.data;
-    }
-    return initialState?.incrementMatrices ?? createDefaultIncrementMatrix();
-  }, [matrixOverrides, initialData, matricesQuery.data, initialState]);
-
-  const handleCycleChange = useCallback((nextCycleId: number) => {
-    setCycleId(nextCycleId);
-    setMatrixOverrides(null);
-  }, []);
-
-  const handleMatricesChange = useCallback((matrices: IncrementMatrixInput[]) => {
-    setMatrixOverrides(matrices);
-  }, []);
-
   const payload = useMemo<FormTemplateInput | null>(() => {
-    if (!targetCategory || !targetSubCategory || !cycleId) {
+    if (!staffCategoryId || !staffSubCategoryId) {
       return null;
     }
 
     return {
       title: title.trim(),
       description: description.trim(),
-      cycleId,
-      targetCategory,
-      targetSubCategory,
+      staffCategoryId: Number(staffCategoryId),
+      staffSubCategoryId: Number(staffSubCategoryId),
       questions,
-      incrementMatrices,
     };
-  }, [
-    title,
-    description,
-    cycleId,
-    targetCategory,
-    targetSubCategory,
-    questions,
-    incrementMatrices,
-  ]);
+  }, [title, description, staffCategoryId, staffSubCategoryId, questions]);
 
   const saveMutation = useMutation({
     mutationFn: async (input: FormTemplateInput) => {
@@ -220,32 +154,12 @@ export default function FormBuilderWizard({
   const validateCategoryStep = () => {
     const nextErrors: Record<string, string> = {};
 
-    if (!targetCategory) {
-      nextErrors.targetCategory = "Employee category is required.";
+    if (!staffCategoryId) {
+      nextErrors.staffCategoryId = "Staff category is required.";
     }
 
-    if (!targetSubCategory) {
-      nextErrors.targetSubCategory = "Sub-category is required.";
-    }
-
-    if (
-      targetCategory &&
-      targetSubCategory &&
-      !CATEGORY_SUB_MAP[targetCategory].includes(targetSubCategory)
-    ) {
-      nextErrors.targetSubCategory =
-        "Selected sub-category does not belong to the chosen category.";
-    }
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const validateProcedureStep = () => {
-    const nextErrors: Record<string, string> = {};
-
-    if (!cycleId) {
-      nextErrors.cycleId = "Appraisal cycle is required.";
+    if (!staffSubCategoryId) {
+      nextErrors.staffSubCategoryId = "Sub-category is required.";
     }
 
     setErrors(nextErrors);
@@ -256,10 +170,6 @@ export default function FormBuilderWizard({
     setSubmitError(null);
 
     if (step === 0 && !validateDesignStep()) {
-      return;
-    }
-
-    if (step === 1 && !validateCategoryStep()) {
       return;
     }
 
@@ -275,20 +185,16 @@ export default function FormBuilderWizard({
   const handleSubmit = () => {
     setSubmitError(null);
 
-    if (!validateProcedureStep() || !payload) {
+    if (!validateDesignStep() || !validateCategoryStep() || !payload) {
       return;
     }
 
     saveMutation.mutate(payload);
   };
 
-  const handleCategoryChange = (category: EmployeeCategory) => {
-    setTargetCategory(category);
-    setTargetSubCategory("");
-  };
-
-  const handleCycleCreated = (cycle: AppraisalCycleRecord) => {
-    setAddedCycles((current) => [cycle, ...current]);
+  const handleCategoryChange = (categoryId: number) => {
+    setStaffCategoryId(categoryId);
+    setStaffSubCategoryId("");
   };
 
   return (
@@ -338,23 +244,11 @@ export default function FormBuilderWizard({
 
         {step === 1 ? (
           <CategoryAssignmentStep
-            targetCategory={targetCategory}
-            targetSubCategory={targetSubCategory}
+            staffCategoryId={staffCategoryId}
+            staffSubCategoryId={staffSubCategoryId}
             errors={errors}
             onCategoryChange={handleCategoryChange}
-            onSubCategoryChange={setTargetSubCategory}
-          />
-        ) : null}
-
-        {step === 2 ? (
-          <ProcedureSetupStep
-            cycles={cycles}
-            cycleId={cycleId}
-            incrementMatrices={incrementMatrices}
-            errors={errors}
-            onCycleChange={handleCycleChange}
-            onMatricesChange={handleMatricesChange}
-            onCycleCreated={handleCycleCreated}
+            onSubCategoryChange={setStaffSubCategoryId}
           />
         ) : null}
       </div>

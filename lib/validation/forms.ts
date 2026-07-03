@@ -1,10 +1,5 @@
 import type { FormTemplateInput } from "@/types/forms";
-import {
-  CATEGORY_SUB_MAP,
-  EMPLOYEE_CATEGORIES,
-  FIELD_TYPES,
-  PERFORMANCE_RATINGS,
-} from "@/types/forms";
+import { FIELD_TYPES } from "@/types/forms";
 
 export function validateFormTemplateInput(
   input: Partial<FormTemplateInput>,
@@ -13,22 +8,18 @@ export function validateFormTemplateInput(
     return "Form title is required.";
   }
 
-  if (!input.cycleId || Number.isNaN(Number(input.cycleId))) {
-    return "Appraisal cycle is required.";
+  if (
+    !input.staffCategoryId ||
+    Number.isNaN(Number(input.staffCategoryId))
+  ) {
+    return "Staff category is required.";
   }
 
   if (
-    !input.targetCategory ||
-    !EMPLOYEE_CATEGORIES.includes(input.targetCategory)
+    !input.staffSubCategoryId ||
+    Number.isNaN(Number(input.staffSubCategoryId))
   ) {
-    return "Target category is required.";
-  }
-
-  if (
-    !input.targetSubCategory ||
-    !CATEGORY_SUB_MAP[input.targetCategory].includes(input.targetSubCategory)
-  ) {
-    return "Target sub-category is required.";
+    return "Staff sub-category is required.";
   }
 
   if (!input.questions || input.questions.length === 0) {
@@ -82,24 +73,6 @@ export function validateFormTemplateInput(
           return `Question ${index + 1}, option ${optionIndex + 1} points must be a number.`;
         }
       }
-    }
-  }
-
-  if (!input.incrementMatrices || input.incrementMatrices.length === 0) {
-    return "Increment matrix configuration is required.";
-  }
-
-  for (const entry of input.incrementMatrices) {
-    if (!PERFORMANCE_RATINGS.includes(entry.rating)) {
-      return "Increment matrix contains an invalid rating.";
-    }
-
-    if (entry.quartile < 1 || entry.quartile > 4) {
-      return "Increment matrix quartile must be between 1 and 4.";
-    }
-
-    if (Number.isNaN(Number(entry.recommendedIncrementPercentage))) {
-      return "Increment matrix percentage must be a number.";
     }
   }
 

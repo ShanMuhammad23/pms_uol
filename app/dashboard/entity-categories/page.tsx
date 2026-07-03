@@ -1,8 +1,8 @@
 import EntityStructureTabs from "@/app/components/entity-categories/EntityStructureTabs";
-import { requireSession } from "@/lib/auth/require-session";
+import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
 
 export default async function EntityCategoriesPage() {
-  await requireSession();
+  await requireSuperAdminSession();
 
   return (
     <div className="space-y-6 text-text-primary">

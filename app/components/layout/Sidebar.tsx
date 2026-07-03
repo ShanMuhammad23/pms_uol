@@ -2,10 +2,11 @@
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { FileText, Grid3X3, LayoutDashboard, LogOut,SquareUserRound,UserRound,List, Users, Layers } from 'lucide-react'
+import { FileText, Grid3X3, LayoutDashboard, LogOut,SquareUserRound,UserRound,List, Users, Layers, ClipboardCheck } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
+import { canReviewSubmissions } from '@/lib/auth/submission-review-roles'
 const Sidebar = () => {
   const pathname = usePathname()
   const { data: session } = useSession()
@@ -14,7 +15,10 @@ const Sidebar = () => {
   const isProfile = pathname === '/dashboard/profile'
   const isForms = pathname.startsWith('/dashboard/forms')
   const isUsers = pathname.startsWith('/dashboard/users')
+  const isMyForms = pathname.startsWith('/dashboard/my-forms')
+  const isSubmissions = pathname.startsWith('/dashboard/submissions')
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
+  const canViewSubmissions = canReviewSubmissions(user?.role)
   const isEntityCategories = pathname === '/dashboard/entity-categories'
   const isStaffCategories = pathname.startsWith('/dashboard/staff-categories')
   const isMatricesAndCycles = pathname.startsWith('/dashboard/matrices-and-cycles')
@@ -24,7 +28,7 @@ const Sidebar = () => {
  
     <div className="flex  items-center gap-4 relative px-4">
        <div className="flex flex-wrap items-center gap-2 flex-1">
-          <Image src="/logo.png" width={100} height={100} alt="University of Lahore" className='invert dark:invert-0 '/>
+         <h2 className='text-2xl font-bold'>PMS Dashboard</h2>
         
        </div>
        <div className="flex items-center gap-2">
@@ -45,6 +49,30 @@ const Sidebar = () => {
                 Dashboard
              </Link>
           </li>
+
+          {!isSuperAdmin ? (
+          <li>
+             <Link href="/dashboard/my-forms" aria-current={isMyForms ? 'page' : undefined}
+                className={`sidebar-nav-link ${
+                  isMyForms ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
+                }`}>
+                <FileText className="size-4" />
+                My Forms
+             </Link>
+          </li>
+          ) : null}
+
+          {canViewSubmissions ? (
+          <li>
+             <Link href="/dashboard/submissions" aria-current={isSubmissions ? 'page' : undefined}
+                className={`sidebar-nav-link ${
+                  isSubmissions ? 'bg-primary/10 border-r-4 border-primary' : 'hover:bg-primary/10 hover:border-r-4 border-primary'
+                }`}>
+                <ClipboardCheck className="size-4" />
+                Submissions
+             </Link>
+          </li>
+          ) : null}
          
          
           
@@ -94,6 +122,7 @@ const Sidebar = () => {
                 Profile
              </Link>
           </li>
+          {isSuperAdmin ? (
           <li>
             <Link href="/dashboard/entity-categories" aria-current={isEntityCategories ? 'page' : undefined}
               className={`sidebar-nav-link ${
@@ -103,6 +132,7 @@ const Sidebar = () => {
               Entity & Categories
             </Link>
           </li>
+          ) : null}
           {isSuperAdmin ? (
           <li>
             <Link href="/dashboard/staff-categories" aria-current={isStaffCategories ? 'page' : undefined}

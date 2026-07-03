@@ -2,14 +2,8 @@
 
 import Link from "next/link";
 import { Pencil } from "lucide-react";
-import IncrementMatrixGrid from "./IncrementMatrixGrid";
-import WorkflowStepper from "./WorkflowStepper";
 import type { FormTemplateRecord } from "@/types/forms";
-import {
-  CATEGORY_LABELS,
-  FIELD_TYPE_LABELS,
-  SUB_CATEGORY_LABELS,
-} from "@/types/forms";
+import { FIELD_TYPE_LABELS } from "@/types/forms";
 
 interface FormTemplateViewProps {
   template: FormTemplateRecord;
@@ -39,20 +33,14 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Category</p>
+          <p className="text-xs font-medium text-foreground/70">Staff Category</p>
           <p className="mt-1 text-sm font-semibold text-text-primary">
-            {CATEGORY_LABELS[template.targetCategory]}
+            {template.staffCategoryName ?? "—"}
           </p>
           <p className="text-xs text-foreground/70">
-            {SUB_CATEGORY_LABELS[template.targetSubCategory]}
-          </p>
-        </div>
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Appraisal Cycle</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
-            FY {template.fiscalYear}
+            {template.staffSubCategoryName ?? "—"}
           </p>
         </div>
         <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
@@ -115,19 +103,6 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
           </div>
         ))}
       </div>
-
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-text-primary">
-          Increment Matrix
-        </h3>
-        <IncrementMatrixGrid
-          matrices={template.incrementMatrices}
-          onChange={() => {}}
-          readOnly
-        />
-      </div>
-
-      <WorkflowStepper />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSessionApi } from "@/lib/auth/require-session";
+import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
 import {
   deleteEntity,
   EntityError,
@@ -14,7 +14,7 @@ interface RouteContext {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const auth = await requireSessionApi();
+  const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -44,7 +44,7 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
-  const auth = await requireSessionApi();
+  const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -83,7 +83,7 @@ export async function PUT(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const auth = await requireSessionApi();
+  const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
   }

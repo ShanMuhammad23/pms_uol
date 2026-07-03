@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSessionApi } from "@/lib/auth/require-session";
+import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
 import {
   createEntity,
   EntityError,
@@ -9,7 +9,7 @@ import { validateCreateEntityInput } from "@/lib/validation/entities";
 import type { CreateEntityInput } from "@/types/entities";
 
 export async function GET() {
-  const auth = await requireSessionApi();
+  const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -27,7 +27,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSessionApi();
+  const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
   }

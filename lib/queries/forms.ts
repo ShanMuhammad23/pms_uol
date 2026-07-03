@@ -2,24 +2,21 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 import { db } from "../db";
-import { upsertIncrementMatrices } from "./increment-matrices";
 import type {
-  EmployeeCategory,
   FieldType,
   FormTemplateInput,
   FormTemplateListItem,
   FormTemplateRecord,
-  SubCategory,
 } from "@/types/forms";
 
 interface FormTemplateListRow {
   id: string;
   title: string;
   description: string | null;
-  cycle_id: number;
-  fiscal_year: number;
-  target_category: EmployeeCategory;
-  target_sub_category: SubCategory;
+  staff_category_id: number | null;
+  staff_sub_category_id: number | null;
+  staff_category_name: string | null;
+  staff_sub_category_name: string | null;
   question_count: string;
   appraisal_count: string;
   created_at: string;
@@ -30,10 +27,10 @@ interface FormTemplateRow {
   id: string;
   title: string;
   description: string | null;
-  cycle_id: number;
-  fiscal_year: number;
-  target_category: EmployeeCategory;
-  target_sub_category: SubCategory;
+  staff_category_id: number | null;
+  staff_sub_category_id: number | null;
+  staff_category_name: string | null;
+  staff_sub_category_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -67,25 +64,41 @@ export class FormTemplateError extends Error {
   }
 }
 
+async function validateStaffCategoryAssignment(
+  staffCategoryId: number,
+  staffSubCategoryId: number,
+  client?: PoolClient,
+): Promise<void> {
+  const executor = client ?? db;
+  const result = await executor.query<{ id: string }>(
+    `SELECT id
+     FROM staff_sub_categories
+     WHERE id = $1 AND staff_category_id = $2`,
+    [staffSubCategoryId, staffCategoryId],
+  );
+
+  if (result.rows.length === 0) {
+    throw new FormTemplateError(
+      "Selected sub-category does not belong to the chosen staff category.",
+      400,
+    );
+  }
+}
+
 async function checkDuplicateTarget(
-  cycleId: number,
-  targetCategory: EmployeeCategory,
-  targetSubCategory: SubCategory,
+  staffCategoryId: number,
+  staffSubCategoryId: number,
   excludeId?: number,
   client?: PoolClient,
 ): Promise<void> {
   const executor = client ?? db;
-  const params: Array<number | EmployeeCategory | SubCategory> = [
-    cycleId,
-    targetCategory,
-    targetSubCategory,
-  ];
+  const params: number[] = [staffCategoryId, staffSubCategoryId];
 
   let query = `SELECT id FROM form_templates
-               WHERE cycle_id = $1 AND target_category = $2 AND target_sub_category = $3`;
+               WHERE staff_category_id = $1 AND staff_sub_category_id = $2`;
 
   if (excludeId !== undefined) {
-    query += " AND id != $4";
+    query += " AND id != $3";
     params.push(excludeId);
   }
 
@@ -93,7 +106,7 @@ async function checkDuplicateTarget(
 
   if (result.rows.length > 0) {
     throw new FormTemplateError(
-      "A form template already exists for this cycle, category, and sub-category combination.",
+      "A form template already exists for this staff category and sub-category combination.",
       409,
     );
   }
@@ -195,32 +208,63 @@ async function getQuestionsForTemplate(
   return questions;
 }
 
+function mapTemplateRow(row: FormTemplateRow): Omit<FormTemplateRecord, "questions"> {
+  return {
+    id: Number(row.id),
+    title: row.title,
+    description: row.description,
+    staffCategoryId: row.staff_category_id,
+    staffSubCategoryId: row.staff_sub_category_id,
+    staffCategoryName: row.staff_category_name,
+    staffSubCategoryName: row.staff_sub_category_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+const templateSelect = `
+  ft.id,
+  ft.title,
+  ft.description,
+  ft.staff_category_id,
+  ft.staff_sub_category_id,
+  sc.name AS staff_category_name,
+  ssc.name AS staff_sub_category_name,
+  ft.created_at::text,
+  ft.updated_at::text
+`;
+
+const templateJoins = `
+  FROM form_templates ft
+  LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
+  LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
+`;
+
 export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
   const result = await db.query<FormTemplateListRow>(
     `SELECT
        ft.id,
        ft.title,
        ft.description,
-       ft.cycle_id,
-       ac.fiscal_year,
-       ft.target_category,
-       ft.target_sub_category,
+       ft.staff_category_id,
+       ft.staff_sub_category_id,
+       sc.name AS staff_category_name,
+       ssc.name AS staff_sub_category_name,
        COUNT(DISTINCT fq.id)::text AS question_count,
        COUNT(DISTINCT ap_linked.appraisal_id)::text AS appraisal_count,
        ft.created_at::text,
        ft.updated_at::text
-     FROM form_templates ft
-     INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
+     ${templateJoins}
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
      LEFT JOIN (
        SELECT ap.id AS appraisal_id, ft_match.id AS template_id
        FROM appraisals ap
        INNER JOIN users u ON u.id = ap.employee_id
-       INNER JOIN form_templates ft_match ON ft_match.cycle_id = ap.cycle_id
-         AND ft_match.target_category = u.emp_category
-         AND ft_match.target_sub_category = u.emp_sub_category
+       INNER JOIN form_templates ft_match
+         ON ft_match.staff_category_id = u.staff_category_id
+        AND ft_match.staff_sub_category_id = u.staff_sub_category_id
      ) ap_linked ON ap_linked.template_id = ft.id
-     GROUP BY ft.id, ac.fiscal_year
+     GROUP BY ft.id, sc.name, ssc.name
      ORDER BY ft.updated_at DESC`,
   );
 
@@ -228,10 +272,10 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
     id: Number(row.id),
     title: row.title,
     description: row.description,
-    cycleId: row.cycle_id,
-    fiscalYear: row.fiscal_year,
-    targetCategory: row.target_category,
-    targetSubCategory: row.target_sub_category,
+    staffCategoryId: row.staff_category_id,
+    staffSubCategoryId: row.staff_sub_category_id,
+    staffCategoryName: row.staff_category_name,
+    staffSubCategoryName: row.staff_sub_category_name,
     questionCount: Number(row.question_count),
     appraisalCount: Number(row.appraisal_count),
     createdAt: row.created_at,
@@ -243,18 +287,8 @@ export async function getFormTemplateById(
   id: number,
 ): Promise<FormTemplateRecord | null> {
   const result = await db.query<FormTemplateRow>(
-    `SELECT
-       ft.id,
-       ft.title,
-       ft.description,
-       ft.cycle_id,
-       ac.fiscal_year,
-       ft.target_category,
-       ft.target_sub_category,
-       ft.created_at::text,
-       ft.updated_at::text
-     FROM form_templates ft
-     INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
+    `SELECT ${templateSelect}
+     ${templateJoins}
      WHERE ft.id = $1`,
     [id],
   );
@@ -264,20 +298,10 @@ export async function getFormTemplateById(
   }
 
   const row = result.rows[0];
-  const { getIncrementMatricesByCycleId } = await import("./increment-matrices");
 
   return {
-    id: Number(row.id),
-    title: row.title,
-    description: row.description,
-    cycleId: row.cycle_id,
-    fiscalYear: row.fiscal_year,
-    targetCategory: row.target_category,
-    targetSubCategory: row.target_sub_category,
+    ...mapTemplateRow(row),
     questions: await getQuestionsForTemplate(Number(row.id)),
-    incrementMatrices: await getIncrementMatricesByCycleId(row.cycle_id),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
   };
 }
 
@@ -290,10 +314,15 @@ export async function createFormTemplate(
   try {
     await client.query("BEGIN");
 
+    await validateStaffCategoryAssignment(
+      input.staffCategoryId,
+      input.staffSubCategoryId,
+      client,
+    );
+
     await checkDuplicateTarget(
-      input.cycleId,
-      input.targetCategory,
-      input.targetSubCategory,
+      input.staffCategoryId,
+      input.staffSubCategoryId,
       undefined,
       client,
     );
@@ -302,18 +331,16 @@ export async function createFormTemplate(
       `INSERT INTO form_templates (
          title,
          description,
-         cycle_id,
-         target_category,
-         target_sub_category,
+         staff_category_id,
+         staff_sub_category_id,
          created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6)
+       ) VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
       [
         input.title,
         input.description || null,
-        input.cycleId,
-        input.targetCategory,
-        input.targetSubCategory,
+        input.staffCategoryId,
+        input.staffSubCategoryId,
         createdById ?? null,
       ],
     );
@@ -321,7 +348,6 @@ export async function createFormTemplate(
     const templateId = Number(templateResult.rows[0].id);
 
     await insertQuestionsAndOptions(templateId, input, client);
-    await upsertIncrementMatrices(input.cycleId, input.incrementMatrices, client);
 
     await client.query("COMMIT");
 
@@ -357,10 +383,15 @@ export async function updateFormTemplate(
       throw new FormTemplateError("Form template not found.", 404);
     }
 
+    await validateStaffCategoryAssignment(
+      input.staffCategoryId,
+      input.staffSubCategoryId,
+      client,
+    );
+
     await checkDuplicateTarget(
-      input.cycleId,
-      input.targetCategory,
-      input.targetSubCategory,
+      input.staffCategoryId,
+      input.staffSubCategoryId,
       id,
       client,
     );
@@ -369,24 +400,21 @@ export async function updateFormTemplate(
       `UPDATE form_templates
        SET title = $1,
            description = $2,
-           cycle_id = $3,
-           target_category = $4,
-           target_sub_category = $5,
+           staff_category_id = $3,
+           staff_sub_category_id = $4,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6`,
+       WHERE id = $5`,
       [
         input.title,
         input.description || null,
-        input.cycleId,
-        input.targetCategory,
-        input.targetSubCategory,
+        input.staffCategoryId,
+        input.staffSubCategoryId,
         id,
       ],
     );
 
     await client.query(`DELETE FROM form_questions WHERE template_id = $1`, [id]);
     await insertQuestionsAndOptions(id, input, client);
-    await upsertIncrementMatrices(input.cycleId, input.incrementMatrices, client);
 
     await client.query("COMMIT");
 
@@ -410,11 +438,15 @@ export async function deleteFormTemplate(id: number): Promise<{
   const appraisalResult = await db.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
      FROM appraisals ap
-     INNER JOIN users u ON u.id = ap.employee_id
-     INNER JOIN form_templates ft ON ft.id = $1
-     WHERE ap.cycle_id = ft.cycle_id
-       AND u.emp_category = ft.target_category
-       AND u.emp_sub_category = ft.target_sub_category`,
+     WHERE ap.template_id = $1
+        OR EXISTS (
+          SELECT 1
+          FROM users u
+          INNER JOIN form_templates ft ON ft.id = $1
+          WHERE u.id = ap.employee_id
+            AND ft.staff_category_id = u.staff_category_id
+            AND ft.staff_sub_category_id = u.staff_sub_category_id
+        )`,
     [id],
   );
 
@@ -430,4 +462,29 @@ export async function deleteFormTemplate(id: number): Promise<{
   }
 
   return { appraisalCount };
+}
+
+export async function getFormTemplateForUser(
+  staffCategoryId: number,
+  staffSubCategoryId: number,
+): Promise<FormTemplateRecord | null> {
+  const result = await db.query<FormTemplateRow>(
+    `SELECT ${templateSelect}
+     ${templateJoins}
+     WHERE ft.staff_category_id = $1
+       AND ft.staff_sub_category_id = $2
+     LIMIT 1`,
+    [staffCategoryId, staffSubCategoryId],
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0];
+
+  return {
+    ...mapTemplateRow(row),
+    questions: await getQuestionsForTemplate(Number(row.id)),
+  };
 }

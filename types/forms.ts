@@ -145,11 +145,9 @@ export interface IncrementMatrixInput {
 export interface FormTemplateInput {
   title: string;
   description: string;
-  cycleId: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  staffCategoryId: number;
+  staffSubCategoryId: number;
   questions: QuestionInput[];
-  incrementMatrices: IncrementMatrixInput[];
 }
 
 export interface QuestionOptionRecord {
@@ -175,10 +173,10 @@ export interface FormTemplateListItem {
   id: number;
   title: string;
   description: string | null;
-  cycleId: number;
-  fiscalYear: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  staffCategoryId: number | null;
+  staffSubCategoryId: number | null;
+  staffCategoryName: string | null;
+  staffSubCategoryName: string | null;
   questionCount: number;
   appraisalCount: number;
   createdAt: string;
@@ -189,12 +187,11 @@ export interface FormTemplateRecord {
   id: number;
   title: string;
   description: string | null;
-  cycleId: number;
-  fiscalYear: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  staffCategoryId: number | null;
+  staffSubCategoryId: number | null;
+  staffCategoryName: string | null;
+  staffSubCategoryName: string | null;
   questions: QuestionRecord[];
-  incrementMatrices: IncrementMatrixInput[];
   createdAt: string;
   updatedAt: string;
 }
