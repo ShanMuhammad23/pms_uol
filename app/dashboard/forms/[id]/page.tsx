@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import FormBuilderWizard from "@/app/components/forms/FormBuilderWizard";
 import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { listAppraisalCycles } from "@/lib/queries/appraisal-cycles";
 import { getFormTemplateById } from "@/lib/queries/forms";
 
 interface EditFormPageProps {
@@ -23,9 +24,15 @@ export default async function EditFormPage({ params }: EditFormPageProps) {
     notFound();
   }
 
+  const appraisalCycles = await listAppraisalCycles();
+
   return (
     <div className="-m-6 h-screen overflow-hidden">
-      <FormBuilderWizard templateId={templateId} initialData={template} />
+      <FormBuilderWizard
+        templateId={templateId}
+        initialData={template}
+        appraisalCycles={appraisalCycles}
+      />
     </div>
   );
 }

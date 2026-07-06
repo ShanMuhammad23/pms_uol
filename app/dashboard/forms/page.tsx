@@ -2,9 +2,11 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import FormsListTable from "@/app/components/forms/FormsListTable";
 import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { listFormTemplates } from "@/lib/queries/forms";
 
 export default async function FormsPage() {
   await requireSuperAdminSession();
+  const templates = await listFormTemplates();
 
   return (
     <div className="space-y-6 text-text-primary">
@@ -25,7 +27,7 @@ export default async function FormsPage() {
         </Link>
       </div>
 
-      <FormsListTable />
+      <FormsListTable templates={templates} />
     </div>
   );
 }

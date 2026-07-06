@@ -69,6 +69,33 @@ export async function getDefaultAppraisalCycle(): Promise<AppraisalCycleRecord |
   return mapCycleRow(result.rows[0]);
 }
 
+export async function ensureDefaultAppraisalCycle(): Promise<AppraisalCycleRecord> {
+  const existing = await getDefaultAppraisalCycle();
+  if (existing) {
+    return existing;
+  }
+
+  const currentYear = new Date().getFullYear();
+
+  await db.query(
+    `INSERT INTO appraisal_cycles (fiscal_year, start_date, end_date, is_active)
+     VALUES ($1, $2, $3, TRUE)
+     ON CONFLICT (fiscal_year) DO NOTHING`,
+    [
+      currentYear,
+      `${currentYear}-01-01`,
+      `${currentYear}-12-31`,
+    ],
+  );
+
+  const created = await getDefaultAppraisalCycle();
+  if (!created) {
+    throw new Error("Failed to initialize the default appraisal cycle.");
+  }
+
+  return created;
+}
+
 export async function getAppraisalCycleById(
   id: number,
 ): Promise<AppraisalCycleRecord | null> {

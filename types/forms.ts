@@ -282,6 +282,17 @@ export function formatEnumLabel(value: string): string {
     .join(" ");
 }
 
+export function pickDefaultAppraisalCycleId(
+  cycles: AppraisalCycleRecord[],
+): number | "" {
+  if (cycles.length === 0) {
+    return "";
+  }
+
+  const activeCycle = cycles.find((cycle) => cycle.isActive);
+  return (activeCycle ?? cycles[0]).id;
+}
+
 export function createDefaultIncrementMatrix(): IncrementMatrixInput[] {
   const entries: IncrementMatrixInput[] = [];
 

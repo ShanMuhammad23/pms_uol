@@ -3,7 +3,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { db } from "../db";
 import { upsertIncrementMatrices } from "./increment-matrices";
-import { getDefaultAppraisalCycle } from "./appraisal-cycles";
+import { getAppraisalCycleById, getDefaultAppraisalCycle, ensureDefaultAppraisalCycle } from "./appraisal-cycles";
 import type {
   EmployeeCategory,
   FieldType,
@@ -79,16 +79,15 @@ export class FormTemplateError extends Error {
 
 async function resolveCycleId(cycleId?: number): Promise<number> {
   if (cycleId) {
+    const selected = await getAppraisalCycleById(cycleId);
+    if (!selected) {
+      throw new FormTemplateError("Selected appraisal cycle was not found.", 400);
+    }
     return cycleId;
   }
 
-  const cycle = await getDefaultAppraisalCycle();
-  if (!cycle) {
-    throw new FormTemplateError(
-      "No appraisal cycle is configured. Run setup-db or create a cycle first.",
-      400,
-    );
-  }
+  const cycle =
+    (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
 
   return cycle.id;
 }

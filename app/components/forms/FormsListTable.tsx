@@ -3,24 +3,35 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, FileText, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   deleteFormTemplate,
   fetchFormTemplates,
 } from "@/lib/queries/forms-client";
+import type { FormTemplateListItem } from "@/types/forms";
 import {
   CATEGORY_LABELS,
   SUB_CATEGORY_LABELS,
 } from "@/types/forms";
 
-export default function FormsListTable() {
+interface FormsListTableProps {
+  templates: FormTemplateListItem[];
+}
+
+export default function FormsListTable({ templates }: FormsListTableProps) {
   const queryClient = useQueryClient();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["form-templates"],
     queryFn: fetchFormTemplates,
+    initialData: templates,
+    refetchOnMount: "always",
   });
+
+  useEffect(() => {
+    queryClient.setQueryData(["form-templates"], templates);
+  }, [templates, queryClient]);
 
   const deleteMutation = useMutation({
     mutationFn: deleteFormTemplate,
@@ -50,7 +61,7 @@ export default function FormsListTable() {
     deleteMutation.mutate(id);
   };
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
         Loading forms...

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/app/components/auth/Button";
@@ -10,6 +10,7 @@ import {
   updateFormTemplate,
 } from "@/lib/queries/forms-client";
 import type {
+  AppraisalCycleRecord,
   EmployeeCategory,
   FormSectionInput,
   FormTemplateInput,
@@ -26,6 +27,7 @@ import {
   FIELD_TYPE_LABELS,
   applyQuestionInputTypeChange,
   mapQuestionRecordToInput,
+  pickDefaultAppraisalCycleId,
   questionNeedsOptions,
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
@@ -57,6 +59,7 @@ const STEPS = [
 interface FormBuilderWizardProps {
   templateId?: number;
   initialData?: FormTemplateRecord;
+  appraisalCycles?: AppraisalCycleRecord[];
 }
 
 function mapRecordToState(record: FormTemplateRecord) {
@@ -945,8 +948,10 @@ function QuestionCard({
 export default function FormBuilderWizard({
   templateId,
   initialData,
+  appraisalCycles = [],
 }: FormBuilderWizardProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const initialState = initialData ? mapRecordToState(initialData) : null;
 
   const [step, setStep] = useState(0);
@@ -957,6 +962,9 @@ export default function FormBuilderWizard({
   );
   const [questions, setQuestions] = useState<QuestionInput[]>(
     initialState?.questions ?? [],
+  );
+  const [cycleId, setCycleId] = useState<number | "">(
+    initialState?.cycleId ?? pickDefaultAppraisalCycleId(appraisalCycles),
   );
   const [targetCategory, setTargetCategory] = useState<EmployeeCategory | "">(
     initialState?.targetCategory ?? "",
@@ -979,9 +987,7 @@ export default function FormBuilderWizard({
       targetSubCategory,
       sections,
       questions,
-      ...(templateId && initialState?.cycleId
-        ? { cycleId: initialState.cycleId }
-        : {}),
+      ...(cycleId ? { cycleId } : {}),
     };
   }, [
     title,
@@ -990,8 +996,7 @@ export default function FormBuilderWizard({
     targetSubCategory,
     sections,
     questions,
-    templateId,
-    initialState?.cycleId,
+    cycleId,
   ]);
 
   const saveMutation = useMutation({
@@ -1001,7 +1006,8 @@ export default function FormBuilderWizard({
       }
       return createFormTemplate(input);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["form-templates"] });
       router.push("/dashboard/forms");
       router.refresh();
     },
@@ -1060,6 +1066,13 @@ export default function FormBuilderWizard({
 
   const validateCategoryStep = () => {
     const nextErrors: Record<string, string> = {};
+
+    if (
+      appraisalCycles.length > 0 &&
+      !cycleId
+    ) {
+      nextErrors.cycleId = "Appraisal cycle is required.";
+    }
 
     if (!targetCategory) {
       nextErrors.targetCategory = "Employee category is required.";
@@ -1226,9 +1239,12 @@ export default function FormBuilderWizard({
           <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto rounded-2xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
             <div className="w-full max-w-2xl">
               <CategoryAssignmentStep
+                appraisalCycles={appraisalCycles}
+                cycleId={cycleId}
                 targetCategory={targetCategory}
                 targetSubCategory={targetSubCategory}
                 errors={errors}
+                onCycleChange={setCycleId}
                 onCategoryChange={handleCategoryChange}
                 onSubCategoryChange={setTargetSubCategory}
               />

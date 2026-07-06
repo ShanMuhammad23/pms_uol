@@ -18,7 +18,10 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export async function fetchFormTemplates(): Promise<FormTemplateListItem[]> {
-  const response = await fetch("/api/admin/forms");
+  const response = await fetch("/api/admin/forms", {
+    credentials: "include",
+    cache: "no-store",
+  });
   return parseResponse<FormTemplateListItem[]>(response);
 }
 
