@@ -6,6 +6,7 @@ import type { FormTemplateRecord, QuestionRecord } from "@/types/forms";
 import {
   CATEGORY_LABELS,
   FIELD_TYPE_LABELS,
+  buildRootLayoutOrderFromRecord,
   flattenAllQuestions,
   SUB_CATEGORY_LABELS,
 } from "@/types/forms";
@@ -69,6 +70,10 @@ function QuestionCard({
 
 export default function FormTemplateView({ template }: FormTemplateViewProps) {
   const allQuestions = flattenAllQuestions(template);
+  const rootLayout = buildRootLayoutOrderFromRecord(
+    template.sections,
+    template.questions,
+  );
   let questionCounter = 0;
 
   return (
@@ -121,18 +126,40 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
       <div className="space-y-6">
         <h3 className="text-sm font-semibold text-text-primary">Form Structure</h3>
 
-        {template.sections.map((section) => (
-          <div key={section.id} className="space-y-4">
-            <h4 className="text-base font-semibold text-text-primary">
-              {section.title}
-            </h4>
+        {rootLayout.map((item) => {
+          if (item.kind === "section") {
+            const section = template.sections.find(
+              (currentSection) => currentSection.id === item.id,
+            );
+            if (!section) {
+              return null;
+            }
 
-            {section.subsections.map((subsection) => (
-              <div key={subsection.id} className="space-y-3 pl-4">
-                <h5 className="text-sm font-medium text-foreground/80">
-                  {subsection.title}
-                </h5>
-                {subsection.questions.map((question) => {
+            return (
+              <div key={section.id} className="space-y-4">
+                <h4 className="text-base font-semibold text-text-primary">
+                  {section.title}
+                </h4>
+
+                {section.subsections.map((subsection) => (
+                  <div key={subsection.id} className="space-y-3 pl-4">
+                    <h5 className="text-sm font-medium text-foreground/80">
+                      {subsection.title}
+                    </h5>
+                    {subsection.questions.map((question) => {
+                      questionCounter += 1;
+                      return (
+                        <QuestionCard
+                          key={question.id}
+                          question={question}
+                          label={`Q${questionCounter}`}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {section.questions.map((question) => {
                   questionCounter += 1;
                   return (
                     <QuestionCard
@@ -143,40 +170,25 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
                   );
                 })}
               </div>
-            ))}
+            );
+          }
 
-            {section.questions.map((question) => {
-              questionCounter += 1;
-              return (
-                <QuestionCard
-                  key={question.id}
-                  question={question}
-                  label={`Q${questionCounter}`}
-                />
-              );
-            })}
-          </div>
-        ))}
+          const question = template.questions.find(
+            (currentQuestion) => currentQuestion.id === item.id,
+          );
+          if (!question) {
+            return null;
+          }
 
-        {template.questions.length > 0 ? (
-          <div className="space-y-4">
-            {template.sections.length > 0 ? (
-              <h4 className="text-sm font-medium text-foreground/80">
-                Root Questions
-              </h4>
-            ) : null}
-            {template.questions.map((question) => {
-              questionCounter += 1;
-              return (
-                <QuestionCard
-                  key={question.id}
-                  question={question}
-                  label={`Q${questionCounter}`}
-                />
-              );
-            })}
-          </div>
-        ) : null}
+          questionCounter += 1;
+          return (
+            <QuestionCard
+              key={question.id}
+              question={question}
+              label={`Q${questionCounter}`}
+            />
+          );
+        })}
 
         {allQuestions.length === 0 ? (
           <p className="text-sm text-foreground/70">No questions defined.</p>

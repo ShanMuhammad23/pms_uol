@@ -26,7 +26,11 @@ import {
   FIELD_TYPES,
   FIELD_TYPE_LABELS,
   applyQuestionInputTypeChange,
+  buildRootLayoutOrder,
+  createEmptySection,
+  getNextRootSortOrder,
   mapQuestionRecordToInput,
+  normalizeRootFormStructure,
   pickDefaultAppraisalCycleId,
   questionNeedsOptions,
 } from "@/types/forms";
@@ -63,25 +67,29 @@ interface FormBuilderWizardProps {
 }
 
 function mapRecordToState(record: FormTemplateRecord) {
+  const mappedSections = record.sections.map((section) => ({
+    clientId: createClientId(),
+    title: section.title,
+    sortOrder: section.sortOrder,
+    questions: section.questions.map(mapQuestionRecordToInput),
+    subsections: section.subsections.map((subsection) => ({
+      clientId: createClientId(),
+      title: subsection.title,
+      sortOrder: subsection.sortOrder,
+      questions: subsection.questions.map(mapQuestionRecordToInput),
+    })),
+  }));
+  const mappedQuestions = record.questions.map(mapQuestionRecordToInput);
+  const normalized = normalizeRootFormStructure(mappedSections, mappedQuestions);
+
   return {
     title: record.title,
     description: record.description ?? "",
     targetCategory: record.targetCategory,
     targetSubCategory: record.targetSubCategory,
     cycleId: record.cycleId,
-    sections: record.sections.map((section) => ({
-      clientId: createClientId(),
-      title: section.title,
-      sortOrder: section.sortOrder,
-      questions: section.questions.map(mapQuestionRecordToInput),
-      subsections: section.subsections.map((subsection) => ({
-        clientId: createClientId(),
-        title: subsection.title,
-        sortOrder: subsection.sortOrder,
-        questions: subsection.questions.map(mapQuestionRecordToInput),
-      })),
-    })),
-    questions: record.questions.map(mapQuestionRecordToInput),
+    sections: normalized.sections,
+    questions: normalized.questions,
   };
 }
 
@@ -181,58 +189,62 @@ function ModernFormDesignStep({
     });
   };
 
+  const commitStructure = useCallback(
+    (nextSections: FormSectionInput[], nextQuestions: QuestionInput[]) => {
+      const normalized = normalizeRootFormStructure(nextSections, nextQuestions);
+      onStructureChange(normalized.sections, normalized.questions);
+    },
+    [onStructureChange],
+  );
+
   const addSection = useCallback(() => {
-    const newSection: FormSectionInput = {
-      clientId: createClientId(),
-      title: "",
-      sortOrder: sections.length,
-      questions: [],
-      subsections: [],
-    };
-    onStructureChange([...sections, newSection], questions);
+    const newSection = createEmptySection(getNextRootSortOrder(sections, questions));
+    commitStructure([...sections, newSection], questions);
     setExpandedSections(prev => new Set([...prev, newSection.clientId]));
-    // Scroll to bottom after add
     setTimeout(() => {
       scrollContainerRef.current?.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior: "smooth" });
     }, 50);
-  }, [sections, questions, onStructureChange]);
+  }, [sections, questions, commitStructure]);
 
   const addStandaloneQuestion = useCallback(() => {
-    const newQuestion = createEmptyQuestion(questions.length);
-    onStructureChange(sections, [...questions, newQuestion]);
+    const newQuestion = createEmptyQuestion(getNextRootSortOrder(sections, questions));
+    commitStructure(sections, [...questions, newQuestion]);
     setTimeout(() => {
       scrollContainerRef.current?.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior: "smooth" });
     }, 50);
-  }, [sections, questions, onStructureChange]);
+  }, [sections, questions, commitStructure]);
 
   const updateSection = (clientId: string, updates: Partial<FormSectionInput>) => {
-    onStructureChange(
+    commitStructure(
       sections.map(s => s.clientId === clientId ? { ...s, ...updates } : s),
-      questions
+      questions,
     );
   };
 
   const removeSection = (clientId: string) => {
-    onStructureChange(sections.filter(s => s.clientId !== clientId), questions);
+    commitStructure(sections.filter(s => s.clientId !== clientId), questions);
   };
 
   const addQuestionToSection = (sectionClientId: string) => {
-    onStructureChange(
+    commitStructure(
       sections.map(s => {
         if (s.clientId === sectionClientId) {
           return {
             ...s,
-            questions: [...s.questions, createEmptyQuestion(s.questions.length)],
+            questions: [
+              ...s.questions,
+              createEmptyQuestion(s.questions.length),
+            ],
           };
         }
         return s;
       }),
-      questions
+      questions,
     );
   };
 
   const addSubsection = (sectionClientId: string) => {
-    onStructureChange(
+    commitStructure(
       sections.map(s => {
         if (s.clientId === sectionClientId) {
           return {
@@ -250,31 +262,40 @@ function ModernFormDesignStep({
         }
         return s;
       }),
-      questions
+      questions,
     );
   };
 
   const removeQuestion = (sectionClientId: string | null, questionClientId: string) => {
     if (sectionClientId) {
-      onStructureChange(
+      commitStructure(
         sections.map(s => {
           if (s.clientId === sectionClientId) {
             return {
               ...s,
-              questions: s.questions.filter(q => q.clientId !== questionClientId)
+              questions: s.questions
+                .filter(q => q.clientId !== questionClientId)
+                .map((question, sortOrder) => ({ ...question, sortOrder })),
             };
           }
           return s;
         }),
-        questions
+        questions,
       );
     } else {
-      onStructureChange(sections, questions.filter(q => q.clientId !== questionClientId));
+      commitStructure(
+        sections,
+        questions.filter(q => q.clientId !== questionClientId),
+      );
     }
   };
 
   const totalQuestions = countAllQuestions(sections, questions);
   const hasErrors = Object.keys(errors).length > 0;
+  const rootLayout = useMemo(
+    () => buildRootLayoutOrder(sections, questions),
+    [sections, questions],
+  );
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -438,62 +459,84 @@ function ModernFormDesignStep({
                 </div>
               )}
 
-              {/* Standalone Questions */}
-              {questions.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    <HelpCircle className="h-3.5 w-3.5" />
-                    Standalone Questions
-                  </div>
-                  {questions.map((question, qIdx) => (
-                    <QuestionCard
-                      key={question.clientId}
-                      question={question}
-                      index={qIdx}
-                      errorPrefix={`question-${qIdx}`}
-                      errors={errors}
-                      onRemove={() => removeQuestion(null, question.clientId)}
-                      onChange={(updates) => {
-                        onStructureChange(
-                          sections,
-                          questions.map(q => q.clientId === question.clientId ? { ...q, ...updates } : q)
-                        );
-                      }}
-                    />
-                  ))}
+              {rootLayout.length > 0 && (
+                <div className="space-y-4">
+                  {rootLayout.map((item) => {
+                    if (item.kind === "section") {
+                      const sectionIndex = sections.findIndex(
+                        (section) => section.clientId === item.clientId,
+                      );
+                      const section = sections[sectionIndex];
+                      if (!section) {
+                        return null;
+                      }
+
+                      return (
+                        <SectionCard
+                          key={section.clientId}
+                          section={section}
+                          index={sectionIndex}
+                          isExpanded={expandedSections.has(section.clientId)}
+                          onToggle={() => toggleSection(section.clientId)}
+                          errors={errors}
+                          onUpdate={(updates) => updateSection(section.clientId, updates)}
+                          onRemove={() => removeSection(section.clientId)}
+                          onAddQuestion={() => addQuestionToSection(section.clientId)}
+                          onAddSubsection={() => addSubsection(section.clientId)}
+                          onRemoveQuestion={(qId) => removeQuestion(section.clientId, qId)}
+                          onUpdateQuestion={(qId, updates) => {
+                            commitStructure(
+                              sections.map((currentSection) => {
+                                if (currentSection.clientId === section.clientId) {
+                                  return {
+                                    ...currentSection,
+                                    questions: currentSection.questions.map((question) =>
+                                      question.clientId === qId
+                                        ? { ...question, ...updates }
+                                        : question,
+                                    ),
+                                  };
+                                }
+                                return currentSection;
+                              }),
+                              questions,
+                            );
+                          }}
+                        />
+                      );
+                    }
+
+                    const questionIndex = questions.findIndex(
+                      (question) => question.clientId === item.clientId,
+                    );
+                    const question = questions[questionIndex];
+                    if (!question) {
+                      return null;
+                    }
+
+                    return (
+                      <QuestionCard
+                        key={question.clientId}
+                        question={question}
+                        index={questionIndex}
+                        errorPrefix={`question-${questionIndex}`}
+                        errors={errors}
+                        onRemove={() => removeQuestion(null, question.clientId)}
+                        onChange={(updates) => {
+                          commitStructure(
+                            sections,
+                            questions.map((currentQuestion) =>
+                              currentQuestion.clientId === question.clientId
+                                ? { ...currentQuestion, ...updates }
+                                : currentQuestion,
+                            ),
+                          );
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               )}
-
-              {/* Sections */}
-              {sections.map((section, sIdx) => (
-                <SectionCard
-                  key={section.clientId}
-                  section={section}
-                  index={sIdx}
-                  isExpanded={expandedSections.has(section.clientId)}
-                  onToggle={() => toggleSection(section.clientId)}
-                  errors={errors}
-                  onUpdate={(updates) => updateSection(section.clientId, updates)}
-                  onRemove={() => removeSection(section.clientId)}
-                  onAddQuestion={() => addQuestionToSection(section.clientId)}
-                  onAddSubsection={() => addSubsection(section.clientId)}
-                  onRemoveQuestion={(qId) => removeQuestion(section.clientId, qId)}
-                  onUpdateQuestion={(qId, updates) => {
-                    onStructureChange(
-                      sections.map(s => {
-                        if (s.clientId === section.clientId) {
-                          return {
-                            ...s,
-                            questions: s.questions.map(q => q.clientId === qId ? { ...q, ...updates } : q)
-                          };
-                        }
-                        return s;
-                      }),
-                      questions
-                    );
-                  }}
-                />
-              ))}
             </div>
           ) : (
             <div className="mx-auto max-w-2xl">
@@ -506,29 +549,48 @@ function ModernFormDesignStep({
                   <p className="mt-2 text-slate-600 dark:text-slate-400">{description}</p>
                 )}
                 <div className="mt-8 space-y-6">
-                  {sections.map((section) => (
-                    <div key={section.clientId} className="space-y-4">
-                      <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                        {section.title || "Untitled Section"}
-                      </h2>
-                      {section.questions.map((q) => (
-                        <div key={q.clientId} className="rounded-lg border border-slate-100 p-4 dark:border-slate-800">
-                          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                            {q.questionText || "Untitled Question"}
-                          </p>
-                          <div className="mt-2 h-8 rounded border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" />
+                  {rootLayout.map((item) => {
+                    if (item.kind === "section") {
+                      const section = sections.find(
+                        (currentSection) => currentSection.clientId === item.clientId,
+                      );
+                      if (!section) {
+                        return null;
+                      }
+
+                      return (
+                        <div key={section.clientId} className="space-y-4">
+                          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                            {section.title || "Untitled Section"}
+                          </h2>
+                          {section.questions.map((question) => (
+                            <div key={question.clientId} className="rounded-lg border border-slate-100 p-4 dark:border-slate-800">
+                              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                {question.questionText || "Untitled Question"}
+                              </p>
+                              <div className="mt-2 h-8 rounded border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" />
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  ))}
-                  {questions.map((q) => (
-                    <div key={q.clientId} className="rounded-lg border border-slate-100 p-4 dark:border-slate-800">
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        {q.questionText || "Untitled Question"}
-                      </p>
-                      <div className="mt-2 h-8 rounded border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" />
-                    </div>
-                  ))}
+                      );
+                    }
+
+                    const question = questions.find(
+                      (currentQuestion) => currentQuestion.clientId === item.clientId,
+                    );
+                    if (!question) {
+                      return null;
+                    }
+
+                    return (
+                      <div key={question.clientId} className="rounded-lg border border-slate-100 p-4 dark:border-slate-800">
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                          {question.questionText || "Untitled Question"}
+                        </p>
+                        <div className="mt-2 h-8 rounded border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -980,13 +1042,15 @@ export default function FormBuilderWizard({
       return null;
     }
 
+    const normalized = normalizeRootFormStructure(sections, questions);
+
     return {
       title: title.trim(),
       description: description.trim(),
       targetCategory,
       targetSubCategory,
-      sections,
-      questions,
+      sections: normalized.sections,
+      questions: normalized.questions,
       ...(cycleId ? { cycleId } : {}),
     };
   }, [

@@ -103,8 +103,8 @@ export const SUB_CATEGORY_LABELS: Record<SubCategory, string> = {
 };
 
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
-  TEXT: "Short Text",
   NUMBER: "Number",
+  TEXT: "Short Text",
   RADIO: "Radio (Single Choice)",
   CHECKBOX: "Checkbox (Multiple Choice)",
   SELECT: "Dropdown",
@@ -349,6 +349,129 @@ export function createEmptySection(sortOrder: number): FormSectionInput {
     subsections: [],
     questions: [],
   };
+}
+
+export type FormRootLayoutItem =
+  | { kind: "section"; clientId: string }
+  | { kind: "question"; clientId: string };
+
+export type FormRootLayoutRecordItem =
+  | { kind: "section"; id: number }
+  | { kind: "question"; id: number };
+
+export function getNextRootSortOrder(
+  sections: FormSectionInput[],
+  questions: QuestionInput[],
+): number {
+  const values = [
+    ...sections.map((section) => section.sortOrder),
+    ...questions.map((question) => question.sortOrder),
+  ];
+
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return Math.max(...values) + 1;
+}
+
+function compareRootLayoutEntries<T extends { sortOrder: number; tie: number; kind: "section" | "question" }>(
+  left: T,
+  right: T,
+): number {
+  if (left.sortOrder !== right.sortOrder) {
+    return left.sortOrder - right.sortOrder;
+  }
+
+  if (left.kind === right.kind) {
+    return left.tie - right.tie;
+  }
+
+  return left.kind === "section" ? -1 : 1;
+}
+
+export function buildRootLayoutOrder(
+  sections: FormSectionInput[],
+  questions: QuestionInput[],
+): FormRootLayoutItem[] {
+  const items = [
+    ...sections.map((section, index) => ({
+      kind: "section" as const,
+      clientId: section.clientId,
+      sortOrder: section.sortOrder,
+      tie: index,
+    })),
+    ...questions.map((question, index) => ({
+      kind: "question" as const,
+      clientId: question.clientId,
+      sortOrder: question.sortOrder,
+      tie: index,
+    })),
+  ];
+
+  items.sort(compareRootLayoutEntries);
+
+  return items.map(({ kind, clientId }) => ({ kind, clientId }));
+}
+
+export function buildRootLayoutOrderFromRecord(
+  sections: FormSectionRecord[],
+  questions: QuestionRecord[],
+): FormRootLayoutRecordItem[] {
+  const items = [
+    ...sections.map((section, index) => ({
+      kind: "section" as const,
+      id: section.id,
+      sortOrder: section.sortOrder,
+      tie: index,
+    })),
+    ...questions.map((question, index) => ({
+      kind: "question" as const,
+      id: question.id,
+      sortOrder: question.sortOrder,
+      tie: index,
+    })),
+  ];
+
+  items.sort(compareRootLayoutEntries);
+
+  return items.map(({ kind, id }) => ({ kind, id }));
+}
+
+export function normalizeRootFormStructure(
+  sections: FormSectionInput[],
+  questions: QuestionInput[],
+): { sections: FormSectionInput[]; questions: QuestionInput[] } {
+  const layout = buildRootLayoutOrder(sections, questions);
+  const sectionMap = new Map(
+    sections.map((section) => [section.clientId, section]),
+  );
+  const questionMap = new Map(
+    questions.map((question) => [question.clientId, question]),
+  );
+
+  const nextSections: FormSectionInput[] = [];
+  const nextQuestions: QuestionInput[] = [];
+  let sortOrder = 0;
+
+  for (const item of layout) {
+    if (item.kind === "section") {
+      const section = sectionMap.get(item.clientId);
+      if (section) {
+        nextSections.push({ ...section, sortOrder });
+        sortOrder += 1;
+      }
+      continue;
+    }
+
+    const question = questionMap.get(item.clientId);
+    if (question) {
+      nextQuestions.push({ ...question, sortOrder });
+      sortOrder += 1;
+    }
+  }
+
+  return { sections: nextSections, questions: nextQuestions };
 }
 
 export function countAllQuestions(
