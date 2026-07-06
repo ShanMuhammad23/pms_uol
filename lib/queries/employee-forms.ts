@@ -11,7 +11,12 @@ import type {
   EmployeeFormStatus,
   SaveEmployeeFormInput,
 } from "@/types/employee-forms";
-import type { FormTemplateRecord } from "@/types/forms";
+import type { FormTemplateRecord, QuestionRecord } from "@/types/forms";
+import { flattenAllQuestions } from "@/types/forms";
+
+function getTemplateQuestions(template: FormTemplateRecord): QuestionRecord[] {
+  return flattenAllQuestions(template);
+}
 
 interface UserStaffRow {
   id: string;
@@ -215,9 +220,7 @@ async function getOrCreateAppraisal(
   return result.rows[0];
 }
 
-function isScoredQuestion(
-  question: FormTemplateRecord["questions"][number],
-): boolean {
+function isScoredQuestion(question: QuestionRecord): boolean {
   return question.totalMarks > 0 && question.inputType === "NUMBER";
 }
 
@@ -229,13 +232,13 @@ function calculateRawScore(
     answers.map((answer) => [answer.questionId, answer.pointsEarned]),
   );
 
-  return template.questions
+  return getTemplateQuestions(template)
     .filter(isScoredQuestion)
     .reduce((sum, question) => sum + (answerMap.get(question.id) ?? 0), 0);
 }
 
 function calculateMaxRawScore(template: FormTemplateRecord): number {
-  return template.questions
+  return getTemplateQuestions(template)
     .filter(isScoredQuestion)
     .reduce((sum, question) => sum + question.totalMarks, 0);
 }
@@ -249,7 +252,7 @@ function validateAnswers(
     answers.map((answer) => [answer.questionId, answer]),
   );
 
-  for (const question of template.questions) {
+  for (const question of getTemplateQuestions(template)) {
     const answer = answerMap.get(question.id);
     const isScored = isScoredQuestion(question);
 
@@ -323,7 +326,7 @@ function normalizeAnswer(
   selectedOptionId: number | null;
   pointsEarned: number;
 } {
-  const question = template.questions.find(
+  const question = getTemplateQuestions(template).find(
     (item) => item.id === answer.questionId,
   );
 
@@ -509,7 +512,7 @@ export async function saveEmployeeForm(
         client,
       );
 
-      for (const question of template.questions.filter(isScoredQuestion)) {
+      for (const question of getTemplateQuestions(template).filter(isScoredQuestion)) {
         const saved = savedAnswers.find(
           (answer) => answer.questionId === question.id,
         );

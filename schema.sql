@@ -85,10 +85,21 @@ CREATE TABLE form_templates (
     CONSTRAINT unique_target_form_per_cycle UNIQUE (cycle_id, target_category, target_sub_category)
 );
 
+-- Form sections and subsections (parent_section_id NULL = top-level section)
+CREATE TABLE form_sections (
+    id BIGSERIAL PRIMARY KEY,
+    template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+    parent_section_id BIGINT REFERENCES form_sections(id) ON DELETE CASCADE,
+    title VARCHAR(150) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Individual Form Questions
 CREATE TABLE form_questions (
     id BIGSERIAL PRIMARY KEY,
     template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+    section_id BIGINT REFERENCES form_sections(id) ON DELETE CASCADE,
     question_text TEXT NOT NULL,
     input_type field_type NOT NULL,
     is_required BOOLEAN DEFAULT TRUE,
@@ -185,6 +196,7 @@ CREATE TABLE appraisal_logs (
 -- PERFORMANCE DDX INDEXES
 CREATE INDEX idx_users_role_dept ON users(system_role, department_id);
 CREATE INDEX idx_appraisals_cycle_status ON appraisals(cycle_id, status);
+CREATE INDEX idx_form_sections_template ON form_sections(template_id, sort_order);
 CREATE INDEX idx_questions_lookup ON form_questions(template_id, sort_order);
 CREATE INDEX idx_options_lookup ON question_options(question_id);
 CREATE INDEX idx_answers_lookup ON appraisal_answers(appraisal_id, question_id);

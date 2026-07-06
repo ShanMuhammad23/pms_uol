@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start --port 3005",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate:form-sections": "node scripts/migrate-form-sections.mjs"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",

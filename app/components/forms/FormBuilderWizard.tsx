@@ -11,11 +11,19 @@ import {
   updateFormTemplate,
 } from "@/lib/queries/forms-client";
 import type {
+  EmployeeCategory,
+  FormSectionInput,
   FormTemplateInput,
   FormTemplateRecord,
   QuestionInput,
+  SubCategory,
 } from "@/types/forms";
-import { createEmptyQuestion } from "@/types/forms";
+import {
+  CATEGORY_SUB_MAP,
+  countAllQuestions,
+  createClientId,
+  mapQuestionRecordToInput,
+} from "@/types/forms";
 import { cn } from "@/lib/utils";
 
 const STEPS = ["Design", "Category"] as const;
@@ -29,23 +37,61 @@ function mapRecordToState(record: FormTemplateRecord) {
   return {
     title: record.title,
     description: record.description ?? "",
-    staffCategoryId: record.staffCategoryId,
-    staffSubCategoryId: record.staffSubCategoryId,
-    questions: record.questions.map((question) => ({
-      questionText: question.questionText,
-      inputType: question.inputType,
-      isRequired: question.isRequired,
-      sortOrder: question.sortOrder,
-      selfAssessmentEnabled: question.selfAssessmentEnabled,
-      hodAssessmentEnabled: question.hodAssessmentEnabled,
-      totalMarks: question.totalMarks,
-      options: question.options.map((option) => ({
-        optionLabel: option.optionLabel,
-        pointsAssigned: option.pointsAssigned,
-        sortOrder: option.sortOrder,
+    targetCategory: record.targetCategory,
+    targetSubCategory: record.targetSubCategory,
+    cycleId: record.cycleId,
+    sections: record.sections.map((section) => ({
+      clientId: createClientId(),
+      title: section.title,
+      sortOrder: section.sortOrder,
+      questions: section.questions.map(mapQuestionRecordToInput),
+      subsections: section.subsections.map((subsection) => ({
+        clientId: createClientId(),
+        title: subsection.title,
+        sortOrder: subsection.sortOrder,
+        questions: subsection.questions.map(mapQuestionRecordToInput),
       })),
     })),
+    questions: record.questions.map(mapQuestionRecordToInput),
   };
+}
+
+function validateQuestionFields(
+  question: QuestionInput,
+  errorPrefix: string,
+  nextErrors: Record<string, string>,
+) {
+  if (!question.questionText.trim()) {
+    nextErrors[errorPrefix] = "Question text is required.";
+  }
+
+  if (
+    question.totalMarks === undefined ||
+    question.totalMarks === null ||
+    Number.isNaN(Number(question.totalMarks)) ||
+    Number(question.totalMarks) <= 0
+  ) {
+    nextErrors[`${errorPrefix}-marks`] =
+      "Total marks is required and must be greater than 0.";
+  }
+
+  if (["RADIO", "SELECT"].includes(question.inputType)) {
+    if (question.options.length < 2) {
+      nextErrors[errorPrefix] =
+        "Radio and dropdown questions need at least two options.";
+    }
+  }
+
+  if (question.inputType === "CHECKBOX" && question.options.length < 1) {
+    nextErrors[errorPrefix] =
+      "Checkbox questions need at least one option.";
+  }
+
+  question.options.forEach((option, optionIndex) => {
+    if (!option.optionLabel.trim()) {
+      nextErrors[errorPrefix] = `Option ${optionIndex + 1} label is required.`;
+    }
+  });
 }
 
 export default function FormBuilderWizard({
@@ -58,31 +104,47 @@ export default function FormBuilderWizard({
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState(initialState?.title ?? "");
   const [description, setDescription] = useState(initialState?.description ?? "");
+  const [sections, setSections] = useState<FormSectionInput[]>(
+    initialState?.sections ?? [],
+  );
   const [questions, setQuestions] = useState<QuestionInput[]>(
-    initialState?.questions ?? [createEmptyQuestion(0)],
+    initialState?.questions ?? [],
   );
-  const [staffCategoryId, setStaffCategoryId] = useState<number | "">(
-    initialState?.staffCategoryId ?? "",
+  const [targetCategory, setTargetCategory] = useState<EmployeeCategory | "">(
+    initialState?.targetCategory ?? "",
   );
-  const [staffSubCategoryId, setStaffSubCategoryId] = useState<number | "">(
-    initialState?.staffSubCategoryId ?? "",
+  const [targetSubCategory, setTargetSubCategory] = useState<SubCategory | "">(
+    initialState?.targetSubCategory ?? "",
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const payload = useMemo<FormTemplateInput | null>(() => {
-    if (!staffCategoryId || !staffSubCategoryId) {
+    if (!targetCategory || !targetSubCategory) {
       return null;
     }
 
     return {
       title: title.trim(),
       description: description.trim(),
-      staffCategoryId: Number(staffCategoryId),
-      staffSubCategoryId: Number(staffSubCategoryId),
+      targetCategory,
+      targetSubCategory,
+      sections,
       questions,
+      ...(templateId && initialState?.cycleId
+        ? { cycleId: initialState.cycleId }
+        : {}),
     };
-  }, [title, description, staffCategoryId, staffSubCategoryId, questions]);
+  }, [
+    title,
+    description,
+    targetCategory,
+    targetSubCategory,
+    sections,
+    questions,
+    templateId,
+    initialState?.cycleId,
+  ]);
 
   const saveMutation = useMutation({
     mutationFn: async (input: FormTemplateInput) => {
@@ -108,43 +170,41 @@ export default function FormBuilderWizard({
       nextErrors.title = "Form title is required.";
     }
 
-    if (questions.length === 0) {
+    if (countAllQuestions(sections, questions) === 0) {
       nextErrors.questions = "At least one question is required.";
     }
 
-    questions.forEach((question, index) => {
-      if (!question.questionText.trim()) {
-        nextErrors[`question-${index}`] = "Question text is required.";
+    sections.forEach((section, sectionIndex) => {
+      if (!section.title.trim()) {
+        nextErrors[`section-${sectionIndex}-title`] = "Section title is required.";
       }
 
-      if (
-        question.totalMarks === undefined ||
-        question.totalMarks === null ||
-        Number.isNaN(Number(question.totalMarks)) ||
-        Number(question.totalMarks) <= 0
-      ) {
-        nextErrors[`question-${index}-marks`] =
-          "Total marks is required and must be greater than 0.";
-      }
-
-      if (["RADIO", "SELECT"].includes(question.inputType)) {
-        if (question.options.length < 2) {
-          nextErrors[`question-${index}`] =
-            "Radio and dropdown questions need at least two options.";
-        }
-      }
-
-      if (question.inputType === "CHECKBOX" && question.options.length < 1) {
-        nextErrors[`question-${index}`] =
-          "Checkbox questions need at least one option.";
-      }
-
-      question.options.forEach((option, optionIndex) => {
-        if (!option.optionLabel.trim()) {
-          nextErrors[`question-${index}`] =
-            `Option ${optionIndex + 1} label is required.`;
-        }
+      section.questions.forEach((question, questionIndex) => {
+        validateQuestionFields(
+          question,
+          `section-${sectionIndex}-question-${questionIndex}`,
+          nextErrors,
+        );
       });
+
+      section.subsections.forEach((subsection, subsectionIndex) => {
+        if (!subsection.title.trim()) {
+          nextErrors[`section-${sectionIndex}-sub-${subsectionIndex}-title`] =
+            "Subsection title is required.";
+        }
+
+        subsection.questions.forEach((question, questionIndex) => {
+          validateQuestionFields(
+            question,
+            `section-${sectionIndex}-sub-${subsectionIndex}-question-${questionIndex}`,
+            nextErrors,
+          );
+        });
+      });
+    });
+
+    questions.forEach((question, index) => {
+      validateQuestionFields(question, `question-${index}`, nextErrors);
     });
 
     setErrors(nextErrors);
@@ -154,12 +214,21 @@ export default function FormBuilderWizard({
   const validateCategoryStep = () => {
     const nextErrors: Record<string, string> = {};
 
-    if (!staffCategoryId) {
-      nextErrors.staffCategoryId = "Staff category is required.";
+    if (!targetCategory) {
+      nextErrors.targetCategory = "Employee category is required.";
     }
 
-    if (!staffSubCategoryId) {
-      nextErrors.staffSubCategoryId = "Sub-category is required.";
+    if (!targetSubCategory) {
+      nextErrors.targetSubCategory = "Sub-category is required.";
+    }
+
+    if (
+      targetCategory &&
+      targetSubCategory &&
+      !CATEGORY_SUB_MAP[targetCategory].includes(targetSubCategory)
+    ) {
+      nextErrors.targetSubCategory =
+        "Selected sub-category does not belong to the chosen category.";
     }
 
     setErrors(nextErrors);
@@ -185,16 +254,24 @@ export default function FormBuilderWizard({
   const handleSubmit = () => {
     setSubmitError(null);
 
-    if (!validateDesignStep() || !validateCategoryStep() || !payload) {
+    if (!validateCategoryStep() || !payload) {
       return;
     }
 
     saveMutation.mutate(payload);
   };
 
-  const handleCategoryChange = (categoryId: number) => {
-    setStaffCategoryId(categoryId);
-    setStaffSubCategoryId("");
+  const handleCategoryChange = (category: EmployeeCategory) => {
+    setTargetCategory(category);
+    setTargetSubCategory("");
+  };
+
+  const handleStructureChange = (
+    nextSections: FormSectionInput[],
+    nextQuestions: QuestionInput[],
+  ) => {
+    setSections(nextSections);
+    setQuestions(nextQuestions);
   };
 
   return (
@@ -234,21 +311,22 @@ export default function FormBuilderWizard({
           <FormDesignStep
             title={title}
             description={description}
+            sections={sections}
             questions={questions}
             errors={errors}
             onTitleChange={setTitle}
             onDescriptionChange={setDescription}
-            onQuestionsChange={setQuestions}
+            onStructureChange={handleStructureChange}
           />
         ) : null}
 
         {step === 1 ? (
           <CategoryAssignmentStep
-            staffCategoryId={staffCategoryId}
-            staffSubCategoryId={staffSubCategoryId}
+            targetCategory={targetCategory}
+            targetSubCategory={targetSubCategory}
             errors={errors}
             onCategoryChange={handleCategoryChange}
-            onSubCategoryChange={setStaffSubCategoryId}
+            onSubCategoryChange={setTargetSubCategory}
           />
         ) : null}
       </div>

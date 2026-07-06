@@ -13,6 +13,7 @@ import type {
   FormSubmissionListItem,
 } from "@/types/form-submissions";
 import type { AppraisalStatus } from "@/types/forms";
+import { flattenAllQuestions } from "@/types/forms";
 
 export class FormSubmissionError extends Error {
   constructor(
@@ -158,7 +159,7 @@ export async function getFormSubmissionById(
   if (summary.templateId) {
     const template = await getFormTemplateById(summary.templateId);
     if (template) {
-      questions = template.questions;
+      questions = flattenAllQuestions(template);
       templateDescription = template.description;
     }
   }

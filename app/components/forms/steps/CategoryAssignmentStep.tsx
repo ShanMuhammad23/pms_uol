@@ -1,115 +1,105 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { fetchStaffCategoriesWithSubCategories } from "@/lib/queries/staff-categories-client";
+import type { EmployeeCategory, SubCategory } from "@/types/forms";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_SUB_MAP,
+  EMPLOYEE_CATEGORIES,
+  SUB_CATEGORY_LABELS,
+} from "@/types/forms";
 
 interface CategoryAssignmentStepProps {
-  staffCategoryId: number | "";
-  staffSubCategoryId: number | "";
+  targetCategory: EmployeeCategory | "";
+  targetSubCategory: SubCategory | "";
   errors: Record<string, string>;
-  onCategoryChange: (categoryId: number) => void;
-  onSubCategoryChange: (subCategoryId: number) => void;
+  onCategoryChange: (category: EmployeeCategory) => void;
+  onSubCategoryChange: (subCategory: SubCategory) => void;
 }
 
 export default function CategoryAssignmentStep({
-  staffCategoryId,
-  staffSubCategoryId,
+  targetCategory,
+  targetSubCategory,
   errors,
   onCategoryChange,
   onSubCategoryChange,
 }: CategoryAssignmentStepProps) {
-  const { data: staffCategories = [], isLoading } = useQuery({
-    queryKey: ["staff-categories-for-forms"],
-    queryFn: fetchStaffCategoriesWithSubCategories,
-  });
-
-  const selectedCategory = staffCategories.find(
-    (category) => category.id === staffCategoryId,
-  );
-  const subCategories = selectedCategory?.subCategories ?? [];
-
-  const selectedSubCategory = subCategories.find(
-    (subCategory) => subCategory.id === staffSubCategoryId,
-  );
+  const subCategories = targetCategory
+    ? CATEGORY_SUB_MAP[targetCategory]
+    : [];
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-text-primary">
-          Staff Category Assignment
+          Category Assignment
         </h2>
         <p className="mt-1 text-sm text-foreground/70">
-          Choose which staff category and sub-category this form applies to.
+          Choose which employee category and sub-category this form applies to.
         </p>
       </div>
 
-      {isLoading ? (
-        <p className="text-sm text-foreground/70">Loading staff categories...</p>
-      ) : staffCategories.length === 0 ? (
-        <p className="text-sm text-foreground/70">
-          No staff categories found. Create staff categories before publishing a
-          form.
-        </p>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-text-primary">
-              Staff Category
-            </label>
-            <select
-              value={staffCategoryId}
-              onChange={(event) =>
-                onCategoryChange(Number(event.target.value))
-              }
-              className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
-            >
-              <option value="">Select staff category</option>
-              {staffCategories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            {errors.staffCategoryId ? (
-              <p className="mt-1 text-xs text-red-600">{errors.staffCategoryId}</p>
-            ) : null}
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-text-primary">
-              Sub-Category
-            </label>
-            <select
-              value={staffSubCategoryId}
-              onChange={(event) =>
-                onSubCategoryChange(Number(event.target.value))
-              }
-              disabled={!staffCategoryId}
-              className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-            >
-              <option value="">Select sub-category</option>
-              {subCategories.map((subCategory) => (
-                <option key={subCategory.id} value={subCategory.id}>
-                  {subCategory.name}
-                </option>
-              ))}
-            </select>
-            {errors.staffSubCategoryId ? (
-              <p className="mt-1 text-xs text-red-600">
-                {errors.staffSubCategoryId}
-              </p>
-            ) : null}
-          </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="mb-2 block text-sm font-medium text-text-primary">
+            Employee Category
+          </label>
+          <select
+            value={targetCategory}
+            onChange={(event) =>
+              onCategoryChange(event.target.value as EmployeeCategory)
+            }
+            className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
+          >
+            <option value="">Select category</option>
+            {EMPLOYEE_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {CATEGORY_LABELS[category]}
+              </option>
+            ))}
+          </select>
+          {errors.targetCategory ? (
+            <p className="mt-1 text-xs text-red-600">{errors.targetCategory}</p>
+          ) : null}
         </div>
-      )}
 
-      {selectedCategory && selectedSubCategory ? (
+        <div>
+          <label className="mb-2 block text-sm font-medium text-text-primary">
+            Sub-Category
+          </label>
+          <select
+            value={targetSubCategory}
+            onChange={(event) =>
+              onSubCategoryChange(event.target.value as SubCategory)
+            }
+            disabled={!targetCategory}
+            className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
+          >
+            <option value="">Select sub-category</option>
+            {subCategories.map((subCategory) => (
+              <option key={subCategory} value={subCategory}>
+                {SUB_CATEGORY_LABELS[subCategory]}
+              </option>
+            ))}
+          </select>
+          {errors.targetSubCategory ? (
+            <p className="mt-1 text-xs text-red-600">
+              {errors.targetSubCategory}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {targetCategory && targetSubCategory ? (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-text-primary">
-          This form will be available to staff in the{" "}
-          <span className="font-semibold">{selectedCategory.name}</span> category
-          under the{" "}
-          <span className="font-semibold">{selectedSubCategory.name}</span>{" "}
-          sub-category.
+          This form will be shown to{" "}
+          <span className="font-semibold">
+            {CATEGORY_LABELS[targetCategory]}
+          </span>{" "}
+          employees in the{" "}
+          <span className="font-semibold">
+            {SUB_CATEGORY_LABELS[targetSubCategory]}
+          </span>{" "}
+          sub-category during the selected appraisal cycle.
         </div>
       ) : null}
     </div>

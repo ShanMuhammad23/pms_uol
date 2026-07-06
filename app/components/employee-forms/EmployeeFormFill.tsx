@@ -8,7 +8,7 @@ import {
   saveEmployeeForm,
 } from "@/lib/queries/employee-forms-client";
 import type { EmployeeFormAnswerInput } from "@/types/employee-forms";
-import { FIELD_TYPE_LABELS } from "@/types/forms";
+import { CATEGORY_LABELS, FIELD_TYPE_LABELS, flattenAllQuestions, SUB_CATEGORY_LABELS } from "@/types/forms";
 
 interface EmployeeFormFillProps {
   templateId: number;
@@ -124,7 +124,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     }
 
     setAnswers(
-      buildInitialAnswers(data.template.questions, data.answers),
+      buildInitialAnswers(flattenAllQuestions(data.template), data.answers),
     );
   }, [data]);
 
@@ -137,7 +137,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
       return 0;
     }
 
-    return data.template.questions
+    return flattenAllQuestions(data.template)
       .filter(isScoredQuestion)
       .reduce((sum, question) => {
         const answer = answers[question.id];
@@ -195,7 +195,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
       return null;
     }
 
-    for (const question of data.template.questions) {
+    for (const question of flattenAllQuestions(data.template)) {
       if (!isScoredQuestion(question)) {
         continue;
       }
@@ -246,6 +246,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   }
 
   const { template } = data;
+  const allQuestions = flattenAllQuestions(template);
 
   return (
     <div className="space-y-6">
@@ -261,7 +262,8 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
               </p>
             ) : null}
             <p className="mt-2 text-xs text-foreground/60">
-              {template.staffCategoryName} / {template.staffSubCategoryName}
+              {CATEGORY_LABELS[template.targetCategory]} /{" "}
+              {SUB_CATEGORY_LABELS[template.targetSubCategory]}
             </p>
           </div>
           <div className="rounded-xl border border-slate-300/80 px-4 py-3 text-right dark:border-white/15">
@@ -281,7 +283,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
       ) : null}
 
       <div className="space-y-4">
-        {template.questions.map((question, index) => {
+        {allQuestions.map((question, index) => {
           const answer = answers[question.id] ?? {
             textResponse: "",
             selectedOptionId: "",

@@ -54,6 +54,21 @@ export async function createAppraisalCycle(
   return mapCycleRow(result.rows[0]);
 }
 
+export async function getDefaultAppraisalCycle(): Promise<AppraisalCycleRecord | null> {
+  const result = await db.query<AppraisalCycleRow>(
+    `SELECT id, fiscal_year, start_date::text, end_date::text, is_active, created_at::text
+     FROM appraisal_cycles
+     ORDER BY is_active DESC, fiscal_year DESC
+     LIMIT 1`,
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return mapCycleRow(result.rows[0]);
+}
+
 export async function getAppraisalCycleById(
   id: number,
 ): Promise<AppraisalCycleRecord | null> {

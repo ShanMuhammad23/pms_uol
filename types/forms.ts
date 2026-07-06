@@ -134,6 +134,37 @@ export interface QuestionInput {
   hodAssessmentEnabled: boolean;
   totalMarks: number;
   options: QuestionOptionInput[];
+  sectionId?: number;
+}
+
+export interface FormSubsectionInput {
+  clientId: string;
+  title: string;
+  sortOrder: number;
+  questions: QuestionInput[];
+}
+
+export interface FormSectionInput {
+  clientId: string;
+  title: string;
+  sortOrder: number;
+  subsections: FormSubsectionInput[];
+  questions: QuestionInput[];
+}
+
+export interface FormSubsectionRecord {
+  id: number;
+  title: string;
+  sortOrder: number;
+  questions: QuestionRecord[];
+}
+
+export interface FormSectionRecord {
+  id: number;
+  title: string;
+  sortOrder: number;
+  subsections: FormSubsectionRecord[];
+  questions: QuestionRecord[];
 }
 
 export interface IncrementMatrixInput {
@@ -145,9 +176,12 @@ export interface IncrementMatrixInput {
 export interface FormTemplateInput {
   title: string;
   description: string;
-  staffCategoryId: number;
-  staffSubCategoryId: number;
+  cycleId?: number;
+  targetCategory: EmployeeCategory;
+  targetSubCategory: SubCategory;
+  sections: FormSectionInput[];
   questions: QuestionInput[];
+  incrementMatrices?: IncrementMatrixInput[];
 }
 
 export interface QuestionOptionRecord {
@@ -166,6 +200,7 @@ export interface QuestionRecord {
   selfAssessmentEnabled: boolean;
   hodAssessmentEnabled: boolean;
   totalMarks: number;
+  sectionId?: number;
   options: QuestionOptionRecord[];
 }
 
@@ -173,10 +208,10 @@ export interface FormTemplateListItem {
   id: number;
   title: string;
   description: string | null;
-  staffCategoryId: number | null;
-  staffSubCategoryId: number | null;
-  staffCategoryName: string | null;
-  staffSubCategoryName: string | null;
+  cycleId: number;
+  fiscalYear: number;
+  targetCategory: EmployeeCategory;
+  targetSubCategory: SubCategory;
   questionCount: number;
   appraisalCount: number;
   createdAt: string;
@@ -187,11 +222,13 @@ export interface FormTemplateRecord {
   id: number;
   title: string;
   description: string | null;
-  staffCategoryId: number | null;
-  staffSubCategoryId: number | null;
-  staffCategoryName: string | null;
-  staffSubCategoryName: string | null;
+  cycleId: number;
+  fiscalYear: number;
+  targetCategory: EmployeeCategory;
+  targetSubCategory: SubCategory;
+  sections: FormSectionRecord[];
   questions: QuestionRecord[];
+  incrementMatrices: IncrementMatrixInput[];
   createdAt: string;
   updatedAt: string;
 }
@@ -235,6 +272,14 @@ export function createDefaultIncrementMatrix(): IncrementMatrixInput[] {
   return entries;
 }
 
+export function createClientId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function createEmptyQuestion(sortOrder: number): QuestionInput {
   return {
     questionText: "",
@@ -245,5 +290,75 @@ export function createEmptyQuestion(sortOrder: number): QuestionInput {
     hodAssessmentEnabled: false,
     totalMarks: 0,
     options: [],
+  };
+}
+
+export function createEmptySubsection(sortOrder: number): FormSubsectionInput {
+  return {
+    clientId: createClientId(),
+    title: "",
+    sortOrder,
+    questions: [],
+  };
+}
+
+export function createEmptySection(sortOrder: number): FormSectionInput {
+  return {
+    clientId: createClientId(),
+    title: "",
+    sortOrder,
+    subsections: [],
+    questions: [],
+  };
+}
+
+export function countAllQuestions(
+  sections: FormSectionInput[],
+  rootQuestions: QuestionInput[],
+): number {
+  let count = rootQuestions.length;
+
+  for (const section of sections) {
+    count += section.questions.length;
+    for (const subsection of section.subsections) {
+      count += subsection.questions.length;
+    }
+  }
+
+  return count;
+}
+
+export function flattenAllQuestions(
+  template: Pick<FormTemplateRecord, "sections" | "questions">,
+): QuestionRecord[] {
+  const result: QuestionRecord[] = [...template.questions];
+
+  for (const section of template.sections) {
+    result.push(...section.questions);
+    for (const subsection of section.subsections) {
+      result.push(...subsection.questions);
+    }
+  }
+
+  return result;
+}
+
+export function mapQuestionRecordToInput(
+  question: QuestionRecord,
+): QuestionInput {
+  return {
+    questionText: question.questionText,
+    inputType: question.inputType,
+    isRequired: question.isRequired,
+    sortOrder: question.sortOrder,
+    selfAssessmentEnabled: question.selfAssessmentEnabled,
+    hodAssessmentEnabled: question.hodAssessmentEnabled,
+    totalMarks: question.totalMarks,
+    sectionId: question.sectionId,
+    options: question.options.map((option) => ({
+      optionLabel: option.optionLabel,
+      pointsAssigned: option.pointsAssigned,
+      sortOrder: option.sortOrder,
+    })),
   };
 }
