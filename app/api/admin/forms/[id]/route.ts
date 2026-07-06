@@ -13,6 +13,28 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+const APPRAISAL_ANSWER_BLOCK_MESSAGE =
+  "This form has appraisal answers linked to questions that would be removed. Delete or archive those answers first, or only edit question text/options in place.";
+
+function isPostgresFkViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: string }).code === "23503"
+  );
+}
+
+function formTemplateErrorResponse(error: FormTemplateError) {
+  return NextResponse.json(
+    {
+      error: error.message,
+      ...(error.meta ?? {}),
+    },
+    { status: error.statusCode },
+  );
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
@@ -68,9 +90,14 @@ export async function PUT(request: Request, context: RouteContext) {
     return NextResponse.json(template);
   } catch (error) {
     if (error instanceof FormTemplateError) {
+      return formTemplateErrorResponse(error);
+    }
+
+    if (isPostgresFkViolation(error)) {
+      console.error("Failed to update form template (FK violation):", error);
       return NextResponse.json(
-        { error: error.message },
-        { status: error.statusCode },
+        { error: APPRAISAL_ANSWER_BLOCK_MESSAGE },
+        { status: 409 },
       );
     }
 
@@ -100,10 +127,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof FormTemplateError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.statusCode },
-      );
+      return formTemplateErrorResponse(error);
     }
 
     console.error("Failed to delete form template:", error);

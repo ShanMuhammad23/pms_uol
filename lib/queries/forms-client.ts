@@ -7,11 +7,26 @@ import type {
   IncrementMatrixInput,
 } from "@/types/forms";
 
+export class FormTemplateRequestError extends Error {
+  constructor(
+    message: string,
+    public existingFormId?: number,
+    public existingFormTitle?: string,
+  ) {
+    super(message);
+    this.name = "FormTemplateRequestError";
+  }
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error ?? "Request failed.");
+    throw new FormTemplateRequestError(
+      data.error ?? "Request failed.",
+      data.existingFormId,
+      data.existingFormTitle,
+    );
   }
 
   return data as T;
@@ -26,7 +41,10 @@ export async function fetchFormTemplates(): Promise<FormTemplateListItem[]> {
 }
 
 export async function fetchFormTemplate(id: number): Promise<FormTemplateRecord> {
-  const response = await fetch(`/api/admin/forms/${id}`);
+  const response = await fetch(`/api/admin/forms/${id}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
   return parseResponse<FormTemplateRecord>(response);
 }
 
@@ -36,6 +54,7 @@ export async function createFormTemplate(
   const response = await fetch("/api/admin/forms", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(input),
   });
 
@@ -49,6 +68,7 @@ export async function updateFormTemplate(
   const response = await fetch(`/api/admin/forms/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(input),
   });
 
@@ -58,6 +78,7 @@ export async function updateFormTemplate(
 export async function deleteFormTemplate(id: number): Promise<{ appraisalCount: number }> {
   const response = await fetch(`/api/admin/forms/${id}`, {
     method: "DELETE",
+    credentials: "include",
   });
 
   return parseResponse<{ appraisalCount: number }>(response);

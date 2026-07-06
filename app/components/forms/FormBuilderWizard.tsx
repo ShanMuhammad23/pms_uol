@@ -1,12 +1,14 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/app/components/auth/Button";
 import CategoryAssignmentStep from "./steps/CategoryAssignmentStep";
 import {
   createFormTemplate,
+  FormTemplateRequestError,
   updateFormTemplate,
 } from "@/lib/queries/forms-client";
 import type {
@@ -64,16 +66,19 @@ interface FormBuilderWizardProps {
   templateId?: number;
   initialData?: FormTemplateRecord;
   appraisalCycles?: AppraisalCycleRecord[];
+  appraisalCount?: number;
 }
 
 function mapRecordToState(record: FormTemplateRecord) {
   const mappedSections = record.sections.map((section) => ({
     clientId: createClientId(),
+    id: section.id,
     title: section.title,
     sortOrder: section.sortOrder,
     questions: section.questions.map(mapQuestionRecordToInput),
     subsections: section.subsections.map((subsection) => ({
       clientId: createClientId(),
+      id: subsection.id,
       title: subsection.title,
       sortOrder: subsection.sortOrder,
       questions: subsection.questions.map(mapQuestionRecordToInput),
@@ -1011,6 +1016,7 @@ export default function FormBuilderWizard({
   templateId,
   initialData,
   appraisalCycles = [],
+  appraisalCount = 0,
 }: FormBuilderWizardProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -1036,6 +1042,7 @@ export default function FormBuilderWizard({
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [duplicateFormId, setDuplicateFormId] = useState<number | null>(null);
 
   const payload = useMemo<FormTemplateInput | null>(() => {
     if (!targetCategory || !targetSubCategory) {
@@ -1070,13 +1077,21 @@ export default function FormBuilderWizard({
       }
       return createFormTemplate(input);
     },
-    onSuccess: async () => {
+    onSuccess: async (template: FormTemplateRecord) => {
       await queryClient.invalidateQueries({ queryKey: ["form-templates"] });
-      router.push("/dashboard/forms");
+      const viewId = templateId ?? template.id;
+      router.push(`/dashboard/forms/${viewId}/view`);
       router.refresh();
     },
     onError: (error: Error) => {
+      if (error instanceof FormTemplateRequestError) {
+        setSubmitError(error.message);
+        setDuplicateFormId(error.existingFormId ?? null);
+        return;
+      }
+
       setSubmitError(error.message);
+      setDuplicateFormId(null);
     },
   });
 
@@ -1161,6 +1176,7 @@ export default function FormBuilderWizard({
 
   const goNext = () => {
     setSubmitError(null);
+    setDuplicateFormId(null);
     if (step === 0 && !validateDesignStep()) {
       return;
     }
@@ -1169,12 +1185,14 @@ export default function FormBuilderWizard({
 
   const goBack = () => {
     setSubmitError(null);
+    setDuplicateFormId(null);
     setErrors({});
     setStep((current) => Math.max(current - 1, 0));
   };
 
   const handleSubmit = () => {
     setSubmitError(null);
+    setDuplicateFormId(null);
     if (!validateCategoryStep() || !payload) {
       return;
     }
@@ -1286,6 +1304,16 @@ export default function FormBuilderWizard({
         </div>
       </div>
 
+      {templateId && appraisalCount > 0 ? (
+        <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            This form has active appraisals — removing questions is restricted.
+            You can still edit question text, options, and add new questions.
+          </p>
+        </div>
+      ) : null}
+
       {/* Main Content */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
         {step === 0 ? (
@@ -1308,6 +1336,7 @@ export default function FormBuilderWizard({
                 targetCategory={targetCategory}
                 targetSubCategory={targetSubCategory}
                 errors={errors}
+                readOnly={Boolean(templateId)}
                 onCycleChange={setCycleId}
                 onCategoryChange={handleCategoryChange}
                 onSubCategoryChange={setTargetSubCategory}
@@ -1319,15 +1348,30 @@ export default function FormBuilderWizard({
 
       {/* Global Error Toast */}
       {submitError && (
-        <div className="absolute bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-red-200 bg-white px-4 py-3 shadow-lg dark:border-red-900 dark:bg-slate-900">
-          <AlertCircle className="h-5 w-5 text-red-500" />
-          <p className="text-sm text-red-600 dark:text-red-400">{submitError}</p>
-          <button 
-            onClick={() => setSubmitError(null)}
-            className="rounded p-1 hover:bg-red-50 dark:hover:bg-red-900/20"
-          >
-            <X className="h-4 w-4 text-red-400" />
-          </button>
+        <div className="absolute bottom-6 right-6 z-50 max-w-sm rounded-xl border border-red-200 bg-white px-4 py-3 shadow-lg dark:border-red-900 dark:bg-slate-900">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-red-600 dark:text-red-400">{submitError}</p>
+              {duplicateFormId ? (
+                <Link
+                  href={`/dashboard/forms/${duplicateFormId}`}
+                  className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+                >
+                  Edit existing form
+                </Link>
+              ) : null}
+            </div>
+            <button
+              onClick={() => {
+                setSubmitError(null);
+                setDuplicateFormId(null);
+              }}
+              className="rounded p-1 hover:bg-red-50 dark:hover:bg-red-900/20"
+            >
+              <X className="h-4 w-4 text-red-400" />
+            </button>
+          </div>
         </div>
       )}
     </div>

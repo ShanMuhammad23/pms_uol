@@ -7,10 +7,12 @@ import { getAppraisalCycleById, getDefaultAppraisalCycle, ensureDefaultAppraisal
 import type {
   EmployeeCategory,
   FieldType,
+  FormSectionInput,
   FormTemplateInput,
   FormTemplateListItem,
   FormTemplateRecord,
   QuestionInput,
+  QuestionOptionInput,
   SubCategory,
 } from "@/types/forms";
 
@@ -71,11 +73,15 @@ export class FormTemplateError extends Error {
   constructor(
     message: string,
     public statusCode = 400,
+    public meta?: { existingFormId?: number; existingFormTitle?: string },
   ) {
     super(message);
     this.name = "FormTemplateError";
   }
 }
+
+const APPRAISAL_ANSWER_BLOCK_MESSAGE =
+  "This form has appraisal answers linked to questions that would be removed. Delete or archive those answers first, or only edit question text/options in place.";
 
 async function resolveCycleId(cycleId?: number): Promise<number> {
   if (cycleId) {
@@ -106,7 +112,7 @@ async function checkDuplicateTarget(
     targetSubCategory,
   ];
 
-  let query = `SELECT id FROM form_templates
+  let query = `SELECT id, title FROM form_templates
                WHERE cycle_id = $1 AND target_category = $2 AND target_sub_category = $3`;
 
   if (excludeId !== undefined) {
@@ -114,13 +120,52 @@ async function checkDuplicateTarget(
     params.push(excludeId);
   }
 
-  const result = await executor.query(query, params);
+  const result = await executor.query<{ id: string; title: string }>(
+    query,
+    params,
+  );
 
   if (result.rows.length > 0) {
     throw new FormTemplateError(
       "A form template already exists for this cycle, category, and sub-category combination.",
       409,
+      {
+        existingFormId: Number(result.rows[0].id),
+        existingFormTitle: result.rows[0].title,
+      },
     );
+  }
+}
+
+async function assertQuestionCanBeDeleted(
+  questionId: number,
+  client: PoolClient,
+): Promise<void> {
+  const result = await client.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count
+     FROM appraisal_answers
+     WHERE question_id = $1`,
+    [questionId],
+  );
+
+  if (Number(result.rows[0]?.count ?? 0) > 0) {
+    throw new FormTemplateError(APPRAISAL_ANSWER_BLOCK_MESSAGE, 409);
+  }
+}
+
+async function assertOptionCanBeDeleted(
+  optionId: number,
+  client: PoolClient,
+): Promise<void> {
+  const result = await client.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count
+     FROM appraisal_answers
+     WHERE selected_option_id = $1`,
+    [optionId],
+  );
+
+  if (Number(result.rows[0]?.count ?? 0) > 0) {
+    throw new FormTemplateError(APPRAISAL_ANSWER_BLOCK_MESSAGE, 409);
   }
 }
 
@@ -129,7 +174,7 @@ async function insertQuestionWithOptions(
   question: QuestionInput,
   sectionId: number | null,
   client: PoolClient,
-): Promise<void> {
+): Promise<number> {
   const questionResult = await client.query<{ id: string }>(
     `INSERT INTO form_questions (
        template_id,
@@ -164,6 +209,246 @@ async function insertQuestionWithOptions(
        VALUES ($1, $2, $3, $4)`,
       [questionId, option.optionLabel, option.pointsAssigned, option.sortOrder],
     );
+  }
+
+  return questionId;
+}
+
+async function syncOptions(
+  questionId: number,
+  options: QuestionOptionInput[],
+  client: PoolClient,
+): Promise<void> {
+  const existingResult = await client.query<{ id: string }>(
+    `SELECT id FROM question_options WHERE question_id = $1`,
+    [questionId],
+  );
+  const existingIds = new Set(
+    existingResult.rows.map((row) => Number(row.id)),
+  );
+  const inputIds = new Set(
+    options.flatMap((option) => (option.id !== undefined ? [option.id] : [])),
+  );
+
+  for (const existingId of existingIds) {
+    if (!inputIds.has(existingId)) {
+      await assertOptionCanBeDeleted(existingId, client);
+      await client.query(`DELETE FROM question_options WHERE id = $1`, [
+        existingId,
+      ]);
+    }
+  }
+
+  for (const option of options) {
+    if (option.id !== undefined) {
+      await client.query(
+        `UPDATE question_options
+         SET option_label = $1,
+             points_assigned = $2,
+             sort_order = $3
+         WHERE id = $4 AND question_id = $5`,
+        [
+          option.optionLabel,
+          option.pointsAssigned,
+          option.sortOrder,
+          option.id,
+          questionId,
+        ],
+      );
+      continue;
+    }
+
+    await client.query(
+      `INSERT INTO question_options (question_id, option_label, points_assigned, sort_order)
+       VALUES ($1, $2, $3, $4)`,
+      [questionId, option.optionLabel, option.pointsAssigned, option.sortOrder],
+    );
+  }
+}
+
+async function syncQuestion(
+  templateId: number,
+  question: QuestionInput,
+  sectionId: number | null,
+  client: PoolClient,
+): Promise<number> {
+  if (question.id !== undefined) {
+    const updated = await client.query(
+      `UPDATE form_questions
+       SET section_id = $1,
+           question_text = $2,
+           input_type = $3,
+           is_required = $4,
+           sort_order = $5,
+           self_assessment_enabled = $6,
+           hod_assessment_enabled = $7,
+           total_marks = $8
+       WHERE id = $9 AND template_id = $10`,
+      [
+        sectionId,
+        question.questionText,
+        question.inputType,
+        question.isRequired,
+        question.sortOrder,
+        question.selfAssessmentEnabled,
+        question.hodAssessmentEnabled,
+        question.totalMarks,
+        question.id,
+        templateId,
+      ],
+    );
+
+    if (updated.rowCount === 0) {
+      throw new FormTemplateError("One or more questions could not be updated.", 400);
+    }
+
+    await syncOptions(question.id, question.options, client);
+    return question.id;
+  }
+
+  return insertQuestionWithOptions(templateId, question, sectionId, client);
+}
+
+async function upsertSection(
+  templateId: number,
+  section: Pick<FormSectionInput, "id" | "title" | "sortOrder">,
+  parentSectionId: number | null,
+  client: PoolClient,
+): Promise<number> {
+  if (section.id !== undefined) {
+    await client.query(
+      `UPDATE form_sections
+       SET title = $1,
+           sort_order = $2,
+           parent_section_id = $3
+       WHERE id = $4 AND template_id = $5`,
+      [
+        section.title,
+        section.sortOrder,
+        parentSectionId,
+        section.id,
+        templateId,
+      ],
+    );
+    return section.id;
+  }
+
+  const sectionResult = await client.query<{ id: string }>(
+    `INSERT INTO form_sections (template_id, parent_section_id, title, sort_order)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id`,
+    [templateId, parentSectionId, section.title, section.sortOrder],
+  );
+
+  return Number(sectionResult.rows[0].id);
+}
+
+function collectStructureIds(input: FormTemplateInput): {
+  sectionIds: Set<number>;
+  questionIds: Set<number>;
+} {
+  const sectionIds = new Set<number>();
+  const questionIds = new Set<number>();
+
+  for (const section of input.sections) {
+    if (section.id !== undefined) {
+      sectionIds.add(section.id);
+    }
+
+    for (const question of section.questions) {
+      if (question.id !== undefined) {
+        questionIds.add(question.id);
+      }
+    }
+
+    for (const subsection of section.subsections) {
+      if (subsection.id !== undefined) {
+        sectionIds.add(subsection.id);
+      }
+
+      for (const question of subsection.questions) {
+        if (question.id !== undefined) {
+          questionIds.add(question.id);
+        }
+      }
+    }
+  }
+
+  for (const question of input.questions) {
+    if (question.id !== undefined) {
+      questionIds.add(question.id);
+    }
+  }
+
+  return { sectionIds, questionIds };
+}
+
+async function syncFormStructure(
+  templateId: number,
+  input: FormTemplateInput,
+  client: PoolClient,
+): Promise<void> {
+  const { sectionIds, questionIds } = collectStructureIds(input);
+
+  const existingQuestions = await client.query<{ id: string }>(
+    `SELECT id FROM form_questions WHERE template_id = $1`,
+    [templateId],
+  );
+
+  for (const row of existingQuestions.rows) {
+    const questionId = Number(row.id);
+    if (!questionIds.has(questionId)) {
+      await assertQuestionCanBeDeleted(questionId, client);
+      await client.query(`DELETE FROM form_questions WHERE id = $1`, [
+        questionId,
+      ]);
+    }
+  }
+
+  const existingSections = await client.query<{
+    id: string;
+    parent_section_id: string | null;
+  }>(`SELECT id, parent_section_id FROM form_sections WHERE template_id = $1`, [
+    templateId,
+  ]);
+
+  const sectionsToDelete = existingSections.rows.filter(
+    (row) => !sectionIds.has(Number(row.id)),
+  );
+  const subsectionsToDelete = sectionsToDelete.filter(
+    (row) => row.parent_section_id,
+  );
+  const topSectionsToDelete = sectionsToDelete.filter(
+    (row) => !row.parent_section_id,
+  );
+
+  for (const row of [...subsectionsToDelete, ...topSectionsToDelete]) {
+    await client.query(`DELETE FROM form_sections WHERE id = $1`, [row.id]);
+  }
+
+  for (const section of input.sections) {
+    const sectionId = await upsertSection(templateId, section, null, client);
+
+    for (const question of section.questions) {
+      await syncQuestion(templateId, question, sectionId, client);
+    }
+
+    for (const subsection of section.subsections) {
+      const subsectionId = await upsertSection(
+        templateId,
+        subsection,
+        sectionId,
+        client,
+      );
+
+      for (const question of subsection.questions) {
+        await syncQuestion(templateId, question, subsectionId, client);
+      }
+    }
+  }
+
+  for (const question of input.questions) {
+    await syncQuestion(templateId, question, null, client);
   }
 }
 
@@ -352,6 +637,27 @@ async function getFormStructureForTemplate(
   return { sections, questions: rootQuestions };
 }
 
+export async function getFormTemplateAppraisalCount(
+  templateId: number,
+): Promise<number> {
+  const result = await db.query<{ count: string }>(
+    `SELECT COUNT(DISTINCT ap_linked.appraisal_id)::text AS count
+     FROM form_templates ft
+     LEFT JOIN (
+       SELECT ap.id AS appraisal_id, ft_match.id AS template_id
+       FROM appraisals ap
+       INNER JOIN users u ON u.id = ap.employee_id
+       INNER JOIN form_templates ft_match ON ft_match.cycle_id = ap.cycle_id
+         AND ft_match.target_category = u.emp_category
+         AND ft_match.target_sub_category = u.emp_sub_category
+     ) ap_linked ON ap_linked.template_id = ft.id
+     WHERE ft.id = $1`,
+    [templateId],
+  );
+
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
   const result = await db.query<FormTemplateListRow>(
     `SELECT
@@ -438,21 +744,6 @@ export async function getFormTemplateById(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-}
-
-async function replaceFormStructure(
-  templateId: number,
-  input: FormTemplateInput,
-  client: PoolClient,
-): Promise<void> {
-  await client.query(`DELETE FROM form_sections WHERE template_id = $1`, [
-    templateId,
-  ]);
-  await client.query(
-    `DELETE FROM form_questions WHERE template_id = $1 AND section_id IS NULL`,
-    [templateId],
-  );
-  await insertSectionsAndQuestions(templateId, input, client);
 }
 
 export async function createFormTemplate(
@@ -567,7 +858,7 @@ export async function updateFormTemplate(
       ],
     );
 
-    await replaceFormStructure(id, input, client);
+    await syncFormStructure(id, input, client);
 
     if (input.incrementMatrices && input.incrementMatrices.length > 0) {
       await upsertIncrementMatrices(cycleId, input.incrementMatrices, client);

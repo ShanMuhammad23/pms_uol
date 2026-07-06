@@ -120,12 +120,14 @@ export const RATING_LABELS: Record<PerformanceRating, string> = {
 };
 
 export interface QuestionOptionInput {
+  id?: number;
   optionLabel: string;
   pointsAssigned: number;
   sortOrder: number;
 }
 
 export interface QuestionInput {
+  id?: number;
   clientId: string;
   questionText: string;
   inputType: FieldType;
@@ -164,6 +166,7 @@ export function applyQuestionInputTypeChange(
 }
 
 export interface FormSubsectionInput {
+  id?: number;
   clientId: string;
   title: string;
   sortOrder: number;
@@ -171,6 +174,7 @@ export interface FormSubsectionInput {
 }
 
 export interface FormSectionInput {
+  id?: number;
   clientId: string;
   title: string;
   sortOrder: number;
@@ -509,6 +513,7 @@ export function mapQuestionRecordToInput(
   question: QuestionRecord,
 ): QuestionInput {
   return {
+    id: question.id,
     clientId: createClientId(),
     questionText: question.questionText,
     inputType: question.inputType,
@@ -520,6 +525,7 @@ export function mapQuestionRecordToInput(
     totalMarks: question.totalMarks,
     sectionId: question.sectionId,
     options: question.options.map((option) => ({
+      id: option.id,
       optionLabel: option.optionLabel,
       pointsAssigned: option.pointsAssigned,
       sortOrder: option.sortOrder,

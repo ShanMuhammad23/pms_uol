@@ -8,6 +8,16 @@ import {
 import { validateFormTemplateInput } from "@/lib/validation/forms";
 import type { FormTemplateInput } from "@/types/forms";
 
+function formTemplateErrorResponse(error: FormTemplateError) {
+  return NextResponse.json(
+    {
+      error: error.message,
+      ...(error.meta ?? {}),
+    },
+    { status: error.statusCode },
+  );
+}
+
 export async function GET() {
   const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
@@ -48,10 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json(template, { status: 201 });
   } catch (error) {
     if (error instanceof FormTemplateError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.statusCode },
-      );
+      return formTemplateErrorResponse(error);
     }
 
     console.error("Failed to create form template:", error);

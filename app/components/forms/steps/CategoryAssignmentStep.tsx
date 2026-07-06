@@ -15,6 +15,7 @@ interface CategoryAssignmentStepProps {
   targetCategory: EmployeeCategory | "";
   targetSubCategory: SubCategory | "";
   errors: Record<string, string>;
+  readOnly?: boolean;
   onCycleChange: (cycleId: number) => void;
   onCategoryChange: (category: EmployeeCategory) => void;
   onSubCategoryChange: (subCategory: SubCategory) => void;
@@ -26,6 +27,7 @@ export default function CategoryAssignmentStep({
   targetCategory,
   targetSubCategory,
   errors,
+  readOnly = false,
   onCycleChange,
   onCategoryChange,
   onSubCategoryChange,
@@ -44,6 +46,12 @@ export default function CategoryAssignmentStep({
         <p className="mt-1 text-sm text-foreground/70">
           Choose the appraisal cycle and which employee group this form applies to.
         </p>
+        {readOnly ? (
+          <p className="mt-2 text-xs text-foreground/60">
+            Audience assignment is locked while editing. Create a new form to target
+            a different category or cycle.
+          </p>
+        ) : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -55,7 +63,8 @@ export default function CategoryAssignmentStep({
             <select
               value={cycleId}
               onChange={(event) => onCycleChange(Number(event.target.value))}
-              className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
+              disabled={readOnly}
+              className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15"
             >
               <option value="">Select appraisal cycle</option>
               {appraisalCycles.map((cycle) => (
@@ -89,7 +98,8 @@ export default function CategoryAssignmentStep({
             onChange={(event) =>
               onCategoryChange(event.target.value as EmployeeCategory)
             }
-            className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
+            disabled={readOnly}
+            className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15"
           >
             <option value="">Select category</option>
             {EMPLOYEE_CATEGORIES.map((category) => (
@@ -112,8 +122,8 @@ export default function CategoryAssignmentStep({
             onChange={(event) =>
               onSubCategoryChange(event.target.value as SubCategory)
             }
-            disabled={!targetCategory}
-            className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
+            disabled={readOnly || !targetCategory}
+            className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15"
           >
             <option value="">Select sub-category</option>
             {subCategories.map((subCategory) => (
