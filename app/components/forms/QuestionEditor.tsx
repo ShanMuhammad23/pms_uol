@@ -2,7 +2,12 @@
 
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import type { QuestionInput } from "@/types/forms";
-import { FIELD_TYPES, FIELD_TYPE_LABELS } from "@/types/forms";
+import {
+  FIELD_TYPES,
+  FIELD_TYPE_LABELS,
+  applyQuestionInputTypeChange,
+  questionNeedsOptions,
+} from "@/types/forms";
 import { cn } from "@/lib/utils";
 
 interface QuestionEditorProps {
@@ -18,7 +23,7 @@ interface QuestionEditorProps {
 }
 
 function needsOptions(inputType: QuestionInput["inputType"]): boolean {
-  return ["RADIO", "CHECKBOX", "SELECT"].includes(inputType);
+  return questionNeedsOptions(inputType);
 }
 
 export default function QuestionEditor({
@@ -76,20 +81,15 @@ export default function QuestionEditor({
   };
 
   const handleInputTypeChange = (inputType: QuestionInput["inputType"]) => {
-    const nextQuestion: QuestionInput = { ...question, inputType };
+    onChange(applyQuestionInputTypeChange(question, inputType));
+  };
 
-    if (needsOptions(inputType) && question.options.length === 0) {
-      nextQuestion.options = [
-        { optionLabel: "", pointsAssigned: 0, sortOrder: 0 },
-        { optionLabel: "", pointsAssigned: 0, sortOrder: 1 },
-      ];
-    }
-
-    if (!needsOptions(inputType)) {
-      nextQuestion.options = [];
-    }
-
-    onChange(nextQuestion);
+  const handleNoMarksChange = (checked: boolean) => {
+    onChange({
+      ...question,
+      noMarks: checked,
+      totalMarks: checked ? 0 : question.totalMarks,
+    });
   };
 
   return (
@@ -219,7 +219,19 @@ export default function QuestionEditor({
             HOD Assessment
           </label>
 
-          <div>
+          <label className="flex items-center gap-2 text-sm text-text-primary">
+            <input
+              type="checkbox"
+              checked={question.noMarks}
+              onChange={(event) => handleNoMarksChange(event.target.checked)}
+              className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            No Marks
+          </label>
+        </div>
+
+        {!question.noMarks ? (
+          <div className="mt-4">
             <label className="mb-2 block text-sm font-medium text-text-primary">
               Total Marks
             </label>
@@ -244,7 +256,11 @@ export default function QuestionEditor({
               <p className="mt-1 text-xs text-red-600">{totalMarksError}</p>
             ) : null}
           </div>
-        </div>
+        ) : (
+          <p className="mt-4 text-xs text-foreground/70">
+            This question will not contribute to the scoring total.
+          </p>
+        )}
       </div>
 
       {showOptions ? (

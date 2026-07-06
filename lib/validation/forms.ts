@@ -19,15 +19,17 @@ function validateQuestion(
     return `${pathPrefix}: invalid input type.`;
   }
 
-  if (
+  if (question.noMarks) {
+    if (Number(question.totalMarks) !== 0) {
+      return `${pathPrefix}: total marks must be 0 when No Marks is enabled.`;
+    }
+  } else if (
     question.totalMarks === undefined ||
     question.totalMarks === null ||
     Number.isNaN(Number(question.totalMarks))
   ) {
     return `${pathPrefix}: total marks is required.`;
-  }
-
-  if (Number(question.totalMarks) <= 0) {
+  } else if (Number(question.totalMarks) <= 0) {
     return `${pathPrefix}: total marks must be greater than 0.`;
   }
 

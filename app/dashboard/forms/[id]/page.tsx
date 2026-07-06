@@ -24,14 +24,7 @@ export default async function EditFormPage({ params }: EditFormPageProps) {
   }
 
   return (
-    <div className="space-y-6 text-text-primary">
-      <div>
-        <h1 className="text-2xl font-bold">Edit Form</h1>
-        <p className="mt-1 text-sm text-foreground/70">
-          Update the form design and category routing.
-        </p>
-      </div>
-
+    <div className="-m-6 h-screen overflow-hidden">
       <FormBuilderWizard templateId={templateId} initialData={template} />
     </div>
   );

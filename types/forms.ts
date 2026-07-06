@@ -126,15 +126,41 @@ export interface QuestionOptionInput {
 }
 
 export interface QuestionInput {
+  clientId: string;
   questionText: string;
   inputType: FieldType;
   isRequired: boolean;
   sortOrder: number;
   selfAssessmentEnabled: boolean;
   hodAssessmentEnabled: boolean;
+  noMarks: boolean;
   totalMarks: number;
   options: QuestionOptionInput[];
   sectionId?: number;
+}
+
+export function questionNeedsOptions(inputType: FieldType): boolean {
+  return ["RADIO", "CHECKBOX", "SELECT"].includes(inputType);
+}
+
+export function applyQuestionInputTypeChange(
+  question: QuestionInput,
+  inputType: FieldType,
+): QuestionInput {
+  const nextQuestion: QuestionInput = { ...question, inputType };
+
+  if (questionNeedsOptions(inputType) && question.options.length === 0) {
+    nextQuestion.options = [
+      { optionLabel: "", pointsAssigned: 0, sortOrder: 0 },
+      { optionLabel: "", pointsAssigned: 0, sortOrder: 1 },
+    ];
+  }
+
+  if (!questionNeedsOptions(inputType)) {
+    nextQuestion.options = [];
+  }
+
+  return nextQuestion;
 }
 
 export interface FormSubsectionInput {
@@ -282,12 +308,14 @@ export function createClientId(): string {
 
 export function createEmptyQuestion(sortOrder: number): QuestionInput {
   return {
+    clientId: createClientId(),
     questionText: "",
     inputType: "TEXT",
     isRequired: true,
     sortOrder,
     selfAssessmentEnabled: false,
     hodAssessmentEnabled: false,
+    noMarks: false,
     totalMarks: 0,
     options: [],
   };
@@ -347,12 +375,14 @@ export function mapQuestionRecordToInput(
   question: QuestionRecord,
 ): QuestionInput {
   return {
+    clientId: createClientId(),
     questionText: question.questionText,
     inputType: question.inputType,
     isRequired: question.isRequired,
     sortOrder: question.sortOrder,
     selfAssessmentEnabled: question.selfAssessmentEnabled,
     hodAssessmentEnabled: question.hodAssessmentEnabled,
+    noMarks: question.totalMarks === 0,
     totalMarks: question.totalMarks,
     sectionId: question.sectionId,
     options: question.options.map((option) => ({
