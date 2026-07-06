@@ -1336,7 +1336,6 @@ export default function FormBuilderWizard({
                 targetCategory={targetCategory}
                 targetSubCategory={targetSubCategory}
                 errors={errors}
-                readOnly={Boolean(templateId)}
                 onCycleChange={setCycleId}
                 onCategoryChange={handleCategoryChange}
                 onSubCategoryChange={setTargetSubCategory}
