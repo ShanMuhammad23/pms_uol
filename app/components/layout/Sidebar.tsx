@@ -24,7 +24,7 @@ const Sidebar = () => {
  
     <div className="flex  items-center gap-4 relative px-4">
        <div className="flex flex-wrap items-center gap-2 flex-1">
-          <Image src="/logo.png" width={100} height={100} alt="University of Lahore" className='invert dark:invert-0 '/>
+        <h2 className='text-4xl font-bold'>PMS</h2>
         
        </div>
        <div className="flex items-center gap-2">

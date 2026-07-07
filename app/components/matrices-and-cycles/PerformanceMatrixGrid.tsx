@@ -1,5 +1,6 @@
 "use client";
 
+import { sortPerformanceMatrix } from "@/lib/performance-matrix";
 import {
   formatPerformanceScore,
   type PerformanceLevelWithQuartiles,
@@ -10,8 +11,9 @@ interface PerformanceMatrixGridProps {
 }
 
 function getColumnHeaders(levels: PerformanceLevelWithQuartiles[]): string[] {
+  const sortedLevels = sortPerformanceMatrix(levels);
   const maxQuartiles = Math.max(
-    ...levels.map((level) => level.quartiles.length),
+    ...sortedLevels.map((level) => level.quartiles.length),
     0,
   );
 
@@ -22,7 +24,7 @@ function getColumnHeaders(levels: PerformanceLevelWithQuartiles[]): string[] {
   const headers: string[] = [];
 
   for (let index = 0; index < maxQuartiles; index += 1) {
-    const names = levels
+    const names = sortedLevels
       .map((level) => level.quartiles[index]?.name)
       .filter(Boolean);
 
@@ -41,9 +43,10 @@ function getColumnHeaders(levels: PerformanceLevelWithQuartiles[]): string[] {
 export default function PerformanceMatrixGrid({
   levels,
 }: PerformanceMatrixGridProps) {
-  const columnHeaders = getColumnHeaders(levels);
+  const sortedLevels = sortPerformanceMatrix(levels);
+  const columnHeaders = getColumnHeaders(sortedLevels);
 
-  if (levels.length === 0) {
+  if (sortedLevels.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
         <p className="text-sm font-medium text-text-primary">
@@ -88,7 +91,7 @@ export default function PerformanceMatrixGrid({
           </tr>
         </thead>
         <tbody className="text-sm divide-y divide-slate-200 dark:divide-neutral-700">
-          {levels.map((level) => (
+          {sortedLevels.map((level) => (
             <tr
               key={level.id}
               className="divide-x divide-slate-200 dark:divide-neutral-700"

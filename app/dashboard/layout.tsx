@@ -4,7 +4,7 @@ const layout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className='flex min-h-screen bg-background text-foreground transition-colors'>
         <Sidebar />
-        <main className='ml-[264px] flex-1 min-h-screen bg-background text-foreground p-6 transition-colors'>
+        <main className='ml-[264px] flex-1 min-h-screen bg-background text-foreground py-4 transition-colors'>
             {children}
         </main>
     </div>

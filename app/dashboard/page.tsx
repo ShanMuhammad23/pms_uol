@@ -1,6 +1,20 @@
 "use client";
 
 import { useState, useMemo, useSyncExternalStore } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchFinancialYears } from "@/lib/queries/financial-years-client";
+import { fetchPerformanceMatrix } from "@/lib/queries/performance-matrices-client";
+import {
+  buildQuartileBandsFromMatrix,
+  getMatrixQuartileColumnHeaders,
+  sortPerformanceMatrix,
+  type MatrixQuartileColumn,
+} from "@/lib/performance-matrix";
+import { resolvePerformanceQuartile } from "@/lib/performance-rating";
+import {
+  formatPerformanceScore,
+  type PerformanceLevelWithQuartiles,
+} from "@/types/performance-matrices";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart,
@@ -280,6 +294,53 @@ const INSTITUTIONAL_QUOTA = [
   { rating: "Outstanding", quota: 5 },
 ];
 
+function createMockPerformanceMatrix(): PerformanceLevelWithQuartiles[] {
+  const levelDefs = [
+    { name: "Unsatisfactory", sortOrder: 0, scoreMin: 0, scoreMax: 39 },
+    { name: "Improvement Needed", sortOrder: 1, scoreMin: 40, scoreMax: 54 },
+    { name: "Strong", sortOrder: 2, scoreMin: 55, scoreMax: 69 },
+    { name: "Excellent", sortOrder: 3, scoreMin: 70, scoreMax: 84 },
+    { name: "Outstanding", sortOrder: 4, scoreMin: 85, scoreMax: 100 },
+  ];
+
+  return levelDefs.map((levelDef, levelIndex) => {
+    const levelId = levelIndex + 1;
+    const bandSize = (levelDef.scoreMax - levelDef.scoreMin + 1) / 4;
+
+    return {
+      id: levelId,
+      financialYearId: 1,
+      name: levelDef.name,
+      sortOrder: levelDef.sortOrder,
+      createdAt: "",
+      updatedAt: "",
+      quartiles: Array.from({ length: 4 }, (_, quartileIndex) => {
+        const scoreMin =
+          quartileIndex === 0
+            ? levelDef.scoreMin
+            : Math.ceil(levelDef.scoreMin + quartileIndex * bandSize);
+        const scoreMax =
+          quartileIndex === 3
+            ? levelDef.scoreMax
+            : Math.floor(levelDef.scoreMin + (quartileIndex + 1) * bandSize - 1);
+
+        return {
+          id: levelId * 10 + quartileIndex + 1,
+          performanceLevelId: levelId,
+          name: `Q${quartileIndex + 1}`,
+          scoreMin,
+          scoreMax,
+          sortOrder: quartileIndex,
+          createdAt: "",
+          updatedAt: "",
+        };
+      }),
+    };
+  });
+}
+
+const MOCK_PERFORMANCE_MATRIX = createMockPerformanceMatrix();
+
 const ALL_EMPLOYEE_CATEGORIES: EmployeeCategory[] = [
   "Academic",
   "Administrative",
@@ -354,6 +415,86 @@ function buildCalibrationData(employees: Employee[]) {
     quota: row.quota,
     actual: total === 0 ? 0 : Math.round(((counts.get(row.rating) ?? 0) / total) * 100),
   }));
+}
+
+type RatingQuartileMatrixCell = {
+  id: number | null;
+  label: string;
+  sortOrder: number;
+  sublabel: string;
+  count: number | null;
+};
+
+type RatingQuartileMatrixRow = {
+  levelId: number;
+  rating: string;
+  sortOrder: number;
+  quartiles: RatingQuartileMatrixCell[];
+  rowTotal: number;
+};
+
+type RatingQuartileMatrixData = {
+  rows: RatingQuartileMatrixRow[];
+  columns: MatrixQuartileColumn[];
+};
+
+function buildRatingQuartileMatrix(
+  employees: Employee[],
+  matrix: PerformanceLevelWithQuartiles[],
+): RatingQuartileMatrixData {
+  const sortedMatrix = sortPerformanceMatrix(matrix);
+  const columns = getMatrixQuartileColumnHeaders(sortedMatrix);
+  const bands = buildQuartileBandsFromMatrix(sortedMatrix);
+  const counts = new Map<string, number>();
+
+  sortedMatrix.forEach((level) => {
+    level.quartiles.forEach((quartile) => {
+      counts.set(`${level.id}-${quartile.id}`, 0);
+    });
+  });
+
+  employees.forEach((employee) => {
+    const resolved = resolvePerformanceQuartile(employee.rawScore, bands);
+
+    if (resolved) {
+      const key = `${resolved.performanceLevelId}-${resolved.quartileId}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  });
+
+  const rows = sortedMatrix.map((level) => {
+    const quartiles = columns.map((column) => {
+      const quartile = level.quartiles[column.index];
+
+      if (!quartile) {
+        return {
+          id: null,
+          label: column.label,
+          sortOrder: column.sortOrder,
+          sublabel: "",
+          count: null,
+        };
+      }
+
+      return {
+        id: quartile.id,
+        label: quartile.name,
+        sortOrder: quartile.sortOrder,
+        sublabel: `${formatPerformanceScore(quartile.scoreMin)} – ${formatPerformanceScore(quartile.scoreMax)}`,
+        count: counts.get(`${level.id}-${quartile.id}`) ?? 0,
+      };
+    });
+
+    return {
+      levelId: level.id,
+      rating: level.name,
+      sortOrder: level.sortOrder,
+      quartiles,
+      rowTotal: quartiles.reduce((sum, cell) => sum + (cell.count ?? 0), 0),
+    };
+  });
+
+  return { rows, columns };
 }
 
 function buildCompletionByCategory(employees: Employee[]) {
@@ -866,6 +1007,125 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
+function CalibrationDistributionMatrix({
+  rows,
+  columns,
+  employeeCount,
+  isLoading,
+}: {
+  rows: RatingQuartileMatrixRow[];
+  columns: MatrixQuartileColumn[];
+  employeeCount: number;
+  isLoading?: boolean;
+}) {
+  const columnTotals = columns.map((column) =>
+    rows.reduce(
+      (sum, row) => sum + (row.quartiles[column.index]?.count ?? 0),
+      0,
+    ),
+  );
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="mb-3">
+        <p className="text-sm font-semibold text-slate-900 dark:text-white">Rating × Quartile Matrix</p>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          Employee headcount by performance level and quartile (sorted by configured order)
+        </p>
+      </div>
+
+      {isLoading ? (
+        <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-12 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+          Loading performance matrix…
+        </div>
+      ) : rows.length === 0 || columns.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-12 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+          No performance levels or quartiles configured yet.
+        </div>
+      ) : (
+        <div className="flex-1 overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-800/60">
+                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 dark:text-slate-300">
+                  Performance Level
+                </th>
+                {columns.map((column) => (
+                  <th
+                    key={`${column.label}-${column.index}`}
+                    className="px-2 py-2.5 text-center font-semibold text-slate-600 dark:text-slate-300"
+                  >
+                    <span className="block">{column.label}</span>
+                  </th>
+                ))}
+                <th className="px-2 py-2.5 text-center font-semibold text-slate-600 dark:text-slate-300">
+                  Total
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+              {rows.map((row) => (
+                <tr
+                  key={row.levelId}
+                  className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                >
+                  <td className="whitespace-nowrap px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200">
+                    {row.rating}
+                  </td>
+                  {row.quartiles.map((cell) => (
+                    <td key={`${row.levelId}-${cell.id ?? cell.sortOrder}`} className="px-2 py-2.5 text-center">
+                      {cell.count === null ? (
+                        <span className="text-slate-300 dark:text-slate-600">—</span>
+                      ) : (
+                        <div className="space-y-0.5">
+                          <span
+                            className={cn(
+                              "inline-flex min-w-8 items-center justify-center rounded-md px-2 py-1 font-semibold tabular-nums",
+                              cell.count > 0
+                                ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                                : "text-slate-300 dark:text-slate-600",
+                            )}
+                          >
+                            {cell.count}
+                          </span>
+                          {cell.sublabel ? (
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                              {cell.sublabel}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                    </td>
+                  ))}
+                  <td className="px-2 py-2.5 text-center font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                    {row.rowTotal}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-slate-200 bg-slate-50/80 dark:border-white/10 dark:bg-slate-800/40">
+                <td className="px-3 py-2.5 font-semibold text-slate-600 dark:text-slate-300">Total</td>
+                {columnTotals.map((total, index) => (
+                  <td
+                    key={`${columns[index]?.label}-${index}`}
+                    className="px-2 py-2.5 text-center font-semibold tabular-nums text-slate-700 dark:text-slate-200"
+                  >
+                    {total}
+                  </td>
+                ))}
+                <td className="px-2 py-2.5 text-center font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                  {employeeCount}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ──────────────────────────────────────────────
    Filter Chip
    ────────────────────────────────────────────── */
@@ -901,6 +1161,33 @@ function FilterChip({
    ────────────────────────────────────────────── */
 export default function HRDashboardPage() {
   const isDarkMode = useIsDarkMode();
+
+  const { data: financialYears } = useQuery({
+    queryKey: ["financial-years"],
+    queryFn: fetchFinancialYears,
+  });
+
+  const activeFinancialYearId = useMemo(() => {
+    if (!financialYears?.length) {
+      return null;
+    }
+
+    return (financialYears.find((year) => year.isActive) ?? financialYears[0]).id;
+  }, [financialYears]);
+
+  const { data: performanceMatrix, isLoading: performanceMatrixLoading } = useQuery({
+    queryKey: ["performance-matrix", activeFinancialYearId],
+    queryFn: () => fetchPerformanceMatrix(activeFinancialYearId!),
+    enabled: activeFinancialYearId !== null,
+  });
+
+  const matrixForDistribution = useMemo(
+    () =>
+      performanceMatrix && performanceMatrix.length > 0
+        ? performanceMatrix
+        : MOCK_PERFORMANCE_MATRIX,
+    [performanceMatrix],
+  );
 
   /* ── Filter State ── */
   const [searchQuery, setSearchQuery] = useState("");
@@ -956,6 +1243,11 @@ export default function HRDashboardPage() {
   const filteredCalibrationData = useMemo(
     () => buildCalibrationData(filteredEmployees),
     [filteredEmployees],
+  );
+
+  const ratingQuartileMatrix = useMemo(
+    () => buildRatingQuartileMatrix(filteredEmployees, matrixForDistribution),
+    [filteredEmployees, matrixForDistribution],
   );
 
   const filteredCompletionByCategory = useMemo(
@@ -1017,74 +1309,8 @@ export default function HRDashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div className="mx-auto  px-4  sm:px-6">
-        {/* ── Header ── */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-8 "
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 dark:bg-amber-600">
-                  <BarChart3 className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-                    Performance Management System
-                  </h1>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Fiscal Year 2026 — University-wide Appraisal Cycle
-                  </p>
-                </div>
-              </div>
-            </div>
-           
-          </div>
-        </motion.div>
-
-        {/* ── Eligibility + Workflow Stats ── */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
-        >
-          <EligibilityStatCard data={eligibilityData} delay={0} />
-          <StatCard
-            title="Self Assessment"
-            value={selfAssessmentCount.toString()}
-            subtitle="Awaiting employee submission"
-            tone="slate"
-            icon={User}
-            delay={0.1}
-            onClick={() => filterByFormState("PENDING_SELF_ASSESSMENT")}
-            active={selectedFormState === "PENDING_SELF_ASSESSMENT"}
-          />
-          <StatCard
-            title="Manager Review"
-            value={managerReviewCount.toString()}
-            subtitle="Awaiting line manager review"
-            tone="amber"
-            icon={AlertTriangle}
-            delay={0.2}
-            onClick={() => filterByFormState("PENDING_HEAD_REVIEW")}
-            active={selectedFormState === "PENDING_HEAD_REVIEW"}
-          />
-          <StatCard
-            title="HR Alignment"
-            value={hrAlignmentCount.toString()}
-            subtitle="Ready for HR calibration"
-            tone="orange"
-            icon={Scale}
-            delay={0.3}
-            onClick={() => filterByFormState("PENDING_HR_CALIBRATION")}
-            active={selectedFormState === "PENDING_HR_CALIBRATION"}
-          />
-        </motion.div>
-
-                {/* ── Filter Bar ── */}
+       
+        {/* ── Filter Bar ── */}
         <motion.div
           variants={itemVariants}
           initial="hidden"
@@ -1092,36 +1318,9 @@ export default function HRDashboardPage() {
           transition={{ delay: 0.55 }}
           className="mb-6 space-y-4"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
-                Appraisal Ledger
-              </h2>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                {filteredEmployees.length} records
-              </span>
-            </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                showFilters
-                  ? "bg-slate-800 text-white dark:bg-amber-600"
-                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300"
-              )}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              {showFilters ? "Hide Filters" : "Show Filters"}
-              {activeFilters.length > 0 && (
-                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-xs">
-                  {activeFilters.length}
-                </span>
-              )}
-            </button>
-          </div>
+          
 
           <AnimatePresence>
-            {showFilters && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
@@ -1258,7 +1457,7 @@ export default function HRDashboardPage() {
                   </div>
                 </div>
               </motion.div>
-            )}
+           
           </AnimatePresence>
 
           {/* Active Filter Chips */}
@@ -1284,6 +1483,47 @@ export default function HRDashboardPage() {
             )}
           </AnimatePresence>
         </motion.div>
+        {/* ── Eligibility + Workflow Stats ── */}
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <EligibilityStatCard data={eligibilityData} delay={0} />
+          <StatCard
+            title="Self Assessment"
+            value={selfAssessmentCount.toString()}
+            subtitle="Awaiting employee submission"
+            tone="slate"
+            icon={User}
+            delay={0.1}
+            onClick={() => filterByFormState("PENDING_SELF_ASSESSMENT")}
+            active={selectedFormState === "PENDING_SELF_ASSESSMENT"}
+          />
+          <StatCard
+            title="Manager Review"
+            value={managerReviewCount.toString()}
+            subtitle="Awaiting line manager review"
+            tone="amber"
+            icon={AlertTriangle}
+            delay={0.2}
+            onClick={() => filterByFormState("PENDING_HEAD_REVIEW")}
+            active={selectedFormState === "PENDING_HEAD_REVIEW"}
+          />
+          <StatCard
+            title="HR Alignment"
+            value={hrAlignmentCount.toString()}
+            subtitle="Ready for HR calibration"
+            tone="orange"
+            icon={Scale}
+            delay={0.3}
+            onClick={() => filterByFormState("PENDING_HR_CALIBRATION")}
+            active={selectedFormState === "PENDING_HR_CALIBRATION"}
+          />
+        </motion.div>
+
+        
 
         {/* ── Charts ── */}
         <motion.div
@@ -1292,39 +1532,49 @@ export default function HRDashboardPage() {
           animate="visible"
           className="mb-8 "
         >
-          {/* Calibration Curve */}
+          {/* Calibration Curve + Rating × Quartile Matrix */}
           <ChartCard
             title="Rating Calibration Curve"
             subtitle="Institutional Quota vs. Actual Distribution — Identifies Grade Inflation"
             delay={0.35}
-            className="lg:col-span-7"
           >
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={filteredCalibrationData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="quotaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
-                      <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#d97706" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis dataKey="rating" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
-                  <Area type="monotone" dataKey="quota" name="Institutional Quota" stroke="#64748b" strokeWidth={2} fill="url(#quotaGrad)" dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}>
-                    <LabelList dataKey="quota" position="top" offset={8} style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }} />
-                  </Area>
-                  <Area type="monotone" dataKey="actual" name="Actual Distribution" stroke="#d97706" strokeWidth={2} fill="url(#actualGrad)" dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}>
-                    <LabelList dataKey="actual" position="bottom" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
-                  </Area>
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              <div className="h-[320px] lg:col-span-7">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={filteredCalibrationData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="quotaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
+                        <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#d97706" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="rating" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
+                    <Area type="monotone" dataKey="quota" name="Institutional Quota" stroke="#64748b" strokeWidth={2} fill="url(#quotaGrad)" dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}>
+                      <LabelList dataKey="quota" position="top" offset={8} style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }} />
+                    </Area>
+                    <Area type="monotone" dataKey="actual" name="Actual Distribution" stroke="#d97706" strokeWidth={2} fill="url(#actualGrad)" dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}>
+                      <LabelList dataKey="actual" position="bottom" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
+                    </Area>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="lg:col-span-5">
+                <CalibrationDistributionMatrix
+                  rows={ratingQuartileMatrix.rows}
+                  columns={ratingQuartileMatrix.columns}
+                  employeeCount={filteredEmployees.length}
+                  isLoading={performanceMatrixLoading}
+                />
+              </div>
             </div>
           </ChartCard>
 
