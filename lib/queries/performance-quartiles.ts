@@ -32,8 +32,8 @@ function mapPerformanceQuartileRow(
   row: PerformanceQuartileRow,
 ): PerformanceQuartileRecord {
   return {
-    id: row.id,
-    performanceLevelId: row.performance_level_id,
+    id: Number(row.id),
+    performanceLevelId: Number(row.performance_level_id),
     name: row.name,
     scoreMin: Number(row.score_min),
     scoreMax: Number(row.score_max),

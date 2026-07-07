@@ -1,0 +1,69 @@
+import { NextResponse } from "next/server";
+import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  createSubCategoryIncrementMatrix,
+  listSubCategoryIncrementMatrices,
+  SubCategoryIncrementMatrixError,
+} from "@/lib/queries/sub-category-increment-matrices";
+import { validateCreateSubCategoryIncrementMatrixInput } from "@/lib/validation/sub-category-increment-matrices";
+import type { CreateSubCategoryIncrementMatrixInput } from "@/types/sub-category-increment-matrices";
+
+export async function GET(request: Request) {
+  const auth = await requireSuperAdminApi();
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const { searchParams } = new URL(request.url);
+  const financialYearId = Number(searchParams.get("financialYearId"));
+
+  if (Number.isNaN(financialYearId) || financialYearId <= 0) {
+    return NextResponse.json(
+      { error: "financialYearId is required." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const entries = await listSubCategoryIncrementMatrices(financialYearId);
+    return NextResponse.json(entries);
+  } catch (error) {
+    console.error("Failed to load sub-category increment matrices:", error);
+    return NextResponse.json(
+      { error: "Failed to load increment matrix entries." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  const auth = await requireSuperAdminApi();
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  try {
+    const body = (await request.json()) as CreateSubCategoryIncrementMatrixInput;
+    const validationError = validateCreateSubCategoryIncrementMatrixInput(body);
+
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
+    const entry = await createSubCategoryIncrementMatrix(body);
+    return NextResponse.json(entry, { status: 201 });
+  } catch (error) {
+    if (error instanceof SubCategoryIncrementMatrixError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.statusCode },
+      );
+    }
+
+    console.error("Failed to create sub-category increment matrix:", error);
+    return NextResponse.json(
+      { error: "Failed to create increment matrix entry." },
+      { status: 500 },
+    );
+  }
+}

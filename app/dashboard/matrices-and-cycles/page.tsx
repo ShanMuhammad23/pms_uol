@@ -9,8 +9,8 @@ export default async function MatricesAndCyclesPage() {
       <div>
         <h1 className="text-2xl font-bold">Matrices and Cycles</h1>
         <p className="mt-1 text-sm text-foreground/70">
-          Configure financial years and build performance level and quartile
-          matrices for appraisal scoring.
+          Configure financial years, performance level and quartile matrices, and
+          sub-category increment percentages for appraisal scoring.
         </p>
       </div>
 

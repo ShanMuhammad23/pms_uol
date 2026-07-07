@@ -1,15 +1,17 @@
 "use client";
 
-import { CalendarRange, Grid3X3 } from "lucide-react";
+import { CalendarRange, Grid3X3, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import FinancialYearsManager from "./FinancialYearsManager";
+import IncrementMatrixManager from "./IncrementMatrixManager";
 import PerformanceMatricesManager from "./PerformanceMatricesManager";
 
-type TabId = "financial-year" | "matrices";
+type TabId = "financial-year" | "matrices" | "increment-matrix";
 
 const tabs: Array<{ id: TabId; label: string; icon: typeof CalendarRange }> = [
   { id: "financial-year", label: "Financial Year", icon: CalendarRange },
   { id: "matrices", label: "Matrices", icon: Grid3X3 },
+  { id: "increment-matrix", label: "Increment Matrix", icon: TrendingUp },
 ];
 
 export default function MatricesAndCyclesTabs() {
@@ -48,6 +50,7 @@ export default function MatricesAndCyclesTabs() {
 
       {activeTab === "financial-year" ? <FinancialYearsManager /> : null}
       {activeTab === "matrices" ? <PerformanceMatricesManager /> : null}
+      {activeTab === "increment-matrix" ? <IncrementMatrixManager /> : null}
     </div>
   );
 }
