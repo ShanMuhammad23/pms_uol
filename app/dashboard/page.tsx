@@ -4,6 +4,10 @@ import { useState, useMemo, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchFinancialYears } from "@/lib/queries/financial-years-client";
 import { fetchPerformanceMatrix } from "@/lib/queries/performance-matrices-client";
+import { fetchStaffCategoriesWithSubCategories } from "@/lib/queries/staff-categories-client";
+import { fetchEntities } from "@/lib/queries/entities-client";
+import { fetchFormSubmissions } from "@/lib/queries/form-submissions-client";
+import Link from "next/link";
 import {
   buildQuartileBandsFromMatrix,
   getMatrixQuartileColumnHeaders,
@@ -15,6 +19,14 @@ import {
   formatPerformanceScore,
   type PerformanceLevelWithQuartiles,
 } from "@/types/performance-matrices";
+import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
+import type { EntityRecord } from "@/types/entities";
+import type { FormSubmissionListItem } from "@/types/form-submissions";
+import {
+  APPRAISAL_STATUSES,
+  RATING_LABELS,
+  type AppraisalStatus,
+} from "@/types/forms";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart,
@@ -69,8 +81,12 @@ type Employee = {
   email: string;
   function: string;        // e.g., "Teaching & Learning", "Student Affairs", "Facilities"
   subFunction: string;     // e.g., "Computer Science Dept", "Registrar Office", "Maintenance"
+  entityId?: number;
+  entityName?: string;
   category: EmployeeCategory;
   subCategory: string;
+  staffCategoryId?: number;
+  staffSubCategoryId?: number;
   rawScore: number;
   initialRating: string;
   calibratedRating: string | null;
@@ -286,6 +302,82 @@ const categoryDistribution = [
   { name: "Management", light: "#7c3aed", dark: "#a78bfa" },
 ] as const;
 
+const CATEGORY_COLOR_PALETTE = categoryDistribution.map(({ light, dark }) => ({
+  light,
+  dark,
+}));
+
+function getStaffCategoryNames(
+  submissions: FormSubmissionListItem[],
+  staffCategories: StaffCategoryWithSubCategories[],
+): string[] {
+  if (staffCategories.length > 0) {
+    return staffCategories.map((category) => category.name);
+  }
+
+  return [...new Set(
+    submissions
+      .map((submission) => submission.staffCategoryName)
+      .filter((name): name is string => Boolean(name)),
+  )].sort();
+}
+
+function buildSubmissionCategoryCounts(
+  submissions: FormSubmissionListItem[],
+  staffCategories: StaffCategoryWithSubCategories[],
+  isDarkMode: boolean,
+) {
+  const categoryNames = getStaffCategoryNames(submissions, staffCategories);
+
+  return categoryNames
+    .map((name, index) => {
+      const palette = CATEGORY_COLOR_PALETTE[index % CATEGORY_COLOR_PALETTE.length];
+
+      return {
+        name,
+        value: submissions.filter((submission) => submission.staffCategoryName === name).length,
+        color: isDarkMode ? palette.dark : palette.light,
+      };
+    })
+    .filter((entry) => entry.value > 0);
+}
+
+function buildSubmissionCompletionByCategory(
+  submissions: FormSubmissionListItem[],
+  staffCategories: StaffCategoryWithSubCategories[],
+) {
+  const categoryNames = getStaffCategoryNames(submissions, staffCategories).filter((name) =>
+    submissions.some((submission) => submission.staffCategoryName === name),
+  );
+
+  return categoryNames.map((category) => {
+    const inCategory = submissions.filter(
+      (submission) => submission.staffCategoryName === category,
+    );
+    const total = inCategory.length || 1;
+
+    const countStatuses = (statuses: AppraisalStatus[]) =>
+      inCategory.filter((submission) => statuses.includes(submission.status)).length;
+
+    return {
+      category,
+      draft: 0,
+      selfAssessment: Math.round(
+        (countStatuses(["PENDING_SELF_ASSESSMENT"]) / total) * 100,
+      ),
+      headReview: Math.round((countStatuses(["PENDING_HEAD_REVIEW"]) / total) * 100),
+      hrCalibration: Math.round(
+        (countStatuses(["PENDING_HR_CALIBRATION"]) / total) * 100,
+      ),
+      approved: Math.round(
+        (countStatuses(["APPROVED", "PENDING_BOARD_APPROVAL", "COMPLETED"]) / total) *
+          100,
+      ),
+      rejected: 0,
+    };
+  });
+}
+
 const INSTITUTIONAL_QUOTA = [
   { rating: "Unsatisfactory", quota: 5 },
   { rating: "Improvement Needed", quota: 10 },
@@ -367,14 +459,204 @@ function normalizeRating(rating: string): string {
   return RATING_NORMALIZE[rating] ?? "Strong";
 }
 
+function getEntityDescendantIds(
+  rootId: number,
+  entities: EntityRecord[],
+): Set<number> {
+  const descendants = new Set<number>();
+  const childrenByParent = new Map<number, number[]>();
+
+  entities.forEach((entity) => {
+    if (entity.parentEntityId !== null) {
+      const siblings = childrenByParent.get(entity.parentEntityId) ?? [];
+      siblings.push(entity.id);
+      childrenByParent.set(entity.parentEntityId, siblings);
+    }
+  });
+
+  const stack = [rootId];
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+
+    for (const childId of childrenByParent.get(current) ?? []) {
+      descendants.add(childId);
+      stack.push(childId);
+    }
+  }
+
+  return descendants;
+}
+
+function matchesEntityFilter(
+  employee: Employee,
+  selectedEntityId: number | "ALL",
+  entities: EntityRecord[],
+): boolean {
+  if (selectedEntityId === "ALL") {
+    return true;
+  }
+
+  const selectedEntity = entities.find((entity) => entity.id === selectedEntityId);
+
+  if (!selectedEntity) {
+    return false;
+  }
+
+  if (employee.entityId === selectedEntityId) {
+    return true;
+  }
+
+  const descendantIds = getEntityDescendantIds(selectedEntityId, entities);
+
+  if (employee.entityId != null && descendantIds.has(employee.entityId)) {
+    return true;
+  }
+
+  if (
+    employee.entityName === selectedEntity.name ||
+    employee.function === selectedEntity.name ||
+    employee.subFunction === selectedEntity.name
+  ) {
+    return true;
+  }
+
+  const descendantNames = [...descendantIds]
+    .map((id) => entities.find((entity) => entity.id === id)?.name)
+    .filter((name): name is string => Boolean(name));
+
+  return descendantNames.includes(employee.subFunction);
+}
+
+function matchesSubmissionEntityFilter(
+  submission: FormSubmissionListItem,
+  selectedEntityId: number | "ALL",
+  entities: EntityRecord[],
+): boolean {
+  if (selectedEntityId === "ALL") {
+    return true;
+  }
+
+  const selectedEntity = entities.find((entity) => entity.id === selectedEntityId);
+
+  if (!selectedEntity) {
+    return false;
+  }
+
+  if (submission.entityId === selectedEntityId) {
+    return true;
+  }
+
+  const descendantIds = getEntityDescendantIds(selectedEntityId, entities);
+
+  if (submission.entityId != null && descendantIds.has(submission.entityId)) {
+    return true;
+  }
+
+  return (
+    submission.entityName === selectedEntity.name ||
+    submission.parentEntityName === selectedEntity.name
+  );
+}
+
+function matchesAppraisalFormState(
+  submissionStatus: AppraisalStatus,
+  selectedFormState: FormState | "ALL",
+): boolean {
+  if (selectedFormState === "ALL") {
+    return true;
+  }
+
+  return APPRAISAL_STATUSES.includes(selectedFormState as AppraisalStatus) &&
+    submissionStatus === selectedFormState;
+}
+
+function getSubmissionDisplayRating(submission: FormSubmissionListItem): string {
+  if (submission.calibratedRating) {
+    return RATING_LABELS[submission.calibratedRating];
+  }
+
+  if (submission.initialRating) {
+    return RATING_LABELS[submission.initialRating];
+  }
+
+  return submission.performanceLevelName ?? "—";
+}
+
+function matchesSubmissionFilters(
+  submission: FormSubmissionListItem,
+  filters: {
+    searchQuery: string;
+    selectedEntityId: number | "ALL";
+    selectedCategoryId: number | "ALL";
+    selectedSubCategoryId: number | "ALL";
+    selectedFormState: FormState | "ALL";
+    staffCategories: StaffCategoryWithSubCategories[];
+    entities: EntityRecord[];
+  },
+): boolean {
+  const query = filters.searchQuery.toLowerCase();
+  const matchesSearch =
+    !filters.searchQuery ||
+    submission.employeeName.toLowerCase().includes(query) ||
+    submission.employeeId.toLowerCase().includes(query) ||
+    submission.employeeEmail.toLowerCase().includes(query);
+
+  const matchesEntity = matchesSubmissionEntityFilter(
+    submission,
+    filters.selectedEntityId,
+    filters.entities,
+  );
+
+  const selectedCategory =
+    filters.selectedCategoryId === "ALL"
+      ? null
+      : filters.staffCategories.find((category) => category.id === filters.selectedCategoryId);
+  const selectedSubCategory =
+    filters.selectedSubCategoryId === "ALL"
+      ? null
+      : filters.staffCategories
+          .flatMap((category) =>
+            category.subCategories.map((subCategory) => ({
+              ...subCategory,
+              staffCategoryId: category.id,
+            })),
+          )
+          .find((subCategory) => subCategory.id === filters.selectedSubCategoryId);
+
+  const matchesCategory =
+    filters.selectedCategoryId === "ALL" ||
+    submission.staffCategoryId === filters.selectedCategoryId ||
+    (selectedCategory != null && submission.staffCategoryName === selectedCategory.name);
+  const matchesSubCategory =
+    filters.selectedSubCategoryId === "ALL" ||
+    submission.staffSubCategoryId === filters.selectedSubCategoryId ||
+    (selectedSubCategory != null &&
+      submission.staffSubCategoryName === selectedSubCategory.name);
+  const matchesFormState = matchesAppraisalFormState(
+    submission.status,
+    filters.selectedFormState,
+  );
+
+  return (
+    matchesSearch &&
+    matchesEntity &&
+    matchesCategory &&
+    matchesSubCategory &&
+    matchesFormState
+  );
+}
+
 function matchesEmployeeFilters(
   employee: Employee,
   filters: {
     searchQuery: string;
-    selectedFunction: string;
-    selectedSubFunction: string;
-    selectedCategory: EmployeeCategory | "ALL";
+    selectedEntityId: number | "ALL";
+    selectedCategoryId: number | "ALL";
+    selectedSubCategoryId: number | "ALL";
     selectedFormState: FormState | "ALL";
+    staffCategories: StaffCategoryWithSubCategories[];
+    entities: EntityRecord[];
   },
 ): boolean {
   const query = filters.searchQuery.toLowerCase();
@@ -383,20 +665,45 @@ function matchesEmployeeFilters(
     employee.name.toLowerCase().includes(query) ||
     employee.employeeId.toLowerCase().includes(query) ||
     employee.email.toLowerCase().includes(query);
-  const matchesFunction =
-    filters.selectedFunction === "ALL" || employee.function === filters.selectedFunction;
-  const matchesSubFunction =
-    filters.selectedSubFunction === "ALL" || employee.subFunction === filters.selectedSubFunction;
+  const matchesEntity = matchesEntityFilter(
+    employee,
+    filters.selectedEntityId,
+    filters.entities,
+  );
+
+  const selectedCategory =
+    filters.selectedCategoryId === "ALL"
+      ? null
+      : filters.staffCategories.find((category) => category.id === filters.selectedCategoryId);
+  const selectedSubCategory =
+    filters.selectedSubCategoryId === "ALL"
+      ? null
+      : filters.staffCategories
+        .flatMap((category) =>
+          category.subCategories.map((subCategory) => ({
+            ...subCategory,
+            staffCategoryId: category.id,
+          })),
+        )
+        .find((subCategory) => subCategory.id === filters.selectedSubCategoryId);
+
   const matchesCategory =
-    filters.selectedCategory === "ALL" || employee.category === filters.selectedCategory;
+    filters.selectedCategoryId === "ALL" ||
+    employee.staffCategoryId === filters.selectedCategoryId ||
+    (selectedCategory != null && employee.category === selectedCategory.name);
+  const matchesSubCategory =
+    filters.selectedSubCategoryId === "ALL" ||
+    employee.staffSubCategoryId === filters.selectedSubCategoryId ||
+    (selectedSubCategory != null && employee.subCategory === selectedSubCategory.name);
+
   const matchesFormState =
     filters.selectedFormState === "ALL" || employee.formState === filters.selectedFormState;
 
   return (
     matchesSearch &&
-    matchesFunction &&
-    matchesSubFunction &&
+    matchesEntity &&
     matchesCategory &&
+    matchesSubCategory &&
     matchesFormState
   );
 }
@@ -501,8 +808,8 @@ function buildCompletionByCategory(employees: Employee[]) {
   const categories =
     employees.length > 0
       ? ALL_EMPLOYEE_CATEGORIES.filter((category) =>
-          employees.some((employee) => employee.category === category),
-        )
+        employees.some((employee) => employee.category === category),
+      )
       : ALL_EMPLOYEE_CATEGORIES;
 
   return categories.map((category) => {
@@ -697,6 +1004,24 @@ const FORM_STATE_CONFIG: Record<
   },
 };
 
+const APPRAISAL_STATE_CONFIG: Record<
+  AppraisalStatus,
+  { label: string; color: string; bg: string; border: string; icon: React.ElementType }
+> = {
+  PENDING_SELF_ASSESSMENT: FORM_STATE_CONFIG.PENDING_SELF_ASSESSMENT,
+  PENDING_HEAD_REVIEW: FORM_STATE_CONFIG.PENDING_HEAD_REVIEW,
+  PENDING_HR_CALIBRATION: FORM_STATE_CONFIG.PENDING_HR_CALIBRATION,
+  PENDING_BOARD_APPROVAL: FORM_STATE_CONFIG.PENDING_BOARD_APPROVAL,
+  APPROVED: FORM_STATE_CONFIG.APPROVED,
+  COMPLETED: {
+    label: "Completed",
+    color: "text-emerald-700",
+    bg: "bg-emerald-50",
+    border: "border-emerald-200",
+    icon: CheckCircle2,
+  },
+};
+
 /* ──────────────────────────────────────────────
    Category Config
    ────────────────────────────────────────────── */
@@ -707,6 +1032,24 @@ const CATEGORY_CONFIG: Record<EmployeeCategory, { color: string; bg: string; bor
   "Blue-Collar": { color: "text-emerald-800", bg: "bg-emerald-50", border: "border-emerald-200" },
   Management: { color: "text-violet-800", bg: "bg-violet-50", border: "border-violet-200" },
 };
+
+const DEFAULT_CATEGORY_BADGE = {
+  color: "text-slate-800",
+  bg: "bg-slate-100",
+  border: "border-slate-200",
+};
+
+function getCategoryBadgeStyle(categoryName: string | null) {
+  if (!categoryName) {
+    return DEFAULT_CATEGORY_BADGE;
+  }
+
+  const configEntry = (Object.keys(CATEGORY_CONFIG) as EmployeeCategory[]).find(
+    (key) => key.toLowerCase() === categoryName.toLowerCase(),
+  );
+
+  return configEntry ? CATEGORY_CONFIG[configEntry] : DEFAULT_CATEGORY_BADGE;
+}
 
 /* ──────────────────────────────────────────────
    Stat Card
@@ -1012,11 +1355,13 @@ function CalibrationDistributionMatrix({
   columns,
   employeeCount,
   isLoading,
+  hideHeader = false,
 }: {
   rows: RatingQuartileMatrixRow[];
   columns: MatrixQuartileColumn[];
   employeeCount: number;
   isLoading?: boolean;
+  hideHeader?: boolean;
 }) {
   const columnTotals = columns.map((column) =>
     rows.reduce(
@@ -1027,12 +1372,14 @@ function CalibrationDistributionMatrix({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-3">
-        <p className="text-sm font-semibold text-slate-900 dark:text-white">Rating × Quartile Matrix</p>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-          Employee headcount by performance level and quartile (sorted by configured order)
-        </p>
-      </div>
+      {!hideHeader ? (
+        <div className="mb-3">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">Rating × Quartile Matrix</p>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            Employee headcount by performance level and quartile (sorted by configured order)
+          </p>
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-12 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
@@ -1181,6 +1528,25 @@ export default function HRDashboardPage() {
     enabled: activeFinancialYearId !== null,
   });
 
+  const { data: staffCategories = [], isLoading: staffCategoriesLoading } = useQuery({
+    queryKey: ["staff-categories-with-subcategories"],
+    queryFn: fetchStaffCategoriesWithSubCategories,
+  });
+
+  const { data: entities = [], isLoading: entitiesLoading } = useQuery({
+    queryKey: ["entities"],
+    queryFn: fetchEntities,
+  });
+
+  const {
+    data: submissions = [],
+    isLoading: submissionsLoading,
+    error: submissionsError,
+  } = useQuery({
+    queryKey: ["form-submissions"],
+    queryFn: fetchFormSubmissions,
+  });
+
   const matrixForDistribution = useMemo(
     () =>
       performanceMatrix && performanceMatrix.length > 0
@@ -1191,53 +1557,83 @@ export default function HRDashboardPage() {
 
   /* ── Filter State ── */
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFunction, setSelectedFunction] = useState<string>("ALL");
-  const [selectedSubFunction, setSelectedSubFunction] = useState<string>("ALL");
-  const [selectedCategory, setSelectedCategory] = useState<(EmployeeCategory | "ALL")>("ALL");
+  const [selectedEntityId, setSelectedEntityId] = useState<number | "ALL">("ALL");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | "ALL">("ALL");
+  const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<number | "ALL">("ALL");
   const [selectedFormState, setSelectedFormState] = useState<(FormState | "ALL")>("ALL");
   const [showFilters, setShowFilters] = useState(true);
 
-  /* ── Derived Data ── */
-  const allFunctions = useMemo(() => {
-    const funcs = new Set(MOCK_EMPLOYEES.map((e) => e.function));
-    return Array.from(funcs).sort();
-  }, []);
+  const selectedStaffCategory = useMemo(
+    () =>
+      selectedCategoryId === "ALL"
+        ? null
+        : staffCategories.find((category) => category.id === selectedCategoryId) ?? null,
+    [selectedCategoryId, staffCategories],
+  );
 
-  const availableSubFunctions = useMemo(() => {
-    const subs = new Set(
-      MOCK_EMPLOYEES.filter((e) => selectedFunction === "ALL" || e.function === selectedFunction).map((e) => e.subFunction)
-    );
-    return Array.from(subs).sort();
-  }, [selectedFunction]);
+  const availableSubCategories = useMemo(
+    () => selectedStaffCategory?.subCategories ?? [],
+    [selectedStaffCategory],
+  );
+
+  /* ── Derived Data ── */
+  const sortedEntities = useMemo(
+    () => [...entities].sort((a, b) => a.name.localeCompare(b.name)),
+    [entities],
+  );
 
   const filteredEmployees = useMemo(
     () =>
       MOCK_EMPLOYEES.filter((employee) =>
         matchesEmployeeFilters(employee, {
           searchQuery,
-          selectedFunction,
-          selectedSubFunction,
-          selectedCategory,
+          selectedEntityId,
+          selectedCategoryId,
+          selectedSubCategoryId,
           selectedFormState,
+          staffCategories,
+          entities,
         }),
       ),
     [
       searchQuery,
-      selectedFunction,
-      selectedSubFunction,
-      selectedCategory,
+      selectedEntityId,
+      selectedCategoryId,
+      selectedSubCategoryId,
       selectedFormState,
+      staffCategories,
+      entities,
+    ],
+  );
+
+  const filteredSubmissions = useMemo(
+    () =>
+      submissions.filter((submission) =>
+        matchesSubmissionFilters(submission, {
+          searchQuery,
+          selectedEntityId,
+          selectedCategoryId,
+          selectedSubCategoryId,
+          selectedFormState,
+          staffCategories,
+          entities,
+        }),
+      ),
+    [
+      submissions,
+      searchQuery,
+      selectedEntityId,
+      selectedCategoryId,
+      selectedSubCategoryId,
+      selectedFormState,
+      staffCategories,
+      entities,
     ],
   );
 
   const themedCategoryDistribution = useMemo(
-    () =>
-      buildCategoryCounts(filteredEmployees).map((entry) => ({
-        name: entry.name,
-        value: entry.value,
-        color: isDarkMode ? entry.dark : entry.light,
-      })),
-    [filteredEmployees, isDarkMode],
+    () => buildSubmissionCategoryCounts(filteredSubmissions, staffCategories, isDarkMode),
+    [filteredSubmissions, staffCategories, isDarkMode],
   );
 
   const filteredCalibrationData = useMemo(
@@ -1251,8 +1647,8 @@ export default function HRDashboardPage() {
   );
 
   const filteredCompletionByCategory = useMemo(
-    () => buildCompletionByCategory(filteredEmployees),
-    [filteredEmployees],
+    () => buildSubmissionCompletionByCategory(filteredSubmissions, staffCategories),
+    [filteredSubmissions, staffCategories],
   );
 
   const pieLabelRenderer = useMemo(
@@ -1265,10 +1661,9 @@ export default function HRDashboardPage() {
     [filteredEmployees, isDarkMode],
   );
 
-  /* Reset sub-function when function changes */
-  const handleFunctionChange = (func: string) => {
-    setSelectedFunction(func);
-    setSelectedSubFunction("ALL");
+  const handleCategoryChange = (categoryId: number | "ALL") => {
+    setSelectedCategoryId(categoryId);
+    setSelectedSubCategoryId("ALL");
   };
 
   /* ── Workflow Stats ── */
@@ -1285,19 +1680,40 @@ export default function HRDashboardPage() {
   /* ── Active Filters for Display ── */
   const activeFilters = useMemo(() => {
     const filters: { label: string; onRemove: () => void; color: "slate" | "amber" | "orange" | "emerald" | "blue" }[] = [];
-    if (selectedFunction !== "ALL") filters.push({ label: `Function: ${selectedFunction}`, onRemove: () => setSelectedFunction("ALL"), color: "slate" });
-    if (selectedSubFunction !== "ALL") filters.push({ label: `Sub: ${selectedSubFunction}`, onRemove: () => setSelectedSubFunction("ALL"), color: "blue" });
-    if (selectedCategory !== "ALL") filters.push({ label: `Category: ${selectedCategory}`, onRemove: () => setSelectedCategory("ALL"), color: "amber" });
+    if (selectedEntityId !== "ALL") {
+      const entity = entities.find((item) => item.id === selectedEntityId);
+      filters.push({
+        label: `Entity: ${entity?.name ?? selectedEntityId}`,
+        onRemove: () => setSelectedEntityId("ALL"),
+        color: "slate",
+      });
+    }
+    if (selectedCategoryId !== "ALL") {
+      const category = staffCategories.find((item) => item.id === selectedCategoryId);
+      filters.push({
+        label: `Category: ${category?.name ?? selectedCategoryId}`,
+        onRemove: () => handleCategoryChange("ALL"),
+        color: "amber",
+      });
+    }
+    if (selectedSubCategoryId !== "ALL") {
+      const subCategory = availableSubCategories.find((item) => item.id === selectedSubCategoryId);
+      filters.push({
+        label: `Sub-Category: ${subCategory?.name ?? selectedSubCategoryId}`,
+        onRemove: () => setSelectedSubCategoryId("ALL"),
+        color: "blue",
+      });
+    }
     if (selectedFormState !== "ALL") filters.push({ label: `State: ${FORM_STATE_CONFIG[selectedFormState].label}`, onRemove: () => setSelectedFormState("ALL"), color: "orange" });
     if (searchQuery) filters.push({ label: `Search: "${searchQuery}"`, onRemove: () => setSearchQuery(""), color: "emerald" });
     return filters;
-  }, [selectedFunction, selectedSubFunction, selectedCategory, selectedFormState, searchQuery]);
+  }, [selectedEntityId, selectedCategoryId, selectedSubCategoryId, selectedFormState, searchQuery, staffCategories, availableSubCategories, entities]);
 
   const clearAllFilters = () => {
     setSearchQuery("");
-    setSelectedFunction("ALL");
-    setSelectedSubFunction("ALL");
-    setSelectedCategory("ALL");
+    setSelectedEntityId("ALL");
+    setSelectedCategoryId("ALL");
+    setSelectedSubCategoryId("ALL");
     setSelectedFormState("ALL");
   };
 
@@ -1309,7 +1725,7 @@ export default function HRDashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div className="mx-auto  px-4  sm:px-6">
-       
+
         {/* ── Filter Bar ── */}
         <motion.div
           variants={itemVariants}
@@ -1318,146 +1734,170 @@ export default function HRDashboardPage() {
           transition={{ delay: 0.55 }}
           className="mb-6 space-y-4"
         >
-          
+
 
           <AnimatePresence>
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                className="overflow-hidden"
-              >
-                <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                    {/* Search */}
-                    <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Search
-                      </label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                          type="text"
-                          placeholder="Name, ID, or email..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className={cn(
-                            "w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400",
-                            "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                            "dark:border-white/10 dark:bg-slate-950 dark:text-white"
-                          )}
-                        />
-                      </div>
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                  {/* Search */}
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Search
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Name, ID, or email..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className={cn(
+                          "w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400",
+                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
+                          "dark:border-white/10 dark:bg-slate-950 dark:text-white"
+                        )}
+                      />
                     </div>
+                  </div>
 
-                    {/* Function */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Function
-                      </label>
-                      <div className="relative">
-                        <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <select
-                          value={selectedFunction}
-                          onChange={(e) => handleFunctionChange(e.target.value)}
-                          className={cn(
-                            "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                            "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                            "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
-                          )}
-                        >
-                          <option value="ALL">All Functions</option>
-                          {allFunctions.map((f) => (
-                            <option key={f} value={f}>{f}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      </div>
+                  {/* Function */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Entity
+                    </label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <select
+                        value={selectedEntityId === "ALL" ? "ALL" : String(selectedEntityId)}
+                        onChange={(e) =>
+                          setSelectedEntityId(
+                            e.target.value === "ALL" ? "ALL" : Number(e.target.value),
+                          )
+                        }
+                        disabled={entitiesLoading}
+                        className={cn(
+                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
+                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
+                          "disabled:cursor-not-allowed disabled:opacity-50",
+                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
+                        )}
+                      >
+                        <option value="ALL">All Entities</option>
+                        {sortedEntities.map((entity) => (
+                          <option key={entity.id} value={entity.id}>
+                            {entity.parentName
+                              ? `${entity.name} (${entity.parentName})`
+                              : entity.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     </div>
+                  </div>
 
-                    {/* Sub-Function */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Sub-Function
-                      </label>
-                      <div className="relative">
-                        <Layers className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <select
-                          value={selectedSubFunction}
-                          onChange={(e) => setSelectedSubFunction(e.target.value)}
-                          disabled={selectedFunction === "ALL"}
-                          className={cn(
-                            "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                            "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                            "disabled:cursor-not-allowed disabled:opacity-50",
-                            "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
-                          )}
-                        >
-                          <option value="ALL">All Sub-Functions</option>
-                          {availableSubFunctions.map((sf) => (
-                            <option key={sf} value={sf}>{sf}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      </div>
+
+
+                  {/* Category */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Category
+                    </label>
+                    <div className="relative">
+                      <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <select
+                        value={selectedCategoryId === "ALL" ? "ALL" : String(selectedCategoryId)}
+                        onChange={(e) =>
+                          handleCategoryChange(
+                            e.target.value === "ALL" ? "ALL" : Number(e.target.value),
+                          )
+                        }
+                        disabled={staffCategoriesLoading}
+                        className={cn(
+                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
+                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
+                          "disabled:cursor-not-allowed disabled:opacity-50",
+                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
+                        )}
+                      >
+                        <option value="ALL">All Categories</option>
+                        {staffCategories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     </div>
+                  </div>
 
-                    {/* Employee Category */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Employee Category
-                      </label>
-                      <div className="relative">
-                        <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <select
-                          value={selectedCategory}
-                          onChange={(e) => setSelectedCategory(e.target.value as EmployeeCategory | "ALL")}
-                          className={cn(
-                            "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                            "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                            "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
-                          )}
-                        >
-                          <option value="ALL">All Categories</option>
-                          <option value="Academic">Academic</option>
-                          <option value="Administrative">Administrative</option>
-                          <option value="Support Staff">Support Staff</option>
-                          <option value="Blue-Collar">Blue-Collar</option>
-                          <option value="Management">Management</option>
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      </div>
+                  {/* Sub-Category */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Sub-Category
+                    </label>
+                    <div className="relative">
+                      <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <select
+                        value={selectedSubCategoryId === "ALL" ? "ALL" : String(selectedSubCategoryId)}
+                        onChange={(e) =>
+                          setSelectedSubCategoryId(
+                            e.target.value === "ALL" ? "ALL" : Number(e.target.value),
+                          )
+                        }
+                        disabled={staffCategoriesLoading || selectedCategoryId === "ALL"}
+                        className={cn(
+                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
+                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
+                          "disabled:cursor-not-allowed disabled:opacity-50",
+                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
+                        )}
+                      >
+                        <option value="ALL">All Sub-Categories</option>
+                        {availableSubCategories.map((subCategory) => (
+                          <option key={subCategory.id} value={subCategory.id}>
+                            {subCategory.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     </div>
+                  </div>
 
-                    {/* Form State */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Form State
-                      </label>
-                      <div className="relative">
-                        <Briefcase className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <select
-                          value={selectedFormState}
-                          onChange={(e) => setSelectedFormState(e.target.value as FormState | "ALL")}
-                          className={cn(
-                            "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                            "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                            "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
-                          )}
-                        >
-                          <option value="ALL">All States</option>
-                          {Object.entries(FORM_STATE_CONFIG).map(([key, config]) => (
-                            <option key={key} value={key}>{config.label}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      </div>
+                  {/* Form State */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Form State
+                    </label>
+                    <div className="relative">
+                      <Briefcase className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <select
+                        value={selectedFormState}
+                        onChange={(e) => setSelectedFormState(e.target.value as FormState | "ALL")}
+                        className={cn(
+                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
+                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
+                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
+                        )}
+                      >
+                        <option value="ALL">All States</option>
+                        {Object.entries(FORM_STATE_CONFIG).map(([key, config]) => (
+                          <option key={key} value={key}>{config.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     </div>
                   </div>
                 </div>
-              </motion.div>
-           
+              </div>
+            </motion.div>
+
           </AnimatePresence>
 
           {/* Active Filter Chips */}
@@ -1523,62 +1963,64 @@ export default function HRDashboardPage() {
           />
         </motion.div>
 
-        
+
 
         {/* ── Charts ── */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="mb-8 "
+          className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12"
         >
-          {/* Calibration Curve + Rating × Quartile Matrix */}
           <ChartCard
             title="Rating Calibration Curve"
             subtitle="Institutional Quota vs. Actual Distribution — Identifies Grade Inflation"
             delay={0.35}
+            className="lg:col-span-6"
           >
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-              <div className="h-[320px] lg:col-span-7">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={filteredCalibrationData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="quotaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
-                        <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#d97706" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis dataKey="rating" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
-                    <Area type="monotone" dataKey="quota" name="Institutional Quota" stroke="#64748b" strokeWidth={2} fill="url(#quotaGrad)" dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}>
-                      <LabelList dataKey="quota" position="top" offset={8} style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }} />
-                    </Area>
-                    <Area type="monotone" dataKey="actual" name="Actual Distribution" stroke="#d97706" strokeWidth={2} fill="url(#actualGrad)" dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}>
-                      <LabelList dataKey="actual" position="bottom" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
-                    </Area>
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="lg:col-span-5">
-                <CalibrationDistributionMatrix
-                  rows={ratingQuartileMatrix.rows}
-                  columns={ratingQuartileMatrix.columns}
-                  employeeCount={filteredEmployees.length}
-                  isLoading={performanceMatrixLoading}
-                />
-              </div>
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={filteredCalibrationData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="quotaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
+                      <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#d97706" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis dataKey="rating" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
+                  <Area type="monotone" dataKey="quota" name="Institutional Quota" stroke="#64748b" strokeWidth={2} fill="url(#quotaGrad)" dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}>
+                    <LabelList dataKey="quota" position="top" offset={8} style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }} />
+                  </Area>
+                  <Area type="monotone" dataKey="actual" name="Actual Distribution" stroke="#d97706" strokeWidth={2} fill="url(#actualGrad)" dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}>
+                    <LabelList dataKey="actual" position="bottom" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
+                  </Area>
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </ChartCard>
 
-
+          <ChartCard
+            title="Rating × Quartile Matrix"
+            subtitle="Employee headcount by performance level and quartile (sorted by configured order)"
+            delay={0.36}
+            className="lg:col-span-6"
+          >
+            <CalibrationDistributionMatrix
+              rows={ratingQuartileMatrix.rows}
+              columns={ratingQuartileMatrix.columns}
+              employeeCount={filteredEmployees.length}
+              isLoading={performanceMatrixLoading}
+              hideHeader
+            />
+          </ChartCard>
         </motion.div>
 
         {/* Completion by Category */}
@@ -1596,31 +2038,39 @@ export default function HRDashboardPage() {
             clipOverflow={false}
           >
             <div className="h-[360px] overflow-visible px-1">
-              {themedCategoryDistribution.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart margin={{ top: 20, right: 24, bottom: 20, left: 24 }}>
-                  <Pie
-                    data={themedCategoryDistribution}
-                    cx="52%"
-                    cy="50%"
-                    innerRadius={52}
-                    outerRadius={82}
-                    paddingAngle={3}
-                    dataKey="value"
-                    nameKey="name"
-                    label={pieLabelRenderer}
-                    labelLine={{ stroke: isDarkMode ? "#64748b" : "#94a3b8", strokeWidth: 1 }}
-                  >
-                    {themedCategoryDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
+              {submissionsLoading ? (
+                <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                  Loading submissions...
+                </div>
+              ) : submissionsError ? (
+                <div className="flex h-full items-center justify-center text-sm text-red-600 dark:text-red-400">
+                  Failed to load submissions.
+                </div>
+              ) : themedCategoryDistribution.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart margin={{ top: 20, right: 24, bottom: 20, left: 24 }}>
+                    <Pie
+                      data={themedCategoryDistribution}
+                      cx="52%"
+                      cy="50%"
+                      innerRadius={52}
+                      outerRadius={82}
+                      paddingAngle={3}
+                      dataKey="value"
+                      nameKey="name"
+                      label={pieLabelRenderer}
+                      labelLine={{ stroke: isDarkMode ? "#64748b" : "#94a3b8", strokeWidth: 1 }}
+                    >
+                      {themedCategoryDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-                  No employees match the current filters
+                  No submissions match the current filters
                 </div>
               )}
             </div>
@@ -1632,6 +2082,15 @@ export default function HRDashboardPage() {
             className="lg:col-span-7"
           >
             <div className="h-[320px]">
+              {submissionsLoading ? (
+                <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                  Loading submissions...
+                </div>
+              ) : submissionsError ? (
+                <div className="flex h-full items-center justify-center text-sm text-red-600 dark:text-red-400">
+                  Failed to load submissions.
+                </div>
+              ) : filteredCompletionByCategory.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={filteredCompletionByCategory} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -1656,6 +2115,11 @@ export default function HRDashboardPage() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                  No submissions match the current filters
+                </div>
+              )}
             </div>
           </ChartCard>
         </motion.div>
@@ -1715,7 +2179,7 @@ export default function HRDashboardPage() {
                     Category
                   </th>
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Raw Score
+                    Score
                   </th>
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Current Rating
@@ -1729,15 +2193,33 @@ export default function HRDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/[0.03]">
+                {submissionsLoading ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                      Loading submissions...
+                    </td>
+                  </tr>
+                ) : submissionsError ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center text-sm text-red-600 dark:text-red-400">
+                      Failed to load submissions.
+                    </td>
+                  </tr>
+                ) : (
                 <AnimatePresence>
-                  {filteredEmployees.map((employee, index) => {
-                    const stateConfig = FORM_STATE_CONFIG[employee.formState];
+                  {filteredSubmissions.map((submission, index) => {
+                    const stateConfig = APPRAISAL_STATE_CONFIG[submission.status];
                     const StateIcon = stateConfig.icon;
-                    const catConfig = CATEGORY_CONFIG[employee.category];
+                    const catConfig = getCategoryBadgeStyle(submission.staffCategoryName);
+                    const functionLabel = submission.parentEntityName ?? submission.entityName ?? "—";
+                    const subFunctionLabel = submission.parentEntityName
+                      ? submission.entityName ?? "—"
+                      : "—";
+                    const displayRating = getSubmissionDisplayRating(submission);
 
                     return (
                       <motion.tr
-                        key={employee.id}
+                        key={submission.id}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -8 }}
@@ -1755,10 +2237,10 @@ export default function HRDashboardPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="truncate font-semibold text-slate-900 dark:text-white">
-                                {employee.name}
+                                {submission.employeeName}
                               </p>
                               <p className="text-xs text-slate-500 dark:text-slate-500">
-                                {employee.employeeId}
+                                {submission.employeeId}
                               </p>
                             </div>
                           </div>
@@ -1768,15 +2250,17 @@ export default function HRDashboardPage() {
                             <div className="flex items-center gap-1.5">
                               <Building2 className="h-3 w-3 text-slate-400" />
                               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                {employee.function}
+                                {functionLabel}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1.5 pl-4">
-                              <Layers className="h-3 w-3 text-slate-400" />
-                              <span className="text-xs text-slate-500 dark:text-slate-500">
-                                {employee.subFunction}
-                              </span>
-                            </div>
+                            {subFunctionLabel !== "—" ? (
+                              <div className="flex items-center gap-1.5 pl-4">
+                                <Layers className="h-3 w-3 text-slate-400" />
+                                <span className="text-xs text-slate-500 dark:text-slate-500">
+                                  {subFunctionLabel}
+                                </span>
+                              </div>
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-5 py-4">
@@ -1786,27 +2270,30 @@ export default function HRDashboardPage() {
                             catConfig.color,
                             catConfig.border
                           )}>
-                            {employee.category}
+                            {submission.staffCategoryName ?? "—"}
                           </span>
-                          <p className="mt-1 text-xs text-slate-500">{employee.subCategory}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {submission.staffSubCategoryName ?? "—"}
+                          </p>
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
                             <Hash className="h-3.5 w-3.5 text-slate-400" />
                             <span className="font-semibold tabular-nums text-slate-900 dark:text-white">
-                              {employee.rawScore}
+                              {submission.rawScore}
                             </span>
+                           
                           </div>
                         </td>
                         <td className="px-5 py-4">
                           <span className={cn(
                             "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
-                            employee.calibratedRating
+                            submission.calibratedRating
                               ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 dark:bg-emerald-950/30 dark:text-emerald-400"
                               : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                           )}>
-                            {employee.calibratedRating || employee.initialRating}
-                            {employee.calibratedRating && (
+                            {displayRating}
+                            {submission.calibratedRating && (
                               <CheckCircle2 className="ml-1 h-3 w-3" />
                             )}
                           </span>
@@ -1823,21 +2310,25 @@ export default function HRDashboardPage() {
                           </span>
                         </td>
                         <td className="px-5 py-4">
-                          <button className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 dark:bg-amber-600 dark:hover:bg-amber-500">
+                          <Link
+                            href={`/dashboard/submissions/${submission.id}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 dark:bg-amber-600 dark:hover:bg-amber-500"
+                          >
                             <Eye className="h-3.5 w-3.5" />
                             View
                             <ArrowRight className="h-3 w-3" />
-                          </button>
+                          </Link>
                         </td>
                       </motion.tr>
                     );
                   })}
                 </AnimatePresence>
+                )}
               </tbody>
             </table>
           </div>
 
-          {filteredEmployees.length === 0 && (
+          {!submissionsLoading && !submissionsError && filteredSubmissions.length === 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

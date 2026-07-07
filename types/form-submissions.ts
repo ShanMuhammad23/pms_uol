@@ -1,4 +1,4 @@
-import type { AppraisalStatus } from "@/types/forms";
+import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 import type { QuestionRecord } from "@/types/forms";
 
@@ -9,14 +9,21 @@ export interface FormSubmissionListItem {
   employeeEmail: string;
   templateId: number | null;
   templateTitle: string | null;
+  staffCategoryId: number | null;
   staffCategoryName: string | null;
+  staffSubCategoryId: number | null;
   staffSubCategoryName: string | null;
+  entityId: number | null;
+  entityName: string | null;
+  parentEntityName: string | null;
   status: AppraisalStatus;
   rawScore: number;
   maxRawScore: number;
   scorePercent: number;
   performanceLevelName: string | null;
   quartileName: string | null;
+  initialRating: PerformanceRating | null;
+  calibratedRating: PerformanceRating | null;
   submittedAt: string;
 }
 

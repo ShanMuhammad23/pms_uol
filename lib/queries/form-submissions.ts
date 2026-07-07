@@ -12,7 +12,7 @@ import type {
   FormSubmissionDetail,
   FormSubmissionListItem,
 } from "@/types/form-submissions";
-import type { AppraisalStatus } from "@/types/forms";
+import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
 import { flattenAllQuestions } from "@/types/forms";
 
 export class FormSubmissionError extends Error {
@@ -32,11 +32,18 @@ interface SubmissionListRow {
   employee_email: string;
   template_id: number | null;
   template_title: string | null;
+  staff_category_id: number | null;
   staff_category_name: string | null;
+  staff_sub_category_id: number | null;
   staff_sub_category_name: string | null;
+  entity_id: string | null;
+  entity_name: string | null;
+  parent_entity_name: string | null;
   status: AppraisalStatus;
   system_raw_score: number;
   max_raw_score: string;
+  initial_rating: PerformanceRating | null;
+  calibrated_rating: PerformanceRating | null;
   submitted_at: string;
 }
 
@@ -77,10 +84,17 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
          u.email AS employee_email,
          ap.template_id,
          ft.title AS template_title,
+         ft.staff_category_id,
          sc.name AS staff_category_name,
+         ft.staff_sub_category_id,
          ssc.name AS staff_sub_category_name,
+         u.entity_id,
+         ent.name AS entity_name,
+         parent_ent.name AS parent_entity_name,
          ap.status,
          ap.system_raw_score,
+         ap.initial_rating,
+         ap.calibrated_rating,
          COALESCE(
            (
              SELECT SUM(fq.total_marks)::text
@@ -97,6 +111,8 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
        LEFT JOIN form_templates ft ON ft.id = ap.template_id
        LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
        LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
+       LEFT JOIN entities ent ON ent.id = u.entity_id
+       LEFT JOIN entities parent_ent ON parent_ent.id = ent.parent_entity_id
        WHERE ap.submitted_at IS NOT NULL
        ORDER BY ap.submitted_at DESC`,
     ),
@@ -116,14 +132,21 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
       employeeEmail: row.employee_email,
       templateId: row.template_id,
       templateTitle: row.template_title,
+      staffCategoryId: row.staff_category_id,
       staffCategoryName: row.staff_category_name,
+      staffSubCategoryId: row.staff_sub_category_id,
       staffSubCategoryName: row.staff_sub_category_name,
+      entityId: row.entity_id ? Number(row.entity_id) : null,
+      entityName: row.entity_name,
+      parentEntityName: row.parent_entity_name,
       status: row.status,
       rawScore,
       maxRawScore,
       scorePercent,
       performanceLevelName: resolved?.performanceLevelName ?? null,
       quartileName: resolved?.quartileName ?? null,
+      initialRating: row.initial_rating,
+      calibratedRating: row.calibrated_rating,
       submittedAt: row.submitted_at,
     };
   });
