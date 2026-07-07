@@ -1,6 +1,9 @@
 import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
-import type { QuestionRecord } from "@/types/forms";
+import type {
+  FormSectionRecord,
+  QuestionRecord,
+} from "@/types/forms";
 
 export interface FormSubmissionListItem {
   id: number;
@@ -46,6 +49,8 @@ export interface FormSubmissionDetail {
   quartileScoreMin: number | null;
   quartileScoreMax: number | null;
   submittedAt: string;
+  sections: FormSectionRecord[];
+  rootQuestions: QuestionRecord[];
   questions: QuestionRecord[];
   answers: EmployeeFormAnswerRecord[];
 }

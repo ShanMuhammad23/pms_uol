@@ -177,11 +177,15 @@ export async function getFormSubmissionById(
   const answers = await getAnswersForSubmission(id, employeeUserId);
 
   let questions: FormSubmissionDetail["questions"] = [];
+  let sections: FormSubmissionDetail["sections"] = [];
+  let rootQuestions: FormSubmissionDetail["rootQuestions"] = [];
   let templateDescription: string | null = null;
 
   if (summary.templateId) {
     const template = await getFormTemplateById(summary.templateId);
     if (template) {
+      sections = template.sections;
+      rootQuestions = template.questions;
       questions = flattenAllQuestions(template);
       templateDescription = template.description;
     }
@@ -195,6 +199,8 @@ export async function getFormSubmissionById(
     quartileScoreMin: resolved?.scoreMin ?? null,
     quartileScoreMax: resolved?.scoreMax ?? null,
     templateDescription,
+    sections,
+    rootQuestions,
     questions,
     answers,
   };

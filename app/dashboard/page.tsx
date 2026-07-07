@@ -955,7 +955,7 @@ const FORM_STATE_CONFIG: Record<
     phase: 1,
   },
   PENDING_HEAD_REVIEW: {
-    label: "Function Head Review",
+    label: "Manager Review",
     color: "text-amber-700",
     bg: "bg-amber-50",
     border: "border-amber-200",
@@ -1274,6 +1274,56 @@ function ChartCard({
 function formatStackBarLabel(value: unknown) {
   const numericValue = Number(value);
   return numericValue >= 5 ? numericValue : "";
+}
+
+const WORKFLOW_CHART_SERIES = [
+  { dataKey: "draft", name: "Draft", fill: "#94a3b8", labelFill: "#fff" },
+  { dataKey: "selfAssessment", name: "Self Assessment", fill: "#cbd5e1", labelFill: "#334155" },
+  { dataKey: "headReview", name: "Manager Review", fill: "#d97706", labelFill: "#fff" },
+  { dataKey: "hrCalibration", name: "HR Calibration", fill: "#ea580c", labelFill: "#fff" },
+  { dataKey: "approved", name: "Approved", fill: "#059669", labelFill: "#fff" },
+] as const;
+
+interface WorkflowLegendPayloadItem {
+  value?: string;
+  color?: string;
+}
+
+function WorkflowProgressLegend({
+  payload,
+}: {
+  payload?: ReadonlyArray<WorkflowLegendPayloadItem>;
+}) {
+  if (!payload?.length) {
+    return null;
+  }
+
+  const order = new Map<string, number>(
+    WORKFLOW_CHART_SERIES.map((series, index) => [series.name, index]),
+  );
+
+  const sorted = [...payload].sort(
+    (a, b) =>
+      (order.get(String(a.value)) ?? Number.MAX_SAFE_INTEGER) -
+      (order.get(String(b.value)) ?? Number.MAX_SAFE_INTEGER),
+  );
+
+  return (
+    <ul className="flex flex-wrap justify-center gap-x-5 gap-y-2 pt-4">
+      {sorted.map((entry) => (
+        <li
+          key={String(entry.value)}
+          className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400"
+        >
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: entry.color }}
+          />
+          <span>{entry.value}</span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 interface PieLabelProps {
@@ -2097,22 +2147,36 @@ export default function HRDashboardPage() {
                   <XAxis dataKey="category" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} unit="%" />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
-                  <Bar dataKey="draft" name="Draft" stackId="a" fill="#94a3b8" radius={[0, 0, 0, 0]}>
-                    <LabelList dataKey="draft" position="center" formatter={formatStackBarLabel} style={{ fill: "#fff", fontSize: 10, fontWeight: 600 }} />
-                  </Bar>
-                  <Bar dataKey="selfAssessment" name="Self Assessment" stackId="a" fill="#cbd5e1">
-                    <LabelList dataKey="selfAssessment" position="center" formatter={formatStackBarLabel} style={{ fill: "#334155", fontSize: 10, fontWeight: 600 }} />
-                  </Bar>
-                  <Bar dataKey="headReview" name="Function Head Review" stackId="a" fill="#d97706">
-                    <LabelList dataKey="headReview" position="center" formatter={formatStackBarLabel} style={{ fill: "#fff", fontSize: 10, fontWeight: 600 }} />
-                  </Bar>
-                  <Bar dataKey="hrCalibration" name="HR Calibration" stackId="a" fill="#ea580c">
-                    <LabelList dataKey="hrCalibration" position="center" formatter={formatStackBarLabel} style={{ fill: "#fff", fontSize: 10, fontWeight: 600 }} />
-                  </Bar>
-                  <Bar dataKey="approved" name="Approved" stackId="a" fill="#059669" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="approved" position="center" formatter={formatStackBarLabel} style={{ fill: "#fff", fontSize: 10, fontWeight: 600 }} />
-                  </Bar>
+                  <Legend
+                    content={(props) => (
+                      <WorkflowProgressLegend payload={props.payload} />
+                    )}
+                  />
+                  {WORKFLOW_CHART_SERIES.map((series, index) => (
+                    <Bar
+                      key={series.dataKey}
+                      dataKey={series.dataKey}
+                      name={series.name}
+                      stackId="a"
+                      fill={series.fill}
+                      radius={
+                        index === WORKFLOW_CHART_SERIES.length - 1
+                          ? [4, 4, 0, 0]
+                          : [0, 0, 0, 0]
+                      }
+                    >
+                      <LabelList
+                        dataKey={series.dataKey}
+                        position="center"
+                        formatter={formatStackBarLabel}
+                        style={{
+                          fill: series.labelFill,
+                          fontSize: 10,
+                          fontWeight: 600,
+                        }}
+                      />
+                    </Bar>
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
               ) : (
@@ -2185,7 +2249,7 @@ export default function HRDashboardPage() {
                     Current Rating
                   </th>
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Form State
+                    Status
                   </th>
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Actions
@@ -2232,9 +2296,7 @@ export default function HRDashboardPage() {
                       >
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-white/5">
-                              <User className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                            </div>
+                            
                             <div className="min-w-0">
                               <p className="truncate font-semibold text-slate-900 dark:text-white">
                                 {submission.employeeName}
@@ -2278,7 +2340,7 @@ export default function HRDashboardPage() {
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
-                            <Hash className="h-3.5 w-3.5 text-slate-400" />
+                          
                             <span className="font-semibold tabular-nums text-slate-900 dark:text-white">
                               {submission.rawScore}
                             </span>
@@ -2315,8 +2377,8 @@ export default function HRDashboardPage() {
                             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 dark:bg-amber-600 dark:hover:bg-amber-500"
                           >
                             <Eye className="h-3.5 w-3.5" />
-                            View
-                            <ArrowRight className="h-3 w-3" />
+                            
+                           
                           </Link>
                         </td>
                       </motion.tr>
