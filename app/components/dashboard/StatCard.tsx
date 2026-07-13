@@ -10,6 +10,8 @@ export type StatCardTone = "navy" | "amber" | "orange" | "emerald" | "slate";
 interface StatCardProps {
   title: string;
   awaiting: number;
+  awaitingtitle: string;
+  completedtitle: string;
   completed: number;
   tone: StatCardTone;
   icon: ElementType;
@@ -21,7 +23,9 @@ interface StatCardProps {
 export function StatCard({
   title,
   awaiting,
+  awaitingtitle,
   completed,
+  completedtitle,
   tone,
   delay,
   onClick,
@@ -88,13 +92,13 @@ export function StatCard({
           </p>
           <ul className="space-y-1.5">
             <li className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Awaiting</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{awaitingtitle}</span>
               <span className={cn("text-2xl font-bold tracking-tight tabular-nums", t.value)}>
                 {awaiting}
               </span>
             </li>
             <li className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Completed</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{completedtitle}</span>
               <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900 dark:text-white">
                 {completed}
               </span>

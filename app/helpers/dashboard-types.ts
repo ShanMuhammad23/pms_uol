@@ -8,14 +8,11 @@ export type EmployeeCategory =
   | "Management";
 
 export type FormState =
-  | "DRAFT"
   | "PENDING_SELF_ASSESSMENT"
   | "PENDING_HEAD_REVIEW"
   | "PENDING_HR_CALIBRATION"
-  | "PENDING_BOARD_APPROVAL"
   | "APPROVED"
-  | "REJECTED"
-  | "ARCHIVED";
+
 
 export type EligibilityStatus =
   | "Fully Eligible"

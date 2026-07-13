@@ -41,6 +41,8 @@ export function DashboardWorkflowStatsRow({
         title="Self Assessment"
         awaiting={selfAssessmentStats.awaiting}
         completed={selfAssessmentStats.completed}
+        awaitingtitle="Eligible"
+        completedtitle="Submitted"
         tone="slate"
         icon={User}
         delay={0.1}
@@ -51,6 +53,8 @@ export function DashboardWorkflowStatsRow({
         title="Manager Review"
         awaiting={managerReviewStats.awaiting}
         completed={managerReviewStats.completed}
+        awaitingtitle="Awaiting Review"
+        completedtitle="Reviewed"
         tone="amber"
         icon={AlertTriangle}
         delay={0.2}
@@ -61,6 +65,8 @@ export function DashboardWorkflowStatsRow({
         title="HR Alignment"
         awaiting={hrAlignmentStats.awaiting}
         completed={hrAlignmentStats.completed}
+        awaitingtitle="Awaiting Alignment"
+        completedtitle="Approved"
         tone="orange"
         icon={Scale}
         delay={0.3}

@@ -82,14 +82,7 @@ export default function HRDashboardPage() {
           performanceMatrixLoading={performanceMatrixLoading}
         />
 
-        <DashboardCategoryCharts
-          themedCategoryDistribution={themedCategoryDistribution}
-          filteredCompletionByCategory={filteredCompletionByCategory}
-          pieLabelRenderer={pieLabelRenderer}
-          isDarkMode={isDarkMode}
-          submissionsLoading={submissionsLoading}
-          submissionsError={submissionsError}
-        />
+      
 
         <DashboardSubmissionsTable
           submissions={filteredSubmissions}
