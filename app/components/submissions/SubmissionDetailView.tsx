@@ -8,11 +8,19 @@ import {
   type QuestionRecord,
 } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
-import { cn } from "@/lib/utils";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
 }
+
+type TableRow = {
+  sr: number;
+  section: string;
+  question: string;
+  weight: number;
+  scoreEarned: number;
+  answerText: string | null;
+};
 
 function isScoredQuestion(question: {
   inputType: string;
@@ -21,14 +29,10 @@ function isScoredQuestion(question: {
   return question.totalMarks > 0 && question.inputType === "NUMBER";
 }
 
-function formatAnswer(
+function getAnswerLabel(
   question: QuestionRecord,
   answer: EmployeeFormAnswerRecord | undefined,
-): string {
-  if (isScoredQuestion(question)) {
-    return `${answer?.pointsEarned ?? 0} / ${question.totalMarks}`;
-  }
-
+): string | null {
   if (answer?.textResponse?.trim()) {
     return answer.textResponse.trim();
   }
@@ -40,48 +44,63 @@ function formatAnswer(
     );
   }
 
-  return "No response provided";
+  return null;
 }
 
-function DocumentQuestion({
-  index,
-  question,
-  answer,
-}: {
-  index: number;
-  question: QuestionRecord;
-  answer: EmployeeFormAnswerRecord | undefined;
-}) {
-  const scored = isScoredQuestion(question);
-  const answerText = formatAnswer(question, answer);
+function buildRows(
+  sections: Parameters<typeof buildRootLayoutOrderFromRecord>[0],
+  rootQuestions: QuestionRecord[],
+  allQuestions: QuestionRecord[],
+  answerMap: Map<number, EmployeeFormAnswerRecord>,
+): TableRow[] {
+  const rootLayout = buildRootLayoutOrderFromRecord(sections, rootQuestions);
+  const rows: TableRow[] = [];
+  let sr = 0;
 
-  return (
-    <div className="break-inside-avoid">
-      <p className="text-[15px] font-medium leading-relaxed text-slate-900 dark:text-slate-100">
-        <span className="mr-2 text-slate-500 dark:text-slate-400">{index}.</span>
-        {question.questionText}
-      </p>
-      <div
-        className={cn(
-          "mt-2 border-l-2 pl-4 text-[15px] leading-relaxed",
-          answerText === "No response provided"
-            ? "border-slate-200 italic text-slate-400 dark:border-white/10 dark:text-slate-500"
-            : "border-amber-500/40 text-slate-700 dark:border-amber-500/30 dark:text-slate-300",
-        )}
-      >
-        {scored ? (
-          <p>
-            <span className="font-medium text-slate-900 dark:text-slate-100">
-              Score:{" "}
-            </span>
-            {answerText}
-          </p>
-        ) : (
-          <p className="whitespace-pre-wrap">{answerText}</p>
-        )}
-      </div>
-    </div>
-  );
+  const pushRow = (
+    question: QuestionRecord,
+    sectionLabel: string,
+  ) => {
+    sr += 1;
+    const answer = answerMap.get(question.id);
+    const scored = isScoredQuestion(question);
+
+    rows.push({
+      sr,
+      section: sectionLabel,
+      question: question.questionText,
+      weight: question.totalMarks,
+      scoreEarned: scored ? (answer?.pointsEarned ?? 0) : (answer?.pointsEarned ?? 0),
+      answerText: scored ? null : getAnswerLabel(question, answer),
+    });
+  };
+
+  if (rootLayout.length === 0) {
+    allQuestions.forEach((question) => pushRow(question, "—"));
+    return rows;
+  }
+
+  rootLayout.forEach((item) => {
+    if (item.kind === "section") {
+      const section = sections.find((current) => current.id === item.id);
+      if (!section) return;
+
+      section.subsections.forEach((subsection) => {
+        const label = `${section.title} › ${subsection.title}`;
+        subsection.questions.forEach((question) => pushRow(question, label));
+      });
+
+      section.questions.forEach((question) => pushRow(question, section.title));
+      return;
+    }
+
+    const question = rootQuestions.find((current) => current.id === item.id);
+    if (question) {
+      pushRow(question, "—");
+    }
+  });
+
+  return rows;
 }
 
 export default function SubmissionDetailView({
@@ -94,7 +113,7 @@ export default function SubmissionDetailView({
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+      <div className="rounded-xl border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
         Loading submission...
       </div>
     );
@@ -111,178 +130,116 @@ export default function SubmissionDetailView({
   const answerMap = new Map(
     data.answers.map((answer) => [answer.questionId, answer]),
   );
-  const rootLayout = buildRootLayoutOrderFromRecord(
+  const rows = buildRows(
     data.sections,
     data.rootQuestions,
+    data.questions,
+    answerMap,
   );
-  let questionCounter = 0;
+
+  const metaParts = [
+    data.employeeName,
+    data.employeeId ? `SAP ${data.employeeId}` : null,
+    data.templateTitle,
+    APPRAISAL_STATUS_LABELS[data.status],
+    `Score ${data.rawScore}/${data.maxRawScore} (${data.scorePercent}%)`,
+    data.performanceLevelName
+      ? `${data.performanceLevelName}${data.quartileName ? ` · ${data.quartileName}` : ""}`
+      : null,
+    new Date(data.submittedAt).toLocaleString(),
+  ].filter(Boolean);
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900">
-      <header className="border-b border-slate-200 bg-slate-50/80 px-8 py-7 dark:border-white/10 dark:bg-slate-950/40">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-          Performance Appraisal Submission
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
+      <div className="border-b border-slate-200 px-4 py-2.5 dark:border-white/10">
+        <p className="truncate text-xs leading-5 text-slate-600 dark:text-slate-300" title={metaParts.join(" · ")}>
+          {metaParts.join(" · ")}
         </p>
-        <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-          {data.templateTitle ?? "Submitted Form"}
-        </h2>
-        {data.templateDescription ? (
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-            {data.templateDescription}
-          </p>
-        ) : null}
-
-        <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Employee
-            </dt>
-            <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-              {data.employeeName}
-            </dd>
-            <dd className="text-xs text-slate-500 dark:text-slate-400">
-              {data.employeeEmail}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Submitted
-            </dt>
-            <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-              {new Date(data.submittedAt).toLocaleString()}
-            </dd>
-            <dd className="text-xs text-slate-500 dark:text-slate-400">
-              {APPRAISAL_STATUS_LABELS[data.status]}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Raw Score
-            </dt>
-            <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-              {data.rawScore} / {data.maxRawScore}
-            </dd>
-            <dd className="text-xs text-slate-500 dark:text-slate-400">
-              {data.scorePercent}%
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Performance
-            </dt>
-            <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-              {data.performanceLevelName ?? "—"}
-            </dd>
-            <dd className="text-xs text-slate-500 dark:text-slate-400">
-              {data.quartileName ?? "No matching quartile"}
-              {data.quartileScoreMin !== null && data.quartileScoreMax !== null
-                ? ` (${data.quartileScoreMin}–${data.quartileScoreMax}%)`
-                : ""}
-            </dd>
-          </div>
-        </dl>
-      </header>
-
-      <div className="px-8 py-8">
-        {rootLayout.length > 0 ? (
-          <div className="space-y-8">
-            {rootLayout.map((item) => {
-              if (item.kind === "section") {
-                const section = data.sections.find(
-                  (currentSection) => currentSection.id === item.id,
-                );
-
-                if (!section) {
-                  return null;
-                }
-
-                return (
-                  <section key={section.id} className="space-y-6">
-                    <h3 className="border-b border-slate-200 pb-2 text-lg font-semibold text-slate-900 dark:border-white/10 dark:text-white">
-                      {section.title}
-                    </h3>
-
-                    {section.subsections.map((subsection) => (
-                      <div key={subsection.id} className="space-y-5">
-                        <h4 className="text-base font-medium text-slate-800 dark:text-slate-200">
-                          {subsection.title}
-                        </h4>
-                        <div className="space-y-6">
-                          {subsection.questions.map((question) => {
-                            questionCounter += 1;
-
-                            return (
-                              <DocumentQuestion
-                                key={question.id}
-                                index={questionCounter}
-                                question={question}
-                                answer={answerMap.get(question.id)}
-                              />
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-
-                    {section.questions.length > 0 ? (
-                      <div className="space-y-6">
-                        {section.questions.map((question) => {
-                          questionCounter += 1;
-
-                          return (
-                            <DocumentQuestion
-                              key={question.id}
-                              index={questionCounter}
-                              question={question}
-                              answer={answerMap.get(question.id)}
-                            />
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </section>
-                );
-              }
-
-              const question = data.rootQuestions.find(
-                (currentQuestion) => currentQuestion.id === item.id,
-              );
-
-              if (!question) {
-                return null;
-              }
-
-              questionCounter += 1;
-
-              return (
-                <DocumentQuestion
-                  key={question.id}
-                  index={questionCounter}
-                  question={question}
-                  answer={answerMap.get(question.id)}
-                />
-              );
-            })}
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {data.questions.map((question, index) => (
-              <DocumentQuestion
-                key={question.id}
-                index={index + 1}
-                question={question}
-                answer={answerMap.get(question.id)}
-              />
-            ))}
-          </div>
-        )}
-
-        {data.questions.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            No questions were found for this submission.
-          </p>
-        ) : null}
       </div>
-    </article>
+
+      <div className="w-full max-w-full overflow-x-auto">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
+              <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Sr Number
+              </th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Section
+              </th>
+              <th className="min-w-[280px] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Questions
+              </th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Weight
+              </th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Score Earned
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400"
+                >
+                  No questions were found for this submission.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => (
+                <tr
+                  key={`${row.sr}-${row.question}`}
+                  className="align-top hover:bg-slate-50/70 dark:hover:bg-white/[0.02]"
+                >
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-500 dark:text-slate-400">
+                    {row.sr}
+                  </td>
+                  <td className="max-w-[220px] px-3 py-2.5 text-slate-700 dark:text-slate-300">
+                    <span className="line-clamp-2" title={row.section}>
+                      {row.section}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-900 dark:text-slate-100">
+                    <p className="leading-snug">{row.question}</p>
+                    {row.answerText ? (
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Response: {row.answerText}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                    {row.weight}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums font-medium text-slate-900 dark:text-white">
+                    {row.scoreEarned}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          {rows.length > 0 ? (
+            <tfoot>
+              <tr className="border-t border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
+                <td
+                  colSpan={3}
+                  className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                >
+                  Total
+                </td>
+                <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-semibold text-slate-900 dark:text-white">
+                  {data.maxRawScore}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-semibold text-slate-900 dark:text-white">
+                  {data.rawScore}
+                </td>
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+    </div>
   );
 }

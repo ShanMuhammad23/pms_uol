@@ -21,20 +21,14 @@ export default async function SubmissionDetailPage({
   }
 
   return (
-    <div className="space-y-6 text-text-primary">
-      <div>
-        <Link
-          href="/dashboard/submissions"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-foreground/70 hover:text-text-primary"
-        >
-          <ArrowLeft className="size-4" />
-          Back to Submissions
-        </Link>
-        <h1 className="text-2xl font-bold">Submission Details</h1>
-        <p className="mt-1 text-sm text-foreground/70">
-          Review the employee&apos;s submitted form and raw score.
-        </p>
-      </div>
+    <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden text-text-primary">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1 text-xs text-foreground/70 hover:text-text-primary"
+      >
+        <ArrowLeft className="size-3.5" />
+        Back
+      </Link>
 
       <SubmissionDetailView submissionId={submissionId} />
     </div>
