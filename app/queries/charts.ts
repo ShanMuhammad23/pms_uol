@@ -23,6 +23,7 @@ interface UseDashboardChartMetricsParams {
   staffCategories: StaffCategoryWithSubCategories[];
   isDarkMode: boolean;
   matrixForDistribution: PerformanceLevelWithQuartiles[];
+  institutionalQuotaRows?: Array<{ rating: string; quota: number }>;
 }
 
 export function useDashboardChartMetrics({
@@ -30,6 +31,7 @@ export function useDashboardChartMetrics({
   staffCategories,
   isDarkMode,
   matrixForDistribution,
+  institutionalQuotaRows,
 }: UseDashboardChartMetricsParams) {
   const themedCategoryDistribution = useMemo(
     () => buildSubmissionCategoryCounts(filteredSubmissions, staffCategories, isDarkMode),
@@ -37,8 +39,8 @@ export function useDashboardChartMetrics({
   );
 
   const filteredCalibrationData = useMemo(
-    () => buildCalibrationData(filteredSubmissions),
-    [filteredSubmissions],
+    () => buildCalibrationData(filteredSubmissions, institutionalQuotaRows),
+    [filteredSubmissions, institutionalQuotaRows],
   );
 
   const ratingQuartileMatrix = useMemo(

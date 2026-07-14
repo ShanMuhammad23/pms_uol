@@ -28,16 +28,20 @@ export function getSubmissionDisplayRating(submission: FormSubmissionListItem): 
   return submission.performanceLevelName ?? "—";
 }
 
-export function buildCalibrationData(submissions: FormSubmissionListItem[]) {
+export function buildCalibrationData(
+  submissions: FormSubmissionListItem[],
+  quotas: Array<{ rating: string; quota: number }> = INSTITUTIONAL_QUOTA,
+) {
+  const quotaRows = quotas.length > 0 ? quotas : INSTITUTIONAL_QUOTA;
   const total = submissions.length;
-  const counts = new Map(INSTITUTIONAL_QUOTA.map((row) => [row.rating, 0]));
+  const counts = new Map(quotaRows.map((row) => [row.rating, 0]));
 
   submissions.forEach((submission) => {
     const bucket = normalizeRating(getSubmissionDisplayRating(submission));
     counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
   });
 
-  return INSTITUTIONAL_QUOTA.map((row) => ({
+  return quotaRows.map((row) => ({
     rating: row.rating,
     quota: row.quota,
     actual: total === 0 ? 0 : Math.round(((counts.get(row.rating) ?? 0) / total) * 100),

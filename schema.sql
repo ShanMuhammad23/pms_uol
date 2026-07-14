@@ -297,3 +297,20 @@ ALTER TABLE appraisals
 
 CREATE INDEX idx_appraisals_performance_quartile ON appraisals (performance_quartile_id);
 CREATE INDEX idx_employee_qualifications_user ON employee_qualifications (user_id);
+
+-- Institutional quota targets (Calibration vs Quota chart)
+CREATE TABLE institutional_quotas (
+    id BIGSERIAL PRIMARY KEY,
+    financial_year_id INT NOT NULL REFERENCES financial_years(id) ON DELETE CASCADE,
+    rating performance_rating NOT NULL,
+    quota_percent NUMERIC(5, 2) NOT NULL
+        CHECK (quota_percent >= 0 AND quota_percent <= 100),
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_institutional_quota_per_year_rating
+        UNIQUE (financial_year_id, rating)
+);
+
+CREATE INDEX idx_institutional_quotas_financial_year
+    ON institutional_quotas (financial_year_id);
