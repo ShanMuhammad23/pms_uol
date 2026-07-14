@@ -30,6 +30,11 @@ interface SubmissionListRow {
   employee_id: string;
   employee_name: string;
   employee_email: string;
+  designation: string | null;
+  grade_group: string | null;
+  date_of_joining: string | null;
+  emp_category: string | null;
+  emp_sub_category: string | null;
   template_id: number | null;
   template_title: string | null;
   staff_category_id: number | null;
@@ -42,9 +47,78 @@ interface SubmissionListRow {
   status: AppraisalStatus;
   system_raw_score: number;
   max_raw_score: string;
+  initial_score_numeric: string | null;
   initial_rating: PerformanceRating | null;
+  credit_hrs_erp_score_adj: string | null;
+  pub_oric_score_adj: string | null;
+  calibration_factor: string | null;
+  normalized_score: string | null;
+  calibrated_score_numeric: string | null;
   calibrated_rating: PerformanceRating | null;
+  stored_quartile_name: string | null;
+  uol_experience_years: string | null;
+  is_eligible: boolean | null;
+  applicable_duration: string | null;
+  remarks_evaluation: string | null;
+  current_salary: string | null;
+  previous_salary: string | null;
+  applicable_salary_for_increment: string | null;
+  applicable_matrix: string | null;
+  calculated_increment_percentage: string | null;
+  increment_per_matrix: string | null;
+  approved_increment_percentage: string | null;
+  revised_salary: string | null;
+  revised_salary_ro: string | null;
+  hod_review_comments: string | null;
+  remarks_compensation: string | null;
+  qualification: string | null;
+  qualification_year: number | null;
+  qualification_subject: string | null;
+  qualification_institute: string | null;
+  qualification_country: string | null;
   submitted_at: string;
+}
+
+let excelColumnsReady: boolean | null = null;
+let qualificationsReady: boolean | null = null;
+
+async function hasExcelSheetColumns(): Promise<boolean> {
+  if (excelColumnsReady !== null) return excelColumnsReady;
+
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'users'
+         AND column_name = 'designation'
+     ) AS exists`,
+  );
+
+  excelColumnsReady = Boolean(result.rows[0]?.exists);
+  return excelColumnsReady;
+}
+
+async function hasQualificationsTable(): Promise<boolean> {
+  if (qualificationsReady !== null) return qualificationsReady;
+
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = 'employee_qualifications'
+     ) AS exists`,
+  );
+
+  qualificationsReady = Boolean(result.rows[0]?.exists);
+  return qualificationsReady;
+}
+
+function toNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 async function getAnswersForSubmission(
@@ -74,82 +148,221 @@ async function getAnswersForSubmission(
   }));
 }
 
+function mapSubmissionRow(
+  row: SubmissionListRow,
+  quartileBands: Awaited<ReturnType<typeof getActiveFinancialYearQuartileBands>>,
+): FormSubmissionListItem {
+  const rawScore = row.system_raw_score;
+  const maxRawScore = Number(row.max_raw_score);
+  const scorePercent = calculateScorePercent(rawScore, maxRawScore);
+  const resolved = resolvePerformanceQuartile(scorePercent, quartileBands);
+  const scoreO = toNumber(row.initial_score_numeric) ?? rawScore;
+  const normalizedScore =
+    toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric);
+
+  return {
+    id: Number(row.id),
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    employeeEmail: row.employee_email,
+    designation: row.designation,
+    gradeGroup: row.grade_group,
+    dateOfJoining: row.date_of_joining,
+    empCategory: row.emp_category,
+    empSubCategory: row.emp_sub_category,
+    templateId: row.template_id,
+    templateTitle: row.template_title,
+    staffCategoryId: row.staff_category_id,
+    staffCategoryName: row.staff_category_name,
+    staffSubCategoryId: row.staff_sub_category_id,
+    staffSubCategoryName: row.staff_sub_category_name,
+    entityId: row.entity_id ? Number(row.entity_id) : null,
+    entityName: row.entity_name,
+    parentEntityName: row.parent_entity_name,
+    status: row.status,
+    rawScore,
+    maxRawScore,
+    scorePercent,
+    scoreO,
+    ratingO: row.initial_rating,
+    creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
+    pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
+    calibrationFactor: toNumber(row.calibration_factor),
+    normalizedScore,
+    ratingN: row.calibrated_rating,
+    performanceLevelName: resolved?.performanceLevelName ?? null,
+    quartileName: row.stored_quartile_name ?? resolved?.quartileName ?? null,
+    initialRating: row.initial_rating,
+    calibratedRating: row.calibrated_rating,
+    uolExperienceYears: toNumber(row.uol_experience_years),
+    isEligible: row.is_eligible,
+    applicableDuration: row.applicable_duration,
+    remarksEvaluation: row.remarks_evaluation,
+    currentSalary: toNumber(row.current_salary),
+    previousSalary: toNumber(row.previous_salary),
+    applicableSalaryForIncrement: toNumber(row.applicable_salary_for_increment),
+    applicableMatrix: row.applicable_matrix,
+    applicableIncrementPercent: toNumber(row.calculated_increment_percentage),
+    incrementPerMatrix: toNumber(row.increment_per_matrix),
+    incrementAdjusted: toNumber(row.approved_increment_percentage),
+    revisedSalary: toNumber(row.revised_salary),
+    revisedSalaryRo: toNumber(row.revised_salary_ro),
+    hodReviewComments: row.hod_review_comments,
+    remarksCompensation: row.remarks_compensation,
+    qualification: row.qualification,
+    qualificationYear: row.qualification_year,
+    qualificationSubject: row.qualification_subject,
+    qualificationInstitute: row.qualification_institute,
+    qualificationCountry: row.qualification_country,
+    submittedAt: row.submitted_at,
+  };
+}
+
 export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
-  const [result, quartileBands] = await Promise.all([
-    db.query<SubmissionListRow>(
-      `SELECT
-         ap.id,
-         u.employee_id,
-         CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
-         u.email AS employee_email,
-         ap.template_id,
-         ft.title AS template_title,
-         ft.staff_category_id,
-         sc.name AS staff_category_name,
-         ft.staff_sub_category_id,
-         ssc.name AS staff_sub_category_name,
-         u.entity_id,
-         ent.name AS entity_name,
-         parent_ent.name AS parent_entity_name,
-         ap.status,
-         ap.system_raw_score,
-         ap.initial_rating,
-         ap.calibrated_rating,
-         COALESCE(
-           (
-             SELECT SUM(fq.total_marks)::text
-             FROM form_questions fq
-             WHERE fq.template_id = ap.template_id
-               AND fq.input_type = 'NUMBER'
-               AND fq.total_marks > 0
-           ),
-           '0'
-         ) AS max_raw_score,
-         ap.submitted_at::text
-       FROM appraisals ap
-       INNER JOIN users u ON u.id = ap.employee_id
-       LEFT JOIN form_templates ft ON ft.id = ap.template_id
-       LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
-       LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
-       LEFT JOIN entities ent ON ent.id = u.entity_id
-       LEFT JOIN entities parent_ent ON parent_ent.id = ent.parent_entity_id
-       WHERE ap.submitted_at IS NOT NULL
-       ORDER BY ap.submitted_at DESC`,
-    ),
+  const [excelReady, qualsReady, quartileBands] = await Promise.all([
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
     getActiveFinancialYearQuartileBands(),
   ]);
 
-  return result.rows.map((row) => {
-    const rawScore = row.system_raw_score;
-    const maxRawScore = Number(row.max_raw_score);
-    const scorePercent = calculateScorePercent(rawScore, maxRawScore);
-    const resolved = resolvePerformanceQuartile(scorePercent, quartileBands);
+  const excelSelect = excelReady
+    ? `
+         u.designation,
+         u.grade_group,
+         u.date_of_joining::text,
+         u.emp_category::text AS emp_category,
+         u.emp_sub_category::text AS emp_sub_category,
+         ap.initial_score_numeric::text,
+         ap.credit_hrs_erp_score_adj::text,
+         ap.pub_oric_score_adj::text,
+         ap.calibration_factor::text,
+         ap.normalized_score::text,
+         ap.calibrated_score_numeric::text,
+         pq.name AS stored_quartile_name,
+         ap.uol_experience_years::text,
+         ap.is_eligible,
+         ap.applicable_duration,
+         ap.remarks_evaluation,
+         ap.current_salary::text,
+         ap.previous_salary::text,
+         ap.applicable_salary_for_increment::text,
+         ap.applicable_matrix,
+         ap.calculated_increment_percentage::text,
+         ap.increment_per_matrix::text,
+         ap.approved_increment_percentage::text,
+         ap.revised_salary::text,
+         ap.revised_salary_ro::text,
+         ap.hod_review_comments,
+         ap.remarks_compensation,
+    `
+    : `
+         NULL::text AS designation,
+         NULL::text AS grade_group,
+         NULL::text AS date_of_joining,
+         u.emp_category::text AS emp_category,
+         u.emp_sub_category::text AS emp_sub_category,
+         NULL::text AS initial_score_numeric,
+         NULL::text AS credit_hrs_erp_score_adj,
+         NULL::text AS pub_oric_score_adj,
+         NULL::text AS calibration_factor,
+         NULL::text AS normalized_score,
+         NULL::text AS calibrated_score_numeric,
+         NULL::text AS stored_quartile_name,
+         NULL::text AS uol_experience_years,
+         NULL::boolean AS is_eligible,
+         NULL::text AS applicable_duration,
+         NULL::text AS remarks_evaluation,
+         NULL::text AS current_salary,
+         NULL::text AS previous_salary,
+         NULL::text AS applicable_salary_for_increment,
+         NULL::text AS applicable_matrix,
+         ap.calculated_increment_percentage::text,
+         NULL::text AS increment_per_matrix,
+         ap.approved_increment_percentage::text,
+         NULL::text AS revised_salary,
+         NULL::text AS revised_salary_ro,
+         NULL::text AS hod_review_comments,
+         NULL::text AS remarks_compensation,
+    `;
 
-    return {
-      id: Number(row.id),
-      employeeId: row.employee_id,
-      employeeName: row.employee_name,
-      employeeEmail: row.employee_email,
-      templateId: row.template_id,
-      templateTitle: row.template_title,
-      staffCategoryId: row.staff_category_id,
-      staffCategoryName: row.staff_category_name,
-      staffSubCategoryId: row.staff_sub_category_id,
-      staffSubCategoryName: row.staff_sub_category_name,
-      entityId: row.entity_id ? Number(row.entity_id) : null,
-      entityName: row.entity_name,
-      parentEntityName: row.parent_entity_name,
-      status: row.status,
-      rawScore,
-      maxRawScore,
-      scorePercent,
-      performanceLevelName: resolved?.performanceLevelName ?? null,
-      quartileName: resolved?.quartileName ?? null,
-      initialRating: row.initial_rating,
-      calibratedRating: row.calibrated_rating,
-      submittedAt: row.submitted_at,
-    };
-  });
+  const qualSelect = qualsReady
+    ? `
+         qual.qualification,
+         qual.year AS qualification_year,
+         qual.subject AS qualification_subject,
+         qual.institute AS qualification_institute,
+         qual.country AS qualification_country,
+    `
+    : `
+         NULL::text AS qualification,
+         NULL::int AS qualification_year,
+         NULL::text AS qualification_subject,
+         NULL::text AS qualification_institute,
+         NULL::text AS qualification_country,
+    `;
+
+  const qualJoin = qualsReady
+    ? `
+       LEFT JOIN LATERAL (
+         SELECT eq.qualification, eq.year, eq.subject, eq.institute, eq.country
+         FROM employee_qualifications eq
+         WHERE eq.user_id = u.id
+         ORDER BY eq.is_primary DESC, eq.year DESC NULLS LAST, eq.id DESC
+         LIMIT 1
+       ) qual ON TRUE
+    `
+    : "";
+
+  const quartileJoin = excelReady
+    ? `LEFT JOIN performance_quartiles pq ON pq.id = ap.performance_quartile_id`
+    : "";
+
+  const result = await db.query<SubmissionListRow>(
+    `SELECT
+       ap.id,
+       u.employee_id,
+       CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+       u.email AS employee_email,
+       ${excelSelect}
+       ${qualSelect}
+       ap.template_id,
+       ft.title AS template_title,
+       ft.staff_category_id,
+       sc.name AS staff_category_name,
+       ft.staff_sub_category_id,
+       ssc.name AS staff_sub_category_name,
+       u.entity_id,
+       ent.name AS entity_name,
+       parent_ent.name AS parent_entity_name,
+       ap.status,
+       ap.system_raw_score,
+       ap.initial_rating,
+       ap.calibrated_rating,
+       COALESCE(
+         (
+           SELECT SUM(fq.total_marks)::text
+           FROM form_questions fq
+           WHERE fq.template_id = ap.template_id
+             AND fq.input_type = 'NUMBER'
+             AND fq.total_marks > 0
+         ),
+         '0'
+       ) AS max_raw_score,
+       ap.submitted_at::text
+     FROM appraisals ap
+     INNER JOIN users u ON u.id = ap.employee_id
+     LEFT JOIN form_templates ft ON ft.id = ap.template_id
+     LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
+     LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
+     LEFT JOIN entities ent ON ent.id = u.entity_id
+     LEFT JOIN entities parent_ent ON parent_ent.id = ent.parent_entity_id
+     ${quartileJoin}
+     ${qualJoin}
+     WHERE ap.submitted_at IS NOT NULL
+     ORDER BY ap.submitted_at DESC`,
+  );
+
+  return result.rows.map((row) => mapSubmissionRow(row, quartileBands));
 }
 
 export async function getFormSubmissionById(
@@ -195,9 +408,23 @@ export async function getFormSubmissionById(
   const resolved = resolvePerformanceQuartile(summary.scorePercent, quartileBands);
 
   return {
-    ...summary,
+    id: summary.id,
+    employeeId: summary.employeeId,
+    employeeName: summary.employeeName,
+    employeeEmail: summary.employeeEmail,
+    templateId: summary.templateId,
+    templateTitle: summary.templateTitle,
+    staffCategoryName: summary.staffCategoryName,
+    staffSubCategoryName: summary.staffSubCategoryName,
+    status: summary.status,
+    rawScore: summary.rawScore,
+    maxRawScore: summary.maxRawScore,
+    scorePercent: summary.scorePercent,
+    performanceLevelName: summary.performanceLevelName,
+    quartileName: summary.quartileName,
     quartileScoreMin: resolved?.scoreMin ?? null,
     quartileScoreMax: resolved?.scoreMax ?? null,
+    submittedAt: summary.submittedAt,
     templateDescription,
     sections,
     rootQuestions,

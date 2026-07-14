@@ -40,13 +40,16 @@ CREATE TABLE departments (
 
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
-    employee_id VARCHAR(30) UNIQUE NOT NULL,
+    employee_id VARCHAR(30) UNIQUE NOT NULL, -- SAP Code
     email VARCHAR(150) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
+    designation VARCHAR(150), -- Designation
+    grade_group VARCHAR(50), -- Gp
+    date_of_joining DATE, -- DOJ
     system_role user_role NOT NULL DEFAULT 'EMPLOYEE',
-    emp_category employee_category NOT NULL,
+    emp_category employee_category NOT NULL, -- Role Category (legacy enum)
     emp_sub_category sub_category NOT NULL,
     department_id INT REFERENCES departments(id) ON DELETE RESTRICT,
     head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, 
@@ -133,13 +136,36 @@ CREATE TABLE appraisals (
     -- Automatic aggregate tracking calculated on submission runtime
     system_raw_score INT DEFAULT 0, 
     
-    initial_score_numeric NUMERIC(5, 2), 
-    initial_rating performance_rating,   
-    calibrated_score_numeric NUMERIC(5, 2), 
-    calibrated_rating performance_rating,   
-    
-    calculated_increment_percentage NUMERIC(5, 2), 
-    approved_increment_percentage   NUMERIC(5, 2), 
+    -- Score (O) / Rating (O)
+    initial_score_numeric NUMERIC(10, 2), 
+    initial_rating performance_rating,
+    -- Adjustments + normalization pipeline
+    credit_hrs_erp_score_adj NUMERIC(10, 2),
+    pub_oric_score_adj NUMERIC(10, 2),
+    calibration_factor NUMERIC(10, 4),
+    normalized_score NUMERIC(10, 2),
+    calibrated_score_numeric NUMERIC(10, 2), 
+    calibrated_rating performance_rating, -- Rating (N)
+    performance_quartile_id BIGINT, -- FK added after performance_quartiles exists
+
+    -- Eligibility / evaluation remarks
+    uol_experience_years NUMERIC(6, 2),
+    is_eligible BOOLEAN,
+    applicable_duration VARCHAR(100),
+    remarks_evaluation TEXT,
+
+    -- Compensation worksheet
+    current_salary NUMERIC(14, 2),
+    previous_salary NUMERIC(14, 2),
+    applicable_salary_for_increment NUMERIC(14, 2),
+    applicable_matrix VARCHAR(150),
+    calculated_increment_percentage NUMERIC(5, 2), -- Applicable Incr %
+    increment_per_matrix NUMERIC(5, 2),
+    approved_increment_percentage   NUMERIC(5, 2), -- Increment Adjusted
+    revised_salary NUMERIC(14, 2),
+    revised_salary_ro NUMERIC(14, 2),
+    hod_review_comments TEXT,
+    remarks_compensation TEXT,
     effective_date DATE,
     
     employee_strengths TEXT,       
@@ -150,6 +176,20 @@ CREATE TABLE appraisals (
     submitted_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_employee_per_cycle UNIQUE (employee_id, cycle_id)
+);
+
+-- Primary qualification snapshot fields used by staff listing (1:N source of truth)
+CREATE TABLE employee_qualifications (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    qualification VARCHAR(255) NOT NULL,
+    year INT,
+    subject VARCHAR(255),
+    institute VARCHAR(255),
+    country VARCHAR(100),
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Actual Stored Answers Filled Out By Employees / Line Managers
@@ -250,3 +290,10 @@ CREATE TABLE performance_quartiles (
 
 CREATE INDEX idx_levels_financial_year ON performance_levels(financial_year_id);
 CREATE INDEX idx_quartiles_level ON performance_quartiles(performance_level_id);
+
+ALTER TABLE appraisals
+    ADD CONSTRAINT appraisals_performance_quartile_id_fkey
+    FOREIGN KEY (performance_quartile_id) REFERENCES performance_quartiles(id) ON DELETE SET NULL;
+
+CREATE INDEX idx_appraisals_performance_quartile ON appraisals (performance_quartile_id);
+CREATE INDEX idx_employee_qualifications_user ON employee_qualifications (user_id);

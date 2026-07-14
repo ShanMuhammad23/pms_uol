@@ -28,14 +28,19 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   }, []);
 
   const width = collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
+  const resolvedWidth = hydrated ? width : SIDEBAR_EXPANDED_WIDTH;
 
   return (
     <SidebarContext.Provider value={{ collapsed, toggle, width }}>
-      <div className="flex min-h-screen bg-background text-foreground transition-colors">
+      <div className="flex min-h-screen w-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground transition-colors">
         <Sidebar />
         <main
-          className="min-h-screen flex-1 bg-background p-4 text-foreground transition-[margin] duration-300 ease-in-out"
-          style={{ marginLeft: hydrated ? width : SIDEBAR_EXPANDED_WIDTH }}
+          className="min-h-screen min-w-0 overflow-x-hidden bg-background p-4 text-foreground transition-[margin,width] duration-300 ease-in-out"
+          style={{
+            marginLeft: resolvedWidth,
+            width: `calc(100vw - ${resolvedWidth}px)`,
+            maxWidth: `calc(100vw - ${resolvedWidth}px)`,
+          }}
         >
           {children}
         </main>

@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:migrate:form-sections": "node scripts/migrate-form-sections.mjs",
     "db:migrate:form-engine": "node scripts/migrate-form-engine.mjs",
-    "db:migrate:sub-category-increment-matrices": "node scripts/migrate-sub-category-increment-matrices.mjs"
+    "db:migrate:sub-category-increment-matrices": "node scripts/migrate-sub-category-increment-matrices.mjs",
+    "db:migrate:excel-sheet-columns": "node scripts/migrate-excel-sheet-columns.mjs"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",
