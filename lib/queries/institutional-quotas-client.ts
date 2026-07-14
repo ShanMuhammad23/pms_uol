@@ -1,4 +1,5 @@
 import type {
+  InstitutionalQuotaChartRow,
   InstitutionalQuotaRecord,
   UpsertInstitutionalQuotasInput,
 } from "@/types/institutional-quotas";
@@ -20,6 +21,19 @@ export async function fetchInstitutionalQuotas(
     `/api/admin/institutional-quotas?financialYearId=${financialYearId}`,
   );
   return parseResponse<InstitutionalQuotaRecord[]>(response);
+}
+
+/** DB-backed chart rows for Performance Rating Curve */
+export async function fetchInstitutionalQuotaChartRows(
+  financialYearId?: number | null,
+): Promise<InstitutionalQuotaChartRow[]> {
+  const url =
+    financialYearId != null
+      ? `/api/institutional-quotas?financialYearId=${financialYearId}`
+      : "/api/institutional-quotas";
+
+  const response = await fetch(url);
+  return parseResponse<InstitutionalQuotaChartRow[]>(response);
 }
 
 export async function upsertInstitutionalQuotas(

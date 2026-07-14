@@ -24,4 +24,5 @@ export interface UpsertInstitutionalQuotasInput {
 export type InstitutionalQuotaChartRow = {
   rating: string;
   quota: number;
+  sortOrder?: number;
 };

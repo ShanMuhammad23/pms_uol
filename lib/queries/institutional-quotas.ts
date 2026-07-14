@@ -1,8 +1,13 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import type { PerformanceRating } from "@/types/forms";
+import {
+  PERFORMANCE_RATINGS,
+  RATING_LABELS,
+  type PerformanceRating,
+} from "@/types/forms";
 import type {
+  InstitutionalQuotaChartRow,
   InstitutionalQuotaRecord,
   UpsertInstitutionalQuotasInput,
 } from "@/types/institutional-quotas";
@@ -64,6 +69,47 @@ export async function listInstitutionalQuotas(
   );
 
   return result.rows.map(mapRow);
+}
+
+/**
+ * Quotas for the Performance Rating Curve — always returns one row per rating
+ * from DB for the given financial year (missing ratings = 0).
+ */
+export async function listInstitutionalQuotaChartRows(
+  financialYearId: number,
+): Promise<InstitutionalQuotaChartRow[]> {
+  const quotas = await listInstitutionalQuotas(financialYearId);
+  const byRating = new Map(quotas.map((row) => [row.rating, row]));
+
+  return PERFORMANCE_RATINGS.map((rating, index) => {
+    const stored = byRating.get(rating);
+    return {
+      rating: RATING_LABELS[rating],
+      quota: stored?.quotaPercent ?? 0,
+      sortOrder: stored?.sortOrder ?? index,
+    };
+  });
+}
+
+export async function listInstitutionalQuotaChartRowsForActiveYear(): Promise<{
+  financialYearId: number | null;
+  rows: InstitutionalQuotaChartRow[];
+}> {
+  const yearResult = await db.query<{ id: number }>(
+    `SELECT id
+     FROM financial_years
+     WHERE is_active = TRUE
+     ORDER BY year DESC
+     LIMIT 1`,
+  );
+
+  const activeId = yearResult.rows[0]?.id ?? null;
+  if (!activeId) {
+    return { financialYearId: null, rows: [] };
+  }
+
+  const rows = await listInstitutionalQuotaChartRows(activeId);
+  return { financialYearId: activeId, rows };
 }
 
 export async function upsertInstitutionalQuotas(

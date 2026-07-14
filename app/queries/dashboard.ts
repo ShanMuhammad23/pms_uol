@@ -11,10 +11,9 @@ import {
 import {
   useActiveFinancialYearId,
   useFinancialYearsQuery,
-  useInstitutionalQuotasQuery,
+  useInstitutionalQuotaChartQuery,
   useMatrixForDistribution,
   usePerformanceMatrixQuery,
-  useQuotaChartRows,
 } from "@/app/queries/performance";
 import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
 
@@ -27,9 +26,8 @@ export function useDashboardPage() {
   const { data: performanceMatrix, isLoading: performanceMatrixLoading } =
     usePerformanceMatrixQuery(activeFinancialYearId);
 
-  const { data: institutionalQuotas } =
-    useInstitutionalQuotasQuery(activeFinancialYearId);
-  const institutionalQuotaRows = useQuotaChartRows(institutionalQuotas);
+  const { data: institutionalQuotaRows } =
+    useInstitutionalQuotaChartQuery(activeFinancialYearId);
 
   const { data: staffCategories = [], isLoading: staffCategoriesLoading } =
     useStaffCategoriesWithSubCategoriesQuery();

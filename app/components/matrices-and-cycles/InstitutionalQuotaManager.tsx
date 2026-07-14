@@ -105,6 +105,7 @@ export default function InstitutionalQuotaManager() {
         saved,
       );
       queryClient.invalidateQueries({ queryKey: ["institutional-quotas"] });
+      queryClient.invalidateQueries({ queryKey: ["institutional-quota-chart"] });
     },
     onError: (mutationError: Error) => {
       setFormMessage({ tone: "error", text: mutationError.message });

@@ -1,4 +1,3 @@
-import { INSTITUTIONAL_QUOTA } from "@/app/helpers/dashboard-chart-config";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { RATING_LABELS } from "@/types/forms";
 
@@ -28,20 +27,29 @@ export function getSubmissionDisplayRating(submission: FormSubmissionListItem): 
   return submission.performanceLevelName ?? "—";
 }
 
+/**
+ * @param quotas Chart quota series from DB (`/api/institutional-quotas`).
+ *               When omitted/undefined (still loading), returns empty series.
+ */
 export function buildCalibrationData(
   submissions: FormSubmissionListItem[],
-  quotas: Array<{ rating: string; quota: number }> = INSTITUTIONAL_QUOTA,
+  quotas?: Array<{ rating: string; quota: number }> | null,
 ) {
-  const quotaRows = quotas.length > 0 ? quotas : INSTITUTIONAL_QUOTA;
+  if (!quotas || quotas.length === 0) {
+    return [];
+  }
+
   const total = submissions.length;
-  const counts = new Map(quotaRows.map((row) => [row.rating, 0]));
+  const counts = new Map(quotas.map((row) => [row.rating, 0]));
 
   submissions.forEach((submission) => {
     const bucket = normalizeRating(getSubmissionDisplayRating(submission));
-    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    if (counts.has(bucket)) {
+      counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    }
   });
 
-  return quotaRows.map((row) => ({
+  return quotas.map((row) => ({
     rating: row.rating,
     quota: row.quota,
     actual: total === 0 ? 0 : Math.round(((counts.get(row.rating) ?? 0) / total) * 100),
