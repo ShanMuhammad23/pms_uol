@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 interface ChartCardProps {
   title: string;
-  subtitle?: string;
+
   children: ReactNode;
   delay: number;
   className?: string;
@@ -17,7 +17,7 @@ interface ChartCardProps {
 
 export function ChartCard({
   title,
-  subtitle,
+
   children,
   delay,
   className,
@@ -39,9 +39,7 @@ export function ChartCard({
           <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-white">
             {title}
           </h3>
-          {subtitle ? (
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">{subtitle}</p>
-          ) : null}
+          
         </div>
         {action}
       </div>

@@ -39,8 +39,7 @@ export function DashboardPrimaryCharts({
       className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12"
     >
       <ChartCard
-        title="Rating Calibration Curve"
-        subtitle="Institutional Quota vs. Actual Distribution — Identifies Grade Inflation"
+        title="Performance Rating Curve"
         delay={0.35}
         className="lg:col-span-6"
       >
@@ -90,8 +89,7 @@ export function DashboardPrimaryCharts({
       </ChartCard>
 
       <ChartCard
-        title="Rating × Quartile Matrix"
-        subtitle="Employee headcount by performance level and quartile (sorted by configured order)"
+        title="Performance Rating Quartile Matrix"
         delay={0.36}
         className="lg:col-span-6"
       >
