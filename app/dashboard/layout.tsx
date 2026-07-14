@@ -1,14 +1,8 @@
-import React from 'react'
-import Sidebar from '../components/layout/Sidebar'
-const layout = ({ children }: { children: React.ReactNode }) => {
-  return (
-    <div className='flex min-h-screen bg-background text-foreground transition-colors'>
-        <Sidebar />
-        <main className='ml-[264px] flex-1 min-h-screen bg-background text-foreground p-4 transition-colors'>
-            {children}
-        </main>
-    </div>
-  )
-}
+import React from "react";
+import DashboardShell from "@/app/components/layout/DashboardShell";
 
-export default layout
+const layout = ({ children }: { children: React.ReactNode }) => {
+  return <DashboardShell>{children}</DashboardShell>;
+};
+
+export default layout;
