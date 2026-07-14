@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  Gavel,
   Scale,
   User,
 } from "lucide-react";
@@ -19,7 +20,6 @@ export const FORM_STATE_CONFIG: Record<
     phase: number;
   }
 > = {
-
   PENDING_SELF_ASSESSMENT: {
     label: "Self Assessment",
     color: "text-slate-700",
@@ -44,7 +44,6 @@ export const FORM_STATE_CONFIG: Record<
     icon: Scale,
     phase: 2,
   },
-
   APPROVED: {
     label: "Approved",
     color: "text-emerald-700",
@@ -52,7 +51,7 @@ export const FORM_STATE_CONFIG: Record<
     border: "border-emerald-200",
     icon: CheckCircle2,
     phase: 3,
-  }
+  },
 };
 
 export const APPRAISAL_STATE_CONFIG: Record<
@@ -62,6 +61,13 @@ export const APPRAISAL_STATE_CONFIG: Record<
   PENDING_SELF_ASSESSMENT: FORM_STATE_CONFIG.PENDING_SELF_ASSESSMENT,
   PENDING_HEAD_REVIEW: FORM_STATE_CONFIG.PENDING_HEAD_REVIEW,
   PENDING_HR_CALIBRATION: FORM_STATE_CONFIG.PENDING_HR_CALIBRATION,
+  PENDING_BOARD_APPROVAL: {
+    label: "Board Approval",
+    color: "text-violet-700",
+    bg: "bg-violet-50",
+    border: "border-violet-200",
+    icon: Gavel,
+  },
   APPROVED: FORM_STATE_CONFIG.APPROVED,
   COMPLETED: {
     label: "Completed",
