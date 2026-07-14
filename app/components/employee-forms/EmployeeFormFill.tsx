@@ -8,7 +8,13 @@ import {
   saveEmployeeForm,
 } from "@/lib/queries/employee-forms-client";
 import type { EmployeeFormAnswerInput } from "@/types/employee-forms";
-import { CATEGORY_LABELS, FIELD_TYPE_LABELS, flattenAllQuestions, SUB_CATEGORY_LABELS } from "@/types/forms";
+import {
+  buildRootLayoutOrderFromRecord,
+  CATEGORY_LABELS,
+  flattenAllQuestions,
+  SUB_CATEGORY_LABELS,
+  type QuestionRecord,
+} from "@/types/forms";
 
 interface EmployeeFormFillProps {
   templateId: number;
@@ -22,6 +28,12 @@ type AnswerState = Record<
     pointsEarned: string;
   }
 >;
+
+type FormRow = {
+  sr: number;
+  section: string;
+  question: QuestionRecord;
+};
 
 function buildInitialAnswers(
   questions: Array<{ id: number }>,
@@ -67,9 +79,7 @@ function toPayload(answers: AnswerState): EmployeeFormAnswerInput[] {
         ? Number(value.selectedOptionId)
         : null,
       pointsEarned:
-        value.pointsEarned !== ""
-          ? Number(value.pointsEarned)
-          : undefined,
+        value.pointsEarned !== "" ? Number(value.pointsEarned) : undefined,
     }))
     .filter(
       (answer) =>
@@ -107,6 +117,48 @@ function isScoredQuestion(question: {
   return question.totalMarks > 0 && question.inputType === "NUMBER";
 }
 
+function buildFormRows(
+  sections: Parameters<typeof buildRootLayoutOrderFromRecord>[0],
+  rootQuestions: QuestionRecord[],
+  allQuestions: QuestionRecord[],
+): FormRow[] {
+  const rootLayout = buildRootLayoutOrderFromRecord(sections, rootQuestions);
+  const rows: FormRow[] = [];
+  let sr = 0;
+
+  const pushRow = (question: QuestionRecord, section: string) => {
+    sr += 1;
+    rows.push({ sr, section, question });
+  };
+
+  if (rootLayout.length === 0) {
+    allQuestions.forEach((question) => pushRow(question, "—"));
+    return rows;
+  }
+
+  rootLayout.forEach((item) => {
+    if (item.kind === "section") {
+      const section = sections.find((current) => current.id === item.id);
+      if (!section) return;
+
+      section.subsections.forEach((subsection) => {
+        const label = `${section.title} › ${subsection.title}`;
+        subsection.questions.forEach((question) => pushRow(question, label));
+      });
+
+      section.questions.forEach((question) => pushRow(question, section.title));
+      return;
+    }
+
+    const question = rootQuestions.find((current) => current.id === item.id);
+    if (question) {
+      pushRow(question, "—");
+    }
+  });
+
+  return rows;
+}
+
 export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) {
   const queryClient = useQueryClient();
   const [answers, setAnswers] = useState<AnswerState>({});
@@ -129,7 +181,6 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   }, [data]);
 
   const isReadOnly = data?.status === "SUBMITTED";
-
   const maxRawScore = data?.maxRawScore ?? 0;
 
   const liveRawScore = useMemo(() => {
@@ -150,7 +201,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
       }, 0);
   }, [answers, data]);
 
-  const displayedRawScore = isReadOnly ? data?.rawScore ?? 0 : liveRawScore;
+  const displayedRawScore = isReadOnly ? (data?.rawScore ?? 0) : liveRawScore;
 
   const saveMutation = useMutation({
     mutationFn: (submit: boolean) =>
@@ -161,7 +212,9 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     onSuccess: (result, submit) => {
       setFormError(null);
       setSuccessMessage(
-        submit ? `Form submitted. Raw score: ${result.rawScore} / ${result.maxRawScore}.` : "Draft saved successfully.",
+        submit
+          ? `Form submitted. Raw score: ${result.rawScore} / ${result.maxRawScore}.`
+          : "Draft saved successfully.",
       );
       queryClient.setQueryData(["my-form", templateId], result);
       queryClient.invalidateQueries({ queryKey: ["my-forms"] });
@@ -231,7 +284,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+      <div className="rounded-xl border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
         Loading form...
       </div>
     );
@@ -246,201 +299,254 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   }
 
   const { template } = data;
-  const allQuestions = flattenAllQuestions(template);
+  const rows = buildFormRows(
+    template.sections,
+    template.questions,
+    flattenAllQuestions(template),
+  );
+
+  const metaParts = [
+    template.title,
+    `${CATEGORY_LABELS[template.targetCategory]} / ${SUB_CATEGORY_LABELS[template.targetSubCategory]}`,
+    `Score ${displayedRawScore}/${maxRawScore}`,
+    data.status === "SUBMITTED"
+      ? `Submitted${data.submittedAt ? ` ${new Date(data.submittedAt).toLocaleString()}` : ""}`
+      : data.status === "DRAFT"
+        ? "Draft"
+        : "Not started",
+  ].filter(Boolean);
+
+  const inputClassName =
+    "h-9 w-full rounded-md border border-slate-300 bg-background px-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15";
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-300/80 bg-surface p-6 dark:border-white/15">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-text-primary">
-              {template.title}
-            </h2>
-            {template.description ? (
-              <p className="mt-1 text-sm text-foreground/70">
-                {template.description}
-              </p>
-            ) : null}
-            <p className="mt-2 text-xs text-foreground/60">
-              {CATEGORY_LABELS[template.targetCategory]} /{" "}
-              {SUB_CATEGORY_LABELS[template.targetSubCategory]}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-300/80 px-4 py-3 text-right dark:border-white/15">
-            <p className="text-xs text-foreground/70">Raw score</p>
-            <p className="text-lg font-semibold text-text-primary">
-              {displayedRawScore} / {maxRawScore}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {formError ? (
-        <p className="text-sm text-red-600">{formError}</p>
-      ) : null}
+    <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden">
+      {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
       {successMessage ? (
         <p className="text-sm text-emerald-600">{successMessage}</p>
       ) : null}
 
-      <div className="space-y-4">
-        {allQuestions.map((question, index) => {
-          const answer = answers[question.id] ?? {
-            textResponse: "",
-            selectedOptionId: "",
-            pointsEarned: "",
-          };
+      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
+        <div className="border-b border-slate-200 px-4 py-2.5 dark:border-white/10">
+          <p
+            className="truncate text-xs leading-5 text-slate-600 dark:text-slate-300"
+            title={metaParts.join(" · ")}
+          >
+            {metaParts.join(" · ")}
+          </p>
+        </div>
 
-          return (
-            <div
-              key={question.id}
-              className="rounded-xl border border-slate-300/80 bg-surface p-5 dark:border-white/15"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-primary">
-                  Q{index + 1}
-                </span>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                  {FIELD_TYPE_LABELS[question.inputType]}
-                </span>
-                {question.isRequired ? (
-                  <span className="text-[11px] text-red-500">Required</span>
-                ) : null}
-                {question.totalMarks > 0 ? (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-white/10 dark:text-slate-300">
-                    Max {question.totalMarks} marks
-                  </span>
-                ) : null}
-              </div>
+        <div className="w-full max-w-full overflow-x-auto">
+          <table className="w-full min-w-[820px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
+                <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Sr Number
+                </th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Section
+                </th>
+                <th className="min-w-[280px] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Questions
+                </th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Weight
+                </th>
+                <th className="min-w-[140px] whitespace-nowrap px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Score Earned
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+              {rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400"
+                  >
+                    No questions were found for this form.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => {
+                  const { question } = row;
+                  const answer = answers[question.id] ?? {
+                    textResponse: "",
+                    selectedOptionId: "",
+                    pointsEarned: "",
+                  };
+                  const scored = isScoredQuestion(question);
 
-              <p className="mt-3 whitespace-pre-wrap text-sm font-medium text-text-primary">
-                {question.questionText}
-              </p>
-
-              <div className="mt-4">
-                {question.inputType === "TEXT" ? (
-                  <input
-                    type="text"
-                    value={answer.textResponse}
-                    disabled={isReadOnly}
-                    onChange={(event) =>
-                      updateAnswer(
-                        question.id,
-                        "textResponse",
-                        event.target.value,
-                      )
-                    }
-                    className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                  />
-                ) : null}
-
-                {question.inputType === "TEXTAREA" ? (
-                  <textarea
-                    value={answer.textResponse}
-                    disabled={isReadOnly}
-                    rows={5}
-                    onChange={(event) =>
-                      updateAnswer(
-                        question.id,
-                        "textResponse",
-                        event.target.value,
-                      )
-                    }
-                    className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                  />
-                ) : null}
-
-                {isScoredQuestion(question) ? (
-                  <div className="max-w-xs">
-                    <label className="mb-1.5 block text-xs font-medium text-foreground/70">
-                      Your score (max {question.totalMarks})
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={question.totalMarks}
-                      step="0.5"
-                      value={answer.pointsEarned}
-                      disabled={isReadOnly}
-                      onChange={(event) =>
-                        updateScore(
-                          question.id,
-                          question.totalMarks,
-                          event.target.value,
-                        )
-                      }
-                      onBlur={(event) =>
-                        updateScore(
-                          question.id,
-                          question.totalMarks,
-                          event.target.value,
-                        )
-                      }
-                      className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                      placeholder={`0 - ${question.totalMarks}`}
-                    />
-                  </div>
-                ) : null}
-
-                {["RADIO", "SELECT"].includes(question.inputType) ? (
-                  <div className="space-y-2">
-                    {question.options.map((option) => (
-                      <label
-                        key={option.id}
-                        className="flex items-center gap-2 text-sm text-text-primary"
-                      >
-                        <input
-                          type="radio"
-                          name={`question-${question.id}`}
-                          value={option.id}
-                          checked={answer.selectedOptionId === String(option.id)}
-                          disabled={isReadOnly}
-                          onChange={() =>
-                            updateAnswer(
-                              question.id,
-                              "selectedOptionId",
-                              String(option.id),
-                            )
-                          }
-                        />
-                        <span>{option.optionLabel}</span>
-                        <span className="text-xs text-foreground/60">
-                          ({option.pointsAssigned} pts)
+                  return (
+                    <tr key={question.id} className="align-top">
+                      <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-500 dark:text-slate-400">
+                        {row.sr}
+                      </td>
+                      <td className="max-w-[220px] px-3 py-2.5 text-slate-700 dark:text-slate-300">
+                        <span className="line-clamp-2" title={row.section}>
+                          {row.section}
                         </span>
-                      </label>
-                    ))}
-                  </div>
-                ) : null}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-900 dark:text-slate-100">
+                        <p className="leading-snug">{question.questionText}</p>
 
-                {question.inputType === "CHECKBOX" ? (
-                  <div className="space-y-2">
-                    {question.options.map((option) => (
-                      <label
-                        key={option.id}
-                        className="flex items-center gap-2 text-sm text-text-primary"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={answer.selectedOptionId === String(option.id)}
-                          disabled={isReadOnly}
-                          onChange={() =>
-                            updateAnswer(
-                              question.id,
-                              "selectedOptionId",
-                              answer.selectedOptionId === String(option.id)
-                                ? ""
-                                : String(option.id),
-                            )
-                          }
-                        />
-                        <span>{option.optionLabel}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
+                        {question.inputType === "TEXT" ? (
+                          <input
+                            type="text"
+                            value={answer.textResponse}
+                            disabled={isReadOnly}
+                            onChange={(event) =>
+                              updateAnswer(
+                                question.id,
+                                "textResponse",
+                                event.target.value,
+                              )
+                            }
+                            className={`${inputClassName} mt-2`}
+                            placeholder="Your response"
+                          />
+                        ) : null}
+
+                        {question.inputType === "TEXTAREA" ? (
+                          <textarea
+                            value={answer.textResponse}
+                            disabled={isReadOnly}
+                            rows={3}
+                            onChange={(event) =>
+                              updateAnswer(
+                                question.id,
+                                "textResponse",
+                                event.target.value,
+                              )
+                            }
+                            className="mt-2 w-full rounded-md border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
+                            placeholder="Your response"
+                          />
+                        ) : null}
+
+                        {["RADIO", "SELECT"].includes(question.inputType) ? (
+                          <div className="mt-2 space-y-1.5">
+                            {question.options.map((option) => (
+                              <label
+                                key={option.id}
+                                className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
+                              >
+                                <input
+                                  type="radio"
+                                  name={`question-${question.id}`}
+                                  value={option.id}
+                                  checked={
+                                    answer.selectedOptionId === String(option.id)
+                                  }
+                                  disabled={isReadOnly}
+                                  onChange={() =>
+                                    updateAnswer(
+                                      question.id,
+                                      "selectedOptionId",
+                                      String(option.id),
+                                    )
+                                  }
+                                />
+                                <span>
+                                  {option.optionLabel}
+                                  {option.pointsAssigned > 0
+                                    ? ` (${option.pointsAssigned} pts)`
+                                    : ""}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {question.inputType === "CHECKBOX" ? (
+                          <div className="mt-2 space-y-1.5">
+                            {question.options.map((option) => (
+                              <label
+                                key={option.id}
+                                className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    answer.selectedOptionId === String(option.id)
+                                  }
+                                  disabled={isReadOnly}
+                                  onChange={() =>
+                                    updateAnswer(
+                                      question.id,
+                                      "selectedOptionId",
+                                      answer.selectedOptionId === String(option.id)
+                                        ? ""
+                                        : String(option.id),
+                                    )
+                                  }
+                                />
+                                <span>{option.optionLabel}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                        {question.totalMarks}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {scored ? (
+                          <input
+                            type="number"
+                            min={0}
+                            max={question.totalMarks}
+                            step="0.5"
+                            value={answer.pointsEarned}
+                            disabled={isReadOnly}
+                            onChange={(event) =>
+                              updateScore(
+                                question.id,
+                                question.totalMarks,
+                                event.target.value,
+                              )
+                            }
+                            onBlur={(event) =>
+                              updateScore(
+                                question.id,
+                                question.totalMarks,
+                                event.target.value,
+                              )
+                            }
+                            className={`${inputClassName} ml-auto max-w-[120px] text-right tabular-nums`}
+                            placeholder={`0–${question.totalMarks}`}
+                          />
+                        ) : (
+                          <span className="tabular-nums text-slate-400">
+                            {answer.pointsEarned || "—"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            {rows.length > 0 ? (
+              <tfoot>
+                <tr className="border-t border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
+                  <td
+                    colSpan={3}
+                    className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                  >
+                    Total
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-semibold text-slate-900 dark:text-white">
+                    {maxRawScore}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-semibold text-slate-900 dark:text-white">
+                    {displayedRawScore}
+                  </td>
+                </tr>
+              </tfoot>
+            ) : null}
+          </table>
+        </div>
       </div>
 
       {!isReadOnly ? (
@@ -464,13 +570,13 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
           </Button>
         </div>
       ) : (
-        <div className="rounded-xl border border-emerald-300/60 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-          This form was submitted
+        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+          Submitted
           {data.submittedAt
             ? ` on ${new Date(data.submittedAt).toLocaleString()}`
             : ""}
-          . Raw score: {data.rawScore} / {data.maxRawScore}. It is now read-only.
-        </div>
+          · read-only · score {data.rawScore}/{data.maxRawScore}
+        </p>
       )}
     </div>
   );

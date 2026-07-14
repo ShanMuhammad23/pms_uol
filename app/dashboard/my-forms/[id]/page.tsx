@@ -19,20 +19,14 @@ export default async function MyFormDetailPage({ params }: MyFormDetailPageProps
   }
 
   return (
-    <div className="space-y-6 text-text-primary">
-      <div>
-        <Link
-          href="/dashboard/my-forms"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-foreground/70 hover:text-text-primary"
-        >
-          <ArrowLeft className="size-4" />
-          Back to My Forms
-        </Link>
-        <h1 className="text-2xl font-bold">Complete Form</h1>
-        <p className="mt-1 text-sm text-foreground/70">
-          Fill in your responses and submit when ready.
-        </p>
-      </div>
+    <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden text-text-primary">
+      <Link
+        href="/dashboard/my-forms"
+        className="inline-flex items-center gap-1 text-xs text-foreground/70 hover:text-text-primary"
+      >
+        <ArrowLeft className="size-3.5" />
+        Back
+      </Link>
 
       <EmployeeFormFill templateId={templateId} />
     </div>
