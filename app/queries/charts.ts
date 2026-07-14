@@ -9,7 +9,11 @@ import {
   buildSubmissionCategoryCounts,
   buildSubmissionCompletionByCategory,
 } from "@/app/helpers/dashboard-submission-charts";
-import { countWorkflowStage } from "@/app/helpers/dashboard-workflow-stats";
+import {
+  buildHrAlignmentStats,
+  buildManagerReviewStats,
+  buildSelfAssessmentStats,
+} from "@/app/helpers/dashboard-workflow-stats";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
@@ -58,35 +62,17 @@ export function useDashboardChartMetrics({
   );
 
   const selfAssessmentStats = useMemo(
-    () =>
-      countWorkflowStage(filteredSubmissions, "PENDING_SELF_ASSESSMENT", [
-        "PENDING_HEAD_REVIEW",
-        "PENDING_HR_CALIBRATION",
-        "PENDING_BOARD_APPROVAL",
-        "APPROVED",
-        "COMPLETED",
-      ]),
+    () => buildSelfAssessmentStats(filteredSubmissions),
     [filteredSubmissions],
   );
 
   const managerReviewStats = useMemo(
-    () =>
-      countWorkflowStage(filteredSubmissions, "PENDING_HEAD_REVIEW", [
-        "PENDING_HR_CALIBRATION",
-        "PENDING_BOARD_APPROVAL",
-        "APPROVED",
-        "COMPLETED",
-      ]),
+    () => buildManagerReviewStats(filteredSubmissions),
     [filteredSubmissions],
   );
 
   const hrAlignmentStats = useMemo(
-    () =>
-      countWorkflowStage(filteredSubmissions, "PENDING_HR_CALIBRATION", [
-        "PENDING_BOARD_APPROVAL",
-        "APPROVED",
-        "COMPLETED",
-      ]),
+    () => buildHrAlignmentStats(filteredSubmissions),
     [filteredSubmissions],
   );
 

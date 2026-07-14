@@ -6,11 +6,7 @@ import { EligibilityStatCard } from "@/app/components/dashboard/EligibilityStatC
 import { StatCard } from "@/app/components/dashboard/StatCard";
 import { containerVariants } from "@/app/helpers/dashboard-animations";
 import type { FormState } from "@/app/helpers/dashboard-types";
-
-interface WorkflowStageStats {
-  awaiting: number;
-  completed: number;
-}
+import type { WorkflowStageStats } from "@/app/helpers/dashboard-workflow-stats";
 
 interface DashboardWorkflowStatsRowProps {
   eligibilityData: Array<{ name: string; value: number; color: string }>;
@@ -41,6 +37,7 @@ export function DashboardWorkflowStatsRow({
         title="Self Assessment"
         awaiting={selfAssessmentStats.awaiting}
         completed={selfAssessmentStats.completed}
+        percentageLabel={selfAssessmentStats.percentageLabel}
         awaitingtitle="Eligible"
         completedtitle="Submitted"
         tone="slate"
@@ -53,8 +50,9 @@ export function DashboardWorkflowStatsRow({
         title="Manager Review"
         awaiting={managerReviewStats.awaiting}
         completed={managerReviewStats.completed}
+        percentageLabel={managerReviewStats.percentageLabel}
         awaitingtitle="Awaiting Review"
-        completedtitle="Reviewed"
+        completedtitle="Submitted"
         tone="amber"
         icon={AlertTriangle}
         delay={0.2}
@@ -65,8 +63,9 @@ export function DashboardWorkflowStatsRow({
         title="HR Alignment"
         awaiting={hrAlignmentStats.awaiting}
         completed={hrAlignmentStats.completed}
+        percentageLabel={hrAlignmentStats.percentageLabel}
         awaitingtitle="Awaiting Alignment"
-        completedtitle="Approved"
+        completedtitle="Submitted"
         tone="orange"
         icon={Scale}
         delay={0.3}
