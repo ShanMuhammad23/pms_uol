@@ -11,7 +11,8 @@
     "db:migrate:form-engine": "node scripts/migrate-form-engine.mjs",
     "db:migrate:sub-category-increment-matrices": "node scripts/migrate-sub-category-increment-matrices.mjs",
     "db:migrate:excel-sheet-columns": "node scripts/migrate-excel-sheet-columns.mjs",
-    "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs"
+    "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs",
+    "db:seed:employees": "node scripts/seed-employees-from-excel.mjs"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",
@@ -38,6 +39,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "xlsx": "^0.18.5"
   }
 }
