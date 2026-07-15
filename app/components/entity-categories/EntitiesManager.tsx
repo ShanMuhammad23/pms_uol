@@ -3,7 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Building2, Pencil, Plus, Table2, Trash2, X } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { EntityListFilterBar } from "@/app/components/entity-categories/EntityListFilterBar";
+import { filterEntityRecords } from "@/app/helpers/dashboard-entity-filters";
 import { fetchEntityCategories } from "@/lib/queries/entity-categories-client";
 import {
   createEntity,
@@ -12,6 +14,7 @@ import {
   updateEntity,
 } from "@/lib/queries/entities-client";
 import type { EntityRecord } from "@/types/entities";
+import type { EntityCategoryCode } from "@/types/entity-categories";
 
 type MessageTone = "success" | "error";
 
@@ -40,6 +43,10 @@ export default function EntitiesManager() {
   const [editingEntity, setEditingEntity] = useState<EntityRecord | null>(null);
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
   const [activeTab, setActiveTab] = useState<EntitySectionTab>("list");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategoryCode, setSelectedCategoryCode] = useState<
+    EntityCategoryCode | "ALL"
+  >("ALL");
 
   const { data: categories, isLoading: categoriesLoading } = useQuery({
     queryKey: ["entity-categories"],
@@ -124,6 +131,19 @@ export default function EntitiesManager() {
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const isLoading = categoriesLoading || entitiesLoading;
 
+  const filteredEntities = useMemo(
+    () => filterEntityRecords(entities ?? [], searchQuery, selectedCategoryCode),
+    [entities, searchQuery, selectedCategoryCode],
+  );
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 || selectedCategoryCode !== "ALL";
+
+  const clearFilters = useCallback(() => {
+    setSearchQuery("");
+    setSelectedCategoryCode("ALL");
+  }, []);
+
   const parentOptions = useMemo(() => {
     if (!entities) {
       return [];
@@ -202,10 +222,25 @@ export default function EntitiesManager() {
     deleteMutation.mutate(entity.id);
   };
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     resetForm();
     setFormMessage(null);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!editingEntity) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleCancelEdit();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingEntity, handleCancelEdit]);
 
   const hasCategories = (categories?.length ?? 0) > 0;
 
@@ -217,48 +252,8 @@ export default function EntitiesManager() {
     }
   };
 
-  const renderFormCard = () => (
-    <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-text-primary">
-            {editingEntity ? "Edit Entity" : "Add Entity"}
-          </h2>
-          <p className="mt-1 text-sm text-foreground/70">
-            Create organizational entities linked to a category and optional
-            parent entity.
-          </p>
-        </div>
-
-        {editingEntity ? (
-          <button
-            type="button"
-            onClick={handleCancelEdit}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-          >
-            <X className="size-3.5" />
-            Cancel
-          </button>
-        ) : null}
-      </div>
-
-      <AnimatePresence>
-        {formMessage ? (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
-              formMessage.tone === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
-                : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
-            }`}
-          >
-            {formMessage.text}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-
+  const renderEntityFormFields = () => (
+    <>
       {!hasCategories && !categoriesLoading ? (
         <p className="mt-4 text-sm text-foreground/70">
           Add at least one entity category before creating entities.
@@ -285,7 +280,7 @@ export default function EntitiesManager() {
               maxLength={150}
               required
               placeholder="e.g. Faculty of Engineering"
-              className="w-full max-w-md rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+              className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
             />
           </div>
 
@@ -306,7 +301,7 @@ export default function EntitiesManager() {
                 }))
               }
               required
-              className="w-full max-w-xs rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+              className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
             >
               <option value="" disabled>
                 Select category
@@ -335,7 +330,7 @@ export default function EntitiesManager() {
                   parentEntityId: event.target.value,
                 }))
               }
-              className="w-full max-w-md rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+              className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
             >
               <option value="">None (top-level)</option>
               {parentOptions.map((entity) => (
@@ -365,7 +360,103 @@ export default function EntitiesManager() {
           </button>
         </form>
       )}
+    </>
+  );
+
+  const renderFormMessage = () => (
+    <AnimatePresence>
+      {formMessage ? (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
+            formMessage.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
+              : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
+          }`}
+        >
+          {formMessage.text}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+
+  const renderAddFormCard = () => (
+    <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
+      <div>
+        <h2 className="text-lg font-semibold text-text-primary">Add Entity</h2>
+        <p className="mt-1 text-sm text-foreground/70">
+          Create organizational entities linked to a category and optional parent
+          entity.
+        </p>
+      </div>
+
+      {renderFormMessage()}
+      {renderEntityFormFields()}
     </div>
+  );
+
+  const renderEditModal = () => (
+    <AnimatePresence>
+      {editingEntity ? (
+        <motion.div
+          key="entity-edit-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="entity-edit-modal-title"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-100 flex items-center justify-center p-4"
+        >
+          <motion.button
+            type="button"
+            aria-label="Close edit entity dialog"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={handleCancelEdit}
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+          />
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+            className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2
+                  id="entity-edit-modal-title"
+                  className="text-lg font-semibold text-text-primary"
+                >
+                  Edit Entity
+                </h2>
+                <p className="mt-1 text-sm text-foreground/70">
+                  Update this entity&apos;s name, category, or parent.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                aria-label="Close"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-foreground/70 hover:bg-primary/10 hover:text-text-primary dark:border-white/15"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {renderFormMessage()}
+            {renderEntityFormFields()}
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 
   return (
@@ -401,7 +492,8 @@ export default function EntitiesManager() {
         </nav>
       </div>
 
-      {activeTab === "add" || editingEntity ? renderFormCard() : null}
+      {activeTab === "add" ? renderAddFormCard() : null}
+      {renderEditModal()}
 
       {isLoading ? (
         <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
@@ -428,6 +520,35 @@ export default function EntitiesManager() {
       ) : null}
 
       {!isLoading && !error && entities && entities.length > 0 ? (
+        <div className="space-y-4">
+          <EntityListFilterBar
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            selectedCategoryCode={selectedCategoryCode}
+            onCategoryCodeChange={setSelectedCategoryCode}
+            categories={categories ?? []}
+            categoriesLoading={categoriesLoading}
+            filteredCount={filteredEntities.length}
+            totalCount={entities.length}
+            onClearFilters={clearFilters}
+            hasActiveFilters={hasActiveFilters}
+          />
+
+          {filteredEntities.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
+              <Building2 className="mx-auto size-8 text-foreground/50" />
+              <p className="mt-3 text-sm font-medium text-text-primary">
+                No entities match the current filters
+              </p>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="mt-3 text-sm font-medium text-primary hover:underline"
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
           <table className="min-w-full text-sm">
             <thead className="bg-primary/5">
@@ -450,7 +571,7 @@ export default function EntitiesManager() {
               </tr>
             </thead>
             <tbody>
-              {entities.map((entity) => (
+              {filteredEntities.map((entity) => (
                 <tr
                   key={entity.id}
                   className="border-t border-slate-300/80 dark:border-white/15"
@@ -492,6 +613,8 @@ export default function EntitiesManager() {
               ))}
             </tbody>
           </table>
+        </div>
+          )}
         </div>
       ) : null}
     </div>

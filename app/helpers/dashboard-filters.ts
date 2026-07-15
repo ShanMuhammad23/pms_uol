@@ -1,5 +1,8 @@
 import type { FormState } from "@/app/helpers/dashboard-types";
-import { getEffectiveEntityFilterId } from "@/app/helpers/dashboard-entity-filters";
+import {
+  getEffectiveEntityFilterId,
+  getEntityDescendantIds,
+} from "@/app/helpers/dashboard-entity-filters";
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { APPRAISAL_STATUSES, type AppraisalStatus } from "@/types/forms";
@@ -16,35 +19,6 @@ export type SubmissionFilterState = {
   staffCategories: StaffCategoryWithSubCategories[];
   entities: EntityRecord[];
 };
-
-export function getEntityDescendantIds(
-  rootId: number,
-  entities: EntityRecord[],
-): Set<number> {
-  const descendants = new Set<number>();
-  const childrenByParent = new Map<number, number[]>();
-
-  entities.forEach((entity) => {
-    if (entity.parentEntityId !== null) {
-      const siblings = childrenByParent.get(entity.parentEntityId) ?? [];
-      siblings.push(entity.id);
-      childrenByParent.set(entity.parentEntityId, siblings);
-    }
-  });
-
-  const stack = [rootId];
-
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-
-    for (const childId of childrenByParent.get(current) ?? []) {
-      descendants.add(childId);
-      stack.push(childId);
-    }
-  }
-
-  return descendants;
-}
 
 export function matchesSubmissionEntityFilter(
   submission: FormSubmissionListItem,
@@ -76,6 +50,8 @@ export function matchesSubmissionEntityFilter(
     submission.parentEntityName === selectedEntity.name
   );
 }
+
+export { getEntityDescendantIds };
 
 export function matchesAppraisalFormState(
   submissionStatus: AppraisalStatus,
