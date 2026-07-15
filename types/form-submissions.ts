@@ -83,7 +83,7 @@ export interface FormSubmissionDetail {
   quartileName: string | null;
   quartileScoreMin: number | null;
   quartileScoreMax: number | null;
-  submittedAt: string;
+  submittedAt: string | null;
   sections: FormSectionRecord[];
   rootQuestions: QuestionRecord[];
   questions: QuestionRecord[];

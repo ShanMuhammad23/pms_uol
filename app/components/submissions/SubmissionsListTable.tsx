@@ -112,7 +112,9 @@ export default function SubmissionsListTable() {
                 {APPRAISAL_STATUS_LABELS[submission.status]}
               </td>
               <td className="px-4 py-3 text-text-primary">
-                {new Date(submission.submittedAt).toLocaleString()}
+                {submission.submittedAt
+                  ? new Date(submission.submittedAt).toLocaleString()
+                  : "—"}
               </td>
               <td className="px-4 py-3">
                 <div className="flex justify-end">

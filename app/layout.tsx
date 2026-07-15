@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Familjen_Grotesk, Geist_Mono } from "next/font/google";
+import { Familjen_Grotesk, Geist_Mono} from "next/font/google";
 import "./globals.css";
 import Providers from "./providers";
 

@@ -146,7 +146,7 @@ export default function SubmissionDetailView({
     data.performanceLevelName
       ? `${data.performanceLevelName}${data.quartileName ? ` · ${data.quartileName}` : ""}`
       : null,
-    new Date(data.submittedAt).toLocaleString(),
+    data.submittedAt ? new Date(data.submittedAt).toLocaleString() : null,
   ].filter(Boolean);
 
   return (
