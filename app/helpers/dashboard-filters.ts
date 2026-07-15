@@ -15,6 +15,7 @@ export type SubmissionFilterState = {
   selectedCategory2EntityId: number | "ALL";
   selectedCategoryId: number | "ALL";
   selectedSubCategoryId: number | "ALL";
+  selectedDesignation: string | "ALL";
   selectedFormState: FormState | "ALL";
   staffCategories: StaffCategoryWithSubCategories[];
   entities: EntityRecord[];
@@ -117,12 +118,16 @@ export function matchesSubmissionFilters(
     submission.status,
     filters.selectedFormState,
   );
+  const matchesDesignation =
+    filters.selectedDesignation === "ALL" ||
+    (submission.designation?.trim() ?? "") === filters.selectedDesignation;
 
   return (
     matchesSearch &&
     matchesEntity &&
     matchesCategory &&
     matchesSubCategory &&
+    matchesDesignation &&
     matchesFormState
   );
 }

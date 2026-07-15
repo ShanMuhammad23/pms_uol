@@ -19,6 +19,8 @@ export default function HRDashboardPage() {
     selectedCategoryId,
     selectedSubCategoryId,
     setSelectedSubCategoryId,
+    selectedDesignation,
+    setSelectedDesignation,
     selectedFormState,
     setSelectedFormState,
     category0Entities,
@@ -26,8 +28,10 @@ export default function HRDashboardPage() {
     category2Entities,
     staffCategories,
     availableSubCategories,
+    designations,
     entitiesLoading,
     staffCategoriesLoading,
+    designationsLoading,
     submissionsLoading,
     submissionsError,
     performanceMatrixLoading,
@@ -68,6 +72,10 @@ export default function HRDashboardPage() {
           onStaffCategoryChange={handleStaffCategoryChange}
           selectedSubCategoryId={selectedSubCategoryId}
           onSubCategoryChange={setSelectedSubCategoryId}
+          selectedDesignation={selectedDesignation}
+          onDesignationChange={setSelectedDesignation}
+          designations={designations}
+          designationsLoading={designationsLoading}
           selectedFormState={selectedFormState}
           onFormStateChange={setSelectedFormState}
           staffCategories={staffCategories}

@@ -7,8 +7,8 @@ import {
   Building2,
   ChevronDown,
   Hash,
+  IdCard,
   RotateCcw,
-  Search,
   Users,
 } from "lucide-react";
 import { FilterChip, type FilterChipColor } from "@/app/components/dashboard/FilterChip";
@@ -42,6 +42,10 @@ interface DashboardFilterBarProps {
   onStaffCategoryChange: (value: number | "ALL") => void;
   selectedSubCategoryId: number | "ALL";
   onSubCategoryChange: (value: number | "ALL") => void;
+  selectedDesignation: string | "ALL";
+  onDesignationChange: (value: string | "ALL") => void;
+  designations: string[];
+  designationsLoading: boolean;
   selectedFormState: FormState | "ALL";
   onFormStateChange: (value: FormState | "ALL") => void;
   staffCategories: StaffCategoryWithSubCategories[];
@@ -68,6 +72,10 @@ export function DashboardFilterBar({
   onStaffCategoryChange,
   selectedSubCategoryId,
   onSubCategoryChange,
+  selectedDesignation,
+  onDesignationChange,
+  designations,
+  designationsLoading,
   selectedFormState,
   onFormStateChange,
   staffCategories,
@@ -118,27 +126,9 @@ export function DashboardFilterBar({
             >
               <div className="border-t border-slate-200 px-4 pb-4 pt-3 dark:border-white/10">
                 <div className="flex flex-wrap gap-2">
-                  <div className="space-y-1.5 flex-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Search
-                    </label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Name, ID, or email..."
-                        value={searchQuery}
-                        onChange={(e) => onSearchQueryChange(e.target.value)}
-                        className={cn(
-                          "w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-white",
-                        )}
-                      />
-                    </div>
-                  </div>
+                 
 
-                  {ENTITY_FILTER_LEVELS.map((level, index) => {
+             {ENTITY_FILTER_LEVELS.map((level, index) => {
                     const selectedId =
                       index === 0
                         ? selectedCategory0EntityId
@@ -258,6 +248,38 @@ export function DashboardFilterBar({
                         {availableSubCategories.map((subCategory) => (
                           <option key={subCategory.id} value={subCategory.id}>
                             {subCategory.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Designation
+                    </label>
+                    <div className="relative">
+                      <IdCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <select
+                        value={selectedDesignation}
+                        onChange={(e) =>
+                          onDesignationChange(
+                            e.target.value === "ALL" ? "ALL" : e.target.value,
+                          )
+                        }
+                        disabled={designationsLoading}
+                        className={cn(
+                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
+                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
+                          "disabled:cursor-not-allowed disabled:opacity-50",
+                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
+                        )}
+                      >
+                        <option value="ALL">All Designations</option>
+                        {designations.map((designation) => (
+                          <option key={designation} value={designation}>
+                            {designation}
                           </option>
                         ))}
                       </select>

@@ -36,6 +36,7 @@ export function useDashboardFilters({
   >("ALL");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | "ALL">("ALL");
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<number | "ALL">("ALL");
+  const [selectedDesignation, setSelectedDesignation] = useState<string | "ALL">("ALL");
   const [selectedFormState, setSelectedFormState] = useState<(FormState | "ALL")>("ALL");
 
   const category0Entities = useMemo(
@@ -82,6 +83,7 @@ export function useDashboardFilters({
           selectedCategory2EntityId,
           selectedCategoryId,
           selectedSubCategoryId,
+          selectedDesignation,
           selectedFormState,
           staffCategories,
           entities,
@@ -95,6 +97,7 @@ export function useDashboardFilters({
       selectedCategory2EntityId,
       selectedCategoryId,
       selectedSubCategoryId,
+      selectedDesignation,
       selectedFormState,
       staffCategories,
       entities,
@@ -167,6 +170,14 @@ export function useDashboardFilters({
       });
     }
 
+    if (selectedDesignation !== "ALL") {
+      filters.push({
+        label: `Designation: ${selectedDesignation}`,
+        onRemove: () => setSelectedDesignation("ALL"),
+        color: "emerald",
+      });
+    }
+
     if (selectedFormState !== "ALL") {
       filters.push({
         label: `State: ${FORM_STATE_CONFIG[selectedFormState].label}`,
@@ -190,6 +201,7 @@ export function useDashboardFilters({
     selectedCategory2EntityId,
     selectedCategoryId,
     selectedSubCategoryId,
+    selectedDesignation,
     selectedFormState,
     searchQuery,
     staffCategories,
@@ -207,6 +219,7 @@ export function useDashboardFilters({
     setSelectedCategory2EntityId("ALL");
     setSelectedCategoryId("ALL");
     setSelectedSubCategoryId("ALL");
+    setSelectedDesignation("ALL");
     setSelectedFormState("ALL");
   }, []);
 
@@ -224,6 +237,8 @@ export function useDashboardFilters({
     selectedCategoryId,
     selectedSubCategoryId,
     setSelectedSubCategoryId,
+    selectedDesignation,
+    setSelectedDesignation,
     selectedFormState,
     setSelectedFormState,
     category0Entities,

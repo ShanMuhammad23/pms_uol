@@ -6,6 +6,7 @@ import { useFormSubmissionsQuery } from "@/app/queries/forms";
 import {
   useEntitiesQuery,
   useStaffCategoriesWithSubCategoriesQuery,
+  useUniqueDesignationsQuery,
 } from "@/app/queries/organization";
 import {
   useActiveFinancialYearId,
@@ -33,6 +34,9 @@ export function useDashboardPage() {
 
   const { data: entities = [], isLoading: entitiesLoading } = useEntitiesQuery();
 
+  const { data: designations = [], isLoading: designationsLoading } =
+    useUniqueDesignationsQuery();
+
   const {
     data: submissions = [],
     isLoading: submissionsLoading,
@@ -51,6 +55,8 @@ export function useDashboardPage() {
     selectedCategoryId,
     selectedSubCategoryId,
     setSelectedSubCategoryId,
+    selectedDesignation,
+    setSelectedDesignation,
     selectedFormState,
     setSelectedFormState,
     category0Entities,
@@ -89,6 +95,8 @@ export function useDashboardPage() {
     selectedCategoryId,
     selectedSubCategoryId,
     setSelectedSubCategoryId,
+    selectedDesignation,
+    setSelectedDesignation,
     selectedFormState,
     setSelectedFormState,
     category0Entities,
@@ -96,8 +104,10 @@ export function useDashboardPage() {
     category2Entities,
     staffCategories,
     availableSubCategories,
+    designations,
     entitiesLoading,
     staffCategoriesLoading,
+    designationsLoading,
     submissionsLoading,
     submissionsError,
     performanceMatrixLoading,
