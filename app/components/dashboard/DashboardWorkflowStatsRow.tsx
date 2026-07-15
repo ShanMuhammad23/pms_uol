@@ -51,8 +51,8 @@ export function DashboardWorkflowStatsRow({
         awaiting={managerReviewStats.awaiting}
         completed={managerReviewStats.completed}
         percentageLabel={managerReviewStats.percentageLabel}
-        awaitingtitle="Awaiting Review"
-        completedtitle="Submitted"
+        awaitingtitle="Submitted"
+        completedtitle="Reviewed"
         tone="amber"
         icon={AlertTriangle}
         delay={0.2}
@@ -64,8 +64,8 @@ export function DashboardWorkflowStatsRow({
         awaiting={hrAlignmentStats.awaiting}
         completed={hrAlignmentStats.completed}
         percentageLabel={hrAlignmentStats.percentageLabel}
-        awaitingtitle="Awaiting Alignment"
-        completedtitle="Submitted"
+        awaitingtitle="Submitted"
+        completedtitle="Aligned"
         tone="orange"
         icon={Scale}
         delay={0.3}

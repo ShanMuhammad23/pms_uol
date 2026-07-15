@@ -85,13 +85,10 @@ export function StatCard({
         active ? "shadow-md ring-1 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950" : "hover:shadow-md",
         t.border,
         t.bg,
-        active && tone === "navy" && "ring-slate-400",
-        active && tone === "amber" && "ring-amber-400",
-        active && tone === "orange" && "ring-orange-400",
-        active && tone === "emerald" && "ring-emerald-400",
+    
       )}
     >
-      <div className={cn("absolute left-0 right-0 top-0 h-1 bg-gradient-to-r", t.top)} />
+      
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex items-start justify-between gap-2">

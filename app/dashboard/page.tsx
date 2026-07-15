@@ -50,7 +50,7 @@ export default function HRDashboardPage() {
   } = useDashboardPage();
 
   return (
-    <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 dark:bg-slate-950 pr-2">
       <div className="mx-auto w-full max-w-full min-w-0 ">
         <DashboardFilterBar
           searchQuery={searchQuery}
