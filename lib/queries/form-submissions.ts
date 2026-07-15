@@ -81,12 +81,7 @@ interface SubmissionListRow {
   submitted_at: string | null;
 }
 
-let excelColumnsReady: boolean | null = null;
-let qualificationsReady: boolean | null = null;
-
 async function hasExcelSheetColumns(): Promise<boolean> {
-  if (excelColumnsReady !== null) return excelColumnsReady;
-
   const result = await db.query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
@@ -97,13 +92,10 @@ async function hasExcelSheetColumns(): Promise<boolean> {
      ) AS exists`,
   );
 
-  excelColumnsReady = Boolean(result.rows[0]?.exists);
-  return excelColumnsReady;
+  return Boolean(result.rows[0]?.exists);
 }
 
 async function hasQualificationsTable(): Promise<boolean> {
-  if (qualificationsReady !== null) return qualificationsReady;
-
   const result = await db.query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
@@ -113,8 +105,7 @@ async function hasQualificationsTable(): Promise<boolean> {
      ) AS exists`,
   );
 
-  qualificationsReady = Boolean(result.rows[0]?.exists);
-  return qualificationsReady;
+  return Boolean(result.rows[0]?.exists);
 }
 
 function toNumber(value: string | number | null | undefined): number | null {

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireSubmissionReviewerApi } from "@/lib/auth/require-submission-reviewer";
 import { listFormSubmissions } from "@/lib/queries/form-submissions";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const auth = await requireSubmissionReviewerApi();
   if (auth instanceof NextResponse) {

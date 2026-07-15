@@ -14,7 +14,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export async function fetchFormSubmissions(): Promise<FormSubmissionListItem[]> {
-  const response = await fetch("/api/submissions");
+  const response = await fetch("/api/submissions", { cache: "no-store" });
   return parseResponse<FormSubmissionListItem[]>(response);
 }
 
