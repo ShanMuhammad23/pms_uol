@@ -58,7 +58,12 @@ export function DashboardPrimaryCharts({
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
               <XAxis dataKey="rating" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                axisLine={false}
+                tickLine={false}
+              />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} iconType="circle" iconSize={8} />
               <Area

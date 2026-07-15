@@ -2,6 +2,19 @@ import { getSubmissionEligibilityStatus } from "@/app/helpers/dashboard-eligibil
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AppraisalStatus } from "@/types/forms";
 
+export function isSubmissionEligible(
+  submission: FormSubmissionListItem,
+): boolean {
+  const eligibility = getSubmissionEligibilityStatus(submission);
+  return eligibility === "Fully Eligible" || eligibility === "Partially Eligible";
+}
+
+export function countEligibleSubmissions(
+  submissions: FormSubmissionListItem[],
+): number {
+  return submissions.filter(isSubmissionEligible).length;
+}
+
 export type WorkflowStageStats = {
   awaiting: number;
   completed: number;
@@ -57,10 +70,7 @@ function toWorkflowStageStats(awaiting: number, completed: number): WorkflowStag
 export function buildSelfAssessmentStats(
   submissions: FormSubmissionListItem[],
 ): WorkflowStageStats {
-  const eligible = submissions.filter((submission) => {
-    const eligibility = getSubmissionEligibilityStatus(submission);
-    return eligibility === "Fully Eligible" || eligibility === "Partially Eligible";
-  }).length;
+  const eligible = countEligibleSubmissions(submissions);
 
   const submitted = countByStatuses(submissions, SUBMITTED_SELF_ASSESSMENT_STATES);
 
