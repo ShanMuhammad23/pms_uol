@@ -51,7 +51,7 @@ export default function HRDashboardPage() {
 
   return (
     <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 dark:bg-slate-950">
-      <div className="mx-auto w-full max-w-full min-w-0 px-4 sm:px-6">
+      <div className="mx-auto w-full max-w-full min-w-0 ">
         <DashboardFilterBar
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}

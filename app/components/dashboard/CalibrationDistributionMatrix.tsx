@@ -51,18 +51,18 @@ export function CalibrationDistributionMatrix({
           <table className="min-w-full text-xs">
             <thead className="whitespace-nowrap border-b border-slate-300 text-left text-sm font-semibold text-slate-900 dark:border-neutral-600 dark:text-slate-50">
               <tr className="divide-x divide-slate-300 dark:divide-neutral-600">
-                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 dark:text-slate-300">
+                <th className="px-3 bg-primary py-2.5 text-left font-semibold text-white dark:text-slate-300">
                   Performance Level
                 </th>
                 {columns.map((column) => (
                   <th
                     key={`${column.label}-${column.index}`}
-                    className="px-2 py-2.5 text-center font-semibold text-slate-600 dark:text-slate-300"
+                    className="px-2 bg-primary py-2.5 text-center font-semibold text-white dark:text-slate-300"
                   >
                     <span className="block">{column.label}</span>
                   </th>
                 ))}
-                <th className="px-2 py-2.5 text-center font-semibold text-slate-600 dark:text-slate-300">
+                <th className="px-2 bg-primary py-2.5 text-center font-semibold text-white dark:text-slate-300">
                   Total
                 </th>
               </tr>
@@ -75,30 +75,30 @@ export function CalibrationDistributionMatrix({
                 >
                   <td
                     className={cn(
-                      "whitespace-nowrap px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200",
+                      "whitespace-nowrap px-3 py-2.5 font-medium text-white dark:text-slate-200",
                       getPerformanceLevelColor(row.rating),
                     )}
                   >
                     {row.rating}
                   </td>
                   {row.quartiles.map((cell) => (
-                    <td key={`${row.levelId}-${cell.id ?? cell.sortOrder}`} className="px-2 py-2.5 text-center">
+                    <td key={`${row.levelId}-${cell.id ?? cell.sortOrder}`} className={cn("px-2 py-2.5 text-center", getPerformanceLevelColor(row.rating))} >
                       {cell.count === null ? (
                         <span className="text-slate-300 dark:text-slate-600">—</span>
                       ) : (
-                        <div className="space-y-0.5">
+                        <div className="space-y-0.1">
                           <span
                             className={cn(
-                              "inline-flex min-w-8 items-center justify-center rounded-md px-2 py-1 font-semibold tabular-nums",
+                              "text-base inline-flex min-w-8 items-center justify-center text-white dark:text-slate-200 rounded-md  font-bold tabular-nums",
                               cell.count > 0
-                                ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-                                : "text-slate-300 dark:text-slate-600",
+                                ? " text-primary dark:bg-amber-950/40 dark:text-amber-300"
+                                : "text-white dark:text-slate-200",
                             )}
                           >
                             {cell.count}
                           </span>
                           {cell.sublabel ? (
-                            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                            <p className="text-[10px] text-white dark:text-slate-500">
                               {cell.sublabel}
                             </p>
                           ) : null}
@@ -106,7 +106,7 @@ export function CalibrationDistributionMatrix({
                       )}
                     </td>
                   ))}
-                  <td className="px-2 py-2.5 text-center font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                  <td className={cn("px-2 py-2.5 text-center font-semibold tabular-nums", getPerformanceLevelColor(row.rating))}>
                     {row.rowTotal}
                   </td>
                 </tr>
@@ -124,7 +124,7 @@ export function CalibrationDistributionMatrix({
                   </td>
                 ))}
                 <td className="px-2 py-2.5 text-center font-semibold tabular-nums text-amber-700 dark:text-amber-400">
-                  {employeeCount}
+                  {}
                 </td>
               </tr>
             </tfoot>

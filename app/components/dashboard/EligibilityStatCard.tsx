@@ -12,6 +12,16 @@ interface EligibilityStatCardProps {
 
 export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
   const hasData = data.some((entry) => entry.value > 0);
+  const fullyEligible =
+    data.find((entry) => entry.name === "Fully Eligible")?.value ?? 0;
+  const partiallyEligible =
+    data.find((entry) => entry.name === "Partially Eligible")?.value ?? 0;
+  const notEligible =
+    data.find((entry) => entry.name === "Not Eligible")?.value ?? 0;
+  const eligibleCount = fullyEligible + partiallyEligible;
+  const totalCount = eligibleCount + notEligible;
+  const eligibilityPercentage =
+    totalCount > 0 ? Math.round((eligibleCount / totalCount) * 100) : 0;
 
   return (
     <motion.div
@@ -20,11 +30,17 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
       whileHover={{ y: -3, transition: { duration: 0.2 } }}
       className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
     >
-      <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600" />
-      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        Appraisal Eligibility
-      </p>
-
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Appraisal Eligibility
+        </p>
+        <span
+          className="shrink-0 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold tabular-nums text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
+          title="(Fully Eligible + Partially Eligible) / Total"
+        >
+          {eligibilityPercentage}%
+        </span>
+      </div>
       {hasData ? (
         <div className="mt-3 flex items-center gap-3">
           <div className="h-[88px] w-[88px] shrink-0">

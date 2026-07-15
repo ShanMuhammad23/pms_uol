@@ -117,8 +117,8 @@ export function DashboardFilterBar({
               className="overflow-hidden"
             >
               <div className="border-t border-slate-200 px-4 pb-4 pt-3 dark:border-white/10">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
-                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                <div className="flex flex-wrap gap-2">
+                  <div className="space-y-1.5 flex-1">
                     <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Search
                     </label>
@@ -163,7 +163,7 @@ export function DashboardFilterBar({
                       (index === 2 && selectedCategory1EntityId === "ALL");
 
                     return (
-                      <div key={level.label} className="space-y-1.5">
+                      <div key={level.label} className="space-y-1.5 flex-1">
                         <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           {level.label}
                         </label>
