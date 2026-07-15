@@ -1,6 +1,5 @@
 "use client";
 
-import { DashboardCategoryCharts } from "@/app/components/dashboard/DashboardCategoryCharts";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { DashboardPrimaryCharts } from "@/app/components/dashboard/DashboardPrimaryCharts";
 import { DashboardSubmissionsTable } from "@/app/components/dashboard/DashboardSubmissionsTable";
@@ -9,26 +8,20 @@ import { useDashboardPage } from "@/app/queries/dashboard";
 
 export default function HRDashboardPage() {
   const {
-    isDarkMode,
-    searchQuery,
-    setSearchQuery,
-    selectedCategory0EntityId,
-    selectedCategory1EntityId,
-    selectedCategory2EntityId,
-    setSelectedCategory2EntityId,
-    selectedCategoryId,
-    selectedSubCategoryId,
-    setSelectedSubCategoryId,
-    selectedDesignation,
-    setSelectedDesignation,
-    selectedFormState,
-    setSelectedFormState,
-    category0Entities,
-    category1Entities,
-    category2Entities,
-    staffCategories,
-    availableSubCategories,
-    designations,
+    selectedCategory0EntityIds,
+    selectedCategory1EntityIds,
+    selectedCategory2EntityIds,
+    selectedCategoryIds,
+    selectedSubCategoryIds,
+    selectedDesignations,
+    selectedFormStates,
+    category0Options,
+    category1Options,
+    category2Options,
+    staffCategoryOptions,
+    staffSubCategoryOptions,
+    designationOptions,
+    formStateOptions,
     entitiesLoading,
     staffCategoriesLoading,
     designationsLoading,
@@ -39,7 +32,11 @@ export default function HRDashboardPage() {
     activeFilters,
     handleCategory0EntityChange,
     handleCategory1EntityChange,
+    handleCategory2EntityChange,
     handleStaffCategoryChange,
+    handleSubCategoryChange,
+    handleDesignationChange,
+    handleFormStateChange,
     clearAllFilters,
     filterByFormState,
     eligibilityData,
@@ -48,38 +45,34 @@ export default function HRDashboardPage() {
     hrAlignmentStats,
     filteredCalibrationData,
     ratingQuartileMatrix,
-    themedCategoryDistribution,
-    filteredCompletionByCategory,
-    pieLabelRenderer,
   } = useDashboardPage();
 
   return (
     <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 dark:bg-slate-950 pr-2">
       <div className="mx-auto w-full max-w-full min-w-0 ">
         <DashboardFilterBar
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          selectedCategory0EntityId={selectedCategory0EntityId}
+          selectedCategory0EntityIds={selectedCategory0EntityIds}
           onCategory0EntityChange={handleCategory0EntityChange}
-          selectedCategory1EntityId={selectedCategory1EntityId}
+          selectedCategory1EntityIds={selectedCategory1EntityIds}
           onCategory1EntityChange={handleCategory1EntityChange}
-          selectedCategory2EntityId={selectedCategory2EntityId}
-          onCategory2EntityChange={setSelectedCategory2EntityId}
-          category0Entities={category0Entities}
-          category1Entities={category1Entities}
-          category2Entities={category2Entities}
-          selectedCategoryId={selectedCategoryId}
+          selectedCategory2EntityIds={selectedCategory2EntityIds}
+          onCategory2EntityChange={handleCategory2EntityChange}
+          category0Options={category0Options}
+          category1Options={category1Options}
+          category2Options={category2Options}
+          selectedCategoryIds={selectedCategoryIds}
           onStaffCategoryChange={handleStaffCategoryChange}
-          selectedSubCategoryId={selectedSubCategoryId}
-          onSubCategoryChange={setSelectedSubCategoryId}
-          selectedDesignation={selectedDesignation}
-          onDesignationChange={setSelectedDesignation}
-          designations={designations}
+          selectedSubCategoryIds={selectedSubCategoryIds}
+          onSubCategoryChange={handleSubCategoryChange}
+          staffCategoryOptions={staffCategoryOptions}
+          staffSubCategoryOptions={staffSubCategoryOptions}
+          selectedDesignations={selectedDesignations}
+          onDesignationChange={handleDesignationChange}
+          designationOptions={designationOptions}
           designationsLoading={designationsLoading}
-          selectedFormState={selectedFormState}
-          onFormStateChange={setSelectedFormState}
-          staffCategories={staffCategories}
-          availableSubCategories={availableSubCategories}
+          selectedFormStates={selectedFormStates}
+          onFormStateChange={handleFormStateChange}
+          formStateOptions={formStateOptions}
           entitiesLoading={entitiesLoading}
           staffCategoriesLoading={staffCategoriesLoading}
           activeFilters={activeFilters}
@@ -91,7 +84,7 @@ export default function HRDashboardPage() {
           selfAssessmentStats={selfAssessmentStats}
           managerReviewStats={managerReviewStats}
           hrAlignmentStats={hrAlignmentStats}
-          selectedFormState={selectedFormState}
+          selectedFormStates={selectedFormStates}
           onFilterByFormState={filterByFormState}
         />
 
@@ -101,8 +94,6 @@ export default function HRDashboardPage() {
           employeeCount={filteredSubmissions.length}
           performanceMatrixLoading={performanceMatrixLoading}
         />
-
-      
 
         <DashboardSubmissionsTable
           submissions={filteredSubmissions}

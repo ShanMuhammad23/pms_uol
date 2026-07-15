@@ -1,7 +1,7 @@
 import type { FormState } from "@/app/helpers/dashboard-types";
 import {
-  getEffectiveEntityFilterId,
   getEntityDescendantIds,
+  type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
@@ -10,16 +10,35 @@ import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
 export type SubmissionFilterState = {
   searchQuery: string;
-  selectedCategory0EntityId: number | "ALL";
-  selectedCategory1EntityId: number | "ALL";
-  selectedCategory2EntityId: number | "ALL";
-  selectedCategoryId: number | "ALL";
-  selectedSubCategoryId: number | "ALL";
-  selectedDesignation: string | "ALL";
-  selectedFormState: FormState | "ALL";
+  selectedCategory0EntityIds: MultiFilterSelection<number>;
+  selectedCategory1EntityIds: MultiFilterSelection<number>;
+  selectedCategory2EntityIds: MultiFilterSelection<number>;
+  selectedCategoryIds: MultiFilterSelection<number>;
+  selectedSubCategoryIds: MultiFilterSelection<number>;
+  selectedDesignations: MultiFilterSelection<string>;
+  selectedFormStates: MultiFilterSelection<FormState>;
   staffCategories: StaffCategoryWithSubCategories[];
   entities: EntityRecord[];
 };
+
+export function matchesMultiSelection<T extends string | number>(
+  selected: MultiFilterSelection<T>,
+  value: T | null | undefined,
+): boolean {
+  if (selected === null) {
+    return true;
+  }
+
+  if (selected.length === 0) {
+    return false;
+  }
+
+  if (value == null) {
+    return false;
+  }
+
+  return selected.includes(value);
+}
 
 export function matchesSubmissionEntityFilter(
   submission: FormSubmissionListItem,
@@ -52,8 +71,46 @@ export function matchesSubmissionEntityFilter(
   );
 }
 
+export function matchesSubmissionEntityMultiFilter(
+  submission: FormSubmissionListItem,
+  selectedEntityIds: MultiFilterSelection<number>,
+  entities: EntityRecord[],
+): boolean {
+  if (selectedEntityIds === null) {
+    return true;
+  }
+
+  if (selectedEntityIds.length === 0) {
+    return false;
+  }
+
+  return selectedEntityIds.some((entityId) =>
+    matchesSubmissionEntityFilter(submission, entityId, entities),
+  );
+}
+
 export { getEntityDescendantIds };
 
+export function matchesAppraisalFormStates(
+  submissionStatus: AppraisalStatus,
+  selectedFormStates: MultiFilterSelection<FormState>,
+): boolean {
+  if (selectedFormStates === null) {
+    return true;
+  }
+
+  if (selectedFormStates.length === 0) {
+    return false;
+  }
+
+  return selectedFormStates.some(
+    (state) =>
+      APPRAISAL_STATUSES.includes(state as AppraisalStatus) &&
+      submissionStatus === state,
+  );
+}
+
+/** @deprecated Prefer matchesAppraisalFormStates for multi-select. */
 export function matchesAppraisalFormState(
   submissionStatus: AppraisalStatus,
   selectedFormState: FormState | "ALL",
@@ -62,10 +119,7 @@ export function matchesAppraisalFormState(
     return true;
   }
 
-  return (
-    APPRAISAL_STATUSES.includes(selectedFormState as AppraisalStatus) &&
-    submissionStatus === selectedFormState
-  );
+  return matchesAppraisalFormStates(submissionStatus, [selectedFormState]);
 }
 
 export function matchesSubmissionFilters(
@@ -79,55 +133,111 @@ export function matchesSubmissionFilters(
     submission.employeeId.toLowerCase().includes(query) ||
     submission.employeeEmail.toLowerCase().includes(query);
 
-  const matchesEntity = matchesSubmissionEntityFilter(
+  const matchesEntity0 = matchesSubmissionEntityMultiFilter(
     submission,
-    getEffectiveEntityFilterId({
-      category0EntityId: filters.selectedCategory0EntityId,
-      category1EntityId: filters.selectedCategory1EntityId,
-      category2EntityId: filters.selectedCategory2EntityId,
-    }),
+    filters.selectedCategory0EntityIds,
+    filters.entities,
+  );
+  const matchesEntity1 = matchesSubmissionEntityMultiFilter(
+    submission,
+    filters.selectedCategory1EntityIds,
+    filters.entities,
+  );
+  const matchesEntity2 = matchesSubmissionEntityMultiFilter(
+    submission,
+    filters.selectedCategory2EntityIds,
     filters.entities,
   );
 
-  const selectedCategory =
-    filters.selectedCategoryId === "ALL"
+  const selectedCategoryNames =
+    filters.selectedCategoryIds === null
       ? null
-      : filters.staffCategories.find((category) => category.id === filters.selectedCategoryId);
-  const selectedSubCategory =
-    filters.selectedSubCategoryId === "ALL"
-      ? null
-      : filters.staffCategories
-          .flatMap((category) =>
-            category.subCategories.map((subCategory) => ({
-              ...subCategory,
-              staffCategoryId: category.id,
-            })),
-          )
-          .find((subCategory) => subCategory.id === filters.selectedSubCategoryId);
+      : new Set(
+          filters.staffCategories
+            .filter((category) => filters.selectedCategoryIds!.includes(category.id))
+            .map((category) => category.name),
+        );
 
   const matchesCategory =
-    filters.selectedCategoryId === "ALL" ||
-    submission.staffCategoryId === filters.selectedCategoryId ||
-    (selectedCategory != null && submission.staffCategoryName === selectedCategory.name);
+    filters.selectedCategoryIds === null ||
+    (filters.selectedCategoryIds.length > 0 &&
+      ((submission.staffCategoryId != null &&
+        filters.selectedCategoryIds.includes(submission.staffCategoryId)) ||
+        (submission.staffCategoryName != null &&
+          selectedCategoryNames?.has(submission.staffCategoryName) === true)));
+
+  const selectedSubCategoryNames =
+    filters.selectedSubCategoryIds === null
+      ? null
+      : new Set(
+          filters.staffCategories
+            .flatMap((category) => category.subCategories)
+            .filter((subCategory) =>
+              filters.selectedSubCategoryIds!.includes(subCategory.id),
+            )
+            .map((subCategory) => subCategory.name),
+        );
+
   const matchesSubCategory =
-    filters.selectedSubCategoryId === "ALL" ||
-    submission.staffSubCategoryId === filters.selectedSubCategoryId ||
-    (selectedSubCategory != null &&
-      submission.staffSubCategoryName === selectedSubCategory.name);
-  const matchesFormState = matchesAppraisalFormState(
-    submission.status,
-    filters.selectedFormState,
+    filters.selectedSubCategoryIds === null ||
+    (filters.selectedSubCategoryIds.length > 0 &&
+      ((submission.staffSubCategoryId != null &&
+        filters.selectedSubCategoryIds.includes(submission.staffSubCategoryId)) ||
+        (submission.staffSubCategoryName != null &&
+          selectedSubCategoryNames?.has(submission.staffSubCategoryName) ===
+            true)));
+
+  const designation = submission.designation?.trim() ?? "";
+  const matchesDesignation = matchesMultiSelection(
+    filters.selectedDesignations,
+    designation || null,
   );
-  const matchesDesignation =
-    filters.selectedDesignation === "ALL" ||
-    (submission.designation?.trim() ?? "") === filters.selectedDesignation;
+
+  const matchesFormState = matchesAppraisalFormStates(
+    submission.status,
+    filters.selectedFormStates,
+  );
 
   return (
     matchesSearch &&
-    matchesEntity &&
+    matchesEntity0 &&
+    matchesEntity1 &&
+    matchesEntity2 &&
     matchesCategory &&
     matchesSubCategory &&
     matchesDesignation &&
     matchesFormState
   );
+}
+
+export type FilterDimension =
+  | "category0"
+  | "category1"
+  | "category2"
+  | "staffCategory"
+  | "staffSubCategory"
+  | "designation"
+  | "formState";
+
+export function matchesSubmissionFiltersExcluding(
+  submission: FormSubmissionListItem,
+  filters: SubmissionFilterState,
+  exclude: FilterDimension,
+): boolean {
+  return matchesSubmissionFilters(submission, {
+    ...filters,
+    selectedCategory0EntityIds:
+      exclude === "category0" ? null : filters.selectedCategory0EntityIds,
+    selectedCategory1EntityIds:
+      exclude === "category1" ? null : filters.selectedCategory1EntityIds,
+    selectedCategory2EntityIds:
+      exclude === "category2" ? null : filters.selectedCategory2EntityIds,
+    selectedCategoryIds:
+      exclude === "staffCategory" ? null : filters.selectedCategoryIds,
+    selectedSubCategoryIds:
+      exclude === "staffSubCategory" ? null : filters.selectedSubCategoryIds,
+    selectedDesignations:
+      exclude === "designation" ? null : filters.selectedDesignations,
+    selectedFormStates: exclude === "formState" ? null : filters.selectedFormStates,
+  });
 }

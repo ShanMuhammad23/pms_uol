@@ -12,12 +12,12 @@ import {
   Users,
 } from "lucide-react";
 import { FilterChip, type FilterChipColor } from "@/app/components/dashboard/FilterChip";
+import {
+  MultiSelectFilterDropdown,
+  type MultiSelectOption,
+} from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
-import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { ENTITY_FILTER_LEVELS } from "@/app/helpers/dashboard-entity-filters";
-import type { FormState } from "@/app/helpers/dashboard-types";
-import type { EntityRecord } from "@/types/entities";
-import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 import { cn } from "@/lib/utils";
 
 export interface ActiveFilter {
@@ -27,29 +27,28 @@ export interface ActiveFilter {
 }
 
 interface DashboardFilterBarProps {
-  searchQuery: string;
-  onSearchQueryChange: (value: string) => void;
-  selectedCategory0EntityId: number | "ALL";
-  onCategory0EntityChange: (value: number | "ALL") => void;
-  selectedCategory1EntityId: number | "ALL";
-  onCategory1EntityChange: (value: number | "ALL") => void;
-  selectedCategory2EntityId: number | "ALL";
-  onCategory2EntityChange: (value: number | "ALL") => void;
-  category0Entities: EntityRecord[];
-  category1Entities: EntityRecord[];
-  category2Entities: EntityRecord[];
-  selectedCategoryId: number | "ALL";
-  onStaffCategoryChange: (value: number | "ALL") => void;
-  selectedSubCategoryId: number | "ALL";
-  onSubCategoryChange: (value: number | "ALL") => void;
-  selectedDesignation: string | "ALL";
-  onDesignationChange: (value: string | "ALL") => void;
-  designations: string[];
+  selectedCategory0EntityIds: string[] | null;
+  onCategory0EntityChange: (value: string[] | null) => void;
+  selectedCategory1EntityIds: string[] | null;
+  onCategory1EntityChange: (value: string[] | null) => void;
+  selectedCategory2EntityIds: string[] | null;
+  onCategory2EntityChange: (value: string[] | null) => void;
+  category0Options: MultiSelectOption[];
+  category1Options: MultiSelectOption[];
+  category2Options: MultiSelectOption[];
+  selectedCategoryIds: string[] | null;
+  onStaffCategoryChange: (value: string[] | null) => void;
+  selectedSubCategoryIds: string[] | null;
+  onSubCategoryChange: (value: string[] | null) => void;
+  staffCategoryOptions: MultiSelectOption[];
+  staffSubCategoryOptions: MultiSelectOption[];
+  selectedDesignations: string[] | null;
+  onDesignationChange: (value: string[] | null) => void;
+  designationOptions: MultiSelectOption[];
   designationsLoading: boolean;
-  selectedFormState: FormState | "ALL";
-  onFormStateChange: (value: FormState | "ALL") => void;
-  staffCategories: StaffCategoryWithSubCategories[];
-  availableSubCategories: StaffCategoryWithSubCategories["subCategories"];
+  selectedFormStates: string[] | null;
+  onFormStateChange: (value: string[] | null) => void;
+  formStateOptions: MultiSelectOption[];
   entitiesLoading: boolean;
   staffCategoriesLoading: boolean;
   activeFilters: ActiveFilter[];
@@ -57,35 +56,46 @@ interface DashboardFilterBarProps {
 }
 
 export function DashboardFilterBar({
-  searchQuery,
-  onSearchQueryChange,
-  selectedCategory0EntityId,
+  selectedCategory0EntityIds,
   onCategory0EntityChange,
-  selectedCategory1EntityId,
+  selectedCategory1EntityIds,
   onCategory1EntityChange,
-  selectedCategory2EntityId,
+  selectedCategory2EntityIds,
   onCategory2EntityChange,
-  category0Entities,
-  category1Entities,
-  category2Entities,
-  selectedCategoryId,
+  category0Options,
+  category1Options,
+  category2Options,
+  selectedCategoryIds,
   onStaffCategoryChange,
-  selectedSubCategoryId,
+  selectedSubCategoryIds,
   onSubCategoryChange,
-  selectedDesignation,
+  staffCategoryOptions,
+  staffSubCategoryOptions,
+  selectedDesignations,
   onDesignationChange,
-  designations,
+  designationOptions,
   designationsLoading,
-  selectedFormState,
+  selectedFormStates,
   onFormStateChange,
-  staffCategories,
-  availableSubCategories,
+  formStateOptions,
   entitiesLoading,
   staffCategoriesLoading,
   activeFilters,
   onClearAllFilters,
 }: DashboardFilterBarProps) {
   const [filtersVisible, setFiltersVisible] = useState(true);
+
+  const entitySelections = [
+    selectedCategory0EntityIds,
+    selectedCategory1EntityIds,
+    selectedCategory2EntityIds,
+  ];
+  const entityOptions = [category0Options, category1Options, category2Options];
+  const entityHandlers = [
+    onCategory0EntityChange,
+    onCategory1EntityChange,
+    onCategory2EntityChange,
+  ];
 
   return (
     <motion.div
@@ -125,193 +135,67 @@ export function DashboardFilterBar({
               className="overflow-hidden"
             >
               <div className="border-t border-slate-200 px-4 pb-4 pt-3 dark:border-white/10">
-                <div className="flex flex-wrap gap-2">
-                 
+                <div className="flex flex-wrap gap-3">
+                  {ENTITY_FILTER_LEVELS.map((level, index) => (
+                    <MultiSelectFilterDropdown
+                      key={level.label}
+                      label={level.label}
+                      icon={Building2}
+                      options={entityOptions[index]}
+                      selectedValues={entitySelections[index]}
+                      onChange={entityHandlers[index]}
+                      disabled={
+                        entitiesLoading ||
+                        (index === 1 && selectedCategory0EntityIds?.length === 0) ||
+                        (index === 2 && selectedCategory1EntityIds?.length === 0)
+                      }
+                      placeholder={`All ${level.label}`}
+                      searchable={entityOptions[index].length > 8}
+                    />
+                  ))}
 
-             {ENTITY_FILTER_LEVELS.map((level, index) => {
-                    const selectedId =
-                      index === 0
-                        ? selectedCategory0EntityId
-                        : index === 1
-                          ? selectedCategory1EntityId
-                          : selectedCategory2EntityId;
-                    const options =
-                      index === 0
-                        ? category0Entities
-                        : index === 1
-                          ? category1Entities
-                          : category2Entities;
-                    const onChange =
-                      index === 0
-                        ? onCategory0EntityChange
-                        : index === 1
-                          ? onCategory1EntityChange
-                          : onCategory2EntityChange;
-                    const disabled =
-                      entitiesLoading ||
-                      (index === 1 && selectedCategory0EntityId === "ALL") ||
-                      (index === 2 && selectedCategory1EntityId === "ALL");
+                  <MultiSelectFilterDropdown
+                    label="Staff Category"
+                    icon={Users}
+                    options={staffCategoryOptions}
+                    selectedValues={selectedCategoryIds}
+                    onChange={onStaffCategoryChange}
+                    disabled={staffCategoriesLoading}
+                    placeholder="All Staff Categories"
+                  />
 
-                    return (
-                      <div key={level.label} className="space-y-1.5 flex-1">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          {level.label}
-                        </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                          <select
-                            value={selectedId === "ALL" ? "ALL" : String(selectedId)}
-                            onChange={(event) =>
-                              onChange(
-                                event.target.value === "ALL"
-                                  ? "ALL"
-                                  : Number(event.target.value),
-                              )
-                            }
-                            disabled={disabled}
-                            className={cn(
-                              "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                              "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                              "disabled:cursor-not-allowed disabled:opacity-50",
-                              "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                            )}
-                          >
-                            <option value="ALL">All {level.label}</option>
-                            {options.map((entity) => (
-                              <option key={entity.id} value={entity.id}>
-                                {entity.name}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <MultiSelectFilterDropdown
+                    label="Staff Sub-Category"
+                    icon={Hash}
+                    options={staffSubCategoryOptions}
+                    selectedValues={selectedSubCategoryIds}
+                    onChange={onSubCategoryChange}
+                    disabled={
+                      staffCategoriesLoading || selectedCategoryIds?.length === 0
+                    }
+                    placeholder="All Staff Sub-Categories"
+                    searchable={staffSubCategoryOptions.length > 8}
+                  />
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Staff Category
-                    </label>
-                    <div className="relative">
-                      <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={selectedCategoryId === "ALL" ? "ALL" : String(selectedCategoryId)}
-                        onChange={(e) =>
-                          onStaffCategoryChange(
-                            e.target.value === "ALL" ? "ALL" : Number(e.target.value),
-                          )
-                        }
-                        disabled={staffCategoriesLoading}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "disabled:cursor-not-allowed disabled:opacity-50",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Staff Categories</option>
-                        {staffCategories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
+                  <MultiSelectFilterDropdown
+                    label="Designation"
+                    icon={IdCard}
+                    options={designationOptions}
+                    selectedValues={selectedDesignations}
+                    onChange={onDesignationChange}
+                    disabled={designationsLoading}
+                    placeholder="All Designations"
+                    searchable
+                  />
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Staff Sub-Category
-                    </label>
-                    <div className="relative">
-                      <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={
-                          selectedSubCategoryId === "ALL" ? "ALL" : String(selectedSubCategoryId)
-                        }
-                        onChange={(e) =>
-                          onSubCategoryChange(
-                            e.target.value === "ALL" ? "ALL" : Number(e.target.value),
-                          )
-                        }
-                        disabled={staffCategoriesLoading || selectedCategoryId === "ALL"}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "disabled:cursor-not-allowed disabled:opacity-50",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Staff Sub-Categories</option>
-                        {availableSubCategories.map((subCategory) => (
-                          <option key={subCategory.id} value={subCategory.id}>
-                            {subCategory.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Designation
-                    </label>
-                    <div className="relative">
-                      <IdCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={selectedDesignation}
-                        onChange={(e) =>
-                          onDesignationChange(
-                            e.target.value === "ALL" ? "ALL" : e.target.value,
-                          )
-                        }
-                        disabled={designationsLoading}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "disabled:cursor-not-allowed disabled:opacity-50",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Designations</option>
-                        {designations.map((designation) => (
-                          <option key={designation} value={designation}>
-                            {designation}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Form Status
-                    </label>
-                    <div className="relative">
-                      <Briefcase className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={selectedFormState}
-                        onChange={(e) => onFormStateChange(e.target.value as FormState | "ALL")}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Statuses</option>
-                        {Object.entries(FORM_STATE_CONFIG).map(([key, config]) => (
-                          <option key={key} value={key}>
-                            {config.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
+                  <MultiSelectFilterDropdown
+                    label="Form Status"
+                    icon={Briefcase}
+                    options={formStateOptions}
+                    selectedValues={selectedFormStates}
+                    onChange={onFormStateChange}
+                    placeholder="All Statuses"
+                  />
                 </div>
               </div>
             </motion.div>

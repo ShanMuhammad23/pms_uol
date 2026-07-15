@@ -2,9 +2,9 @@ import type { EntityRecord } from "@/types/entities";
 import type { EntityCategoryCode } from "@/types/entity-categories";
 
 export const ENTITY_FILTER_LEVELS = [
-  { level: 0, categoryCode: "C0" as EntityCategoryCode, label: "Category 0" },
-  { level: 1, categoryCode: "C1" as EntityCategoryCode, label: "Category 1" },
-  { level: 2, categoryCode: "C2" as EntityCategoryCode, label: "Category 2" },
+  { level: 0, categoryCode: "C1" as EntityCategoryCode, label: "Category 0" },
+  { level: 1, categoryCode: "C2" as EntityCategoryCode, label: "Category 1" },
+  { level: 2, categoryCode: "C3" as EntityCategoryCode, label: "Category 2" },
 ] as const;
 
 export type EntityFilterSelection = {
@@ -12,6 +12,9 @@ export type EntityFilterSelection = {
   category1EntityId: number | "ALL";
   category2EntityId: number | "ALL";
 };
+
+/** `null` = all selected (no filter). `[]` = none selected. */
+export type MultiFilterSelection<T extends string | number> = T[] | null;
 
 function sortEntities(entities: EntityRecord[]): EntityRecord[] {
   return [...entities].sort((left, right) => left.name.localeCompare(right.name));
@@ -37,6 +40,55 @@ export function getEntitiesForFilterLevel(
   });
 
   return sortEntities(filtered);
+}
+
+export function getEntitiesForFilterLevels(
+  entities: EntityRecord[],
+  level: 0 | 1 | 2,
+  parentEntityIds: number[] | null,
+): EntityRecord[] {
+  if (level === 0) {
+    return getEntitiesForFilterLevel(entities, 0, null);
+  }
+
+  if (parentEntityIds === null) {
+    return sortEntities(
+      entities.filter(
+        (entity) => entity.categoryCode === ENTITY_FILTER_LEVELS[level].categoryCode,
+      ),
+    );
+  }
+
+  if (parentEntityIds.length === 0) {
+    return [];
+  }
+
+  const byId = new Map<number, EntityRecord>();
+  for (const parentId of parentEntityIds) {
+    for (const entity of getEntitiesForFilterLevel(entities, level, parentId)) {
+      byId.set(entity.id, entity);
+    }
+  }
+
+  return sortEntities([...byId.values()]);
+}
+
+export function pruneMultiSelection<T extends string | number>(
+  selected: MultiFilterSelection<T>,
+  availableValues: T[],
+): MultiFilterSelection<T> {
+  if (selected === null) {
+    return null;
+  }
+
+  const available = new Set(availableValues);
+  const next = selected.filter((value) => available.has(value));
+
+  if (next.length === availableValues.length && availableValues.length > 0) {
+    return null;
+  }
+
+  return next;
 }
 
 export function getEffectiveEntityFilterId(

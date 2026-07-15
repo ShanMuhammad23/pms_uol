@@ -13,8 +13,19 @@ interface DashboardWorkflowStatsRowProps {
   selfAssessmentStats: WorkflowStageStats;
   managerReviewStats: WorkflowStageStats;
   hrAlignmentStats: WorkflowStageStats;
-  selectedFormState: FormState | "ALL";
+  selectedFormStates: string[] | null;
   onFilterByFormState: (state: FormState) => void;
+}
+
+function isFormStateActive(
+  selectedFormStates: string[] | null,
+  state: FormState,
+): boolean {
+  return (
+    selectedFormStates !== null &&
+    selectedFormStates.length === 1 &&
+    selectedFormStates[0] === state
+  );
 }
 
 export function DashboardWorkflowStatsRow({
@@ -22,7 +33,7 @@ export function DashboardWorkflowStatsRow({
   selfAssessmentStats,
   managerReviewStats,
   hrAlignmentStats,
-  selectedFormState,
+  selectedFormStates,
   onFilterByFormState,
 }: DashboardWorkflowStatsRowProps) {
   return (
@@ -44,7 +55,7 @@ export function DashboardWorkflowStatsRow({
         icon={User}
         delay={0.1}
         onClick={() => onFilterByFormState("PENDING_SELF_ASSESSMENT")}
-        active={selectedFormState === "PENDING_SELF_ASSESSMENT"}
+        active={isFormStateActive(selectedFormStates, "PENDING_SELF_ASSESSMENT")}
       />
       <StatCard
         title="Manager Review"
@@ -57,7 +68,7 @@ export function DashboardWorkflowStatsRow({
         icon={AlertTriangle}
         delay={0.2}
         onClick={() => onFilterByFormState("PENDING_HEAD_REVIEW")}
-        active={selectedFormState === "PENDING_HEAD_REVIEW"}
+        active={isFormStateActive(selectedFormStates, "PENDING_HEAD_REVIEW")}
       />
       <StatCard
         title="HR Alignment"
@@ -70,7 +81,7 @@ export function DashboardWorkflowStatsRow({
         icon={Scale}
         delay={0.3}
         onClick={() => onFilterByFormState("PENDING_HR_CALIBRATION")}
-        active={selectedFormState === "PENDING_HR_CALIBRATION"}
+        active={isFormStateActive(selectedFormStates, "PENDING_HR_CALIBRATION")}
       />
     </motion.div>
   );
