@@ -86,7 +86,7 @@ export function DashboardPrimaryCharts({
                 fill="url(#actualGrad)"
                 dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}
               >
-                <LabelList dataKey="actual" position="bottom" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
+                <LabelList dataKey="actual" position="top" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
               </Area>
             </AreaChart>
           </ResponsiveContainer>

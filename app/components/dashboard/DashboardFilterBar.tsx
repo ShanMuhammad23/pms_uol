@@ -14,6 +14,7 @@ import {
 import { FilterChip, type FilterChipColor } from "@/app/components/dashboard/FilterChip";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
+import { ENTITY_FILTER_LEVELS } from "@/app/helpers/dashboard-entity-filters";
 import type { FormState } from "@/app/helpers/dashboard-types";
 import type { EntityRecord } from "@/types/entities";
 import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
@@ -28,15 +29,21 @@ export interface ActiveFilter {
 interface DashboardFilterBarProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
-  selectedEntityId: number | "ALL";
-  onEntityChange: (value: number | "ALL") => void;
+  selectedCategory0EntityId: number | "ALL";
+  onCategory0EntityChange: (value: number | "ALL") => void;
+  selectedCategory1EntityId: number | "ALL";
+  onCategory1EntityChange: (value: number | "ALL") => void;
+  selectedCategory2EntityId: number | "ALL";
+  onCategory2EntityChange: (value: number | "ALL") => void;
+  category0Entities: EntityRecord[];
+  category1Entities: EntityRecord[];
+  category2Entities: EntityRecord[];
   selectedCategoryId: number | "ALL";
-  onCategoryChange: (value: number | "ALL") => void;
+  onStaffCategoryChange: (value: number | "ALL") => void;
   selectedSubCategoryId: number | "ALL";
   onSubCategoryChange: (value: number | "ALL") => void;
   selectedFormState: FormState | "ALL";
   onFormStateChange: (value: FormState | "ALL") => void;
-  sortedEntities: EntityRecord[];
   staffCategories: StaffCategoryWithSubCategories[];
   availableSubCategories: StaffCategoryWithSubCategories["subCategories"];
   entitiesLoading: boolean;
@@ -48,15 +55,21 @@ interface DashboardFilterBarProps {
 export function DashboardFilterBar({
   searchQuery,
   onSearchQueryChange,
-  selectedEntityId,
-  onEntityChange,
+  selectedCategory0EntityId,
+  onCategory0EntityChange,
+  selectedCategory1EntityId,
+  onCategory1EntityChange,
+  selectedCategory2EntityId,
+  onCategory2EntityChange,
+  category0Entities,
+  category1Entities,
+  category2Entities,
   selectedCategoryId,
-  onCategoryChange,
+  onStaffCategoryChange,
   selectedSubCategoryId,
   onSubCategoryChange,
   selectedFormState,
   onFormStateChange,
-  sortedEntities,
   staffCategories,
   availableSubCategories,
   entitiesLoading,
@@ -104,7 +117,7 @@ export function DashboardFilterBar({
               className="overflow-hidden"
             >
               <div className="border-t border-slate-200 px-4 pb-4 pt-3 dark:border-white/10">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
                     <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Search
@@ -125,48 +138,79 @@ export function DashboardFilterBar({
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Entity
-                    </label>
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={selectedEntityId === "ALL" ? "ALL" : String(selectedEntityId)}
-                        onChange={(e) =>
-                          onEntityChange(e.target.value === "ALL" ? "ALL" : Number(e.target.value))
-                        }
-                        disabled={entitiesLoading}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "disabled:cursor-not-allowed disabled:opacity-50",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Entities</option>
-                        {sortedEntities.map((entity) => (
-                          <option key={entity.id} value={entity.id}>
-                            {entity.parentName
-                              ? `${entity.name} (${entity.parentName})`
-                              : entity.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
+                  {ENTITY_FILTER_LEVELS.map((level, index) => {
+                    const selectedId =
+                      index === 0
+                        ? selectedCategory0EntityId
+                        : index === 1
+                          ? selectedCategory1EntityId
+                          : selectedCategory2EntityId;
+                    const options =
+                      index === 0
+                        ? category0Entities
+                        : index === 1
+                          ? category1Entities
+                          : category2Entities;
+                    const onChange =
+                      index === 0
+                        ? onCategory0EntityChange
+                        : index === 1
+                          ? onCategory1EntityChange
+                          : onCategory2EntityChange;
+                    const disabled =
+                      entitiesLoading ||
+                      (index === 1 && selectedCategory0EntityId === "ALL") ||
+                      (index === 2 && selectedCategory1EntityId === "ALL");
+
+                    return (
+                      <div key={level.label} className="space-y-1.5">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          {level.label}
+                        </label>
+                        <div className="relative">
+                          <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          <select
+                            value={selectedId === "ALL" ? "ALL" : String(selectedId)}
+                            onChange={(event) =>
+                              onChange(
+                                event.target.value === "ALL"
+                                  ? "ALL"
+                                  : Number(event.target.value),
+                              )
+                            }
+                            disabled={disabled}
+                            className={cn(
+                              "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
+                              "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
+                              "disabled:cursor-not-allowed disabled:opacity-50",
+                              "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
+                            )}
+                          >
+                            <option value="ALL">All {level.label}</option>
+                            {options.map((entity) => (
+                              <option key={entity.id} value={entity.id}>
+                                {entity.name}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        </div>
+                      </div>
+                    );
+                  })}
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Category
+                      Staff Category
                     </label>
                     <div className="relative">
                       <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <select
                         value={selectedCategoryId === "ALL" ? "ALL" : String(selectedCategoryId)}
                         onChange={(e) =>
-                          onCategoryChange(e.target.value === "ALL" ? "ALL" : Number(e.target.value))
+                          onStaffCategoryChange(
+                            e.target.value === "ALL" ? "ALL" : Number(e.target.value),
+                          )
                         }
                         disabled={staffCategoriesLoading}
                         className={cn(
@@ -176,7 +220,7 @@ export function DashboardFilterBar({
                           "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
                         )}
                       >
-                        <option value="ALL">All Categories</option>
+                        <option value="ALL">All Staff Categories</option>
                         {staffCategories.map((category) => (
                           <option key={category.id} value={category.id}>
                             {category.name}
@@ -189,7 +233,7 @@ export function DashboardFilterBar({
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Sub-Category
+                      Staff Sub-Category
                     </label>
                     <div className="relative">
                       <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -210,7 +254,7 @@ export function DashboardFilterBar({
                           "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
                         )}
                       >
-                        <option value="ALL">All Sub-Categories</option>
+                        <option value="ALL">All Staff Sub-Categories</option>
                         {availableSubCategories.map((subCategory) => (
                           <option key={subCategory.id} value={subCategory.id}>
                             {subCategory.name}

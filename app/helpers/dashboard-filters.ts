@@ -1,4 +1,5 @@
 import type { FormState } from "@/app/helpers/dashboard-types";
+import { getEffectiveEntityFilterId } from "@/app/helpers/dashboard-entity-filters";
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { APPRAISAL_STATUSES, type AppraisalStatus } from "@/types/forms";
@@ -6,7 +7,9 @@ import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
 export type SubmissionFilterState = {
   searchQuery: string;
-  selectedEntityId: number | "ALL";
+  selectedCategory0EntityId: number | "ALL";
+  selectedCategory1EntityId: number | "ALL";
+  selectedCategory2EntityId: number | "ALL";
   selectedCategoryId: number | "ALL";
   selectedSubCategoryId: number | "ALL";
   selectedFormState: FormState | "ALL";
@@ -101,7 +104,11 @@ export function matchesSubmissionFilters(
 
   const matchesEntity = matchesSubmissionEntityFilter(
     submission,
-    filters.selectedEntityId,
+    getEffectiveEntityFilterId({
+      category0EntityId: filters.selectedCategory0EntityId,
+      category1EntityId: filters.selectedCategory1EntityId,
+      category2EntityId: filters.selectedCategory2EntityId,
+    }),
     filters.entities,
   );
 

@@ -5,7 +5,6 @@ import { useDashboardFilters } from "@/app/queries/dashboard-filters";
 import { useFormSubmissionsQuery } from "@/app/queries/forms";
 import {
   useEntitiesQuery,
-  useSortedEntities,
   useStaffCategoriesWithSubCategoriesQuery,
 } from "@/app/queries/organization";
 import {
@@ -41,22 +40,28 @@ export function useDashboardPage() {
   } = useFormSubmissionsQuery();
 
   const matrixForDistribution = useMatrixForDistribution(performanceMatrix);
-  const sortedEntities = useSortedEntities(entities);
 
   const {
     searchQuery,
     setSearchQuery,
-    selectedEntityId,
-    setSelectedEntityId,
+    selectedCategory0EntityId,
+    selectedCategory1EntityId,
+    selectedCategory2EntityId,
+    setSelectedCategory2EntityId,
     selectedCategoryId,
     selectedSubCategoryId,
     setSelectedSubCategoryId,
     selectedFormState,
     setSelectedFormState,
+    category0Entities,
+    category1Entities,
+    category2Entities,
     availableSubCategories,
     filteredSubmissions,
     activeFilters,
-    handleCategoryChange,
+    handleCategory0EntityChange,
+    handleCategory1EntityChange,
+    handleStaffCategoryChange,
     clearAllFilters,
     filterByFormState,
   } = useDashboardFilters({
@@ -77,14 +82,18 @@ export function useDashboardPage() {
     isDarkMode,
     searchQuery,
     setSearchQuery,
-    selectedEntityId,
-    setSelectedEntityId,
+    selectedCategory0EntityId,
+    selectedCategory1EntityId,
+    selectedCategory2EntityId,
+    setSelectedCategory2EntityId,
     selectedCategoryId,
     selectedSubCategoryId,
     setSelectedSubCategoryId,
     selectedFormState,
     setSelectedFormState,
-    sortedEntities,
+    category0Entities,
+    category1Entities,
+    category2Entities,
     staffCategories,
     availableSubCategories,
     entitiesLoading,
@@ -94,7 +103,9 @@ export function useDashboardPage() {
     performanceMatrixLoading,
     filteredSubmissions,
     activeFilters,
-    handleCategoryChange,
+    handleCategory0EntityChange,
+    handleCategory1EntityChange,
+    handleStaffCategoryChange,
     clearAllFilters,
     filterByFormState,
     ...chartMetrics,

@@ -12,14 +12,18 @@ export default function HRDashboardPage() {
     isDarkMode,
     searchQuery,
     setSearchQuery,
-    selectedEntityId,
-    setSelectedEntityId,
+    selectedCategory0EntityId,
+    selectedCategory1EntityId,
+    selectedCategory2EntityId,
+    setSelectedCategory2EntityId,
     selectedCategoryId,
     selectedSubCategoryId,
     setSelectedSubCategoryId,
     selectedFormState,
     setSelectedFormState,
-    sortedEntities,
+    category0Entities,
+    category1Entities,
+    category2Entities,
     staffCategories,
     availableSubCategories,
     entitiesLoading,
@@ -29,7 +33,9 @@ export default function HRDashboardPage() {
     performanceMatrixLoading,
     filteredSubmissions,
     activeFilters,
-    handleCategoryChange,
+    handleCategory0EntityChange,
+    handleCategory1EntityChange,
+    handleStaffCategoryChange,
     clearAllFilters,
     filterByFormState,
     eligibilityData,
@@ -49,15 +55,21 @@ export default function HRDashboardPage() {
         <DashboardFilterBar
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          selectedEntityId={selectedEntityId}
-          onEntityChange={setSelectedEntityId}
+          selectedCategory0EntityId={selectedCategory0EntityId}
+          onCategory0EntityChange={handleCategory0EntityChange}
+          selectedCategory1EntityId={selectedCategory1EntityId}
+          onCategory1EntityChange={handleCategory1EntityChange}
+          selectedCategory2EntityId={selectedCategory2EntityId}
+          onCategory2EntityChange={setSelectedCategory2EntityId}
+          category0Entities={category0Entities}
+          category1Entities={category1Entities}
+          category2Entities={category2Entities}
           selectedCategoryId={selectedCategoryId}
-          onCategoryChange={handleCategoryChange}
+          onStaffCategoryChange={handleStaffCategoryChange}
           selectedSubCategoryId={selectedSubCategoryId}
           onSubCategoryChange={setSelectedSubCategoryId}
           selectedFormState={selectedFormState}
           onFormStateChange={setSelectedFormState}
-          sortedEntities={sortedEntities}
           staffCategories={staffCategories}
           availableSubCategories={availableSubCategories}
           entitiesLoading={entitiesLoading}

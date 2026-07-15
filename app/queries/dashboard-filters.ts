@@ -2,6 +2,10 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { ActiveFilter } from "@/app/components/dashboard/DashboardFilterBar";
+import {
+  ENTITY_FILTER_LEVELS,
+  getEntitiesForFilterLevel,
+} from "@/app/helpers/dashboard-entity-filters";
 import { matchesSubmissionFilters } from "@/app/helpers/dashboard-filters";
 import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormState } from "@/app/helpers/dashboard-types";
@@ -21,10 +25,39 @@ export function useDashboardFilters({
   entities,
 }: UseDashboardFiltersParams) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedEntityId, setSelectedEntityId] = useState<number | "ALL">("ALL");
+  const [selectedCategory0EntityId, setSelectedCategory0EntityId] = useState<
+    number | "ALL"
+  >("ALL");
+  const [selectedCategory1EntityId, setSelectedCategory1EntityId] = useState<
+    number | "ALL"
+  >("ALL");
+  const [selectedCategory2EntityId, setSelectedCategory2EntityId] = useState<
+    number | "ALL"
+  >("ALL");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | "ALL">("ALL");
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<number | "ALL">("ALL");
   const [selectedFormState, setSelectedFormState] = useState<(FormState | "ALL")>("ALL");
+
+  const category0Entities = useMemo(
+    () => getEntitiesForFilterLevel(entities, 0, null),
+    [entities],
+  );
+
+  const category1Entities = useMemo(
+    () =>
+      selectedCategory0EntityId === "ALL"
+        ? []
+        : getEntitiesForFilterLevel(entities, 1, selectedCategory0EntityId),
+    [entities, selectedCategory0EntityId],
+  );
+
+  const category2Entities = useMemo(
+    () =>
+      selectedCategory1EntityId === "ALL"
+        ? []
+        : getEntitiesForFilterLevel(entities, 2, selectedCategory1EntityId),
+    [entities, selectedCategory1EntityId],
+  );
 
   const selectedStaffCategory = useMemo(
     () =>
@@ -44,7 +77,9 @@ export function useDashboardFilters({
       submissions.filter((submission) =>
         matchesSubmissionFilters(submission, {
           searchQuery,
-          selectedEntityId,
+          selectedCategory0EntityId,
+          selectedCategory1EntityId,
+          selectedCategory2EntityId,
           selectedCategoryId,
           selectedSubCategoryId,
           selectedFormState,
@@ -55,7 +90,9 @@ export function useDashboardFilters({
     [
       submissions,
       searchQuery,
-      selectedEntityId,
+      selectedCategory0EntityId,
+      selectedCategory1EntityId,
+      selectedCategory2EntityId,
       selectedCategoryId,
       selectedSubCategoryId,
       selectedFormState,
@@ -64,7 +101,18 @@ export function useDashboardFilters({
     ],
   );
 
-  const handleCategoryChange = useCallback((categoryId: number | "ALL") => {
+  const handleCategory0EntityChange = useCallback((entityId: number | "ALL") => {
+    setSelectedCategory0EntityId(entityId);
+    setSelectedCategory1EntityId("ALL");
+    setSelectedCategory2EntityId("ALL");
+  }, []);
+
+  const handleCategory1EntityChange = useCallback((entityId: number | "ALL") => {
+    setSelectedCategory1EntityId(entityId);
+    setSelectedCategory2EntityId("ALL");
+  }, []);
+
+  const handleStaffCategoryChange = useCallback((categoryId: number | "ALL") => {
     setSelectedCategoryId(categoryId);
     setSelectedSubCategoryId("ALL");
   }, []);
@@ -72,11 +120,29 @@ export function useDashboardFilters({
   const activeFilters = useMemo(() => {
     const filters: ActiveFilter[] = [];
 
-    if (selectedEntityId !== "ALL") {
-      const entity = entities.find((item) => item.id === selectedEntityId);
+    if (selectedCategory0EntityId !== "ALL") {
+      const entity = entities.find((item) => item.id === selectedCategory0EntityId);
       filters.push({
-        label: `Entity: ${entity?.name ?? selectedEntityId}`,
-        onRemove: () => setSelectedEntityId("ALL"),
+        label: `${ENTITY_FILTER_LEVELS[0].label}: ${entity?.name ?? selectedCategory0EntityId}`,
+        onRemove: () => handleCategory0EntityChange("ALL"),
+        color: "slate",
+      });
+    }
+
+    if (selectedCategory1EntityId !== "ALL") {
+      const entity = entities.find((item) => item.id === selectedCategory1EntityId);
+      filters.push({
+        label: `${ENTITY_FILTER_LEVELS[1].label}: ${entity?.name ?? selectedCategory1EntityId}`,
+        onRemove: () => handleCategory1EntityChange("ALL"),
+        color: "slate",
+      });
+    }
+
+    if (selectedCategory2EntityId !== "ALL") {
+      const entity = entities.find((item) => item.id === selectedCategory2EntityId);
+      filters.push({
+        label: `${ENTITY_FILTER_LEVELS[2].label}: ${entity?.name ?? selectedCategory2EntityId}`,
+        onRemove: () => setSelectedCategory2EntityId("ALL"),
         color: "slate",
       });
     }
@@ -84,16 +150,18 @@ export function useDashboardFilters({
     if (selectedCategoryId !== "ALL") {
       const category = staffCategories.find((item) => item.id === selectedCategoryId);
       filters.push({
-        label: `Category: ${category?.name ?? selectedCategoryId}`,
-        onRemove: () => handleCategoryChange("ALL"),
+        label: `Staff Category: ${category?.name ?? selectedCategoryId}`,
+        onRemove: () => handleStaffCategoryChange("ALL"),
         color: "amber",
       });
     }
 
     if (selectedSubCategoryId !== "ALL") {
-      const subCategory = availableSubCategories.find((item) => item.id === selectedSubCategoryId);
+      const subCategory = availableSubCategories.find(
+        (item) => item.id === selectedSubCategoryId,
+      );
       filters.push({
-        label: `Sub-Category: ${subCategory?.name ?? selectedSubCategoryId}`,
+        label: `Staff Sub-Category: ${subCategory?.name ?? selectedSubCategoryId}`,
         onRemove: () => setSelectedSubCategoryId("ALL"),
         color: "blue",
       });
@@ -117,7 +185,9 @@ export function useDashboardFilters({
 
     return filters;
   }, [
-    selectedEntityId,
+    selectedCategory0EntityId,
+    selectedCategory1EntityId,
+    selectedCategory2EntityId,
     selectedCategoryId,
     selectedSubCategoryId,
     selectedFormState,
@@ -125,12 +195,16 @@ export function useDashboardFilters({
     staffCategories,
     availableSubCategories,
     entities,
-    handleCategoryChange,
+    handleCategory0EntityChange,
+    handleCategory1EntityChange,
+    handleStaffCategoryChange,
   ]);
 
   const clearAllFilters = useCallback(() => {
     setSearchQuery("");
-    setSelectedEntityId("ALL");
+    setSelectedCategory0EntityId("ALL");
+    setSelectedCategory1EntityId("ALL");
+    setSelectedCategory2EntityId("ALL");
     setSelectedCategoryId("ALL");
     setSelectedSubCategoryId("ALL");
     setSelectedFormState("ALL");
@@ -143,17 +217,24 @@ export function useDashboardFilters({
   return {
     searchQuery,
     setSearchQuery,
-    selectedEntityId,
-    setSelectedEntityId,
+    selectedCategory0EntityId,
+    selectedCategory1EntityId,
+    selectedCategory2EntityId,
+    setSelectedCategory2EntityId,
     selectedCategoryId,
     selectedSubCategoryId,
     setSelectedSubCategoryId,
     selectedFormState,
     setSelectedFormState,
+    category0Entities,
+    category1Entities,
+    category2Entities,
     availableSubCategories,
     filteredSubmissions,
     activeFilters,
-    handleCategoryChange,
+    handleCategory0EntityChange,
+    handleCategory1EntityChange,
+    handleStaffCategoryChange,
     clearAllFilters,
     filterByFormState,
   };
