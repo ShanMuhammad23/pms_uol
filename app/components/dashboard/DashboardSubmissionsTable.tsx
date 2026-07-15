@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Eye, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ColumnVisibilityDropdown,
   useDashboardColumnVisibility,
@@ -15,6 +16,8 @@ import {
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 50;
 
 interface DashboardSubmissionsTableProps {
   submissions: FormSubmissionListItem[];
@@ -81,9 +84,30 @@ export function DashboardSubmissionsTable({
   onClearAllFilters,
 }: DashboardSubmissionsTableProps) {
   const { visibleIds, toggleColumn, showAll, isVisible } = useDashboardColumnVisibility();
+  const [page, setPage] = useState(1);
 
   const visibleColumns = DASHBOARD_TABLE_COLUMNS.filter((column) => isVisible(column.id));
   const colSpan = Math.max(visibleColumns.length, 1);
+
+  const totalCount = submissions.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [submissions]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
+  const paginatedSubmissions = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return submissions.slice(start, start + PAGE_SIZE);
+  }, [page, submissions]);
+
+  const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
+  const showPagination = !isLoading && !error && totalCount > 0;
 
   return (
     <motion.div
@@ -140,7 +164,7 @@ export function DashboardSubmissionsTable({
               </tr>
             ) : (
               <AnimatePresence>
-                {submissions.map((submission, index) => (
+                {paginatedSubmissions.map((submission, index) => (
                   <motion.tr
                     key={submission.id}
                     initial={{ opacity: 0, y: 8 }}
@@ -148,7 +172,7 @@ export function DashboardSubmissionsTable({
                     exit={{ opacity: 0, y: -8 }}
                     transition={{
                       duration: 0.35,
-                      delay: index * 0.02,
+                      delay: Math.min(index, 10) * 0.02,
                       ease: [0.23, 1, 0.32, 1],
                     }}
                     className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]"
@@ -193,6 +217,37 @@ export function DashboardSubmissionsTable({
             Clear all filters
           </button>
         </motion.div>
+      ) : null}
+
+      {showPagination ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-3 dark:border-white/5">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Showing {rangeStart}–{rangeEnd} of {totalCount}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page <= 1}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/[0.04]"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Previous
+            </button>
+            <span className="min-w-20 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/[0.04]"
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
       ) : null}
     </motion.div>
   );
