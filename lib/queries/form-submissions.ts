@@ -1,6 +1,8 @@
 import "server-only";
 
+import { computeAppraisalEligibility, resolveReferenceEndDate } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
+import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import {
   calculateScorePercent,
   getActiveFinancialYearQuartileBands,
@@ -26,7 +28,7 @@ export class FormSubmissionError extends Error {
 }
 
 interface SubmissionListRow {
-  id: string;
+  id: string | null;
   employee_id: string;
   employee_name: string;
   employee_email: string;
@@ -76,7 +78,7 @@ interface SubmissionListRow {
   qualification_subject: string | null;
   qualification_institute: string | null;
   qualification_country: string | null;
-  submitted_at: string;
+  submitted_at: string | null;
 }
 
 let excelColumnsReady: boolean | null = null;
@@ -151,17 +153,25 @@ async function getAnswersForSubmission(
 function mapSubmissionRow(
   row: SubmissionListRow,
   quartileBands: Awaited<ReturnType<typeof getActiveFinancialYearQuartileBands>>,
+  eligibilityContext: {
+    financialYear: number | null;
+    cycleEndDate: string | null;
+  },
 ): FormSubmissionListItem {
-  const rawScore = row.system_raw_score;
+  const rawScore = row.system_raw_score ?? 0;
   const maxRawScore = Number(row.max_raw_score);
   const scorePercent = calculateScorePercent(rawScore, maxRawScore);
   const resolved = resolvePerformanceQuartile(scorePercent, quartileBands);
   const scoreO = toNumber(row.initial_score_numeric) ?? rawScore;
   const normalizedScore =
     toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric);
+  const eligibility = computeAppraisalEligibility(row.date_of_joining, {
+    financialYear: eligibilityContext.financialYear,
+    cycleEndDate: eligibilityContext.cycleEndDate,
+  });
 
   return {
-    id: Number(row.id),
+    id: row.id ? Number(row.id) : 0,
     employeeId: row.employee_id,
     employeeName: row.employee_name,
     employeeEmail: row.employee_email,
@@ -194,9 +204,13 @@ function mapSubmissionRow(
     quartileName: row.stored_quartile_name ?? resolved?.quartileName ?? null,
     initialRating: row.initial_rating,
     calibratedRating: row.calibrated_rating,
-    uolExperienceYears: toNumber(row.uol_experience_years),
-    isEligible: row.is_eligible,
-    applicableDuration: row.applicable_duration,
+    uolExperienceYears:
+      toNumber(row.uol_experience_years) ?? eligibility.uolExperienceYears,
+    isEligible: row.is_eligible ?? eligibility.isEligible,
+    applicableDuration: row.applicable_duration ?? eligibility.applicableDuration,
+    eligibilityStatus: eligibility.status,
+    eligibilityReferenceYear: eligibilityContext.financialYear,
+    eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
     remarksEvaluation: row.remarks_evaluation,
     currentSalary: toNumber(row.current_salary),
     previousSalary: toNumber(row.previous_salary),
@@ -218,11 +232,49 @@ function mapSubmissionRow(
   };
 }
 
+async function getEligibilityContext(): Promise<{
+  cycleId: number | null;
+  financialYear: number | null;
+  cycleEndDate: string | null;
+}> {
+  const [cycleResult, financialYearResult] = await Promise.all([
+    getDefaultAppraisalCycle(),
+    db.query<{ year: number }>(
+      `SELECT year
+       FROM financial_years
+       WHERE is_active = TRUE
+       ORDER BY year DESC
+       LIMIT 1`,
+    ),
+  ]);
+
+  const financialYear = financialYearResult.rows[0]?.year ?? cycleResult?.fiscalYear ?? null;
+  const referenceEndDate = resolveReferenceEndDate({
+    financialYear,
+    cycleEndDate: cycleResult?.endDate ?? null,
+  });
+
+  return {
+    cycleId: cycleResult?.id ?? null,
+    financialYear,
+    cycleEndDate: formatReferenceDate(referenceEndDate),
+  };
+}
+
+function formatReferenceDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
-  const [excelReady, qualsReady, quartileBands] = await Promise.all([
+  const [excelReady, qualsReady, quartileBands, eligibilityContext] =
+    await Promise.all([
     hasExcelSheetColumns(),
     hasQualificationsTable(),
     getActiveFinancialYearQuartileBands(),
+    getEligibilityContext(),
   ]);
 
   const excelSelect = excelReady
@@ -327,15 +379,15 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
        ${qualSelect}
        ap.template_id,
        ft.title AS template_title,
-       ft.staff_category_id,
-       sc.name AS staff_category_name,
-       ft.staff_sub_category_id,
-       ssc.name AS staff_sub_category_name,
+       COALESCE(ft.staff_category_id, u.staff_category_id) AS staff_category_id,
+       COALESCE(sc.name, sc_user.name) AS staff_category_name,
+       COALESCE(ft.staff_sub_category_id, u.staff_sub_category_id) AS staff_sub_category_id,
+       COALESCE(ssc.name, ssc_user.name) AS staff_sub_category_name,
        u.entity_id,
        ent.name AS entity_name,
        parent_ent.name AS parent_entity_name,
-       ap.status,
-       ap.system_raw_score,
+       COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT') AS status,
+       COALESCE(ap.system_raw_score, 0) AS system_raw_score,
        ap.initial_rating,
        ap.calibrated_rating,
        COALESCE(
@@ -349,20 +401,39 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
          '0'
        ) AS max_raw_score,
        ap.submitted_at::text
-     FROM appraisals ap
-     INNER JOIN users u ON u.id = ap.employee_id
+     FROM users u
+     LEFT JOIN LATERAL (
+       SELECT ap_inner.*
+       FROM appraisals ap_inner
+       WHERE ap_inner.employee_id = u.id
+         AND (
+           ap_inner.cycle_id = $1
+           OR ($1::int IS NULL AND ap_inner.cycle_id IS NULL)
+         )
+       ORDER BY ap_inner.updated_at DESC NULLS LAST, ap_inner.id DESC
+       LIMIT 1
+     ) ap ON TRUE
      LEFT JOIN form_templates ft ON ft.id = ap.template_id
      LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
      LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
+     LEFT JOIN staff_categories sc_user ON sc_user.id = u.staff_category_id
+     LEFT JOIN staff_sub_categories ssc_user ON ssc_user.id = u.staff_sub_category_id
      LEFT JOIN entities ent ON ent.id = u.entity_id
      LEFT JOIN entities parent_ent ON parent_ent.id = ent.parent_entity_id
      ${quartileJoin}
      ${qualJoin}
-     WHERE ap.submitted_at IS NOT NULL
-     ORDER BY ap.submitted_at DESC`,
+     WHERE u.is_active = TRUE
+       AND u.employee_id <> 'EMP-0001'
+     ORDER BY u.first_name, u.last_name, u.employee_id`,
+    [eligibilityContext.cycleId],
   );
 
-  return result.rows.map((row) => mapSubmissionRow(row, quartileBands));
+  return result.rows.map((row) =>
+    mapSubmissionRow(row, quartileBands, {
+      financialYear: eligibilityContext.financialYear,
+      cycleEndDate: eligibilityContext.cycleEndDate,
+    }),
+  );
 }
 
 export async function getFormSubmissionById(

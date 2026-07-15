@@ -47,6 +47,10 @@ function renderCell(
   }
 
   if (columnId === "actions") {
+    if (submission.id <= 0) {
+      return <span className="text-xs text-slate-400">—</span>;
+    }
+
     return (
       <Link
         href={`/dashboard/submissions/${submission.id}`}

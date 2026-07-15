@@ -12,7 +12,8 @@
     "db:migrate:sub-category-increment-matrices": "node scripts/migrate-sub-category-increment-matrices.mjs",
     "db:migrate:excel-sheet-columns": "node scripts/migrate-excel-sheet-columns.mjs",
     "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs",
-    "db:seed:employees": "node scripts/seed-employees-from-excel.mjs"
+    "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
+    "db:recompute:eligibility": "node scripts/recompute-appraisal-eligibility.mjs"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",

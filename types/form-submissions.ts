@@ -59,7 +59,10 @@ export interface FormSubmissionListItem {
   qualificationSubject: string | null;
   qualificationInstitute: string | null;
   qualificationCountry: string | null;
-  submittedAt: string;
+  eligibilityStatus?: "Fully Eligible" | "Partially Eligible" | "Not Eligible";
+  eligibilityReferenceYear?: number | null;
+  eligibilityReferenceEndDate?: string | null;
+  submittedAt: string | null;
 }
 
 export interface FormSubmissionDetail {
