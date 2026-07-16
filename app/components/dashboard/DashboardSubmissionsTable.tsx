@@ -2,25 +2,35 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Pencil, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
 import {
   ColumnVisibilityDropdown,
   useDashboardColumnVisibility,
 } from "@/app/components/dashboard/ColumnVisibilityDropdown";
+import { InlineGradeGroupCell } from "@/app/components/dashboard/InlineGradeGroupCell";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
+import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { StaffListingMasterFilter } from "@/app/components/dashboard/StaffListingMasterFilter";
+import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
+import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
+import {
+  getEligibilityShortLabel,
+  getSubmissionEligibilityStatus,
+} from "@/app/helpers/dashboard-eligibility";
 import {
   EMPTY_MASTER_FILTER_STATE,
   applyMasterFilters,
+  isMasterFilterableColumn,
   type MasterFilterMultiSelection,
   type MasterFilterState,
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
 import {
-  DASHBOARD_TABLE_COLUMNS,
+  resolveOrderedColumns,
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
@@ -73,11 +83,57 @@ function renderCell(
     );
   }
 
+  if (columnId === "eligible") {
+    const status = getSubmissionEligibilityStatus(submission);
+    const label = getEligibilityShortLabel(status);
+    const backgroundColor = ELIGIBILITY_CONFIG[status].light;
+
+    return (
+      <span
+        className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white"
+        style={{ backgroundColor }}
+        title={status}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  if (columnId === "roleCategory") {
+    return (
+      <InlineRoleCategoryCell
+        employeeId={submission.employeeId}
+        value={submission.roleCategory}
+      />
+    );
+  }
+
+  if (columnId === "gradeGroup") {
+    return (
+      <InlineGradeGroupCell
+        employeeId={submission.employeeId}
+        value={submission.gradeGroup}
+      />
+    );
+  }
+
   if (columnId === "remarksEvaluation") {
     return (
       <InlineRemarksCell
         submissionId={submission.id}
+        field="remarksEvaluation"
         value={submission.remarksEvaluation}
+        disabled={submission.id <= 0}
+      />
+    );
+  }
+
+  if (columnId === "remarksCompensation") {
+    return (
+      <InlineRemarksCell
+        submissionId={submission.id}
+        field="remarksCompensation"
+        value={submission.remarksCompensation}
         disabled={submission.id <= 0}
       />
     );
@@ -102,14 +158,28 @@ export function DashboardSubmissionsTable({
   error,
   onClearAllFilters,
 }: DashboardSubmissionsTableProps) {
-  const { visibleIds, toggleColumn, showAll, isVisible } = useDashboardColumnVisibility();
+  const {
+    visibleIds,
+    columnOrder,
+    toggleColumn,
+    showAll,
+    hideAll,
+    setColumnPosition,
+  } = useDashboardColumnVisibility();
   const [page, setPage] = useState(1);
   const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
     EMPTY_MASTER_FILTER_STATE,
   );
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
 
-  const visibleColumns = DASHBOARD_TABLE_COLUMNS.filter((column) => isVisible(column.id));
-  const colSpan = Math.max(visibleColumns.length, 1);
+  const visibleColumns = useMemo(
+    () => resolveOrderedColumns(columnOrder, visibleIds),
+    [columnOrder, visibleIds],
+  );
+  const colSpan = Math.max(visibleColumns.length, 1) + 1;
 
   const masterFilteredSubmissions = useMemo(
     () => applyMasterFilters(submissions, masterFilters),
@@ -127,14 +197,73 @@ export function DashboardSubmissionsTable({
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
+  useEffect(() => {
+    const available = new Set(
+      masterFilteredSubmissions.map((row) => row.employeeId),
+    );
+    setSelectedEmployeeIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of current) {
+        if (available.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [masterFilteredSubmissions]);
+
   const paginatedSubmissions = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return masterFilteredSubmissions.slice(start, start + PAGE_SIZE);
   }, [page, masterFilteredSubmissions]);
 
+  const pageEmployeeIds = useMemo(
+    () => paginatedSubmissions.map((row) => row.employeeId),
+    [paginatedSubmissions],
+  );
+  const selectedOnPageCount = pageEmployeeIds.filter((id) =>
+    selectedEmployeeIds.has(id),
+  ).length;
+  const allPageSelected =
+    pageEmployeeIds.length > 0 && selectedOnPageCount === pageEmployeeIds.length;
+  const somePageSelected =
+    selectedOnPageCount > 0 && selectedOnPageCount < pageEmployeeIds.length;
+  const selectedCount = selectedEmployeeIds.size;
+
   const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
   const showPagination = !isLoading && !error && totalCount > 0;
+
+  const toggleEmployeeSelection = (employeeId: string) => {
+    setSelectedEmployeeIds((current) => {
+      const next = new Set(current);
+      if (next.has(employeeId)) {
+        next.delete(employeeId);
+      } else {
+        next.add(employeeId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedEmployeeIds((current) => {
+      const next = new Set(current);
+      if (allPageSelected) {
+        for (const id of pageEmployeeIds) {
+          next.delete(id);
+        }
+      } else {
+        for (const id of pageEmployeeIds) {
+          next.add(id);
+        }
+      }
+      return next;
+    });
+  };
 
   const handleMasterTextChange = (
     columnId: MasterFilterTextColumnId,
@@ -187,7 +316,14 @@ export function DashboardSubmissionsTable({
       transition={{ delay: 0.6 }}
       className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
+         <StaffListingMasterFilter
+        submissions={submissions}
+        filters={masterFilters}
+        onTextChange={handleMasterTextChange}
+        onMultiChange={handleMasterMultiChange}
+        onClearAll={clearMasterFilters}
+      />
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
         <div className="min-w-0">
           <p className="text-lg font-semibold text-slate-900 dark:text-white">
             Staff listing ( Total: {totalCount}
@@ -196,26 +332,54 @@ export function DashboardSubmissionsTable({
               : ""}{" "}
             )
           </p>
+          {selectedCount > 0 ? (
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              {selectedCount} selected
+            </p>
+          ) : null}
         </div>
-        <ColumnVisibilityDropdown
-          visibleIds={visibleIds}
-          onToggle={toggleColumn}
-          onShowAll={showAll}
-        />
-      </div>
 
-      <StaffListingMasterFilter
-        submissions={submissions}
-        filters={masterFilters}
-        onTextChange={handleMasterTextChange}
-        onMultiChange={handleMasterMultiChange}
-        onClearAll={clearMasterFilters}
-      />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setBulkEditOpen(true)}
+            disabled={selectedCount === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-amber-600 dark:hover:bg-amber-500"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Bulk edit
+            {selectedCount > 0 ? ` (${selectedCount})` : ""}
+          </button>
+          <ColumnVisibilityDropdown
+            visibleIds={visibleIds}
+            columnOrder={columnOrder}
+            onToggle={toggleColumn}
+            onShowAll={showAll}
+            onHideAll={hideAll}
+            onSetColumnPosition={setColumnPosition}
+          />
+        </div>
+      </div>
 
       <div className="w-full max-w-full overflow-x-auto overscroll-x-contain">
         <table className="w-max min-w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/5 dark:bg-white/[0.02]">
+              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-3 dark:bg-slate-900">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  ref={(element) => {
+                    if (element) {
+                      element.indeterminate = somePageSelected;
+                    }
+                  }}
+                  onChange={toggleSelectAllOnPage}
+                  disabled={pageEmployeeIds.length === 0}
+                  aria-label="Select all staff on this page"
+                  className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
+                />
+              </th>
               {visibleColumns.map((column) => (
                 <th
                   key={column.id}
@@ -225,7 +389,17 @@ export function DashboardSubmissionsTable({
                     column.align === "center" && "text-center",
                   )}
                 >
-                  {column.label}
+                  {isMasterFilterableColumn(column.id) ? (
+                    <TableColumnHeaderFilter
+                      column={column}
+                      submissions={submissions}
+                      filters={masterFilters}
+                      onTextChange={handleMasterTextChange}
+                      onMultiChange={handleMasterMultiChange}
+                    />
+                  ) : (
+                    column.label
+                  )}
                 </th>
               ))}
             </tr>
@@ -245,36 +419,62 @@ export function DashboardSubmissionsTable({
               </tr>
             ) : (
               <AnimatePresence>
-                {paginatedSubmissions.map((submission, index) => (
-                  <motion.tr
-                    key={submission.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{
-                      duration: 0.35,
-                      delay: Math.min(index, 10) * 0.02,
-                      ease: [0.23, 1, 0.32, 1],
-                    }}
-                    className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]"
-                  >
-                    {visibleColumns.map((column) => {
-                      const value = column.getValue(submission);
-                      return (
-                        <td
-                          key={column.id}
-                          className={cn(
-                            "whitespace-nowrap px-4 py-3 align-middle",
-                            column.align === "right" && "text-right",
-                            column.align === "center" && "text-center",
-                          )}
-                        >
-                          {renderCell(column.id, submission, value)}
-                        </td>
-                      );
-                    })}
-                  </motion.tr>
-                ))}
+                {paginatedSubmissions.map((submission, index) => {
+                  const isSelected = selectedEmployeeIds.has(
+                    submission.employeeId,
+                  );
+                  return (
+                    <motion.tr
+                      key={`${submission.employeeId}-${submission.id}`}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{
+                        duration: 0.35,
+                        delay: Math.min(index, 10) * 0.02,
+                        ease: [0.23, 1, 0.32, 1],
+                      }}
+                      className={cn(
+                        "group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
+                        isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
+                      )}
+                    >
+                      <td
+                        className={cn(
+                          "sticky left-0 z-10 px-3 py-3",
+                          isSelected
+                            ? "bg-amber-50/60 dark:bg-amber-500/5"
+                            : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() =>
+                            toggleEmployeeSelection(submission.employeeId)
+                          }
+                          aria-label={`Select ${submission.employeeName}`}
+                          className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20 dark:bg-slate-950"
+                        />
+                      </td>
+                      {visibleColumns.map((column) => {
+                        const value = column.getValue(submission);
+                        return (
+                          <td
+                            key={column.id}
+                            className={cn(
+                              "whitespace-nowrap px-4 py-3 align-middle",
+                              column.align === "right" && "text-right",
+                              column.align === "center" && "text-center",
+                            )}
+                          >
+                            {renderCell(column.id, submission, value)}
+                          </td>
+                        );
+                      })}
+                    </motion.tr>
+                  );
+                })}
               </AnimatePresence>
             )}
           </tbody>
@@ -330,6 +530,13 @@ export function DashboardSubmissionsTable({
           </div>
         </div>
       ) : null}
+
+      <BulkEditStaffModal
+        open={bulkEditOpen}
+        selectedEmployeeIds={[...selectedEmployeeIds]}
+        onClose={() => setBulkEditOpen(false)}
+        onSuccess={() => setSelectedEmployeeIds(new Set())}
+      />
     </motion.div>
   );
 }

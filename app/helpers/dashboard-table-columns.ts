@@ -93,8 +93,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "roleCategory",
     label: "Role Category",
-    getValue: (row) =>
-      formatNullable(row.staffCategoryName ?? row.empCategory),
+    getValue: (row) => formatNullable(row.roleCategory),
   },
   {
     id: "facultyName",
@@ -109,7 +108,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   },
   {
     id: "gradeGroup",
-    label: "Gp",
+    label: "Column 1",
     getValue: (row) => formatNullable(row.gradeGroup),
   },
   {
@@ -180,7 +179,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
     label: "Applicable Dur",
     align: "right",
     getValue: (row) =>
-      formatNumber(getSubmissionApplicableDurationFactor(row), 1),
+      formatNumber(getSubmissionApplicableDurationFactor(row), 2),
   },
   {
     id: "remarksEvaluation",
@@ -305,6 +304,48 @@ export const TOGGLEABLE_DASHBOARD_TABLE_COLUMNS = DASHBOARD_TABLE_COLUMNS.filter
   (column) => !column.pinned,
 );
 
+export const PINNED_DASHBOARD_TABLE_COLUMNS = DASHBOARD_TABLE_COLUMNS.filter(
+  (column) => column.pinned,
+);
+
 export function getDefaultVisibleColumnIds(): DashboardTableColumnId[] {
   return DASHBOARD_TABLE_COLUMNS.map((column) => column.id);
+}
+
+export function getDefaultColumnOrder(): DashboardTableColumnId[] {
+  return TOGGLEABLE_DASHBOARD_TABLE_COLUMNS.map((column) => column.id);
+}
+
+export function getColumnById(
+  id: DashboardTableColumnId,
+): DashboardTableColumnDef | undefined {
+  return DASHBOARD_TABLE_COLUMNS.find((column) => column.id === id);
+}
+
+/** Apply saved toggleable order; pinned columns always remain at the end. */
+export function resolveOrderedColumns(
+  columnOrder: DashboardTableColumnId[],
+  visibleIds: DashboardTableColumnId[],
+): DashboardTableColumnDef[] {
+  const visible = new Set(visibleIds);
+  const byId = new Map(
+    DASHBOARD_TABLE_COLUMNS.map((column) => [column.id, column] as const),
+  );
+  const defaults = getDefaultColumnOrder();
+  const seen = new Set<DashboardTableColumnId>();
+  const orderedToggleable: DashboardTableColumnDef[] = [];
+
+  for (const id of [...columnOrder, ...defaults]) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const column = byId.get(id);
+    if (!column || column.pinned || !visible.has(id)) continue;
+    orderedToggleable.push(column);
+  }
+
+  const pinnedVisible = PINNED_DASHBOARD_TABLE_COLUMNS.filter((column) =>
+    visible.has(column.id),
+  );
+
+  return [...orderedToggleable, ...pinnedVisible];
 }

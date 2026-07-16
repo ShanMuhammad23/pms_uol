@@ -81,6 +81,7 @@ export function useDashboardPage() {
   });
 
   const chartMetrics = useDashboardChartMetrics({
+    submissions,
     filteredSubmissions,
     staffCategories,
     isDarkMode,

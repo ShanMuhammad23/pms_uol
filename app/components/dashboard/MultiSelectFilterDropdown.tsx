@@ -29,6 +29,8 @@ interface MultiSelectFilterDropdownProps {
   disabled?: boolean;
   placeholder?: string;
   searchable?: boolean;
+  /** Softer chrome for dense filter panels. */
+  quiet?: boolean;
   className?: string;
 }
 
@@ -91,6 +93,7 @@ export function MultiSelectFilterDropdown({
   disabled = false,
   placeholder = "All",
   searchable = false,
+  quiet = false,
   className,
 }: MultiSelectFilterDropdownProps) {
   const [open, setOpen] = useState(false);
@@ -242,7 +245,12 @@ export function MultiSelectFilterDropdown({
                 type="button"
                 onClick={handleSelectAll}
                 disabled={allSelected || options.length === 0}
-                className="text-xs font-semibold text-amber-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-amber-400"
+                className={cn(
+                  "text-xs font-semibold hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline",
+                  quiet
+                    ? "text-slate-600 dark:text-slate-300"
+                    : "text-amber-700 dark:text-amber-400",
+                )}
               >
                 Select all
               </button>
@@ -291,7 +299,9 @@ export function MultiSelectFilterDropdown({
                           className={cn(
                             "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
                             checked
-                              ? "border-amber-500 bg-amber-500 text-white"
+                              ? quiet
+                                ? "border-slate-700 bg-slate-700 text-white dark:border-slate-300 dark:bg-slate-300 dark:text-slate-900"
+                                : "border-amber-500 bg-amber-500 text-white"
                               : "border-slate-300 dark:border-white/20",
                           )}
                         >
@@ -313,8 +323,22 @@ export function MultiSelectFilterDropdown({
       : null;
 
   return (
-    <div ref={rootRef} className={cn("relative min-w-[180px] flex-1 space-y-1.5", className)}>
-      <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+    <div
+      ref={rootRef}
+      className={cn(
+        "relative min-w-[180px] flex-1",
+        quiet ? "space-y-1" : "space-y-1.5",
+        className,
+      )}
+    >
+      <label
+        className={cn(
+          "text-slate-500 dark:text-slate-400",
+          quiet
+            ? "text-[11px] font-medium"
+            : "text-xs font-semibold uppercase tracking-wider",
+        )}
+      >
         {label}
       </label>
       <div className="relative">
@@ -332,12 +356,25 @@ export function MultiSelectFilterDropdown({
           }}
           onKeyDown={handleTriggerKeyDown}
           className={cn(
-            "flex w-full items-center rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-left text-sm text-slate-700",
-            "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-            "disabled:cursor-not-allowed disabled:opacity-50",
+            "flex w-full items-center border bg-white pr-10 text-left text-sm text-slate-700",
+            quiet
+              ? "rounded-md border-slate-200/80 bg-white/90 py-1.5"
+              : "rounded-lg border-slate-200 py-2",
+            Icon ? "pl-10" : "pl-3",
+            "outline-none transition-all disabled:cursor-not-allowed disabled:opacity-50",
             "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-            open && "border-amber-500/50 ring-2 ring-amber-500/20",
-            !allSelected && !noneSelected && "border-amber-300 dark:border-amber-700/50",
+            quiet
+              ? "focus:border-slate-400 focus:ring-1 focus:ring-slate-300/50 dark:focus:border-slate-500 dark:focus:ring-slate-600/40"
+              : "focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
+            open &&
+              (quiet
+                ? "border-slate-400 ring-1 ring-slate-300/50 dark:border-slate-500 dark:ring-slate-600/40"
+                : "border-amber-500/50 ring-2 ring-amber-500/20"),
+            !allSelected &&
+              !noneSelected &&
+              (quiet
+                ? "border-slate-400 dark:border-slate-500"
+                : "border-amber-300 dark:border-amber-700/50"),
           )}
         >
           {Icon ? (

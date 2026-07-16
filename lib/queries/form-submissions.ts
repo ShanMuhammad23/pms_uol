@@ -33,6 +33,7 @@ interface SubmissionListRow {
   employee_name: string;
   employee_email: string;
   designation: string | null;
+  role_category: string | null;
   grade_group: string | null;
   date_of_joining: string | null;
   emp_category: string | null;
@@ -89,6 +90,20 @@ async function hasExcelSheetColumns(): Promise<boolean> {
        WHERE table_schema = 'public'
          AND table_name = 'users'
          AND column_name = 'designation'
+     ) AS exists`,
+  );
+
+  return Boolean(result.rows[0]?.exists);
+}
+
+async function hasRoleCategoryColumn(): Promise<boolean> {
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'users'
+         AND column_name = 'role_category'
      ) AS exists`,
   );
 
@@ -167,6 +182,7 @@ function mapSubmissionRow(
     employeeName: row.employee_name,
     employeeEmail: row.employee_email,
     designation: row.designation,
+    roleCategory: row.role_category,
     gradeGroup: row.grade_group,
     dateOfJoining: row.date_of_joining,
     empCategory: row.emp_category,
@@ -261,17 +277,28 @@ function formatReferenceDate(date: Date): string {
 }
 
 export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
-  const [excelReady, qualsReady, quartileBands, eligibilityContext] =
-    await Promise.all([
+  const [
+    excelReady,
+    roleCategoryReady,
+    qualsReady,
+    quartileBands,
+    eligibilityContext,
+  ] = await Promise.all([
     hasExcelSheetColumns(),
+    hasRoleCategoryColumn(),
     hasQualificationsTable(),
     getActiveFinancialYearQuartileBands(),
     getEligibilityContext(),
   ]);
 
+  const roleCategorySelect = roleCategoryReady
+    ? `u.role_category,`
+    : `NULL::text AS role_category,`;
+
   const excelSelect = excelReady
     ? `
          u.designation,
+         ${roleCategorySelect}
          u.grade_group,
          u.date_of_joining::text,
          u.emp_category::text AS emp_category,
@@ -301,6 +328,7 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
     `
     : `
          NULL::text AS designation,
+         ${roleCategorySelect}
          NULL::text AS grade_group,
          NULL::text AS date_of_joining,
          u.emp_category::text AS emp_category,
@@ -496,17 +524,52 @@ export async function getFormSubmissionById(
   };
 }
 
-export async function updateAppraisalRemarksEvaluation(
+export type AppraisalRemarksField =
+  | "remarksEvaluation"
+  | "remarksCompensation";
+
+export async function updateAppraisalRemarks(
   appraisalId: number,
-  remarksEvaluation: string | null,
-): Promise<{ id: number; remarksEvaluation: string | null }> {
-  const result = await db.query<{ id: string; remarks_evaluation: string | null }>(
+  field: AppraisalRemarksField,
+  value: string | null,
+): Promise<{
+  id: number;
+  remarksEvaluation?: string | null;
+  remarksCompensation?: string | null;
+}> {
+  if (field === "remarksEvaluation") {
+    const result = await db.query<{
+      id: string;
+      remarks_evaluation: string | null;
+    }>(
+      `UPDATE appraisals
+       SET remarks_evaluation = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING id, remarks_evaluation`,
+      [appraisalId, value],
+    );
+
+    if (!result.rows[0]) {
+      throw new FormSubmissionError("Submission not found.", 404);
+    }
+
+    return {
+      id: Number(result.rows[0].id),
+      remarksEvaluation: result.rows[0].remarks_evaluation,
+    };
+  }
+
+  const result = await db.query<{
+    id: string;
+    remarks_compensation: string | null;
+  }>(
     `UPDATE appraisals
-     SET remarks_evaluation = $2,
+     SET remarks_compensation = $2,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1
-     RETURNING id, remarks_evaluation`,
-    [appraisalId, remarksEvaluation],
+     RETURNING id, remarks_compensation`,
+    [appraisalId, value],
   );
 
   if (!result.rows[0]) {
@@ -515,6 +578,145 @@ export async function updateAppraisalRemarksEvaluation(
 
   return {
     id: Number(result.rows[0].id),
-    remarksEvaluation: result.rows[0].remarks_evaluation,
+    remarksCompensation: result.rows[0].remarks_compensation,
+  };
+}
+
+export async function updateEmployeeRoleCategory(
+  employeeCode: string,
+  roleCategory: string | null,
+): Promise<{ employeeId: string; roleCategory: string | null }> {
+  if (!(await hasRoleCategoryColumn())) {
+    throw new FormSubmissionError(
+      "Role category column is not available. Run the excel-sheet columns migration.",
+      503,
+    );
+  }
+
+  const result = await db.query<{
+    employee_id: string;
+    role_category: string | null;
+  }>(
+    `UPDATE users
+     SET role_category = $2
+     WHERE employee_id = $1
+     RETURNING employee_id, role_category`,
+    [employeeCode, roleCategory],
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Employee not found.", 404);
+  }
+
+  return {
+    employeeId: result.rows[0].employee_id,
+    roleCategory: result.rows[0].role_category,
+  };
+}
+
+export async function updateEmployeeGradeGroup(
+  employeeCode: string,
+  gradeGroup: string | null,
+): Promise<{ employeeId: string; gradeGroup: string | null }> {
+  if (!(await hasExcelSheetColumns())) {
+    throw new FormSubmissionError(
+      "Grade group column is not available. Run the excel-sheet columns migration.",
+      503,
+    );
+  }
+
+  const result = await db.query<{
+    employee_id: string;
+    grade_group: string | null;
+  }>(
+    `UPDATE users
+     SET grade_group = $2
+     WHERE employee_id = $1
+     RETURNING employee_id, grade_group`,
+    [employeeCode, gradeGroup],
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Employee not found.", 404);
+  }
+
+  return {
+    employeeId: result.rows[0].employee_id,
+    gradeGroup: result.rows[0].grade_group,
+  };
+}
+
+export async function bulkUpdateEmployeeListingFields(
+  employeeIds: string[],
+  fields: {
+    roleCategory?: string | null;
+    gradeGroup?: string | null;
+  },
+): Promise<{
+  updatedCount: number;
+  employeeIds: string[];
+  roleCategory?: string | null;
+  gradeGroup?: string | null;
+}> {
+  const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
+
+  if (uniqueIds.length === 0) {
+    throw new FormSubmissionError("At least one employeeId is required.", 400);
+  }
+
+  const updatesRole = "roleCategory" in fields;
+  const updatesGrade = "gradeGroup" in fields;
+
+  if (!updatesRole && !updatesGrade) {
+    throw new FormSubmissionError(
+      "Provide roleCategory and/or gradeGroup to update.",
+      400,
+    );
+  }
+
+  if (updatesRole && !(await hasRoleCategoryColumn())) {
+    throw new FormSubmissionError(
+      "Role category column is not available. Run the excel-sheet columns migration.",
+      503,
+    );
+  }
+
+  if (updatesGrade && !(await hasExcelSheetColumns())) {
+    throw new FormSubmissionError(
+      "Grade group column is not available. Run the excel-sheet columns migration.",
+      503,
+    );
+  }
+
+  const setClauses: string[] = [];
+  const values: unknown[] = [uniqueIds];
+
+  if (updatesRole) {
+    values.push(fields.roleCategory ?? null);
+    setClauses.push(`role_category = $${values.length}`);
+  }
+
+  if (updatesGrade) {
+    values.push(fields.gradeGroup ?? null);
+    setClauses.push(`grade_group = $${values.length}`);
+  }
+
+  const result = await db.query<{ employee_id: string }>(
+    `UPDATE users
+     SET ${setClauses.join(", ")}
+     WHERE employee_id = ANY($1::text[])
+     RETURNING employee_id`,
+    values,
+  );
+
+  if (result.rows.length === 0) {
+    throw new FormSubmissionError("No matching employees found.", 404);
+  }
+
+  return {
+    updatedCount: result.rows.length,
+    employeeIds: result.rows.map((row) => row.employee_id),
+    ...(updatesRole ? { roleCategory: fields.roleCategory ?? null } : {}),
+    ...(updatesGrade ? { gradeGroup: fields.gradeGroup ?? null } : {}),
   };
 }
