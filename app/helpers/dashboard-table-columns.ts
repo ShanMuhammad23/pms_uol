@@ -93,8 +93,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "roleCategory",
     label: "Role Category",
-    getValue: (row) =>
-      formatNullable(row.staffCategoryName ?? row.empCategory),
+    getValue: (row) => formatNullable(row.roleCategory),
   },
   {
     id: "facultyName",

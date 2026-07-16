@@ -42,8 +42,8 @@ function TextFilterField({
   onChange: (next: string) => void;
 }) {
   return (
-    <label className="flex min-w-[200px] flex-1 flex-col gap-1.5 sm:max-w-[240px]">
-      <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+    <label className="flex min-w-0 flex-col gap-1">
+      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
         {label}
       </span>
       <div className="relative">
@@ -53,7 +53,7 @@ function TextFilterField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+          className="w-full rounded-md border border-slate-200/80 bg-white/90 py-1.5 pl-8 pr-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-300/50 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-slate-500 dark:focus:ring-slate-600/40"
         />
       </div>
     </label>
@@ -74,31 +74,39 @@ export function StaffListingMasterFilter({
     const map = new Map<string, MultiSelectOption[]>();
 
     for (const column of MASTER_FILTER_MULTI_COLUMNS) {
-      map.set(column.id, buildMasterFilterOptions(submissions, column));
+      map.set(
+        column.id,
+        buildMasterFilterOptions(
+          submissions,
+          column,
+          filters,
+          filters.multi[column.id] ?? null,
+        ),
+      );
     }
 
     return map;
-  }, [submissions]);
+  }, [filters, submissions]);
 
   return (
-    <div className="border-b border-slate-200 dark:border-white/5">
-      <div className="flex items-center justify-between gap-3 px-5 py-2.5">
+    <div className="border-b border-slate-200/80 bg-slate-50/90 dark:border-white/5 dark:bg-slate-950/40">
+      <div className="flex items-center justify-between gap-3 px-5 py-2">
         <button
           type="button"
           onClick={() => setOpen((current) => !current)}
-          className="inline-flex items-center gap-2 rounded-md px-1.5 py-1 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          className="inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30 dark:text-slate-300 dark:hover:text-white"
           aria-expanded={open}
         >
-          <Filter className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <span>Master Filter</span>
+          <Filter className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+          <span>Master filter</span>
           {activeCount > 0 ? (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+            <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700 dark:bg-white/10 dark:text-slate-200">
               {activeCount}
             </span>
           ) : null}
           <ChevronDown
             className={cn(
-              "h-4 w-4 text-slate-400 transition-transform duration-300",
+              "h-3.5 w-3.5 text-slate-400 transition-transform duration-300",
               open && "rotate-180",
             )}
           />
@@ -111,7 +119,7 @@ export function StaffListingMasterFilter({
             className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
           >
             <RotateCcw className="h-3 w-3" />
-            Clear master filters
+            Clear all
           </button>
         ) : null}
       </div>
@@ -126,47 +134,39 @@ export function StaffListingMasterFilter({
             transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
             className="overflow-hidden"
           >
-            <div className="space-y-4 border-t border-slate-100 px-5 pb-4 pt-3 dark:border-white/5">
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Text search
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  {MASTER_FILTER_TEXT_COLUMNS.map((column) => (
-                    <TextFilterField
-                      key={column.id}
-                      label={column.label}
-                      value={filters.text[column.id as MasterFilterTextColumnId] ?? ""}
-                      placeholder={`Search ${column.label.toLowerCase()}...`}
-                      onChange={(next) =>
-                        onTextChange(column.id as MasterFilterTextColumnId, next)
-                      }
-                    />
-                  ))}
-                </div>
+            <div className="space-y-5 border-t border-slate-200/70 px-5 pb-5 pt-4 dark:border-white/5">
+              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                {MASTER_FILTER_TEXT_COLUMNS.map((column) => (
+                  <TextFilterField
+                    key={column.id}
+                    label={column.label}
+                    value={filters.text[column.id as MasterFilterTextColumnId] ?? ""}
+                    placeholder={`Search ${column.label.toLowerCase()}...`}
+                    onChange={(next) =>
+                      onTextChange(column.id as MasterFilterTextColumnId, next)
+                    }
+                  />
+                ))}
               </div>
 
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Multi-select
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  {MASTER_FILTER_MULTI_COLUMNS.map((column) => {
-                    const options = optionsByColumn.get(column.id) ?? [];
+              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {MASTER_FILTER_MULTI_COLUMNS.map((column) => {
+                  const options = optionsByColumn.get(column.id) ?? [];
 
-                    return (
-                      <MultiSelectFilterDropdown
-                        key={column.id}
-                        label={column.label}
-                        options={options}
-                        selectedValues={filters.multi[column.id] ?? null}
-                        onChange={(next) => onMultiChange(column.id, next)}
-                        placeholder={`All ${column.label}`}
-                        searchable={options.length > 8}
-                      />
-                    );
-                  })}
-                </div>
+                  return (
+                    <MultiSelectFilterDropdown
+                      key={column.id}
+                      label={column.label}
+                      options={options}
+                      selectedValues={filters.multi[column.id] ?? null}
+                      onChange={(next) => onMultiChange(column.id, next)}
+                      placeholder="All"
+                      searchable={options.length > 8}
+                      quiet
+                      className="min-w-0 flex-none"
+                    />
+                  );
+                })}
               </div>
             </div>
           </motion.div>

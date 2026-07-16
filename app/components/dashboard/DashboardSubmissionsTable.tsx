@@ -9,12 +9,15 @@ import {
   useDashboardColumnVisibility,
 } from "@/app/components/dashboard/ColumnVisibilityDropdown";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
+import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { StaffListingMasterFilter } from "@/app/components/dashboard/StaffListingMasterFilter";
+import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import {
   EMPTY_MASTER_FILTER_STATE,
   applyMasterFilters,
+  isMasterFilterableColumn,
   type MasterFilterMultiSelection,
   type MasterFilterState,
   type MasterFilterTextColumnId,
@@ -70,6 +73,15 @@ function renderCell(
       >
         <Eye className="h-3.5 w-3.5" />
       </Link>
+    );
+  }
+
+  if (columnId === "roleCategory") {
+    return (
+      <InlineRoleCategoryCell
+        employeeId={submission.employeeId}
+        value={submission.roleCategory}
+      />
     );
   }
 
@@ -187,6 +199,13 @@ export function DashboardSubmissionsTable({
       transition={{ delay: 0.6 }}
       className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
     >
+         <StaffListingMasterFilter
+        submissions={submissions}
+        filters={masterFilters}
+        onTextChange={handleMasterTextChange}
+        onMultiChange={handleMasterMultiChange}
+        onClearAll={clearMasterFilters}
+      />
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
         <div className="min-w-0">
           <p className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -197,6 +216,7 @@ export function DashboardSubmissionsTable({
             )
           </p>
         </div>
+     
         <ColumnVisibilityDropdown
           visibleIds={visibleIds}
           onToggle={toggleColumn}
@@ -204,13 +224,7 @@ export function DashboardSubmissionsTable({
         />
       </div>
 
-      <StaffListingMasterFilter
-        submissions={submissions}
-        filters={masterFilters}
-        onTextChange={handleMasterTextChange}
-        onMultiChange={handleMasterMultiChange}
-        onClearAll={clearMasterFilters}
-      />
+     
 
       <div className="w-full max-w-full overflow-x-auto overscroll-x-contain">
         <table className="w-max min-w-full text-left text-sm">
@@ -225,7 +239,17 @@ export function DashboardSubmissionsTable({
                     column.align === "center" && "text-center",
                   )}
                 >
-                  {column.label}
+                  {isMasterFilterableColumn(column.id) ? (
+                    <TableColumnHeaderFilter
+                      column={column}
+                      submissions={submissions}
+                      filters={masterFilters}
+                      onTextChange={handleMasterTextChange}
+                      onMultiChange={handleMasterMultiChange}
+                    />
+                  ) : (
+                    column.label
+                  )}
                 </th>
               ))}
             </tr>

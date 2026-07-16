@@ -11,6 +11,8 @@ export interface FormSubmissionListItem {
   employeeName: string;
   employeeEmail: string;
   designation: string | null;
+  /** Free-text role category; not derived from staff categories. */
+  roleCategory: string | null;
   gradeGroup: string | null;
   dateOfJoining: string | null;
   empCategory: string | null;

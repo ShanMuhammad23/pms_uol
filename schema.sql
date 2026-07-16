@@ -46,10 +46,11 @@ CREATE TABLE users (
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
     designation VARCHAR(150), -- Designation
+    role_category VARCHAR(150), -- Role Category (free text; not staff category)
     grade_group VARCHAR(50), -- Gp
     date_of_joining DATE, -- DOJ
     system_role user_role NOT NULL DEFAULT 'EMPLOYEE',
-    emp_category employee_category NOT NULL, -- Role Category (legacy enum)
+    emp_category employee_category NOT NULL, -- Legacy enum (forms routing)
     emp_sub_category sub_category NOT NULL,
     department_id INT REFERENCES departments(id) ON DELETE RESTRICT,
     head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, 

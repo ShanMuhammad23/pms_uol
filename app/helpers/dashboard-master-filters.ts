@@ -21,6 +21,7 @@ const MASTER_FILTER_EXCLUDED_IDS = new Set<DashboardTableColumnId>([
 export const MASTER_FILTER_TEXT_COLUMN_IDS = [
   "sapCode",
   "employeeName",
+  "roleCategory",
   "remarksEvaluation",
   "qualificationSubject",
   "qualificationInstitute",
@@ -58,31 +59,14 @@ export const MASTER_FILTER_MULTI_COLUMNS: DashboardTableColumnDef[] =
       !MASTER_FILTER_TEXT_ID_SET.has(column.id),
   );
 
-export function buildMasterFilterOptions(
-  submissions: FormSubmissionListItem[],
-  column: DashboardTableColumnDef,
-): MultiSelectOption[] {
-  const counts = new Map<string, number>();
+export function isMasterFilterTextColumn(
+  columnId: DashboardTableColumnId,
+): columnId is MasterFilterTextColumnId {
+  return MASTER_FILTER_TEXT_ID_SET.has(columnId);
+}
 
-  for (const submission of submissions) {
-    const value = column.getValue(submission);
-    counts.set(value, (counts.get(value) ?? 0) + 1);
-  }
-
-  return [...counts.entries()]
-    .map(([value, count]) => ({
-      value,
-      label: value,
-      count,
-    }))
-    .sort((left, right) => {
-      if (left.value === "—") return 1;
-      if (right.value === "—") return -1;
-      return left.label.localeCompare(right.label, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-    });
+export function isMasterFilterableColumn(columnId: DashboardTableColumnId): boolean {
+  return !MASTER_FILTER_EXCLUDED_IDS.has(columnId);
 }
 
 function matchesTextQuery(cellValue: string, query: string): boolean {
@@ -102,7 +86,23 @@ export function matchesMasterFilters(
   submission: FormSubmissionListItem,
   filters: MasterFilterState,
 ): boolean {
+  return matchesMasterFiltersExcluding(submission, filters, null);
+}
+
+/**
+ * Same as matchesMasterFilters, but ignores the filter for `excludeColumnId`
+ * so option lists / counts can cascade across other active filters.
+ */
+export function matchesMasterFiltersExcluding(
+  submission: FormSubmissionListItem,
+  filters: MasterFilterState,
+  excludeColumnId: DashboardTableColumnId | null,
+): boolean {
   for (const column of MASTER_FILTER_TEXT_COLUMNS) {
+    if (excludeColumnId === column.id) {
+      continue;
+    }
+
     const query = filters.text[column.id as MasterFilterTextColumnId];
     if (!query?.trim()) {
       continue;
@@ -114,6 +114,10 @@ export function matchesMasterFilters(
   }
 
   for (const column of MASTER_FILTER_MULTI_COLUMNS) {
+    if (excludeColumnId === column.id) {
+      continue;
+    }
+
     const selected = filters.multi[column.id];
 
     if (selected === undefined || selected === null) {
@@ -132,6 +136,49 @@ export function matchesMasterFilters(
   return true;
 }
 
+export function buildMasterFilterOptions(
+  submissions: FormSubmissionListItem[],
+  column: DashboardTableColumnDef,
+  filters: MasterFilterState = EMPTY_MASTER_FILTER_STATE,
+  selectedValues: MasterFilterMultiSelection = null,
+): MultiSelectOption[] {
+  const counts = new Map<string, number>();
+
+  for (const submission of submissions) {
+    if (!matchesMasterFiltersExcluding(submission, filters, column.id)) {
+      continue;
+    }
+
+    const value = column.getValue(submission);
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  // Keep currently selected values visible even if other filters zero them out.
+  if (selectedValues) {
+    for (const value of selectedValues) {
+      if (!counts.has(value)) {
+        counts.set(value, 0);
+      }
+    }
+  }
+
+  return [...counts.entries()]
+    .map(([value, count]) => ({
+      value,
+      label: value,
+      count,
+    }))
+    .filter((option) => option.count > 0 || selectedValues?.includes(option.value))
+    .sort((left, right) => {
+      if (left.value === "—") return 1;
+      if (right.value === "—") return -1;
+      return left.label.localeCompare(right.label, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    });
+}
+
 export function applyMasterFilters(
   submissions: FormSubmissionListItem[],
   filters: MasterFilterState,
@@ -147,6 +194,18 @@ export function applyMasterFilters(
 
 export function hasActiveMasterFilters(filters: MasterFilterState): boolean {
   return countActiveMasterFilters(filters) > 0;
+}
+
+export function isColumnFilterActive(
+  filters: MasterFilterState,
+  columnId: DashboardTableColumnId,
+): boolean {
+  if (isMasterFilterTextColumn(columnId)) {
+    return Boolean(filters.text[columnId]?.trim());
+  }
+
+  const selected = filters.multi[columnId];
+  return selected !== undefined && selected !== null;
 }
 
 export function countActiveMasterFilters(filters: MasterFilterState): number {

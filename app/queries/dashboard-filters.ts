@@ -283,14 +283,17 @@ export function useDashboardFilters({
 
   const designationOptions = useMemo<MultiSelectOption[]>(
     () =>
-      designations.map((designation) => ({
-        value: designation,
-        label: designation,
-        count: countForDimension(
-          "designation",
-          (submission) => (submission.designation?.trim() ?? "") === designation,
-        ),
-      })),
+      designations
+        .map((designation) => ({
+          value: designation,
+          label: designation,
+          count: countForDimension(
+            "designation",
+            (submission) =>
+              (submission.designation?.trim() ?? "") === designation,
+          ),
+        }))
+        .filter((option) => option.count > 0),
     [designations, countForDimension],
   );
 

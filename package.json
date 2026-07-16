@@ -11,6 +11,7 @@
     "db:migrate:form-engine": "node scripts/migrate-form-engine.mjs",
     "db:migrate:sub-category-increment-matrices": "node scripts/migrate-sub-category-increment-matrices.mjs",
     "db:migrate:excel-sheet-columns": "node scripts/migrate-excel-sheet-columns.mjs",
+    "db:migrate:role-category": "node scripts/migrate-role-category-column.mjs",
     "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs",
     "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
     "db:recompute:eligibility": "node scripts/recompute-appraisal-eligibility.mjs",

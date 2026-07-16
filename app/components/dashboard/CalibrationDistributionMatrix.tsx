@@ -106,7 +106,7 @@ export function CalibrationDistributionMatrix({
                       )}
                     </td>
                   ))}
-                  <td className={cn("px-2 py-2.5 text-center font-semibold tabular-nums", getPerformanceLevelColor(row.rating))}>
+                  <td className={cn("px-2 py-2.5 text-center text-white font-bold text-base tabular-nums", getPerformanceLevelColor(row.rating))}>
                     {row.rowTotal}
                   </td>
                 </tr>

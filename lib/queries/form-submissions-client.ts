@@ -39,3 +39,18 @@ export async function updateSubmissionRemarksEvaluation(
     response,
   );
 }
+
+export async function updateEmployeeRoleCategory(
+  employeeId: string,
+  roleCategory: string | null,
+): Promise<{ employeeId: string; roleCategory: string | null }> {
+  const response = await fetch("/api/submissions/role-category", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employeeId, roleCategory }),
+  });
+
+  return parseResponse<{ employeeId: string; roleCategory: string | null }>(
+    response,
+  );
+}

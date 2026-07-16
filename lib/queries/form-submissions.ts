@@ -33,6 +33,7 @@ interface SubmissionListRow {
   employee_name: string;
   employee_email: string;
   designation: string | null;
+  role_category: string | null;
   grade_group: string | null;
   date_of_joining: string | null;
   emp_category: string | null;
@@ -89,6 +90,20 @@ async function hasExcelSheetColumns(): Promise<boolean> {
        WHERE table_schema = 'public'
          AND table_name = 'users'
          AND column_name = 'designation'
+     ) AS exists`,
+  );
+
+  return Boolean(result.rows[0]?.exists);
+}
+
+async function hasRoleCategoryColumn(): Promise<boolean> {
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'users'
+         AND column_name = 'role_category'
      ) AS exists`,
   );
 
@@ -167,6 +182,7 @@ function mapSubmissionRow(
     employeeName: row.employee_name,
     employeeEmail: row.employee_email,
     designation: row.designation,
+    roleCategory: row.role_category,
     gradeGroup: row.grade_group,
     dateOfJoining: row.date_of_joining,
     empCategory: row.emp_category,
@@ -261,17 +277,28 @@ function formatReferenceDate(date: Date): string {
 }
 
 export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
-  const [excelReady, qualsReady, quartileBands, eligibilityContext] =
-    await Promise.all([
+  const [
+    excelReady,
+    roleCategoryReady,
+    qualsReady,
+    quartileBands,
+    eligibilityContext,
+  ] = await Promise.all([
     hasExcelSheetColumns(),
+    hasRoleCategoryColumn(),
     hasQualificationsTable(),
     getActiveFinancialYearQuartileBands(),
     getEligibilityContext(),
   ]);
 
+  const roleCategorySelect = roleCategoryReady
+    ? `u.role_category,`
+    : `NULL::text AS role_category,`;
+
   const excelSelect = excelReady
     ? `
          u.designation,
+         ${roleCategorySelect}
          u.grade_group,
          u.date_of_joining::text,
          u.emp_category::text AS emp_category,
@@ -301,6 +328,7 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
     `
     : `
          NULL::text AS designation,
+         ${roleCategorySelect}
          NULL::text AS grade_group,
          NULL::text AS date_of_joining,
          u.emp_category::text AS emp_category,
@@ -516,5 +544,37 @@ export async function updateAppraisalRemarksEvaluation(
   return {
     id: Number(result.rows[0].id),
     remarksEvaluation: result.rows[0].remarks_evaluation,
+  };
+}
+
+export async function updateEmployeeRoleCategory(
+  employeeCode: string,
+  roleCategory: string | null,
+): Promise<{ employeeId: string; roleCategory: string | null }> {
+  if (!(await hasRoleCategoryColumn())) {
+    throw new FormSubmissionError(
+      "Role category column is not available. Run the excel-sheet columns migration.",
+      503,
+    );
+  }
+
+  const result = await db.query<{
+    employee_id: string;
+    role_category: string | null;
+  }>(
+    `UPDATE users
+     SET role_category = $2
+     WHERE employee_id = $1
+     RETURNING employee_id, role_category`,
+    [employeeCode, roleCategory],
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Employee not found.", 404);
+  }
+
+  return {
+    employeeId: result.rows[0].employee_id,
+    roleCategory: result.rows[0].role_category,
   };
 }

@@ -3,6 +3,7 @@
 -- Employee master fields
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS designation VARCHAR(150),
+    ADD COLUMN IF NOT EXISTS role_category VARCHAR(150), -- free-text Role Category (not staff category)
     ADD COLUMN IF NOT EXISTS grade_group VARCHAR(50),
     ADD COLUMN IF NOT EXISTS date_of_joining DATE;
 
