@@ -16,6 +16,10 @@ interface UserRow {
   email: string;
   first_name: string;
   last_name: string;
+  designation: string | null;
+  role_category: string | null;
+  grade_group: string | null;
+  date_of_joining: string | null;
   system_role: UserRecord["systemRole"];
   emp_category: UserRecord["empCategory"];
   emp_sub_category: UserRecord["empSubCategory"];
@@ -25,10 +29,16 @@ interface UserRow {
   staff_sub_category_name: string | null;
   entity_id: number | null;
   entity_name: string | null;
+  parent_entity_name: string | null;
   department_id?: number | null;
   department_name?: string | null;
   head_id: string | null;
   head_name: string | null;
+  qualification: string | null;
+  qualification_year: string | null;
+  qualification_subject: string | null;
+  qualification_institute: string | null;
+  qualification_country: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -38,6 +48,45 @@ type UserStaffMode = "dynamic" | "legacy";
 
 let cachedUserOrgMode: UserOrgMode | null = null;
 let cachedUserStaffMode: UserStaffMode | null = null;
+let cachedExcelColumns: boolean | null = null;
+let cachedQualificationsTable: boolean | null = null;
+
+async function hasExcelSheetColumns(): Promise<boolean> {
+  if (cachedExcelColumns !== null) {
+    return cachedExcelColumns;
+  }
+
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'users'
+         AND column_name = 'designation'
+     ) AS exists`,
+  );
+
+  cachedExcelColumns = Boolean(result.rows[0]?.exists);
+  return cachedExcelColumns;
+}
+
+async function hasQualificationsTable(): Promise<boolean> {
+  if (cachedQualificationsTable !== null) {
+    return cachedQualificationsTable;
+  }
+
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = 'employee_qualifications'
+     ) AS exists`,
+  );
+
+  cachedQualificationsTable = Boolean(result.rows[0]?.exists);
+  return cachedQualificationsTable;
+}
 
 async function getUserOrgMode(): Promise<UserOrgMode> {
   if (cachedUserOrgMode) {
@@ -84,9 +133,18 @@ async function getUserStaffMode(): Promise<UserStaffMode> {
   return cachedUserStaffMode;
 }
 
-function buildUserSelect(mode: UserOrgMode, staffMode: UserStaffMode): string {
+function buildUserSelect(
+  mode: UserOrgMode,
+  staffMode: UserStaffMode,
+  excelReady: boolean,
+  qualsReady: boolean,
+): string {
   const orgIdColumn = mode === "entity" ? "u.entity_id" : "u.department_id";
   const orgJoinTable = mode === "entity" ? "entities" : "departments";
+  const parentEntityJoin =
+    mode === "entity"
+      ? "LEFT JOIN entities parent_ent ON parent_ent.id = org.parent_entity_id"
+      : "";
   const staffSelect =
     staffMode === "dynamic"
       ? `u.staff_category_id,
@@ -103,6 +161,38 @@ function buildUserSelect(mode: UserOrgMode, staffMode: UserStaffMode): string {
     LEFT JOIN staff_categories sc ON sc.id = u.staff_category_id
     LEFT JOIN staff_sub_categories ssc ON ssc.id = u.staff_sub_category_id`
       : "";
+  const excelSelect = excelReady
+    ? `u.designation,
+       u.role_category,
+       u.grade_group,
+       u.date_of_joining::text AS date_of_joining,`
+    : `NULL::text AS designation,
+       NULL::text AS role_category,
+       NULL::text AS grade_group,
+       NULL::text AS date_of_joining,`;
+  const qualSelect = qualsReady
+    ? `qual.qualification,
+       qual.year::text AS qualification_year,
+       qual.subject AS qualification_subject,
+       qual.institute AS qualification_institute,
+       qual.country AS qualification_country,`
+    : `NULL::text AS qualification,
+       NULL::text AS qualification_year,
+       NULL::text AS qualification_subject,
+       NULL::text AS qualification_institute,
+       NULL::text AS qualification_country,`;
+  const qualJoin = qualsReady
+    ? `
+    LEFT JOIN LATERAL (
+      SELECT eq.qualification, eq.year, eq.subject, eq.institute, eq.country
+      FROM employee_qualifications eq
+      WHERE eq.user_id = u.id
+      ORDER BY eq.is_primary DESC, eq.year DESC NULLS LAST, eq.id DESC
+      LIMIT 1
+    ) qual ON TRUE`
+    : "";
+  const parentEntitySelect =
+    mode === "entity" ? "parent_ent.name AS parent_entity_name," : "NULL::text AS parent_entity_name,";
 
   return `
     SELECT
@@ -111,20 +201,25 @@ function buildUserSelect(mode: UserOrgMode, staffMode: UserStaffMode): string {
       u.email,
       u.first_name,
       u.last_name,
+      ${excelSelect}
       u.system_role,
       u.emp_category,
       u.emp_sub_category,
       ${staffSelect},
       ${orgIdColumn} AS entity_id,
       org.name AS entity_name,
+      ${parentEntitySelect}
       u.head_id,
       CONCAT(h.first_name, ' ', h.last_name) AS head_name,
+      ${qualSelect}
       u.is_active,
       u.created_at::text
     FROM users u
     ${staffJoin}
     LEFT JOIN ${orgJoinTable} org ON org.id = ${orgIdColumn}
+    ${parentEntityJoin}
     LEFT JOIN users h ON h.id = u.head_id
+    ${qualJoin}
   `;
 }
 
@@ -145,6 +240,10 @@ function mapUserRow(row: UserRow): UserRecord {
     email: row.email,
     firstName: row.first_name,
     lastName: row.last_name,
+    designation: row.designation,
+    roleCategory: row.role_category,
+    gradeGroup: row.grade_group,
+    dateOfJoining: row.date_of_joining,
     systemRole: row.system_role,
     empCategory: row.emp_category,
     empSubCategory: row.emp_sub_category,
@@ -154,8 +253,14 @@ function mapUserRow(row: UserRow): UserRecord {
     staffSubCategoryName: row.staff_sub_category_name,
     entityId: row.entity_id,
     entityName: row.entity_name,
+    parentEntityName: row.parent_entity_name,
     headId: row.head_id ? Number(row.head_id) : null,
     headName: row.head_name,
+    qualification: row.qualification,
+    qualificationYear: row.qualification_year,
+    qualificationSubject: row.qualification_subject,
+    qualificationInstitute: row.qualification_institute,
+    qualificationCountry: row.qualification_country,
     isActive: row.is_active,
     createdAt: row.created_at,
   };
@@ -228,10 +333,14 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
-  const mode = await getUserOrgMode();
-  const staffMode = await getUserStaffMode();
+  const [mode, staffMode, excelReady, qualsReady] = await Promise.all([
+    getUserOrgMode(),
+    getUserStaffMode(),
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
+  ]);
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, staffMode)}
+    `${buildUserSelect(mode, staffMode, excelReady, qualsReady)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
 
@@ -239,10 +348,14 @@ export async function listUsers(): Promise<UserRecord[]> {
 }
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
-  const mode = await getUserOrgMode();
-  const staffMode = await getUserStaffMode();
+  const [mode, staffMode, excelReady, qualsReady] = await Promise.all([
+    getUserOrgMode(),
+    getUserStaffMode(),
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
+  ]);
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, staffMode)}
+    `${buildUserSelect(mode, staffMode, excelReady, qualsReady)}
      WHERE u.id = $1`,
     [id],
   );
