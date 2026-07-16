@@ -60,6 +60,9 @@ export default function SubmissionDetailView({
   const answerMap = new Map(
     data.answers.map((answer) => [answer.questionId, answer]),
   );
+  const managerAnswerMap = new Map(
+    data.managerAnswers.map((answer) => [answer.questionId, answer]),
+  );
   const rootLayout = buildRootLayoutOrderFromRecord(
     data.sections,
     data.rootQuestions,
@@ -151,6 +154,10 @@ export default function SubmissionDetailView({
         </p>
       </div>
 
+      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2 text-xs text-slate-400 dark:border-white/10 dark:text-slate-500">
+        <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+        Scroll horizontally to view all columns
+      </div>
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse text-left text-sm">
           <thead>
@@ -167,15 +174,18 @@ export default function SubmissionDetailView({
               <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Weight
               </th>
+              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Self Assessed
+              </th>
               <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Score Earned
+                Manager Review
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-white/5">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                   No questions were found for this submission.
                 </td>
               </tr>
@@ -183,6 +193,7 @@ export default function SubmissionDetailView({
               rows.map((row) => {
                 const { question } = row;
                 const answer = answerMap.get(question.id);
+                const managerAnswer = managerAnswerMap.get(question.id);
                 const answerText = getAnswerLabel(question, answer);
 
                 return (
@@ -220,8 +231,11 @@ export default function SubmissionDetailView({
                     <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-slate-700 dark:border-white/10 dark:text-slate-300">
                       {question.totalMarks}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums font-medium text-slate-900 dark:text-white">
+                    <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums font-medium text-slate-900 dark:border-white/10 dark:text-white">
                       {answer?.pointsEarned ?? 0}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums font-medium text-slate-900 dark:text-white">
+                      {managerAnswer?.pointsEarned ?? 0}
                     </td>
                   </tr>
                 );
@@ -237,8 +251,11 @@ export default function SubmissionDetailView({
                 <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
                   {data.maxRawScore}
                 </td>
+                <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
+                  {data.answers.reduce((sum, a) => sum + a.pointsEarned, 0)}
+                </td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:text-white">
-                  {data.rawScore}
+                  {data.managerAnswers.reduce((sum, a) => sum + a.pointsEarned, 0)}
                 </td>
               </tr>
             </tfoot>

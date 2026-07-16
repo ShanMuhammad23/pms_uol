@@ -466,9 +466,10 @@ export async function getFormSubmissionById(
     return null;
   }
 
-  const employeeResult = await db.query<{ user_id: string }>(
-    `SELECT ap.employee_id::text AS user_id
+  const employeeResult = await db.query<{ user_id: string; head_id: string | null }>(
+    `SELECT ap.employee_id::text AS user_id, u.head_id::text AS head_id
      FROM appraisals ap
+     INNER JOIN users u ON u.id = ap.employee_id
      WHERE ap.id = $1`,
     [id],
   );
@@ -478,7 +479,14 @@ export async function getFormSubmissionById(
     return null;
   }
 
+  const headId = employeeResult.rows[0]?.head_id
+    ? Number(employeeResult.rows[0].head_id)
+    : null;
+
   const answers = await getAnswersForSubmission(id, employeeUserId);
+  const managerAnswers = headId
+    ? await getAnswersForSubmission(id, headId)
+    : [];
 
   let questions: FormSubmissionDetail["questions"] = [];
   let sections: FormSubmissionDetail["sections"] = [];
@@ -521,6 +529,7 @@ export async function getFormSubmissionById(
     rootQuestions,
     questions,
     answers,
+    managerAnswers,
   };
 }
 
