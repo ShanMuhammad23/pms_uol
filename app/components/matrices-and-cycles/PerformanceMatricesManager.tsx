@@ -151,7 +151,7 @@ export default function PerformanceMatricesManager() {
       input,
     }: {
       id: number;
-      input: { name: string; sortOrder: number };
+      input: { matrixLabel: string; name: string; sortOrder: number };
     }) => updatePerformanceLevel(id, input),
     onSuccess: (level) => {
       setFormMessage({
