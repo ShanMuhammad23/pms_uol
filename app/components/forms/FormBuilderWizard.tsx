@@ -15,6 +15,7 @@ import type {
   AppraisalCycleRecord,
   EmployeeCategory,
   FormSectionInput,
+  FormSubsectionInput,
   FormTemplateInput,
   FormTemplateRecord,
   QuestionInput,
@@ -56,6 +57,11 @@ import {
   HelpCircle,
   X
 } from "lucide-react";
+
+interface QuestionLocation {
+  sectionClientId: string | null;
+  subsectionClientId: string | null;
+}
 
 const STEPS = [
   { id: "design" as const, label: "Design", icon: LayoutTemplate, description: "Build your form structure" },
@@ -171,6 +177,7 @@ function ModernFormDesignStep({
   const [activePanel, setActivePanel] = useState<"builder" | "preview">("builder");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-expand sections that have errors
@@ -294,6 +301,94 @@ function ModernFormDesignStep({
       );
     }
   };
+
+  const moveQuestion = useCallback(
+    (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => {
+      if (
+        source.sectionClientId === target.sectionClientId &&
+        source.subsectionClientId === target.subsectionClientId
+      ) {
+        return;
+      }
+
+      let movedQuestion: QuestionInput | null = null;
+      let nextSections = [...sections];
+      let nextQuestions = [...questions];
+
+      if (source.sectionClientId === null) {
+        const idx = nextQuestions.findIndex(q => q.clientId === questionClientId);
+        if (idx >= 0) {
+          movedQuestion = nextQuestions[idx];
+          nextQuestions = nextQuestions.filter(q => q.clientId !== questionClientId);
+        }
+      } else {
+        nextSections = nextSections.map(s => {
+          if (s.clientId !== source.sectionClientId) return s;
+          if (source.subsectionClientId === null) {
+            const idx = s.questions.findIndex(q => q.clientId === questionClientId);
+            if (idx >= 0) {
+              movedQuestion = s.questions[idx];
+              return {
+                ...s,
+                questions: s.questions
+                  .filter(q => q.clientId !== questionClientId)
+                  .map((q, i) => ({ ...q, sortOrder: i })),
+              };
+            }
+          } else {
+            return {
+              ...s,
+              subsections: s.subsections.map(sub => {
+                if (sub.clientId !== source.subsectionClientId) return sub;
+                const idx = sub.questions.findIndex(q => q.clientId === questionClientId);
+                if (idx >= 0) {
+                  movedQuestion = sub.questions[idx];
+                  return {
+                    ...sub,
+                    questions: sub.questions
+                      .filter(q => q.clientId !== questionClientId)
+                      .map((q, i) => ({ ...q, sortOrder: i })),
+                  };
+                }
+                return sub;
+              }),
+            };
+          }
+          return s;
+        });
+      }
+
+      if (!movedQuestion) return;
+      const moved = movedQuestion;
+
+      if (target.sectionClientId === null) {
+        nextQuestions = [...nextQuestions, { ...moved, sortOrder: nextQuestions.length }];
+      } else {
+        nextSections = nextSections.map(s => {
+          if (s.clientId !== target.sectionClientId) return s;
+          if (target.subsectionClientId === null) {
+            return {
+              ...s,
+              questions: [...s.questions, { ...moved, sortOrder: s.questions.length }],
+            };
+          }
+          return {
+            ...s,
+            subsections: s.subsections.map(sub => {
+              if (sub.clientId !== target.subsectionClientId) return sub;
+              return {
+                ...sub,
+                questions: [...sub.questions, { ...moved, sortOrder: sub.questions.length }],
+              };
+            }),
+          };
+        });
+      }
+
+      commitStructure(nextSections, nextQuestions);
+    },
+    [sections, questions, commitStructure],
+  );
 
   const totalQuestions = countAllQuestions(sections, questions);
   const hasErrors = Object.keys(errors).length > 0;
@@ -489,6 +584,7 @@ function ModernFormDesignStep({
                           onAddQuestion={() => addQuestionToSection(section.clientId)}
                           onAddSubsection={() => addSubsection(section.clientId)}
                           onRemoveQuestion={(qId) => removeQuestion(section.clientId, qId)}
+                          onMoveQuestion={moveQuestion}
                           onUpdateQuestion={(qId, updates) => {
                             commitStructure(
                               sections.map((currentSection) => {
@@ -526,6 +622,7 @@ function ModernFormDesignStep({
                         index={questionIndex}
                         errorPrefix={`question-${questionIndex}`}
                         errors={errors}
+                        sourceLocation={{ sectionClientId: null, subsectionClientId: null }}
                         onRemove={() => removeQuestion(null, question.clientId)}
                         onChange={(updates) => {
                           commitStructure(
@@ -540,6 +637,33 @@ function ModernFormDesignStep({
                       />
                     );
                   })}
+                </div>
+              )}
+
+              {sections.length > 0 && (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    setDragOverTarget("root");
+                  }}
+                  onDragLeave={() => setDragOverTarget(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOverTarget(null);
+                    try {
+                      const data = JSON.parse(e.dataTransfer.getData("application/json"));
+                      moveQuestion(data.questionClientId, data.source, { sectionClientId: null, subsectionClientId: null });
+                    } catch { /* ignore */ }
+                  }}
+                  className={cn(
+                    "rounded-xl border-2 border-dashed py-4 text-center text-xs transition-all",
+                    dragOverTarget === "root"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                  )}
+                >
+                  Drop here to move question to root level
                 </div>
               )}
             </div>
@@ -644,6 +768,7 @@ function SectionCard({
   onAddQuestion,
   onAddSubsection,
   onRemoveQuestion,
+  onMoveQuestion,
   onUpdateQuestion,
 }: {
   section: FormSectionInput;
@@ -656,8 +781,10 @@ function SectionCard({
   onAddQuestion: () => void;
   onAddSubsection: () => void;
   onRemoveQuestion: (qId: string) => void;
+  onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
   onUpdateQuestion: (qId: string, updates: Partial<QuestionInput>) => void;
 }) {
+  const [sectionDragOver, setSectionDragOver] = useState(false);
   const hasTitleError = errors[`section-${index}-title`];
   const hasAnyError = Object.keys(errors).some(k => k.startsWith(`section-${index}`));
 
@@ -740,8 +867,27 @@ function SectionCard({
             </p>
           )}
 
-          {/* Section Questions */}
-          <div className="space-y-3">
+          {/* Section Questions - Drop Target */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              setSectionDragOver(true);
+            }}
+            onDragLeave={() => setSectionDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setSectionDragOver(false);
+              try {
+                const data = JSON.parse(e.dataTransfer.getData("application/json"));
+                onMoveQuestion(data.questionClientId, data.source, { sectionClientId: section.clientId, subsectionClientId: null });
+              } catch { /* ignore */ }
+            }}
+            className={cn(
+              "space-y-3 rounded-lg transition-all",
+              sectionDragOver && "ring-2 ring-primary/40 bg-primary/5"
+            )}
+          >
             {section.questions.map((question, qIdx) => (
               <QuestionCard
                 key={question.clientId}
@@ -749,6 +895,7 @@ function SectionCard({
                 index={qIdx}
                 errorPrefix={`section-${index}-question-${qIdx}`}
                 errors={errors}
+                sourceLocation={{ sectionClientId: section.clientId, subsectionClientId: null }}
                 onRemove={() => onRemoveQuestion(question.clientId)}
                 onChange={(updates) => onUpdateQuestion(question.clientId, updates)}
                 compact
@@ -757,10 +904,29 @@ function SectionCard({
             
             {section.questions.length === 0 && (
               <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center dark:border-slate-800">
-                <p className="text-xs text-slate-400 dark:text-slate-500">No questions yet</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">No questions yet — drag here or click Add Question</p>
               </div>
             )}
           </div>
+
+          {/* Subsections */}
+          {section.subsections.length > 0 && (
+            <div className="mt-4 space-y-3">
+              {section.subsections.map((subsection, subIdx) => (
+                <SubsectionCard
+                  key={subsection.clientId}
+                  subsection={subsection}
+                  sectionIndex={index}
+                  subsectionIndex={subIdx}
+                  sectionClientId={section.clientId}
+                  errors={errors}
+                  onUpdate={(updates) => onUpdate({ subsections: section.subsections.map(sub => sub.clientId === subsection.clientId ? { ...sub, ...updates } : sub) })}
+                  onRemove={() => onUpdate({ subsections: section.subsections.filter(sub => sub.clientId !== subsection.clientId).map((sub, i) => ({ ...sub, sortOrder: i })) })}
+                  onMoveQuestion={onMoveQuestion}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Action Bar */}
           <div className="mt-4 flex gap-2">
@@ -790,6 +956,7 @@ function QuestionCard({
   index,
   errorPrefix,
   errors,
+  sourceLocation,
   onRemove,
   onChange,
   compact = false,
@@ -798,6 +965,7 @@ function QuestionCard({
   index: number;
   errorPrefix: string;
   errors: Record<string, string>;
+  sourceLocation: QuestionLocation;
   onRemove: () => void;
   onChange: (updates: Partial<QuestionInput>) => void;
   compact?: boolean;
@@ -823,6 +991,20 @@ function QuestionCard({
         : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
     )}>
       <div className="flex items-start gap-2">
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData("application/json", JSON.stringify({
+              questionClientId: question.clientId,
+              source: sourceLocation,
+            }));
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          className="mt-1 flex cursor-grab items-center text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
+          title="Drag to move question"
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
         <div className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-400">
           {index + 1}
         </div>
@@ -1006,6 +1188,134 @@ function QuestionCard({
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
+    </div>
+  );
+}
+
+function SubsectionCard({
+  subsection,
+  sectionIndex,
+  subsectionIndex,
+  sectionClientId,
+  errors,
+  onUpdate,
+  onRemove,
+  onMoveQuestion,
+}: {
+  subsection: FormSubsectionInput;
+  sectionIndex: number;
+  subsectionIndex: number;
+  sectionClientId: string;
+  errors: Record<string, string>;
+  onUpdate: (updates: Partial<FormSubsectionInput>) => void;
+  onRemove: () => void;
+  onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
+}) {
+  const [subDragOver, setSubDragOver] = useState(false);
+  const titleErrorKey = `section-${sectionIndex}-sub-${subsectionIndex}-title`;
+  const hasTitleError = errors[titleErrorKey];
+
+  const addQuestion = () => {
+    onUpdate({
+      questions: [...subsection.questions, createEmptyQuestion(subsection.questions.length)],
+    });
+  };
+
+  const removeQuestion = (qClientId: string) => {
+    onUpdate({
+      questions: subsection.questions
+        .filter(q => q.clientId !== qClientId)
+        .map((q, i) => ({ ...q, sortOrder: i })),
+    });
+  };
+
+  const updateQuestion = (qClientId: string, updates: Partial<QuestionInput>) => {
+    onUpdate({
+      questions: subsection.questions.map(q =>
+        q.clientId === qClientId ? { ...q, ...updates } : q
+      ),
+    });
+  };
+
+  return (
+    <div className={cn(
+      "rounded-lg border bg-slate-50/30 p-3 dark:bg-slate-800/30",
+      hasTitleError ? "border-red-200 dark:border-red-800" : "border-slate-200 dark:border-slate-700"
+    )}>
+      <div className="mb-3 flex items-center gap-2">
+        <Layers className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <input
+          type="text"
+          value={subsection.title}
+          onChange={(e) => onUpdate({ title: e.target.value })}
+          placeholder="Subsection Title"
+          className={cn(
+            "flex-1 bg-transparent text-xs font-semibold outline-none placeholder:text-slate-400",
+            hasTitleError ? "text-red-600 placeholder:text-red-300" : "text-slate-700 dark:text-slate-300"
+          )}
+        />
+        <button
+          onClick={onRemove}
+          className="text-slate-400 hover:text-red-500"
+          title="Remove subsection"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {hasTitleError && (
+        <p className="mb-2 flex items-center gap-1 text-xs text-red-500">
+          <AlertCircle className="h-3 w-3" /> {hasTitleError}
+        </p>
+      )}
+
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setSubDragOver(true);
+        }}
+        onDragLeave={() => setSubDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setSubDragOver(false);
+          try {
+            const data = JSON.parse(e.dataTransfer.getData("application/json"));
+            onMoveQuestion(data.questionClientId, data.source, { sectionClientId: sectionClientId, subsectionClientId: subsection.clientId });
+          } catch { /* ignore */ }
+        }}
+        className={cn(
+          "space-y-2 rounded-lg transition-all",
+          subDragOver && "ring-2 ring-primary/40 bg-primary/5"
+        )}
+      >
+        {subsection.questions.map((question, qIdx) => (
+          <QuestionCard
+            key={question.clientId}
+            question={question}
+            index={qIdx}
+            errorPrefix={`section-${sectionIndex}-sub-${subsectionIndex}-question-${qIdx}`}
+            errors={errors}
+            sourceLocation={{ sectionClientId: sectionClientId, subsectionClientId: subsection.clientId }}
+            onRemove={() => removeQuestion(question.clientId)}
+            onChange={(updates) => updateQuestion(question.clientId, updates)}
+            compact
+          />
+        ))}
+
+        {subsection.questions.length === 0 && (
+          <div className="rounded-lg border border-dashed border-slate-200 py-4 text-center dark:border-slate-800">
+            <p className="text-xs text-slate-400 dark:text-slate-500">No questions — drag here or click Add Question</p>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={addQuestion}
+        className="mt-2 flex items-center gap-1 rounded-md border border-dashed border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-slate-500 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary"
+      >
+        <Plus className="h-3 w-3" />
+        Add Question
+      </button>
     </div>
   );
 }
