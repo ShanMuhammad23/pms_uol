@@ -8,8 +8,17 @@ import {
   ColumnVisibilityDropdown,
   useDashboardColumnVisibility,
 } from "@/app/components/dashboard/ColumnVisibilityDropdown";
+import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
+import { StaffListingMasterFilter } from "@/app/components/dashboard/StaffListingMasterFilter";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
+import {
+  EMPTY_MASTER_FILTER_STATE,
+  applyMasterFilters,
+  type MasterFilterMultiSelection,
+  type MasterFilterState,
+  type MasterFilterTextColumnId,
+} from "@/app/helpers/dashboard-master-filters";
 import {
   DASHBOARD_TABLE_COLUMNS,
   type DashboardTableColumnId,
@@ -64,6 +73,16 @@ function renderCell(
     );
   }
 
+  if (columnId === "remarksEvaluation") {
+    return (
+      <InlineRemarksCell
+        submissionId={submission.id}
+        value={submission.remarksEvaluation}
+        disabled={submission.id <= 0}
+      />
+    );
+  }
+
   return (
     <span
       className={cn(
@@ -85,16 +104,24 @@ export function DashboardSubmissionsTable({
 }: DashboardSubmissionsTableProps) {
   const { visibleIds, toggleColumn, showAll, isVisible } = useDashboardColumnVisibility();
   const [page, setPage] = useState(1);
+  const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
+    EMPTY_MASTER_FILTER_STATE,
+  );
 
   const visibleColumns = DASHBOARD_TABLE_COLUMNS.filter((column) => isVisible(column.id));
   const colSpan = Math.max(visibleColumns.length, 1);
 
-  const totalCount = submissions.length;
+  const masterFilteredSubmissions = useMemo(
+    () => applyMasterFilters(submissions, masterFilters),
+    [masterFilters, submissions],
+  );
+
+  const totalCount = masterFilteredSubmissions.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   useEffect(() => {
     setPage(1);
-  }, [submissions]);
+  }, [submissions, masterFilters]);
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
@@ -102,12 +129,55 @@ export function DashboardSubmissionsTable({
 
   const paginatedSubmissions = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return submissions.slice(start, start + PAGE_SIZE);
-  }, [page, submissions]);
+    return masterFilteredSubmissions.slice(start, start + PAGE_SIZE);
+  }, [page, masterFilteredSubmissions]);
 
   const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
   const showPagination = !isLoading && !error && totalCount > 0;
+
+  const handleMasterTextChange = (
+    columnId: MasterFilterTextColumnId,
+    next: string,
+  ) => {
+    setMasterFilters((current) => {
+      const text = { ...current.text };
+
+      if (!next.trim()) {
+        delete text[columnId];
+      } else {
+        text[columnId] = next;
+      }
+
+      return { ...current, text };
+    });
+  };
+
+  const handleMasterMultiChange = (
+    columnId: DashboardTableColumnId,
+    next: MasterFilterMultiSelection,
+  ) => {
+    setMasterFilters((current) => {
+      const multi = { ...current.multi };
+
+      if (next === null) {
+        delete multi[columnId];
+      } else {
+        multi[columnId] = next;
+      }
+
+      return { ...current, multi };
+    });
+  };
+
+  const clearMasterFilters = () => {
+    setMasterFilters(EMPTY_MASTER_FILTER_STATE);
+  };
+
+  const handleClearAllFilters = () => {
+    clearMasterFilters();
+    onClearAllFilters();
+  };
 
   return (
     <motion.div
@@ -119,9 +189,12 @@ export function DashboardSubmissionsTable({
     >
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900 dark:text-white">Staff listing</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Excel-aligned appraisal columns · toggle visibility for committee views
+          <p className="text-lg font-semibold text-slate-900 dark:text-white">
+            Staff listing ( Total: {totalCount}
+            {totalCount !== submissions.length
+              ? ` of ${submissions.length}`
+              : ""}{" "}
+            )
           </p>
         </div>
         <ColumnVisibilityDropdown
@@ -130,6 +203,14 @@ export function DashboardSubmissionsTable({
           onShowAll={showAll}
         />
       </div>
+
+      <StaffListingMasterFilter
+        submissions={submissions}
+        filters={masterFilters}
+        onTextChange={handleMasterTextChange}
+        onMultiChange={handleMasterMultiChange}
+        onClearAll={clearMasterFilters}
+      />
 
       <div className="w-full max-w-full overflow-x-auto overscroll-x-contain">
         <table className="w-max min-w-full text-left text-sm">
@@ -200,7 +281,7 @@ export function DashboardSubmissionsTable({
         </table>
       </div>
 
-      {!isLoading && !error && submissions.length === 0 ? (
+      {!isLoading && !error && totalCount === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -211,7 +292,7 @@ export function DashboardSubmissionsTable({
             No records match your filters
           </p>
           <button
-            onClick={onClearAllFilters}
+            onClick={handleClearAllFilters}
             className="mt-2 text-xs text-amber-600 hover:underline dark:text-amber-400"
           >
             Clear all filters

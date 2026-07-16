@@ -37,7 +37,7 @@ export const FORM_STATE_CONFIG: Record<
     phase: 1,
   },
   PENDING_HR_CALIBRATION: {
-    label: "HR Calibration",
+    label: "HR Alignment",
     color: "text-orange-700",
     bg: "bg-orange-50",
     border: "border-orange-200",

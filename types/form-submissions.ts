@@ -42,6 +42,8 @@ export interface FormSubmissionListItem {
   uolExperienceYears: number | null;
   isEligible: boolean | null;
   applicableDuration: string | null;
+  /** 1 = full, 0 = not eligible, otherwise months-to-evaluation / 12. */
+  applicableDurationFactor: number | null;
   remarksEvaluation: string | null;
   currentSalary: number | null;
   previousSalary: number | null;

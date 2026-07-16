@@ -2,9 +2,9 @@ import type { EntityRecord } from "@/types/entities";
 import type { EntityCategoryCode } from "@/types/entity-categories";
 
 export const ENTITY_FILTER_LEVELS = [
-  { level: 0, categoryCode: "C1" as EntityCategoryCode, label: "Category 0" },
-  { level: 1, categoryCode: "C2" as EntityCategoryCode, label: "Category 1" },
-  { level: 2, categoryCode: "C3" as EntityCategoryCode, label: "Category 2" },
+  { level: 0, categoryCode: "C0" as EntityCategoryCode, label: "Category 0" },
+  { level: 1, categoryCode: "C1" as EntityCategoryCode, label: "Category 1" },
+  { level: 2, categoryCode: "C2" as EntityCategoryCode, label: "Category 2" },
 ] as const;
 
 export type EntityFilterSelection = {

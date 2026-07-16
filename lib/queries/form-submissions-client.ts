@@ -24,3 +24,18 @@ export async function fetchFormSubmission(
   const response = await fetch(`/api/submissions/${id}`);
   return parseResponse<FormSubmissionDetail>(response);
 }
+
+export async function updateSubmissionRemarksEvaluation(
+  id: number,
+  remarksEvaluation: string | null,
+): Promise<{ id: number; remarksEvaluation: string | null }> {
+  const response = await fetch(`/api/submissions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ remarksEvaluation }),
+  });
+
+  return parseResponse<{ id: number; remarksEvaluation: string | null }>(
+    response,
+  );
+}

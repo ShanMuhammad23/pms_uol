@@ -199,6 +199,7 @@ function mapSubmissionRow(
       toNumber(row.uol_experience_years) ?? eligibility.uolExperienceYears,
     isEligible: row.is_eligible ?? eligibility.isEligible,
     applicableDuration: row.applicable_duration ?? eligibility.applicableDuration,
+    applicableDurationFactor: eligibility.applicableDurationFactor,
     eligibilityStatus: eligibility.status,
     eligibilityReferenceYear: eligibilityContext.financialYear,
     eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
@@ -492,5 +493,28 @@ export async function getFormSubmissionById(
     rootQuestions,
     questions,
     answers,
+  };
+}
+
+export async function updateAppraisalRemarksEvaluation(
+  appraisalId: number,
+  remarksEvaluation: string | null,
+): Promise<{ id: number; remarksEvaluation: string | null }> {
+  const result = await db.query<{ id: string; remarks_evaluation: string | null }>(
+    `UPDATE appraisals
+     SET remarks_evaluation = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+     RETURNING id, remarks_evaluation`,
+    [appraisalId, remarksEvaluation],
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  return {
+    id: Number(result.rows[0].id),
+    remarksEvaluation: result.rows[0].remarks_evaluation,
   };
 }

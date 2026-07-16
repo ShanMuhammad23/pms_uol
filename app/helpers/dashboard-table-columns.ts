@@ -1,3 +1,9 @@
+import {
+  getEligibilityShortLabel,
+  getSubmissionApplicableDurationFactor,
+  getSubmissionEligibilityStatus,
+} from "@/app/helpers/dashboard-eligibility";
+import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 export type DashboardTableColumnId =
@@ -92,12 +98,12 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   },
   {
     id: "facultyName",
-    label: "Faculty Name",
+    label: "ORG Level 1",
     getValue: (row) => formatNullable(row.parentEntityName ?? row.entityName),
   },
   {
     id: "deptGroupName",
-    label: "Dept. / Group Name",
+    label: "ORG Level 2",
     getValue: (row) =>
       formatNullable(row.parentEntityName ? row.entityName : null),
   },
@@ -119,13 +125,13 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   },
   {
     id: "creditHrsErpAdj",
-    label: "Credit Hrs ERP Score Adj",
+    label: "CH Adj",
     align: "right",
     getValue: (row) => formatNumber(row.creditHrsErpScoreAdj),
   },
   {
     id: "pubOricScoreAdj",
-    label: "Pub. ORIC Score Adj",
+    label: "ORIC Adj",
     align: "right",
     getValue: (row) => formatNumber(row.pubOricScoreAdj),
   },
@@ -166,12 +172,15 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "eligible",
     label: "Eligible?",
-    getValue: (row) => formatNullable(row.isEligible),
+    getValue: (row) =>
+      getEligibilityShortLabel(getSubmissionEligibilityStatus(row)),
   },
   {
     id: "applicableDuration",
     label: "Applicable Dur",
-    getValue: (row) => formatNullable(row.applicableDuration),
+    align: "right",
+    getValue: (row) =>
+      formatNumber(getSubmissionApplicableDurationFactor(row), 1),
   },
   {
     id: "remarksEvaluation",
@@ -280,7 +289,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
     id: "status",
     label: "Status",
     pinned: true,
-    getValue: (row) => row.status,
+    getValue: (row) => APPRAISAL_STATE_CONFIG[row.status]?.label ?? row.status,
   },
   {
     id: "actions",

@@ -6,11 +6,11 @@ import {
   Briefcase,
   Building2,
   ChevronDown,
-  Hash,
   IdCard,
   RotateCcw,
   Users,
 } from "lucide-react";
+import { Category0DistributionBar } from "@/app/components/dashboard/Category0DistributionBar";
 import { FilterChip, type FilterChipColor } from "@/app/components/dashboard/FilterChip";
 import {
   MultiSelectFilterDropdown,
@@ -67,10 +67,7 @@ export function DashboardFilterBar({
   category2Options,
   selectedCategoryIds,
   onStaffCategoryChange,
-  selectedSubCategoryIds,
-  onSubCategoryChange,
   staffCategoryOptions,
-  staffSubCategoryOptions,
   selectedDesignations,
   onDesignationChange,
   designationOptions,
@@ -106,11 +103,12 @@ export function DashboardFilterBar({
       className="mb-6 space-y-4"
     >
       <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
-        <div className="flex items-center justify-end px-4 py-2">
+        <div className="flex items-center gap-3 px-4 py-2">
+          <Category0DistributionBar options={category0Options} />
           <button
             type="button"
             onClick={() => setFiltersVisible((prev) => !prev)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             aria-label={filtersVisible ? "Hide filters" : "Show filters"}
             aria-expanded={filtersVisible}
             title={filtersVisible ? "Hide filters" : "Show filters"}
@@ -149,7 +147,7 @@ export function DashboardFilterBar({
                         (index === 1 && selectedCategory0EntityIds?.length === 0) ||
                         (index === 2 && selectedCategory1EntityIds?.length === 0)
                       }
-                      placeholder={`All ${level.label}`}
+                      placeholder={`All`}
                       searchable={entityOptions[index].length > 8}
                     />
                   ))}
@@ -161,21 +159,10 @@ export function DashboardFilterBar({
                     selectedValues={selectedCategoryIds}
                     onChange={onStaffCategoryChange}
                     disabled={staffCategoriesLoading}
-                    placeholder="All Staff Categories"
+                    placeholder="All"
                   />
 
-                  <MultiSelectFilterDropdown
-                    label="Staff Sub-Category"
-                    icon={Hash}
-                    options={staffSubCategoryOptions}
-                    selectedValues={selectedSubCategoryIds}
-                    onChange={onSubCategoryChange}
-                    disabled={
-                      staffCategoriesLoading || selectedCategoryIds?.length === 0
-                    }
-                    placeholder="All Staff Sub-Categories"
-                    searchable={staffSubCategoryOptions.length > 8}
-                  />
+             
 
                   <MultiSelectFilterDropdown
                     label="Designation"
@@ -184,7 +171,7 @@ export function DashboardFilterBar({
                     selectedValues={selectedDesignations}
                     onChange={onDesignationChange}
                     disabled={designationsLoading}
-                    placeholder="All Designations"
+                    placeholder="All"
                     searchable
                   />
 
@@ -194,7 +181,7 @@ export function DashboardFilterBar({
                     options={formStateOptions}
                     selectedValues={selectedFormStates}
                     onChange={onFormStateChange}
-                    placeholder="All Statuses"
+                    placeholder="All"
                   />
                 </div>
               </div>

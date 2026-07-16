@@ -23,6 +23,33 @@ export function getSubmissionEligibilityStatus(
   return computed.status;
 }
 
+/** Short labels for the staff listing Eligible? column. */
+export function getEligibilityShortLabel(
+  status: EligibilityStatus,
+): "Full" | "Partial" | "No" {
+  if (status === "Fully Eligible") return "Full";
+  if (status === "Partially Eligible") return "Partial";
+  return "No";
+}
+
+export function getSubmissionApplicableDurationFactor(
+  submission: FormSubmissionListItem,
+): number {
+  if (
+    submission.applicableDurationFactor !== null &&
+    submission.applicableDurationFactor !== undefined
+  ) {
+    return Math.round(submission.applicableDurationFactor * 10) / 10;
+  }
+
+  const computed = computeAppraisalEligibility(submission.dateOfJoining, {
+    financialYear: submission.eligibilityReferenceYear ?? undefined,
+    cycleEndDate: submission.eligibilityReferenceEndDate ?? undefined,
+  });
+
+  return computed.applicableDurationFactor;
+}
+
 export function buildEligibilityData(
   submissions: FormSubmissionListItem[],
   isDarkMode: boolean,
