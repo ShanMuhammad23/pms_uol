@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { Pencil } from "lucide-react";
-import type { FormTemplateRecord, QuestionRecord } from "@/types/forms";
+import type { FormTemplateRecord, QuestionRecord, FormSectionRecord, FormSubsectionRecord } from "@/types/forms";
 import {
   CATEGORY_LABELS,
-  FIELD_TYPE_LABELS,
   buildRootLayoutOrderFromRecord,
   flattenAllQuestions,
   SUB_CATEGORY_LABELS,
@@ -15,69 +14,81 @@ interface FormTemplateViewProps {
   template: FormTemplateRecord;
 }
 
-function QuestionCard({
-  question,
-  label,
-}: {
-  question: QuestionRecord;
-  label: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-primary">{label}</span>
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-          {FIELD_TYPE_LABELS[question.inputType]}
-        </span>
-        {question.isRequired ? (
-          <span className="text-[11px] text-foreground/60">Required</span>
-        ) : null}
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-white/10 dark:text-slate-300">
-          {question.totalMarks} marks
-        </span>
-        {question.selfAssessmentEnabled ? (
-          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
-            Self Assessment
-          </span>
-        ) : null}
-        {question.hodAssessmentEnabled ? (
-          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-            HOD Assessment
-          </span>
-        ) : null}
-      </div>
-      <p className="mt-2 text-sm font-medium text-text-primary">
-        {question.questionText}
-      </p>
-      {question.options.length > 0 ? (
-        <ul className="mt-3 space-y-1.5">
-          {question.options.map((option) => (
-            <li
-              key={option.id}
-              className="flex items-center justify-between rounded-lg border border-slate-300/60 px-3 py-2 text-xs dark:border-white/10"
-            >
-              <span className="text-text-primary">{option.optionLabel}</span>
-              <span className="text-foreground/70">
-                {option.pointsAssigned} pts
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
 export default function FormTemplateView({ template }: FormTemplateViewProps) {
   const allQuestions = flattenAllQuestions(template);
   const rootLayout = buildRootLayoutOrderFromRecord(
     template.sections,
     template.questions,
   );
-  let questionCounter = 0;
+
+  type TableRow = {
+    sr: number;
+    sectionTitle: string | null;
+    subsectionTitle: string | null;
+    question: QuestionRecord;
+    isFirstInSection: boolean;
+    sectionRowCount: number;
+  };
+
+  const rows: TableRow[] = [];
+  let sr = 0;
+
+  const collectQuestions = (
+    section: FormSectionRecord,
+    subsection: FormSubsectionRecord | null,
+  ) => {
+    const questions = subsection ? subsection.questions : section.questions;
+    const startIdx = rows.length;
+    questions.forEach((question) => {
+      sr += 1;
+      rows.push({
+        sr,
+        sectionTitle: section.title,
+        subsectionTitle: subsection?.title ?? null,
+        question,
+        isFirstInSection: false,
+        sectionRowCount: 0,
+      });
+    });
+    if (rows.length > startIdx) {
+      rows[startIdx].isFirstInSection = true;
+      for (let i = startIdx; i < rows.length; i++) {
+        rows[i].sectionRowCount = rows.length - startIdx;
+      }
+    }
+  };
+
+  rootLayout.forEach((item) => {
+    if (item.kind === "section") {
+      const section = template.sections.find((s) => s.id === item.id);
+      if (!section) return;
+      const startIdx = rows.length;
+      section.subsections.forEach((sub) => collectQuestions(section, sub));
+      collectQuestions(section, null);
+      if (rows.length > startIdx) {
+        rows[startIdx].isFirstInSection = true;
+        for (let i = startIdx; i < rows.length; i++) {
+          rows[i].sectionRowCount = rows.length - startIdx;
+        }
+      }
+    } else {
+      const question = template.questions.find((q) => q.id === item.id);
+      if (question) {
+        sr += 1;
+        rows.push({
+          sr,
+          sectionTitle: null,
+          subsectionTitle: null,
+          question,
+          isFirstInSection: true,
+          sectionRowCount: 1,
+        });
+      }
+    }
+  });
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-text-primary">
@@ -123,76 +134,96 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
         </div>
       </div>
 
-      <div className="space-y-6">
-        <h3 className="text-sm font-semibold text-text-primary">Form Structure</h3>
-
-        {rootLayout.map((item) => {
-          if (item.kind === "section") {
-            const section = template.sections.find(
-              (currentSection) => currentSection.id === item.id,
-            );
-            if (!section) {
-              return null;
-            }
-
-            return (
-              <div key={section.id} className="space-y-4">
-                <h4 className="text-base font-semibold text-text-primary">
-                  {section.title}
-                </h4>
-
-                {section.subsections.map((subsection) => (
-                  <div key={subsection.id} className="space-y-3 pl-4">
-                    <h5 className="text-sm font-medium text-foreground/80">
-                      {subsection.title}
-                    </h5>
-                    {subsection.questions.map((question) => {
-                      questionCounter += 1;
-                      return (
-                        <QuestionCard
-                          key={question.id}
-                          question={question}
-                          label={`Q${questionCounter}`}
-                        />
-                      );
-                    })}
-                  </div>
-                ))}
-
-                {section.questions.map((question) => {
-                  questionCounter += 1;
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
+                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                  Sr. No.
+                </th>
+                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                  Key Task / Function
+                </th>
+                <th className="min-w-[280px] border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                  Key Performance Indicators (KPIs)
+                </th>
+                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                  Weight
+                </th>
+                
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                    No questions defined.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => {
+                  const { question } = row;
                   return (
-                    <QuestionCard
-                      key={question.id}
-                      question={question}
-                      label={`Q${questionCounter}`}
-                    />
+                    <tr key={question.id} className="align-top">
+                      <td className="border-r border-slate-200 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-white/10 dark:text-slate-400">
+                        {row.sr}
+                      </td>
+                      {row.isFirstInSection ? (
+                        <td
+                          className="max-w-[220px] border-r border-slate-200 px-3 py-2.5 align-top text-slate-700 dark:border-white/10 dark:text-slate-300"
+                          rowSpan={row.sectionRowCount}
+                        >
+                          {row.sectionTitle ? (
+                            <span className="line-clamp-3" title={row.sectionTitle}>
+                              {row.sectionTitle}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      ) : null}
+                      <td className="border-r border-slate-200 px-3 py-2.5 text-slate-900 dark:border-white/10 dark:text-slate-100">
+                        {row.subsectionTitle ? (
+                          <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                            {row.subsectionTitle}
+                          </span>
+                        ) : null}
+                        <p className="max-w-[450px] break-words text-xs leading-snug">{question.questionText}</p>
+                        {question.options.length > 0 ? (
+                          <ul className="mt-1.5 space-y-0.5">
+                            {question.options.map((option) => (
+                              <li key={option.id} className="max-w-[400px] break-words text-[11px] text-slate-500 dark:text-slate-400">
+                                • {option.optionLabel} ({option.pointsAssigned} pts)
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-slate-700 dark:border-white/10 dark:text-slate-300">
+                        {question.totalMarks}
+                      </td>
+                      
+                    </tr>
                   );
-                })}
-              </div>
-            );
-          }
-
-          const question = template.questions.find(
-            (currentQuestion) => currentQuestion.id === item.id,
-          );
-          if (!question) {
-            return null;
-          }
-
-          questionCounter += 1;
-          return (
-            <QuestionCard
-              key={question.id}
-              question={question}
-              label={`Q${questionCounter}`}
-            />
-          );
-        })}
-
-        {allQuestions.length === 0 ? (
-          <p className="text-sm text-foreground/70">No questions defined.</p>
-        ) : null}
+                })
+              )}
+            </tbody>
+            {rows.length > 0 ? (
+              <tfoot>
+                <tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-white/20 dark:bg-slate-950/50">
+                  <td colSpan={3} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                    Total
+                  </td>
+                  <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
+                    {allQuestions.reduce((sum, q) => sum + q.totalMarks, 0)}
+                  </td>
+                 
+                </tr>
+              </tfoot>
+            ) : null}
+          </table>
+        </div>
       </div>
     </div>
   );

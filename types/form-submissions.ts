@@ -92,4 +92,5 @@ export interface FormSubmissionDetail {
   rootQuestions: QuestionRecord[];
   questions: QuestionRecord[];
   answers: EmployeeFormAnswerRecord[];
+  managerAnswers: EmployeeFormAnswerRecord[];
 }
