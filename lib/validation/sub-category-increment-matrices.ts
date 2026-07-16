@@ -46,6 +46,10 @@ function validateCategoryPair(
 export function validateCreateSubCategoryIncrementMatrixInput(
   input: Partial<CreateSubCategoryIncrementMatrixInput>,
 ): string | null {
+  if (!input.matrixLabel?.trim()) {
+    return "Matrix label is required.";
+  }
+
   if (!input.financialYearId || Number.isNaN(Number(input.financialYearId))) {
     return "Financial year is required.";
   }
@@ -72,6 +76,10 @@ export function validateCreateSubCategoryIncrementMatrixInput(
 export function validateUpdateSubCategoryIncrementMatrixInput(
   input: Partial<UpdateSubCategoryIncrementMatrixInput>,
 ): string | null {
+  if (!input.matrixLabel?.trim()) {
+    return "Matrix label is required.";
+  }
+
   const categoryError = validateCategoryPair(
     input.targetCategory,
     input.targetSubCategory,

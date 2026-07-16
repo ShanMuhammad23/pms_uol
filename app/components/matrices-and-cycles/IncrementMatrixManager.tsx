@@ -48,6 +48,7 @@ export default function IncrementMatrixManager() {
   const [targetCategory, setTargetCategory] = useState<EmployeeCategory | "">(
     "",
   );
+  const [matrixLabel, setMatrixLabel] = useState("Default");
   const [targetSubCategory, setTargetSubCategory] = useState<SubCategory | "">(
     "",
   );
@@ -131,8 +132,9 @@ export default function IncrementMatrixManager() {
     );
     if (!quartile) return null;
 
-    return `${CATEGORY_LABELS[targetCategory]} · ${SUB_CATEGORY_LABELS[targetSubCategory]} · ${selectedLevel.name} · ${quartile.name} → ${incrementPercentage}%`;
+    return `${matrixLabel} · ${CATEGORY_LABELS[targetCategory]} · ${SUB_CATEGORY_LABELS[targetSubCategory]} · ${selectedLevel.name} · ${quartile.name} → ${incrementPercentage}%`;
   }, [
+    matrixLabel,
     targetCategory,
     targetSubCategory,
     selectedLevel,
@@ -143,6 +145,7 @@ export default function IncrementMatrixManager() {
 
   /* ─── Handlers ─── */
   const resetForm = () => {
+    setMatrixLabel("Default");
     setTargetCategory("");
     setTargetSubCategory("");
     setPerformanceLevelId("");
@@ -241,6 +244,7 @@ export default function IncrementMatrixManager() {
     }
 
     const payload = {
+      matrixLabel: matrixLabel.trim(),
       targetCategory,
       targetSubCategory,
       performanceLevelId,
@@ -264,6 +268,7 @@ export default function IncrementMatrixManager() {
 
   const handleEdit = (entry: SubCategoryIncrementMatrixRecord) => {
     setEditingEntry(entry);
+    setMatrixLabel(entry.matrixLabel);
     setTargetCategory(entry.targetCategory);
     setTargetSubCategory(entry.targetSubCategory);
     setPerformanceLevelId(entry.performanceLevelId);
@@ -447,6 +452,22 @@ export default function IncrementMatrixManager() {
             ) : null}
 
             <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+              <div>
+                <label
+                  htmlFor="increment-matrix-label"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-foreground/60"
+                >
+                  Matrix Label
+                </label>
+                <input
+                  id="increment-matrix-label"
+                  value={matrixLabel}
+                  onChange={(e) => setMatrixLabel(e.target.value)}
+                  placeholder="e.g. Matrix A"
+                  className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                />
+              </div>
+
               {/* Category */}
               <div>
                 <label
@@ -701,6 +722,9 @@ export default function IncrementMatrixManager() {
                   <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm dark:bg-slate-800/95 dark:shadow-white/5">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
+                        Matrix
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
                         Category
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
@@ -726,6 +750,9 @@ export default function IncrementMatrixManager() {
                         key={entry.id}
                         className="transition-colors hover:bg-slate-50/80 dark:hover:bg-white/5"
                       >
+                        <td className="px-4 py-3 text-text-primary">
+                          {entry.matrixLabel}
+                        </td>
                         <td className="px-4 py-3 text-text-primary">
                           {CATEGORY_LABELS[entry.targetCategory]}
                         </td>

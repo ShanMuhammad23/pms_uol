@@ -11,6 +11,7 @@ import type {
 interface IncrementMatrixRow {
   id: string;
   financial_year_id: number;
+  matrix_label: string;
   target_category: EmployeeCategory;
   target_sub_category: SubCategory;
   performance_level_id: string;
@@ -47,6 +48,7 @@ function mapRow(row: IncrementMatrixRow): SubCategoryIncrementMatrixRecord {
   return {
     id: Number(row.id),
     financialYearId: row.financial_year_id,
+    matrixLabel: row.matrix_label,
     targetCategory: row.target_category,
     targetSubCategory: row.target_sub_category,
     performanceLevelId: Number(row.performance_level_id),
@@ -63,6 +65,7 @@ const LIST_QUERY = `
   SELECT
     sim.id,
     sim.financial_year_id,
+    sim.matrix_label,
     sim.target_category,
     sim.target_sub_category,
     pl.id AS performance_level_id,
@@ -125,6 +128,7 @@ export async function listSubCategoryIncrementMatrices(
     `${LIST_QUERY}
      WHERE sim.financial_year_id = $1
      ORDER BY
+       sim.matrix_label,
        sim.target_category,
        sim.target_sub_category,
        pl.sort_order,
@@ -148,14 +152,16 @@ export async function createSubCategoryIncrementMatrix(
     const result = await db.query<{ id: string }>(
       `INSERT INTO sub_category_increment_matrices (
          financial_year_id,
+         matrix_label,
          target_category,
          target_sub_category,
          performance_quartile_id,
          increment_percentage
-       ) VALUES ($1, $2, $3, $4, $5)
+       ) VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
       [
         input.financialYearId,
+        input.matrixLabel.trim(),
         input.targetCategory,
         input.targetSubCategory,
         input.performanceQuartileId,
@@ -214,13 +220,15 @@ export async function updateSubCategoryIncrementMatrix(
   try {
     const result = await db.query(
       `UPDATE sub_category_increment_matrices
-       SET target_category = $1,
-           target_sub_category = $2,
-           performance_quartile_id = $3,
-           increment_percentage = $4,
+       SET matrix_label = $1,
+           target_category = $2,
+           target_sub_category = $3,
+           performance_quartile_id = $4,
+           increment_percentage = $5,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5`,
+       WHERE id = $6`,
       [
+        input.matrixLabel.trim(),
         input.targetCategory,
         input.targetSubCategory,
         input.performanceQuartileId,

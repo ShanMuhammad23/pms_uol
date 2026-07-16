@@ -20,11 +20,44 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 export async function fetchPerformanceMatrix(
   financialYearId: number,
+  matrixLabel?: string,
 ): Promise<PerformanceLevelWithQuartiles[]> {
+  const params = new URLSearchParams({
+    financialYearId: String(financialYearId),
+  });
+  if (matrixLabel?.trim()) {
+    params.set("matrixLabel", matrixLabel.trim());
+  }
   const response = await fetch(
-    `/api/admin/performance-levels?financialYearId=${financialYearId}`,
+    `/api/admin/performance-levels?${params.toString()}`,
   );
   return parseResponse<PerformanceLevelWithQuartiles[]>(response);
+}
+
+export async function fetchPerformanceMatrixLabels(
+  financialYearId: number,
+): Promise<string[]> {
+  const response = await fetch(
+    `/api/admin/performance-levels?financialYearId=${financialYearId}&labelsOnly=1`,
+  );
+  return parseResponse<string[]>(response);
+}
+
+export async function assignPerformanceMatrixToEmployees(
+  input: {
+    financialYearId: number;
+    matrixLabel: string;
+    employeeIds: string[];
+  },
+): Promise<{ updatedCount: number; financialYearId: number; matrixLabel: string }> {
+  const response = await fetch("/api/admin/performance-levels", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseResponse<{ updatedCount: number; financialYearId: number; matrixLabel: string }>(
+    response,
+  );
 }
 
 export async function createPerformanceLevel(

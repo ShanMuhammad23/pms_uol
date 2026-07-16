@@ -12,6 +12,7 @@ import type {
 interface PerformanceLevelRow {
   id: number;
   financial_year_id: number;
+  matrix_label: string;
   name: string;
   sort_order: number;
   created_at: string;
@@ -45,6 +46,7 @@ function mapPerformanceLevelRow(
   return {
     id: Number(row.id),
     financialYearId: row.financial_year_id,
+    matrixLabel: row.matrix_label,
     name: row.name,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
@@ -87,13 +89,16 @@ function isForeignKeyViolation(error: unknown): boolean {
 
 export async function listPerformanceLevelsByFinancialYearId(
   financialYearId: number,
+  matrixLabel?: string,
 ): Promise<PerformanceLevelRecord[]> {
+  const hasMatrixLabel = Boolean(matrixLabel?.trim());
   const result = await db.query<PerformanceLevelRow>(
-    `SELECT id, financial_year_id, name, sort_order, created_at::text, updated_at::text
+    `SELECT id, financial_year_id, matrix_label, name, sort_order, created_at::text, updated_at::text
      FROM performance_levels
      WHERE financial_year_id = $1
+       ${hasMatrixLabel ? "AND matrix_label = $2" : ""}
      ORDER BY sort_order ASC, name ASC`,
-    [financialYearId],
+    hasMatrixLabel ? [financialYearId, matrixLabel!.trim()] : [financialYearId],
   );
 
   return result.rows.map(mapPerformanceLevelRow);
@@ -103,7 +108,7 @@ export async function getPerformanceLevelById(
   id: number,
 ): Promise<PerformanceLevelRecord | null> {
   const result = await db.query<PerformanceLevelRow>(
-    `SELECT id, financial_year_id, name, sort_order, created_at::text, updated_at::text
+    `SELECT id, financial_year_id, matrix_label, name, sort_order, created_at::text, updated_at::text
      FROM performance_levels
      WHERE id = $1`,
     [id],
@@ -118,8 +123,12 @@ export async function getPerformanceLevelById(
 
 export async function getPerformanceMatrixByFinancialYearId(
   financialYearId: number,
+  matrixLabel?: string,
 ): Promise<PerformanceLevelWithQuartiles[]> {
-  const levels = await listPerformanceLevelsByFinancialYearId(financialYearId);
+  const levels = await listPerformanceLevelsByFinancialYearId(
+    financialYearId,
+    matrixLabel,
+  );
 
   if (levels.length === 0) {
     return [];
@@ -154,11 +163,12 @@ export async function createPerformanceLevel(
 ): Promise<PerformanceLevelRecord> {
   try {
     const result = await db.query<PerformanceLevelRow>(
-      `INSERT INTO performance_levels (financial_year_id, name, sort_order)
-       VALUES ($1, $2, $3)
-       RETURNING id, financial_year_id, name, sort_order, created_at::text, updated_at::text`,
+      `INSERT INTO performance_levels (financial_year_id, matrix_label, name, sort_order)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, financial_year_id, matrix_label, name, sort_order, created_at::text, updated_at::text`,
       [
         input.financialYearId,
+        input.matrixLabel.trim(),
         input.name.trim(),
         input.sortOrder ?? 0,
       ],
@@ -188,10 +198,13 @@ export async function updatePerformanceLevel(
   try {
     const result = await db.query<PerformanceLevelRow>(
       `UPDATE performance_levels
-       SET name = $1, sort_order = COALESCE($2, sort_order), updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
-       RETURNING id, financial_year_id, name, sort_order, created_at::text, updated_at::text`,
-      [input.name.trim(), input.sortOrder ?? null, id],
+       SET matrix_label = $1,
+           name = $2,
+           sort_order = COALESCE($3, sort_order),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING id, financial_year_id, matrix_label, name, sort_order, created_at::text, updated_at::text`,
+      [input.matrixLabel.trim(), input.name.trim(), input.sortOrder ?? null, id],
     );
 
     if (result.rows.length === 0) {
@@ -238,4 +251,72 @@ export async function deletePerformanceLevel(id: number): Promise<void> {
 
     throw error;
   }
+}
+
+export async function listPerformanceMatrixLabelsByFinancialYearId(
+  financialYearId: number,
+): Promise<string[]> {
+  const result = await db.query<{ matrix_label: string }>(
+    `SELECT DISTINCT matrix_label
+     FROM performance_levels
+     WHERE financial_year_id = $1
+     ORDER BY matrix_label ASC`,
+    [financialYearId],
+  );
+  return result.rows.map((row) => row.matrix_label);
+}
+
+export async function assignPerformanceMatrixToEmployees(
+  financialYearId: number,
+  matrixLabel: string,
+  employeeIds: string[],
+): Promise<{ updatedCount: number; financialYearId: number; matrixLabel: string }> {
+  const normalizedCodes = [...new Set(employeeIds.map((item) => item.trim()).filter(Boolean))];
+  const trimmedLabel = matrixLabel.trim();
+
+  if (!trimmedLabel) {
+    throw new PerformanceLevelError("Matrix label is required.", 400);
+  }
+  if (normalizedCodes.length === 0) {
+    throw new PerformanceLevelError("At least one employee is required.", 400);
+  }
+
+  const matrixExists = await db.query<{ id: string }>(
+    `SELECT id
+     FROM performance_levels
+     WHERE financial_year_id = $1 AND matrix_label = $2
+     LIMIT 1`,
+    [financialYearId, trimmedLabel],
+  );
+  if (!matrixExists.rows[0]) {
+    throw new PerformanceLevelError("Selected performance matrix does not exist.", 404);
+  }
+
+  const result = await db.query<{ employee_id: string }>(
+    `WITH selected_users AS (
+       SELECT id
+       FROM users
+       WHERE employee_id = ANY($1::text[])
+         AND is_active = TRUE
+     ),
+     upserted AS (
+       INSERT INTO employee_performance_matrix_assignments (
+         employee_id, financial_year_id, matrix_label
+       )
+       SELECT id, $2, $3
+       FROM selected_users
+       ON CONFLICT (employee_id, financial_year_id) DO UPDATE
+         SET matrix_label = EXCLUDED.matrix_label,
+             updated_at = CURRENT_TIMESTAMP
+       RETURNING employee_id
+     )
+     SELECT employee_id FROM upserted`,
+    [normalizedCodes, financialYearId, trimmedLabel],
+  );
+
+  return {
+    updatedCount: result.rows.length,
+    financialYearId,
+    matrixLabel: trimmedLabel,
+  };
 }
