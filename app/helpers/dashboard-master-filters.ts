@@ -20,13 +20,16 @@ const MASTER_FILTER_EXCLUDED_IDS = new Set<DashboardTableColumnId>([
 export const MASTER_FILTER_TEXT_COLUMN_IDS = [
   "sapCode",
   "employeeName",
-  "roleCategory",
   "gradeGroup",
   "remarksEvaluation",
   "remarksCompensation",
   "qualificationSubject",
   "qualificationInstitute",
 ] as const satisfies readonly DashboardTableColumnId[];
+
+/** Multi-select options list every distinct value from the full dataset (Excel-style). */
+export const MASTER_FILTER_DATABASE_UNIQUE_COLUMN_IDS =
+  new Set<DashboardTableColumnId>(["roleCategory"]);
 
 export type MasterFilterTextColumnId =
   (typeof MASTER_FILTER_TEXT_COLUMN_IDS)[number];
@@ -142,6 +145,7 @@ export function buildMasterFilterOptions(
   column: DashboardTableColumnDef,
   filters: MasterFilterState = EMPTY_MASTER_FILTER_STATE,
   selectedValues: MasterFilterMultiSelection = null,
+  allSubmissions?: FormSubmissionListItem[],
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 
@@ -154,6 +158,18 @@ export function buildMasterFilterOptions(
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
+  if (
+    MASTER_FILTER_DATABASE_UNIQUE_COLUMN_IDS.has(column.id) &&
+    allSubmissions
+  ) {
+    for (const submission of allSubmissions) {
+      const value = column.getValue(submission);
+      if (!counts.has(value)) {
+        counts.set(value, 0);
+      }
+    }
+  }
+
   // Keep currently selected values visible even if other filters zero them out.
   if (selectedValues) {
     for (const value of selectedValues) {
@@ -163,13 +179,21 @@ export function buildMasterFilterOptions(
     }
   }
 
+  const includeZeroCountOptions =
+    MASTER_FILTER_DATABASE_UNIQUE_COLUMN_IDS.has(column.id);
+
   return [...counts.entries()]
     .map(([value, count]) => ({
       value,
       label: value,
       count,
     }))
-    .filter((option) => option.count > 0 || selectedValues?.includes(option.value))
+    .filter(
+      (option) =>
+        option.count > 0 ||
+        selectedValues?.includes(option.value) ||
+        includeZeroCountOptions,
+    )
     .sort((left, right) => {
       if (left.value === "—") return 1;
       if (right.value === "—") return -1;

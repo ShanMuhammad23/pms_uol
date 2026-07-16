@@ -40,6 +40,7 @@ const PAGE_SIZE = 50;
 
 interface DashboardSubmissionsTableProps {
   submissions: FormSubmissionListItem[];
+  allSubmissions?: FormSubmissionListItem[];
   isLoading: boolean;
   error: unknown;
   onClearAllFilters: () => void;
@@ -154,6 +155,7 @@ function renderCell(
 
 export function DashboardSubmissionsTable({
   submissions,
+  allSubmissions = submissions,
   isLoading,
   error,
   onClearAllFilters,
@@ -314,10 +316,11 @@ export function DashboardSubmissionsTable({
       initial="hidden"
       animate="visible"
       transition={{ delay: 0.6 }}
-      className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
+      className="min-w-0 min-h-screen max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
     >
          <StaffListingMasterFilter
         submissions={submissions}
+        allSubmissions={allSubmissions}
         filters={masterFilters}
         onTextChange={handleMasterTextChange}
         onMultiChange={handleMasterMultiChange}
@@ -393,6 +396,7 @@ export function DashboardSubmissionsTable({
                     <TableColumnHeaderFilter
                       column={column}
                       submissions={submissions}
+                      allSubmissions={allSubmissions}
                       filters={masterFilters}
                       onTextChange={handleMasterTextChange}
                       onMultiChange={handleMasterMultiChange}

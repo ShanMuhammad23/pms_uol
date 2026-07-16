@@ -8,6 +8,8 @@ import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFi
 
 interface Category0DistributionBarProps {
   options: MultiSelectOption[];
+  selectedValues?: string[] | null;
+  onSelect?: (value: string) => void;
   className?: string;
 }
 
@@ -21,6 +23,8 @@ type Segment = {
 
 export function Category0DistributionBar({
   options,
+  selectedValues = null,
+  onSelect,
   className,
 }: Category0DistributionBarProps) {
   const isDarkMode = useIsDarkMode();
@@ -48,6 +52,9 @@ export function Category0DistributionBar({
       });
   }, [isDarkMode, options]);
 
+  const isExclusiveSelection =
+    selectedValues !== null && selectedValues.length === 1;
+
   return (
     <div className={cn("min-w-0 flex-1", className)}>
       <div
@@ -63,26 +70,37 @@ export function Category0DistributionBar({
         onMouseLeave={() => setHoveredValue(null)}
       >
         {segments.length > 0 ? (
-          segments.map((segment) => (
-            <div
-              key={segment.value}
-              className={cn(
-                "flex h-full min-w-0 items-center justify-center px-1.5 transition-[flex-grow,opacity] duration-300 first:rounded-l-md last:rounded-r-md",
-                hoveredValue !== null && hoveredValue !== segment.value && "opacity-40",
-              )}
-              style={{
-                flexGrow: segment.count,
-                flexBasis: 0,
-                backgroundColor: segment.color,
-              }}
-              title={`${segment.label}: ${segment.count} (${segment.percent.toFixed(1)}%)`}
-              onMouseEnter={() => setHoveredValue(segment.value)}
-            >
-              <span className="truncate text-[11px] font-medium leading-none text-white">
-                {segment.label} ({segment.count})
-              </span>
-            </div>
-          ))
+          segments.map((segment) => {
+            const isSelected = selectedValues?.includes(segment.value) ?? false;
+            const isActive = isExclusiveSelection && isSelected;
+
+            return (
+              <button
+                key={segment.value}
+                type="button"
+                disabled={!onSelect}
+                onClick={() => onSelect?.(segment.value)}
+                className={cn(
+                  "flex h-full min-w-0 items-center justify-center px-1.5 transition-[flex-grow,opacity,box-shadow] duration-300 first:rounded-l-md last:rounded-r-md",
+                  onSelect && "cursor-pointer hover:brightness-110",
+                  hoveredValue !== null && hoveredValue !== segment.value && "opacity-40",
+                  isActive && "ring-2 ring-inset ring-white/80 dark:ring-white/30",
+                )}
+                style={{
+                  flexGrow: segment.count,
+                  flexBasis: 0,
+                  backgroundColor: segment.color,
+                }}
+                title={`${segment.label}: ${segment.count} (${segment.percent.toFixed(1)}%)`}
+                onMouseEnter={() => setHoveredValue(segment.value)}
+                aria-pressed={isActive}
+              >
+                <span className="truncate text-[11px] font-medium leading-none text-white">
+                  {segment.label} ({segment.count})
+                </span>
+              </button>
+            );
+          })
         ) : (
           <div className="h-full w-full rounded-md bg-slate-200 dark:bg-slate-700" />
         )}
