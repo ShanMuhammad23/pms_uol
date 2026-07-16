@@ -11,7 +11,6 @@ const MASTER_FILTER_EXCLUDED_IDS = new Set<DashboardTableColumnId>([
   "actions",
   "dateOfJoining",
   "hodReviewComments",
-  "remarksCompensation",
 ]);
 
 /**
@@ -22,7 +21,9 @@ export const MASTER_FILTER_TEXT_COLUMN_IDS = [
   "sapCode",
   "employeeName",
   "roleCategory",
+  "gradeGroup",
   "remarksEvaluation",
+  "remarksCompensation",
   "qualificationSubject",
   "qualificationInstitute",
 ] as const satisfies readonly DashboardTableColumnId[];

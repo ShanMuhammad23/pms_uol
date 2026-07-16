@@ -8,12 +8,18 @@ import {
   ColumnVisibilityDropdown,
   useDashboardColumnVisibility,
 } from "@/app/components/dashboard/ColumnVisibilityDropdown";
+import { InlineGradeGroupCell } from "@/app/components/dashboard/InlineGradeGroupCell";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { StaffListingMasterFilter } from "@/app/components/dashboard/StaffListingMasterFilter";
 import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
+import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
+import {
+  getEligibilityShortLabel,
+  getSubmissionEligibilityStatus,
+} from "@/app/helpers/dashboard-eligibility";
 import {
   EMPTY_MASTER_FILTER_STATE,
   applyMasterFilters,
@@ -76,6 +82,22 @@ function renderCell(
     );
   }
 
+  if (columnId === "eligible") {
+    const status = getSubmissionEligibilityStatus(submission);
+    const label = getEligibilityShortLabel(status);
+    const backgroundColor = ELIGIBILITY_CONFIG[status].light;
+
+    return (
+      <span
+        className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white"
+        style={{ backgroundColor }}
+        title={status}
+      >
+        {label}
+      </span>
+    );
+  }
+
   if (columnId === "roleCategory") {
     return (
       <InlineRoleCategoryCell
@@ -85,11 +107,32 @@ function renderCell(
     );
   }
 
+  if (columnId === "gradeGroup") {
+    return (
+      <InlineGradeGroupCell
+        employeeId={submission.employeeId}
+        value={submission.gradeGroup}
+      />
+    );
+  }
+
   if (columnId === "remarksEvaluation") {
     return (
       <InlineRemarksCell
         submissionId={submission.id}
+        field="remarksEvaluation"
         value={submission.remarksEvaluation}
+        disabled={submission.id <= 0}
+      />
+    );
+  }
+
+  if (columnId === "remarksCompensation") {
+    return (
+      <InlineRemarksCell
+        submissionId={submission.id}
+        field="remarksCompensation"
+        value={submission.remarksCompensation}
         disabled={submission.id <= 0}
       />
     );

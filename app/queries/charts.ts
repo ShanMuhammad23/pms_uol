@@ -13,12 +13,14 @@ import {
   buildHrAlignmentStats,
   buildManagerReviewStats,
   buildSelfAssessmentStats,
+  countEligibleSubmissions,
 } from "@/app/helpers/dashboard-workflow-stats";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
 interface UseDashboardChartMetricsParams {
+  submissions: FormSubmissionListItem[];
   filteredSubmissions: FormSubmissionListItem[];
   staffCategories: StaffCategoryWithSubCategories[];
   isDarkMode: boolean;
@@ -27,6 +29,7 @@ interface UseDashboardChartMetricsParams {
 }
 
 export function useDashboardChartMetrics({
+  submissions,
   filteredSubmissions,
   staffCategories,
   isDarkMode,
@@ -38,9 +41,19 @@ export function useDashboardChartMetrics({
     [filteredSubmissions, staffCategories, isDarkMode],
   );
 
+  const totalEligibleCount = useMemo(
+    () => countEligibleSubmissions(submissions),
+    [submissions],
+  );
+
   const filteredCalibrationData = useMemo(
-    () => buildCalibrationData(filteredSubmissions, institutionalQuotaRows),
-    [filteredSubmissions, institutionalQuotaRows],
+    () =>
+      buildCalibrationData(
+        filteredSubmissions,
+        institutionalQuotaRows,
+        totalEligibleCount,
+      ),
+    [filteredSubmissions, institutionalQuotaRows, totalEligibleCount],
   );
 
   const ratingQuartileMatrix = useMemo(

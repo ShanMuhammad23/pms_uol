@@ -3,12 +3,18 @@ import { requireSubmissionReviewerApi } from "@/lib/auth/require-submission-revi
 import {
   FormSubmissionError,
   getFormSubmissionById,
-  updateAppraisalRemarksEvaluation,
+  updateAppraisalRemarks,
+  type AppraisalRemarksField,
 } from "@/lib/queries/form-submissions";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
+
+const REMARKS_FIELDS = [
+  "remarksEvaluation",
+  "remarksCompensation",
+] as const satisfies readonly AppraisalRemarksField[];
 
 export async function GET(_request: Request, context: RouteContext) {
   const auth = await requireSubmissionReviewerApi();
@@ -61,34 +67,31 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   try {
-    const body = (await request.json()) as { remarksEvaluation?: unknown };
+    const body = (await request.json()) as Record<string, unknown>;
+    const field = REMARKS_FIELDS.find((candidate) => candidate in body);
 
-    if (!("remarksEvaluation" in body)) {
+    if (!field) {
       return NextResponse.json(
-        { error: "remarksEvaluation is required." },
+        {
+          error:
+            "One of remarksEvaluation or remarksCompensation is required.",
+        },
         { status: 400 },
       );
     }
 
-    if (
-      body.remarksEvaluation !== null &&
-      typeof body.remarksEvaluation !== "string"
-    ) {
+    const rawValue = body[field];
+    if (rawValue !== null && typeof rawValue !== "string") {
       return NextResponse.json(
-        { error: "remarksEvaluation must be a string or null." },
+        { error: `${field} must be a string or null.` },
         { status: 400 },
       );
     }
 
-    const remarksEvaluation =
-      typeof body.remarksEvaluation === "string"
-        ? body.remarksEvaluation.trim() || null
-        : null;
+    const value =
+      typeof rawValue === "string" ? rawValue.trim() || null : null;
 
-    const updated = await updateAppraisalRemarksEvaluation(
-      submissionId,
-      remarksEvaluation,
-    );
+    const updated = await updateAppraisalRemarks(submissionId, field, value);
 
     return NextResponse.json(updated);
   } catch (error) {
@@ -99,9 +102,9 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
-    console.error("Failed to update evaluation remarks:", error);
+    console.error("Failed to update remarks:", error);
     return NextResponse.json(
-      { error: "Failed to update evaluation remarks." },
+      { error: "Failed to update remarks." },
       { status: 500 },
     );
   }

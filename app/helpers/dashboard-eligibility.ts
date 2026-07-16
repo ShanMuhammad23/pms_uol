@@ -26,10 +26,10 @@ export function getSubmissionEligibilityStatus(
 /** Short labels for the staff listing Eligible? column. */
 export function getEligibilityShortLabel(
   status: EligibilityStatus,
-): "Full" | "Partial" | "No" {
+): "Full" | "Partial" | "Not" {
   if (status === "Fully Eligible") return "Full";
   if (status === "Partially Eligible") return "Partial";
-  return "No";
+  return "Not";
 }
 
 export function getSubmissionApplicableDurationFactor(

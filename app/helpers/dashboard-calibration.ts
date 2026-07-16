@@ -29,21 +29,25 @@ export function getSubmissionDisplayRating(submission: FormSubmissionListItem): 
 }
 
 /**
+ * @param submissions Filtered submissions — drives Actual Distribution only.
  * @param quotas Chart quota series from DB (`/api/institutional-quotas`).
  *               When omitted/undefined (still loading), returns empty series.
- *               `quota` is the target headcount (eligible × quota %).
- *               `actual` is the rated eligible headcount in each bucket.
+ * @param quotaEligibleCount Total eligible headcount (unfiltered). Institutional
+ *               Quota always uses this so filters do not reshape the quota curve.
+ *               Defaults to eligible count within `submissions` when omitted.
  */
 export function buildCalibrationData(
   submissions: FormSubmissionListItem[],
   quotas?: Array<{ rating: string; quota: number }> | null,
+  quotaEligibleCount?: number,
 ) {
   if (!quotas || quotas.length === 0) {
     return [];
   }
 
   const eligibleSubmissions = submissions.filter(isSubmissionEligible);
-  const eligibleCount = eligibleSubmissions.length;
+  const quotaBaseCount =
+    quotaEligibleCount ?? eligibleSubmissions.length;
   const counts = new Map(quotas.map((row) => [row.rating, 0]));
 
   eligibleSubmissions.forEach((submission) => {
@@ -62,7 +66,7 @@ export function buildCalibrationData(
 
   return quotas.map((row) => ({
     rating: row.rating,
-    quota: Math.round((eligibleCount * row.quota) / 100),
+    quota: Math.round((quotaBaseCount * row.quota) / 100),
     actual: counts.get(row.rating) ?? 0,
   }));
 }

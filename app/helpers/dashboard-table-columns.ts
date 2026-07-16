@@ -108,7 +108,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   },
   {
     id: "gradeGroup",
-    label: "Gp",
+    label: "Column 1",
     getValue: (row) => formatNullable(row.gradeGroup),
   },
   {
@@ -179,7 +179,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
     label: "Applicable Dur",
     align: "right",
     getValue: (row) =>
-      formatNumber(getSubmissionApplicableDurationFactor(row), 1),
+      formatNumber(getSubmissionApplicableDurationFactor(row), 2),
   },
   {
     id: "remarksEvaluation",

@@ -25,19 +25,28 @@ export async function fetchFormSubmission(
   return parseResponse<FormSubmissionDetail>(response);
 }
 
-export async function updateSubmissionRemarksEvaluation(
+export type RemarksField = "remarksEvaluation" | "remarksCompensation";
+
+export async function updateSubmissionRemarks(
   id: number,
-  remarksEvaluation: string | null,
-): Promise<{ id: number; remarksEvaluation: string | null }> {
+  field: RemarksField,
+  value: string | null,
+): Promise<{
+  id: number;
+  remarksEvaluation?: string | null;
+  remarksCompensation?: string | null;
+}> {
   const response = await fetch(`/api/submissions/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ remarksEvaluation }),
+    body: JSON.stringify({ [field]: value }),
   });
 
-  return parseResponse<{ id: number; remarksEvaluation: string | null }>(
-    response,
-  );
+  return parseResponse<{
+    id: number;
+    remarksEvaluation?: string | null;
+    remarksCompensation?: string | null;
+  }>(response);
 }
 
 export async function updateEmployeeRoleCategory(
@@ -51,6 +60,21 @@ export async function updateEmployeeRoleCategory(
   });
 
   return parseResponse<{ employeeId: string; roleCategory: string | null }>(
+    response,
+  );
+}
+
+export async function updateEmployeeGradeGroup(
+  employeeId: string,
+  gradeGroup: string | null,
+): Promise<{ employeeId: string; gradeGroup: string | null }> {
+  const response = await fetch("/api/submissions/grade-group", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employeeId, gradeGroup }),
+  });
+
+  return parseResponse<{ employeeId: string; gradeGroup: string | null }>(
     response,
   );
 }

@@ -524,17 +524,52 @@ export async function getFormSubmissionById(
   };
 }
 
-export async function updateAppraisalRemarksEvaluation(
+export type AppraisalRemarksField =
+  | "remarksEvaluation"
+  | "remarksCompensation";
+
+export async function updateAppraisalRemarks(
   appraisalId: number,
-  remarksEvaluation: string | null,
-): Promise<{ id: number; remarksEvaluation: string | null }> {
-  const result = await db.query<{ id: string; remarks_evaluation: string | null }>(
+  field: AppraisalRemarksField,
+  value: string | null,
+): Promise<{
+  id: number;
+  remarksEvaluation?: string | null;
+  remarksCompensation?: string | null;
+}> {
+  if (field === "remarksEvaluation") {
+    const result = await db.query<{
+      id: string;
+      remarks_evaluation: string | null;
+    }>(
+      `UPDATE appraisals
+       SET remarks_evaluation = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING id, remarks_evaluation`,
+      [appraisalId, value],
+    );
+
+    if (!result.rows[0]) {
+      throw new FormSubmissionError("Submission not found.", 404);
+    }
+
+    return {
+      id: Number(result.rows[0].id),
+      remarksEvaluation: result.rows[0].remarks_evaluation,
+    };
+  }
+
+  const result = await db.query<{
+    id: string;
+    remarks_compensation: string | null;
+  }>(
     `UPDATE appraisals
-     SET remarks_evaluation = $2,
+     SET remarks_compensation = $2,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1
-     RETURNING id, remarks_evaluation`,
-    [appraisalId, remarksEvaluation],
+     RETURNING id, remarks_compensation`,
+    [appraisalId, value],
   );
 
   if (!result.rows[0]) {
@@ -543,7 +578,7 @@ export async function updateAppraisalRemarksEvaluation(
 
   return {
     id: Number(result.rows[0].id),
-    remarksEvaluation: result.rows[0].remarks_evaluation,
+    remarksCompensation: result.rows[0].remarks_compensation,
   };
 }
 
@@ -576,5 +611,37 @@ export async function updateEmployeeRoleCategory(
   return {
     employeeId: result.rows[0].employee_id,
     roleCategory: result.rows[0].role_category,
+  };
+}
+
+export async function updateEmployeeGradeGroup(
+  employeeCode: string,
+  gradeGroup: string | null,
+): Promise<{ employeeId: string; gradeGroup: string | null }> {
+  if (!(await hasExcelSheetColumns())) {
+    throw new FormSubmissionError(
+      "Grade group column is not available. Run the excel-sheet columns migration.",
+      503,
+    );
+  }
+
+  const result = await db.query<{
+    employee_id: string;
+    grade_group: string | null;
+  }>(
+    `UPDATE users
+     SET grade_group = $2
+     WHERE employee_id = $1
+     RETURNING employee_id, grade_group`,
+    [employeeCode, gradeGroup],
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Employee not found.", 404);
+  }
+
+  return {
+    employeeId: result.rows[0].employee_id,
+    gradeGroup: result.rows[0].grade_group,
   };
 }
