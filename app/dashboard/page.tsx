@@ -11,20 +11,17 @@ export default function HRDashboardPage() {
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
-    selectedCategoryIds,
-    selectedSubCategoryIds,
+    selectedRoleCategories,
     selectedDesignations,
     selectedFormStates,
     category0Options,
     category0DistributionOptions,
     category1Options,
     category2Options,
-    staffCategoryOptions,
-    staffSubCategoryOptions,
+    roleCategoryOptions,
     designationOptions,
     formStateOptions,
     entitiesLoading,
-    staffCategoriesLoading,
     designationsLoading,
     submissionsLoading,
     submissionsError,
@@ -36,8 +33,7 @@ export default function HRDashboardPage() {
     handleCategory0DistributionSelect,
     handleCategory1EntityChange,
     handleCategory2EntityChange,
-    handleStaffCategoryChange,
-    handleSubCategoryChange,
+    handleRoleCategoryChange,
     handleDesignationChange,
     handleFormStateChange,
     clearAllFilters,
@@ -66,12 +62,9 @@ export default function HRDashboardPage() {
           onCategory0DistributionSelect={handleCategory0DistributionSelect}
           category1Options={category1Options}
           category2Options={category2Options}
-          selectedCategoryIds={selectedCategoryIds}
-          onStaffCategoryChange={handleStaffCategoryChange}
-          selectedSubCategoryIds={selectedSubCategoryIds}
-          onSubCategoryChange={handleSubCategoryChange}
-          staffCategoryOptions={staffCategoryOptions}
-          staffSubCategoryOptions={staffSubCategoryOptions}
+          selectedRoleCategories={selectedRoleCategories}
+          onRoleCategoryChange={handleRoleCategoryChange}
+          roleCategoryOptions={roleCategoryOptions}
           selectedDesignations={selectedDesignations}
           onDesignationChange={handleDesignationChange}
           designationOptions={designationOptions}
@@ -80,7 +73,6 @@ export default function HRDashboardPage() {
           onFormStateChange={handleFormStateChange}
           formStateOptions={formStateOptions}
           entitiesLoading={entitiesLoading}
-          staffCategoriesLoading={staffCategoriesLoading}
           activeFilters={activeFilters}
           onClearAllFilters={clearAllFilters}
         />

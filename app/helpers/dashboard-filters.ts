@@ -8,6 +8,16 @@ import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { APPRAISAL_STATUSES, type AppraisalStatus } from "@/types/forms";
 import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
+export function formatRoleCategoryValue(
+  value: string | null | undefined,
+): string {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+
+  return value;
+}
+
 export type SubmissionFilterState = {
   searchQuery: string;
   selectedCategory0EntityIds: MultiFilterSelection<number>;
@@ -15,6 +25,7 @@ export type SubmissionFilterState = {
   selectedCategory2EntityIds: MultiFilterSelection<number>;
   selectedCategoryIds: MultiFilterSelection<number>;
   selectedSubCategoryIds: MultiFilterSelection<number>;
+  selectedRoleCategories: MultiFilterSelection<string>;
   selectedDesignations: MultiFilterSelection<string>;
   selectedFormStates: MultiFilterSelection<FormState>;
   staffCategories: StaffCategoryWithSubCategories[];
@@ -187,6 +198,11 @@ export function matchesSubmissionFilters(
           selectedSubCategoryNames?.has(submission.staffSubCategoryName) ===
             true)));
 
+  const matchesRoleCategory = matchesMultiSelection(
+    filters.selectedRoleCategories,
+    formatRoleCategoryValue(submission.roleCategory),
+  );
+
   const designation = submission.designation?.trim() ?? "";
   const matchesDesignation = matchesMultiSelection(
     filters.selectedDesignations,
@@ -205,6 +221,7 @@ export function matchesSubmissionFilters(
     matchesEntity2 &&
     matchesCategory &&
     matchesSubCategory &&
+    matchesRoleCategory &&
     matchesDesignation &&
     matchesFormState
   );
@@ -216,6 +233,7 @@ export type FilterDimension =
   | "category2"
   | "staffCategory"
   | "staffSubCategory"
+  | "roleCategory"
   | "designation"
   | "formState";
 
@@ -236,6 +254,8 @@ export function matchesSubmissionFiltersExcluding(
       exclude === "staffCategory" ? null : filters.selectedCategoryIds,
     selectedSubCategoryIds:
       exclude === "staffSubCategory" ? null : filters.selectedSubCategoryIds,
+    selectedRoleCategories:
+      exclude === "roleCategory" ? null : filters.selectedRoleCategories,
     selectedDesignations:
       exclude === "designation" ? null : filters.selectedDesignations,
     selectedFormStates: exclude === "formState" ? null : filters.selectedFormStates,

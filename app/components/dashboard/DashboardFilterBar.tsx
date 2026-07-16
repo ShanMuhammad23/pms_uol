@@ -8,7 +8,7 @@ import {
   ChevronDown,
   IdCard,
   RotateCcw,
-  Users,
+  Tags,
 } from "lucide-react";
 import { Category0DistributionBar } from "@/app/components/dashboard/Category0DistributionBar";
 import { FilterChip, type FilterChipColor } from "@/app/components/dashboard/FilterChip";
@@ -38,12 +38,9 @@ interface DashboardFilterBarProps {
   onCategory0DistributionSelect: (value: string) => void;
   category1Options: MultiSelectOption[];
   category2Options: MultiSelectOption[];
-  selectedCategoryIds: string[] | null;
-  onStaffCategoryChange: (value: string[] | null) => void;
-  selectedSubCategoryIds: string[] | null;
-  onSubCategoryChange: (value: string[] | null) => void;
-  staffCategoryOptions: MultiSelectOption[];
-  staffSubCategoryOptions: MultiSelectOption[];
+  selectedRoleCategories: string[] | null;
+  onRoleCategoryChange: (value: string[] | null) => void;
+  roleCategoryOptions: MultiSelectOption[];
   selectedDesignations: string[] | null;
   onDesignationChange: (value: string[] | null) => void;
   designationOptions: MultiSelectOption[];
@@ -52,7 +49,6 @@ interface DashboardFilterBarProps {
   onFormStateChange: (value: string[] | null) => void;
   formStateOptions: MultiSelectOption[];
   entitiesLoading: boolean;
-  staffCategoriesLoading: boolean;
   activeFilters: ActiveFilter[];
   onClearAllFilters: () => void;
 }
@@ -69,9 +65,9 @@ export function DashboardFilterBar({
   onCategory0DistributionSelect,
   category1Options,
   category2Options,
-  selectedCategoryIds,
-  onStaffCategoryChange,
-  staffCategoryOptions,
+  selectedRoleCategories,
+  onRoleCategoryChange,
+  roleCategoryOptions,
   selectedDesignations,
   onDesignationChange,
   designationOptions,
@@ -80,7 +76,6 @@ export function DashboardFilterBar({
   onFormStateChange,
   formStateOptions,
   entitiesLoading,
-  staffCategoriesLoading,
   activeFilters,
   onClearAllFilters,
 }: DashboardFilterBarProps) {
@@ -161,16 +156,14 @@ export function DashboardFilterBar({
                   ))}
 
                   <MultiSelectFilterDropdown
-                    label="Staff Category"
-                    icon={Users}
-                    options={staffCategoryOptions}
-                    selectedValues={selectedCategoryIds}
-                    onChange={onStaffCategoryChange}
-                    disabled={staffCategoriesLoading}
+                    label="Role Category"
+                    icon={Tags}
+                    options={roleCategoryOptions}
+                    selectedValues={selectedRoleCategories}
+                    onChange={onRoleCategoryChange}
                     placeholder="All"
+                    searchable={roleCategoryOptions.length > 8}
                   />
-
-             
 
                   <MultiSelectFilterDropdown
                     label="Designation"

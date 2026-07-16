@@ -13,6 +13,7 @@ import {
   matchesSubmissionEntityMultiFilter,
   matchesSubmissionFilters,
   matchesSubmissionFiltersExcluding,
+  formatRoleCategoryValue,
   type FilterDimension,
   type SubmissionFilterState,
 } from "@/app/helpers/dashboard-filters";
@@ -100,6 +101,8 @@ export function useDashboardFilters({
     useState<MultiFilterSelection<number>>(null);
   const [selectedSubCategoryIds, setSelectedSubCategoryIds] =
     useState<MultiFilterSelection<number>>(null);
+  const [selectedRoleCategories, setSelectedRoleCategories] =
+    useState<MultiFilterSelection<string>>(null);
   const [selectedDesignations, setSelectedDesignations] =
     useState<MultiFilterSelection<string>>(null);
   const [selectedFormStates, setSelectedFormStates] =
@@ -169,6 +172,7 @@ export function useDashboardFilters({
       selectedCategory2EntityIds,
       selectedCategoryIds,
       selectedSubCategoryIds,
+      selectedRoleCategories,
       selectedDesignations,
       selectedFormStates,
       staffCategories,
@@ -181,6 +185,7 @@ export function useDashboardFilters({
       selectedCategory2EntityIds,
       selectedCategoryIds,
       selectedSubCategoryIds,
+      selectedRoleCategories,
       selectedDesignations,
       selectedFormStates,
       staffCategories,
@@ -290,6 +295,48 @@ export function useDashboardFilters({
     [staffCategories, countForDimension],
   );
 
+  const roleCategoryOptions = useMemo<MultiSelectOption[]>(() => {
+    const counts = new Map<string, number>();
+
+    for (const submission of submissions) {
+      const value = formatRoleCategoryValue(submission.roleCategory);
+      if (
+        matchesSubmissionFiltersExcluding(
+          submission,
+          baseFilterState,
+          "roleCategory",
+        )
+      ) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      } else if (!counts.has(value)) {
+        counts.set(value, 0);
+      }
+    }
+
+    if (selectedRoleCategories) {
+      for (const value of selectedRoleCategories) {
+        if (!counts.has(value)) {
+          counts.set(value, 0);
+        }
+      }
+    }
+
+    return [...counts.entries()]
+      .map(([value, count]) => ({
+        value,
+        label: value,
+        count,
+      }))
+      .sort((left, right) => {
+        if (left.value === "—") return 1;
+        if (right.value === "—") return -1;
+        return left.label.localeCompare(right.label, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      });
+  }, [submissions, baseFilterState, selectedRoleCategories]);
+
   const staffSubCategoryOptions = useMemo<MultiSelectOption[]>(
     () =>
       availableSubCategories.map((subCategory) => ({
@@ -359,6 +406,10 @@ export function useDashboardFilters({
 
   const handleStaffCategoryChange = useCallback((values: string[] | null) => {
     setSelectedCategoryIds(fromStringIds(values));
+  }, []);
+
+  const handleRoleCategoryChange = useCallback((values: string[] | null) => {
+    setSelectedRoleCategories(values);
   }, []);
 
   const handleSubCategoryChange = useCallback((values: string[] | null) => {
@@ -431,6 +482,18 @@ export function useDashboardFilters({
       });
     }
 
+    if (selectedRoleCategories !== null) {
+      filters.push({
+        label: formatMultiChipLabel(
+          "Role Category",
+          selectedRoleCategories,
+          (value) => value,
+        ),
+        onRemove: () => setSelectedRoleCategories(null),
+        color: "amber",
+      });
+    }
+
     if (selectedSubCategoryIds !== null) {
       filters.push({
         label: formatMultiChipLabel(
@@ -484,6 +547,7 @@ export function useDashboardFilters({
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
     selectedCategoryIds,
+    selectedRoleCategories,
     selectedSubCategoryIds,
     selectedDesignations,
     selectedFormStates,
@@ -500,6 +564,7 @@ export function useDashboardFilters({
     setSelectedCategory2EntityIds(null);
     setSelectedCategoryIds(null);
     setSelectedSubCategoryIds(null);
+    setSelectedRoleCategories(null);
     setSelectedDesignations(null);
     setSelectedFormStates(null);
   }, []);
@@ -526,6 +591,7 @@ export function useDashboardFilters({
     selectedCategory2EntityIds: toStringSelection(selectedCategory2EntityIds),
     selectedCategoryIds: toStringSelection(selectedCategoryIds),
     selectedSubCategoryIds: toStringSelection(selectedSubCategoryIds),
+    selectedRoleCategories,
     selectedDesignations,
     selectedFormStates:
       selectedFormStates === null ? null : selectedFormStates.map(String),
@@ -535,6 +601,7 @@ export function useDashboardFilters({
     category2Options,
     staffCategoryOptions,
     staffSubCategoryOptions,
+    roleCategoryOptions,
     designationOptions,
     formStateOptions,
     filteredSubmissions,
@@ -544,6 +611,7 @@ export function useDashboardFilters({
     handleCategory1EntityChange,
     handleCategory2EntityChange,
     handleStaffCategoryChange,
+    handleRoleCategoryChange,
     handleSubCategoryChange,
     handleDesignationChange,
     handleFormStateChange,
