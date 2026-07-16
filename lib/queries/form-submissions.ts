@@ -645,3 +645,78 @@ export async function updateEmployeeGradeGroup(
     gradeGroup: result.rows[0].grade_group,
   };
 }
+
+export async function bulkUpdateEmployeeListingFields(
+  employeeIds: string[],
+  fields: {
+    roleCategory?: string | null;
+    gradeGroup?: string | null;
+  },
+): Promise<{
+  updatedCount: number;
+  employeeIds: string[];
+  roleCategory?: string | null;
+  gradeGroup?: string | null;
+}> {
+  const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
+
+  if (uniqueIds.length === 0) {
+    throw new FormSubmissionError("At least one employeeId is required.", 400);
+  }
+
+  const updatesRole = "roleCategory" in fields;
+  const updatesGrade = "gradeGroup" in fields;
+
+  if (!updatesRole && !updatesGrade) {
+    throw new FormSubmissionError(
+      "Provide roleCategory and/or gradeGroup to update.",
+      400,
+    );
+  }
+
+  if (updatesRole && !(await hasRoleCategoryColumn())) {
+    throw new FormSubmissionError(
+      "Role category column is not available. Run the excel-sheet columns migration.",
+      503,
+    );
+  }
+
+  if (updatesGrade && !(await hasExcelSheetColumns())) {
+    throw new FormSubmissionError(
+      "Grade group column is not available. Run the excel-sheet columns migration.",
+      503,
+    );
+  }
+
+  const setClauses: string[] = [];
+  const values: unknown[] = [uniqueIds];
+
+  if (updatesRole) {
+    values.push(fields.roleCategory ?? null);
+    setClauses.push(`role_category = $${values.length}`);
+  }
+
+  if (updatesGrade) {
+    values.push(fields.gradeGroup ?? null);
+    setClauses.push(`grade_group = $${values.length}`);
+  }
+
+  const result = await db.query<{ employee_id: string }>(
+    `UPDATE users
+     SET ${setClauses.join(", ")}
+     WHERE employee_id = ANY($1::text[])
+     RETURNING employee_id`,
+    values,
+  );
+
+  if (result.rows.length === 0) {
+    throw new FormSubmissionError("No matching employees found.", 404);
+  }
+
+  return {
+    updatedCount: result.rows.length,
+    employeeIds: result.rows.map((row) => row.employee_id),
+    ...(updatesRole ? { roleCategory: fields.roleCategory ?? null } : {}),
+    ...(updatesGrade ? { gradeGroup: fields.gradeGroup ?? null } : {}),
+  };
+}

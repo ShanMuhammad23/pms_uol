@@ -78,3 +78,29 @@ export async function updateEmployeeGradeGroup(
     response,
   );
 }
+
+export async function bulkUpdateEmployeeListingFields(
+  employeeIds: string[],
+  fields: {
+    roleCategory?: string | null;
+    gradeGroup?: string | null;
+  },
+): Promise<{
+  updatedCount: number;
+  employeeIds: string[];
+  roleCategory?: string | null;
+  gradeGroup?: string | null;
+}> {
+  const response = await fetch("/api/submissions/bulk-edit", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employeeIds, ...fields }),
+  });
+
+  return parseResponse<{
+    updatedCount: number;
+    employeeIds: string[];
+    roleCategory?: string | null;
+    gradeGroup?: string | null;
+  }>(response);
+}
