@@ -16,6 +16,7 @@ export default function HRDashboardPage() {
     selectedDesignations,
     selectedFormStates,
     category0Options,
+    category0DistributionOptions,
     category1Options,
     category2Options,
     staffCategoryOptions,
@@ -29,8 +30,10 @@ export default function HRDashboardPage() {
     submissionsError,
     performanceMatrixLoading,
     filteredSubmissions,
+    submissions,
     activeFilters,
     handleCategory0EntityChange,
+    handleCategory0DistributionSelect,
     handleCategory1EntityChange,
     handleCategory2EntityChange,
     handleStaffCategoryChange,
@@ -43,6 +46,7 @@ export default function HRDashboardPage() {
     selfAssessmentStats,
     managerReviewStats,
     hrAlignmentStats,
+    boardApprovalStats,
     filteredCalibrationData,
     ratingQuartileMatrix,
   } = useDashboardPage();
@@ -58,6 +62,8 @@ export default function HRDashboardPage() {
           selectedCategory2EntityIds={selectedCategory2EntityIds}
           onCategory2EntityChange={handleCategory2EntityChange}
           category0Options={category0Options}
+          category0DistributionOptions={category0DistributionOptions}
+          onCategory0DistributionSelect={handleCategory0DistributionSelect}
           category1Options={category1Options}
           category2Options={category2Options}
           selectedCategoryIds={selectedCategoryIds}
@@ -84,6 +90,7 @@ export default function HRDashboardPage() {
           selfAssessmentStats={selfAssessmentStats}
           managerReviewStats={managerReviewStats}
           hrAlignmentStats={hrAlignmentStats}
+          boardApprovalStats={boardApprovalStats}
           selectedFormStates={selectedFormStates}
           onFilterByFormState={filterByFormState}
         />
@@ -97,6 +104,7 @@ export default function HRDashboardPage() {
 
         <DashboardSubmissionsTable
           submissions={filteredSubmissions}
+          allSubmissions={submissions}
           isLoading={submissionsLoading}
           error={submissionsError}
           onClearAllFilters={clearAllFilters}

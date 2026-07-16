@@ -32,6 +32,10 @@ export interface UserRecord {
   email: string;
   firstName: string;
   lastName: string;
+  designation: string | null;
+  roleCategory: string | null;
+  gradeGroup: string | null;
+  dateOfJoining: string | null;
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
@@ -41,8 +45,14 @@ export interface UserRecord {
   staffSubCategoryName: string | null;
   entityId: number | null;
   entityName: string | null;
+  parentEntityName: string | null;
   headId: number | null;
   headName: string | null;
+  qualification: string | null;
+  qualificationYear: string | null;
+  qualificationSubject: string | null;
+  qualificationInstitute: string | null;
+  qualificationCountry: string | null;
   isActive: boolean;
   createdAt: string;
 }

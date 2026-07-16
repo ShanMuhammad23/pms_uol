@@ -84,6 +84,31 @@ export async function deleteFormTemplate(id: number): Promise<{ appraisalCount: 
   return parseResponse<{ appraisalCount: number }>(response);
 }
 
+export async function assignFormTemplateToEmployees(
+  templateId: number,
+  employeeIds: string[],
+): Promise<{ assignedCount: number; templateId: number }> {
+  const response = await fetch(`/api/admin/forms/${templateId}/assignments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ employeeIds }),
+  });
+
+  return parseResponse<{ assignedCount: number; templateId: number }>(response);
+}
+
+export async function fetchFormTemplateAssignments(
+  templateId: number,
+): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {
+  const response = await fetch(`/api/admin/forms/${templateId}/assignments`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  return parseResponse<Array<{ employeeId: string; employeeName: string; email: string | null }>>(response);
+}
+
 export async function fetchAppraisalCycles(): Promise<AppraisalCycleRecord[]> {
   const response = await fetch("/api/admin/appraisal-cycles");
   return parseResponse<AppraisalCycleRecord[]>(response);

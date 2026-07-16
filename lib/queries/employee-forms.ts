@@ -121,11 +121,75 @@ async function getAssignedTemplateForUser(
   };
 }
 
+async function listExplicitlyAssignedTemplatesForUser(
+  userId: number,
+  client?: PoolClient,
+): Promise<
+  Array<{
+    templateId: number;
+    title: string;
+    description: string | null;
+    staffCategoryName: string | null;
+    staffSubCategoryName: string | null;
+    questionCount: number;
+  }>
+> {
+  const executor = client ?? db;
+  const result = await executor.query<{
+    id: string;
+    title: string;
+    description: string | null;
+    staff_category_name: string | null;
+    staff_sub_category_name: string | null;
+    question_count: string;
+  }>(
+    `SELECT
+       ft.id,
+       ft.title,
+       ft.description,
+       sc.name AS staff_category_name,
+       ssc.name AS staff_sub_category_name,
+       COUNT(fq.id)::text AS question_count
+     FROM employee_form_assignments efa
+     INNER JOIN form_templates ft ON ft.id = efa.template_id
+     LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
+     LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
+     LEFT JOIN form_questions fq ON fq.template_id = ft.id
+     WHERE efa.employee_id = $1
+     GROUP BY ft.id, sc.name, ssc.name
+     ORDER BY ft.id DESC`,
+    [userId],
+  );
+
+  return result.rows.map((row) => ({
+    templateId: Number(row.id),
+    title: row.title,
+    description: row.description,
+    staffCategoryName: row.staff_category_name,
+    staffSubCategoryName: row.staff_sub_category_name,
+    questionCount: Number(row.question_count),
+  }));
+}
+
 async function assertTemplateAssignedToUser(
   userId: number,
   templateId: number,
   client?: PoolClient,
 ): Promise<void> {
+  const explicitAssignments = await listExplicitlyAssignedTemplatesForUser(
+    userId,
+    client,
+  );
+  if (explicitAssignments.length > 0) {
+    const matched = explicitAssignments.some(
+      (template) => template.templateId === templateId,
+    );
+    if (!matched) {
+      throw new EmployeeFormError("This form is not assigned to you.", 403);
+    }
+    return;
+  }
+
   const assigned = await getAssignedTemplateForUser(userId, client);
 
   if (!assigned || assigned.templateId !== templateId) {
@@ -367,6 +431,32 @@ function normalizeAnswer(
 export async function listAssignedFormsForUser(
   userId: number,
 ): Promise<AssignedFormListItem[]> {
+  const explicitAssignments = await listExplicitlyAssignedTemplatesForUser(userId);
+  if (explicitAssignments.length > 0) {
+    const items = await Promise.all(
+      explicitAssignments.map(async (assigned) => {
+        const appraisal = await getAppraisalForUserTemplate(userId, assigned.templateId);
+        const answers = appraisal
+          ? await getAnswersForAppraisal(Number(appraisal.id), userId)
+          : [];
+
+        return {
+          templateId: assigned.templateId,
+          title: assigned.title,
+          description: assigned.description,
+          staffCategoryName: assigned.staffCategoryName,
+          staffSubCategoryName: assigned.staffSubCategoryName,
+          questionCount: assigned.questionCount,
+          status: resolveFormStatus(appraisal, answers.length),
+          submittedAt: appraisal?.submitted_at ?? null,
+          updatedAt: appraisal?.updated_at ?? null,
+        } satisfies AssignedFormListItem;
+      }),
+    );
+
+    return items;
+  }
+
   const assigned = await getAssignedTemplateForUser(userId);
 
   if (!assigned) {

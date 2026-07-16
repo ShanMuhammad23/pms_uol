@@ -38,6 +38,7 @@ type MenuPosition = {
 interface TableColumnHeaderFilterProps {
   column: DashboardTableColumnDef;
   submissions: FormSubmissionListItem[];
+  allSubmissions?: FormSubmissionListItem[];
   filters: MasterFilterState;
   onTextChange: (columnId: MasterFilterTextColumnId, next: string) => void;
   onMultiChange: (
@@ -76,6 +77,7 @@ function getMenuPosition(trigger: HTMLElement): MenuPosition {
 export function TableColumnHeaderFilter({
   column,
   submissions,
+  allSubmissions,
   filters,
   onTextChange,
   onMultiChange,
@@ -103,8 +105,9 @@ export function TableColumnHeaderFilter({
             column,
             filters,
             selectedValues,
+            allSubmissions,
           ),
-    [column, filters, isText, selectedValues, submissions],
+    [allSubmissions, column, filters, isText, selectedValues, submissions],
   );
 
   useEffect(() => {

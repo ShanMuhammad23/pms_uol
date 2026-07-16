@@ -6,14 +6,17 @@ import { Grid3X3, Pencil, Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { fetchFinancialYears } from "@/lib/queries/financial-years-client";
 import {
+  assignPerformanceMatrixToEmployees,
   createPerformanceLevel,
   createPerformanceQuartile,
+  fetchPerformanceMatrixLabels,
   deletePerformanceLevel,
   deletePerformanceQuartile,
   fetchPerformanceMatrix,
   updatePerformanceLevel,
   updatePerformanceQuartile,
 } from "@/lib/queries/performance-matrices-client";
+import { fetchUsers } from "@/lib/queries/users-client";
 import {
   formatPerformanceScore,
   type PerformanceLevelRecord,
@@ -36,6 +39,9 @@ export default function PerformanceMatricesManager() {
   >(null);
 
   const [levelName, setLevelName] = useState("");
+  const [matrixLabel, setMatrixLabel] = useState("Default");
+  const [selectedMatrixLabel, setSelectedMatrixLabel] = useState("Default");
+  const [newMatrixLabel, setNewMatrixLabel] = useState("");
   const [levelSortOrder, setLevelSortOrder] = useState("0");
   const [editingLevel, setEditingLevel] =
     useState<PerformanceLevelRecord | null>(null);
@@ -49,6 +55,7 @@ export default function PerformanceMatricesManager() {
     useState<PerformanceQuartileRecord | null>(null);
 
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
 
   const { data: financialYears, isLoading: yearsLoading } = useQuery({
     queryKey: ["financial-years"],
@@ -68,9 +75,24 @@ export default function PerformanceMatricesManager() {
     isLoading: matrixLoading,
     error: matrixError,
   } = useQuery({
-    queryKey: ["performance-matrix", selectedFinancialYearId],
-    queryFn: () => fetchPerformanceMatrix(selectedFinancialYearId!),
+    queryKey: ["performance-matrix", selectedFinancialYearId, selectedMatrixLabel],
+    queryFn: () =>
+      fetchPerformanceMatrix(
+        selectedFinancialYearId!,
+        selectedMatrixLabel || undefined,
+      ),
     enabled: selectedFinancialYearId !== null,
+  });
+
+  const { data: matrixLabels } = useQuery({
+    queryKey: ["performance-matrix-labels", selectedFinancialYearId],
+    queryFn: () => fetchPerformanceMatrixLabels(selectedFinancialYearId!),
+    enabled: selectedFinancialYearId !== null,
+  });
+
+  const { data: users } = useQuery({
+    queryKey: ["users-for-performance-assignment"],
+    queryFn: fetchUsers,
   });
 
   const invalidateMatrix = () => {
@@ -80,6 +102,7 @@ export default function PerformanceMatricesManager() {
   };
 
   const resetLevelForm = () => {
+    setMatrixLabel(selectedMatrixLabel || "Default");
     setLevelName("");
     setLevelSortOrder("0");
     setEditingLevel(null);
@@ -108,13 +131,27 @@ export default function PerformanceMatricesManager() {
     },
   });
 
+  const assignMatrixMutation = useMutation({
+    mutationFn: assignPerformanceMatrixToEmployees,
+    onSuccess: (result) => {
+      setFormMessage({
+        tone: "success",
+        text: `Performance matrix "${result.matrixLabel}" assigned to ${result.updatedCount} employees.`,
+      });
+      setSelectedEmployeeIds([]);
+    },
+    onError: (mutationError: Error) => {
+      setFormMessage({ tone: "error", text: mutationError.message });
+    },
+  });
+
   const updateLevelMutation = useMutation({
     mutationFn: ({
       id,
       input,
     }: {
       id: number;
-      input: { name: string; sortOrder: number };
+      input: { matrixLabel: string; name: string; sortOrder: number };
     }) => updatePerformanceLevel(id, input),
     onSuccess: (level) => {
       setFormMessage({
@@ -241,13 +278,14 @@ export default function PerformanceMatricesManager() {
     if (editingLevel) {
       updateLevelMutation.mutate({
         id: editingLevel.id,
-        input: { name: levelName.trim(), sortOrder },
+        input: { matrixLabel: matrixLabel.trim(), name: levelName.trim(), sortOrder },
       });
       return;
     }
 
     createLevelMutation.mutate({
       financialYearId: selectedFinancialYearId,
+      matrixLabel: matrixLabel.trim(),
       name: levelName.trim(),
       sortOrder,
     });
@@ -329,6 +367,7 @@ export default function PerformanceMatricesManager() {
 
   const handleEditLevel = (level: PerformanceLevelWithQuartiles) => {
     setEditingLevel(level);
+    setMatrixLabel(level.matrixLabel);
     setLevelName(level.name);
     setLevelSortOrder(String(level.sortOrder));
     setFormMessage(null);
@@ -373,6 +412,27 @@ export default function PerformanceMatricesManager() {
     createLevelMutation.isPending || updateLevelMutation.isPending;
   const isQuartileSubmitting =
     createQuartileMutation.isPending || updateQuartileMutation.isPending;
+  const matrixOptions = Array.from(
+    new Set([...(matrixLabels ?? []), "Default"]),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const handleCreateMatrixLabel = () => {
+    const label = newMatrixLabel.trim();
+    if (!label) {
+      setFormMessage({ tone: "error", text: "Matrix label is required." });
+      return;
+    }
+
+    setSelectedMatrixLabel(label);
+    setMatrixLabel(label);
+    setNewMatrixLabel("");
+    setSelectedLevelId(null);
+    resetQuartileForm();
+    setFormMessage({
+      tone: "success",
+      text: `Matrix "${label}" selected. Add performance levels to initialize it.`,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -397,6 +457,7 @@ export default function PerformanceMatricesManager() {
             value={selectedFinancialYearId ?? ""}
             onChange={(event) => {
               setSelectedFinancialYearId(Number(event.target.value));
+              setSelectedMatrixLabel("Default");
               setSelectedLevelId(null);
               resetLevelForm();
               resetQuartileForm();
@@ -416,6 +477,56 @@ export default function PerformanceMatricesManager() {
               ))
             )}
           </select>
+        </div>
+        <div className="mt-4 max-w-xs">
+          <label
+            htmlFor="matrix-label-filter"
+            className="mb-1.5 block text-sm font-medium text-text-primary"
+          >
+            Performance Matrix
+          </label>
+          <select
+            id="matrix-label-filter"
+            value={selectedMatrixLabel}
+            onChange={(event) => {
+              setSelectedMatrixLabel(event.target.value);
+              setMatrixLabel(event.target.value);
+              setSelectedLevelId(null);
+              resetQuartileForm();
+              setFormMessage(null);
+            }}
+            className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+          >
+            {matrixOptions.map((label) => (
+              <option key={label} value={label}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 dark:border-white/20">
+          <p className="text-sm font-semibold text-text-primary">
+            Add Another Performance Matrix
+          </p>
+          <p className="mt-1 text-xs text-foreground/70">
+            Create a new matrix label for this financial year (for example: Matrix A, Matrix B).
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              value={newMatrixLabel}
+              onChange={(event) => setNewMatrixLabel(event.target.value)}
+              placeholder="Enter new matrix label"
+              className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15 sm:max-w-sm"
+            />
+            <button
+              type="button"
+              onClick={handleCreateMatrixLabel}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+            >
+              <Plus className="size-4" />
+              Add Matrix
+            </button>
+          </div>
         </div>
       </div>
 
@@ -464,6 +575,25 @@ export default function PerformanceMatricesManager() {
           </div>
 
           <form onSubmit={handleLevelSubmit} className="mt-4 space-y-4">
+            <div>
+              <label
+                htmlFor="matrix-label"
+                className="mb-1.5 block text-sm font-medium text-text-primary"
+              >
+                Matrix Label
+              </label>
+              <input
+                id="matrix-label"
+                type="text"
+                value={matrixLabel}
+                onChange={(event) => setMatrixLabel(event.target.value)}
+                required
+                disabled={!selectedFinancialYearId}
+                className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                placeholder="Default / Matrix A"
+              />
+            </div>
+
             <div>
               <label
                 htmlFor="level-name"
@@ -536,6 +666,9 @@ export default function PerformanceMatricesManager() {
                 <thead className="bg-primary/5">
                   <tr>
                     <th className="px-4 py-3 text-left font-semibold text-text-primary">
+                      Matrix
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-text-primary">
                       Name
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-text-primary">
@@ -555,6 +688,9 @@ export default function PerformanceMatricesManager() {
                         selectedLevelId === level.id ? "bg-primary/5" : ""
                       }`}
                     >
+                      <td className="px-4 py-3 font-medium text-text-primary">
+                        {level.matrixLabel}
+                      </td>
                       <td className="px-4 py-3 font-medium text-text-primary">
                         {level.name}
                       </td>
@@ -823,6 +959,69 @@ export default function PerformanceMatricesManager() {
       </div>
 
       <div className="space-y-3">
+        <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
+          <h3 className="text-base font-semibold text-text-primary">
+            Assign Performance Matrix to Employees
+          </h3>
+          <p className="mt-1 text-sm text-foreground/70">
+            Assign the selected performance matrix label to multiple employees.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <select
+              value={selectedMatrixLabel}
+              onChange={(event) => setSelectedMatrixLabel(event.target.value)}
+              className="rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+            >
+              {[...(matrixLabels ?? []), "Default"]
+                .filter((value, idx, arr) => arr.indexOf(value) === idx)
+                .map((label) => (
+                  <option key={label} value={label}>
+                    {label}
+                  </option>
+                ))}
+            </select>
+            <select
+              multiple
+              value={selectedEmployeeIds}
+              onChange={(event) => {
+                const selected = Array.from(event.currentTarget.selectedOptions).map(
+                  (option) => option.value,
+                );
+                setSelectedEmployeeIds(selected);
+              }}
+              className="min-h-28 rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+            >
+              {(users ?? []).map((user) => (
+                <option key={user.id} value={user.employeeId}>
+                  {user.employeeId} - {`${user.firstName} ${user.lastName}`.trim()}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            disabled={
+              !selectedFinancialYearId ||
+              selectedEmployeeIds.length === 0 ||
+              assignMatrixMutation.isPending
+            }
+            onClick={() => {
+              if (!selectedFinancialYearId) {
+                return;
+              }
+              setFormMessage(null);
+              assignMatrixMutation.mutate({
+                financialYearId: selectedFinancialYearId,
+                matrixLabel: selectedMatrixLabel,
+                employeeIds: selectedEmployeeIds,
+              });
+            }}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+          >
+            Assign Selected Employees
+          </button>
+        </div>
+
         <div className="flex items-center gap-2">
           <Grid3X3 className="size-5 text-primary" />
           <h3 className="text-base font-semibold text-text-primary">

@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Pencil, Plus, Table2, Trash2, Users, X } from "lucide-react";
+import { Pencil, Plus, Table2, Users, X } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
+import { UsersListingTable } from "@/app/components/users/UsersListingTable";
 import {
   createUser,
   deleteUser,
@@ -625,103 +626,14 @@ export default function UsersManager() {
 
       {activeTab === "list" && !isLoading && !error && users && users.length > 0 ? (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {categoryStats.map((stat) => (
-              <div
-                key={stat.category}
-                className="rounded-xl border border-slate-300/80 p-4 dark:border-white/15"
-              >
-                <p className="text-xs font-medium uppercase tracking-wide text-foreground/70">
-                  {stat.label}
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-text-primary">
-                  {stat.count}
-                </p>
-                <p className="mt-1 text-xs text-foreground/70">
-                  {stat.count === 1 ? "Employee" : "Employees"}
-                </p>
-              </div>
-            ))}
-          </div>
+   
 
-          <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
-            <table className="min-w-full text-sm">
-              <thead className="bg-primary/5">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Employee</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Role</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Category</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Entity</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Head</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Status</th>
-                  <th className="px-4 py-3 text-right font-semibold text-text-primary">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="border-t border-slate-300/80 dark:border-white/15"
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-text-primary">
-                        {user.firstName} {user.lastName}
-                      </p>
-                      <p className="mt-0.5 text-xs text-foreground/70">{user.employeeId}</p>
-                      <p className="text-xs text-foreground/70">{user.email}</p>
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {USER_ROLE_LABELS[user.systemRole]}
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {user.staffCategoryName ?? user.empCategory}
-                      <span className="block text-xs text-foreground/70">
-                        {user.staffSubCategoryName ?? user.empSubCategory}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {user.entityName ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {user.headName ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          user.isActive
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                            : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-foreground/70"
-                        }`}
-                      >
-                        {user.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(user)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-                        >
-                          <Pencil className="size-3.5" />
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(user)}
-                          disabled={deleteMutation.isPending}
-                          className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
-                        >
-                          <Trash2 className="size-3.5" />
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <UsersListingTable
+            users={users}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            deletePending={deleteMutation.isPending}
+          />
         </div>
       ) : null}
     </div>

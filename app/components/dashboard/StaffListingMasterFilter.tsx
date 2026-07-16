@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 interface StaffListingMasterFilterProps {
   submissions: FormSubmissionListItem[];
+  allSubmissions?: FormSubmissionListItem[];
   filters: MasterFilterState;
   onTextChange: (columnId: MasterFilterTextColumnId, next: string) => void;
   onMultiChange: (
@@ -62,6 +63,7 @@ function TextFilterField({
 
 export function StaffListingMasterFilter({
   submissions,
+  allSubmissions,
   filters,
   onTextChange,
   onMultiChange,
@@ -81,12 +83,13 @@ export function StaffListingMasterFilter({
           column,
           filters,
           filters.multi[column.id] ?? null,
+          allSubmissions,
         ),
       );
     }
 
     return map;
-  }, [filters, submissions]);
+  }, [allSubmissions, filters, submissions]);
 
   return (
     <div className="border-b border-slate-200/80 bg-slate-50/90 dark:border-white/5 dark:bg-slate-950/40">

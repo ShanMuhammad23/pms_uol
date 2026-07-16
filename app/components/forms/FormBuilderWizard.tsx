@@ -1389,8 +1389,12 @@ export default function FormBuilderWizard({
     },
     onSuccess: async (template: FormTemplateRecord) => {
       await queryClient.invalidateQueries({ queryKey: ["form-templates"] });
-      const viewId = templateId ?? template.id;
-      router.push(`/dashboard/forms/${viewId}/view`);
+      const nextId = templateId ?? template.id;
+      if (templateId) {
+        router.push(`/dashboard/forms/${nextId}/view`);
+      } else {
+        router.push(`/dashboard/forms/${nextId}/assign`);
+      }
       router.refresh();
     },
     onError: (error: Error) => {

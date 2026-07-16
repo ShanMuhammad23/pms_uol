@@ -34,6 +34,8 @@ interface DashboardFilterBarProps {
   selectedCategory2EntityIds: string[] | null;
   onCategory2EntityChange: (value: string[] | null) => void;
   category0Options: MultiSelectOption[];
+  category0DistributionOptions: MultiSelectOption[];
+  onCategory0DistributionSelect: (value: string) => void;
   category1Options: MultiSelectOption[];
   category2Options: MultiSelectOption[];
   selectedCategoryIds: string[] | null;
@@ -63,6 +65,8 @@ export function DashboardFilterBar({
   selectedCategory2EntityIds,
   onCategory2EntityChange,
   category0Options,
+  category0DistributionOptions,
+  onCategory0DistributionSelect,
   category1Options,
   category2Options,
   selectedCategoryIds,
@@ -104,7 +108,11 @@ export function DashboardFilterBar({
     >
       <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
         <div className="flex items-center gap-3 px-4 py-2">
-          <Category0DistributionBar options={category0Options} />
+          <Category0DistributionBar
+            options={category0DistributionOptions}
+            selectedValues={selectedCategory0EntityIds}
+            onSelect={onCategory0DistributionSelect}
+          />
           <button
             type="button"
             onClick={() => setFiltersVisible((prev) => !prev)}

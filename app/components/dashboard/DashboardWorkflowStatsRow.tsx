@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Scale, User } from "lucide-react";
+import { AlertTriangle, Gavel, Scale, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { EligibilityStatCard } from "@/app/components/dashboard/EligibilityStatCard";
 import { StatCard } from "@/app/components/dashboard/StatCard";
@@ -13,6 +13,7 @@ interface DashboardWorkflowStatsRowProps {
   selfAssessmentStats: WorkflowStageStats;
   managerReviewStats: WorkflowStageStats;
   hrAlignmentStats: WorkflowStageStats;
+  boardApprovalStats: WorkflowStageStats;
   selectedFormStates: string[] | null;
   onFilterByFormState: (state: FormState) => void;
 }
@@ -33,6 +34,7 @@ export function DashboardWorkflowStatsRow({
   selfAssessmentStats,
   managerReviewStats,
   hrAlignmentStats,
+  boardApprovalStats,
   selectedFormStates,
   onFilterByFormState,
 }: DashboardWorkflowStatsRowProps) {
@@ -41,7 +43,7 @@ export function DashboardWorkflowStatsRow({
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5"
     >
       <EligibilityStatCard data={eligibilityData} delay={0} />
       <StatCard
@@ -82,6 +84,19 @@ export function DashboardWorkflowStatsRow({
         delay={0.3}
         onClick={() => onFilterByFormState("PENDING_HR_CALIBRATION")}
         active={isFormStateActive(selectedFormStates, "PENDING_HR_CALIBRATION")}
+      />
+      <StatCard
+        title="Board Approval"
+        awaiting={boardApprovalStats.awaiting}
+        completed={boardApprovalStats.completed}
+        percentageLabel={boardApprovalStats.percentageLabel}
+        awaitingtitle="Pending"
+        completedtitle="Approved"
+        tone="violet"
+        icon={Gavel}
+        delay={0.4}
+        onClick={() => onFilterByFormState("PENDING_BOARD_APPROVAL")}
+        active={isFormStateActive(selectedFormStates, "PENDING_BOARD_APPROVAL")}
       />
     </motion.div>
   );

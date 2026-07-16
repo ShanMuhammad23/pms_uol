@@ -227,6 +227,30 @@ export function useDashboardFilters({
     [category0Entities, countForDimension, entities],
   );
 
+  const category0DistributionOptions = useMemo<MultiSelectOption[]>(() => {
+    const visibleEntities =
+      selectedCategory0EntityIds !== null && selectedCategory0EntityIds.length > 0
+        ? category0Entities.filter((entity) =>
+            selectedCategory0EntityIds.includes(entity.id),
+          )
+        : category0Entities;
+
+    return visibleEntities
+      .map((entity) => ({
+        value: String(entity.id),
+        label: entity.name,
+        count: filteredSubmissions.filter((submission) =>
+          matchesSubmissionEntityMultiFilter(submission, [entity.id], entities),
+        ).length,
+      }))
+      .filter((option) => option.count > 0);
+  }, [
+    category0Entities,
+    selectedCategory0EntityIds,
+    filteredSubmissions,
+    entities,
+  ]);
+
   const category1Options = useMemo<MultiSelectOption[]>(
     () =>
       category1Entities.map((entity) => ({
@@ -312,6 +336,17 @@ export function useDashboardFilters({
 
   const handleCategory0EntityChange = useCallback((values: string[] | null) => {
     setSelectedCategory0EntityIds(fromStringIds(values));
+  }, []);
+
+  const handleCategory0DistributionSelect = useCallback((entityId: string) => {
+    const id = Number(entityId);
+    setSelectedCategory0EntityIds((current) => {
+      if (current !== null && current.length === 1 && current[0] === id) {
+        return null;
+      }
+
+      return [id];
+    });
   }, []);
 
   const handleCategory1EntityChange = useCallback((values: string[] | null) => {
@@ -495,6 +530,7 @@ export function useDashboardFilters({
     selectedFormStates:
       selectedFormStates === null ? null : selectedFormStates.map(String),
     category0Options,
+    category0DistributionOptions,
     category1Options,
     category2Options,
     staffCategoryOptions,
@@ -504,6 +540,7 @@ export function useDashboardFilters({
     filteredSubmissions,
     activeFilters,
     handleCategory0EntityChange,
+    handleCategory0DistributionSelect,
     handleCategory1EntityChange,
     handleCategory2EntityChange,
     handleStaffCategoryChange,

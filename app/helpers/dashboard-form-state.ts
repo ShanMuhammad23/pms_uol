@@ -44,13 +44,21 @@ export const FORM_STATE_CONFIG: Record<
     icon: Scale,
     phase: 2,
   },
+  PENDING_BOARD_APPROVAL: {
+    label: "Board Approval",
+    color: "text-violet-700",
+    bg: "bg-violet-50",
+    border: "border-violet-200",
+    icon: Gavel,
+    phase: 3,
+  },
   APPROVED: {
     label: "Approved",
     color: "text-emerald-700",
     bg: "bg-emerald-50",
     border: "border-emerald-200",
     icon: CheckCircle2,
-    phase: 3,
+    phase: 4,
   },
 };
 
@@ -61,13 +69,7 @@ export const APPRAISAL_STATE_CONFIG: Record<
   PENDING_SELF_ASSESSMENT: FORM_STATE_CONFIG.PENDING_SELF_ASSESSMENT,
   PENDING_HEAD_REVIEW: FORM_STATE_CONFIG.PENDING_HEAD_REVIEW,
   PENDING_HR_CALIBRATION: FORM_STATE_CONFIG.PENDING_HR_CALIBRATION,
-  PENDING_BOARD_APPROVAL: {
-    label: "Board Approval",
-    color: "text-violet-700",
-    bg: "bg-violet-50",
-    border: "border-violet-200",
-    icon: Gavel,
-  },
+  PENDING_BOARD_APPROVAL: FORM_STATE_CONFIG.PENDING_BOARD_APPROVAL,
   APPROVED: FORM_STATE_CONFIG.APPROVED,
   COMPLETED: {
     label: "Completed",

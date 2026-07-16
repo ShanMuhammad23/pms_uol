@@ -907,3 +907,91 @@ export async function deleteFormTemplate(id: number): Promise<{
 
   return { appraisalCount };
 }
+
+export async function assignFormTemplateToEmployees(
+  templateId: number,
+  employeeCodes: string[],
+): Promise<{ assignedCount: number; templateId: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    throw new FormTemplateError("At least one employee is required.", 400);
+  }
+
+  const templateResult = await db.query<{ id: string; cycle_id: number }>(
+    `SELECT id, cycle_id
+     FROM form_templates
+     WHERE id = $1`,
+    [templateId],
+  );
+
+  if (!templateResult.rows[0]) {
+    throw new FormTemplateError("Form template not found.", 404);
+  }
+
+  const cycleId = Number(templateResult.rows[0].cycle_id);
+
+  const result = await db.query<{ employee_id: string }>(
+    `WITH selected_users AS (
+       SELECT id, employee_id
+       FROM users
+       WHERE employee_id = ANY($1::text[])
+         AND is_active = TRUE
+     ),
+     assigned AS (
+       INSERT INTO employee_form_assignments (employee_id, template_id)
+       SELECT su.id, $2
+       FROM selected_users su
+       ON CONFLICT (employee_id, template_id) DO UPDATE
+         SET updated_at = CURRENT_TIMESTAMP
+       RETURNING employee_id
+     ),
+     touched_appraisals AS (
+       INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
+       SELECT su.id, $3, $2, 'PENDING_SELF_ASSESSMENT'
+       FROM selected_users su
+       ON CONFLICT (employee_id, template_id) DO UPDATE
+         SET cycle_id = EXCLUDED.cycle_id,
+             template_id = EXCLUDED.template_id,
+             updated_at = CURRENT_TIMESTAMP
+       RETURNING employee_id
+     )
+     SELECT su.employee_id
+     FROM selected_users su`,
+    [normalizedCodes, templateId, cycleId],
+  );
+
+  if (result.rows.length === 0) {
+    throw new FormTemplateError("No matching active employees found.", 404);
+  }
+
+  return {
+    assignedCount: result.rows.length,
+    templateId,
+  };
+}
+
+export async function listFormTemplateAssignedEmployees(
+  templateId: number,
+): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {
+  const result = await db.query<{
+    employee_id: string;
+    employee_name: string;
+    email: string | null;
+  }>(
+    `SELECT
+       u.employee_id,
+       CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+       u.email
+     FROM employee_form_assignments efa
+     INNER JOIN users u ON u.id = efa.employee_id
+     WHERE efa.template_id = $1
+     ORDER BY u.first_name, u.last_name, u.employee_id`,
+    [templateId],
+  );
+
+  return result.rows.map((row) => ({
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    email: row.email,
+  }));
+}
