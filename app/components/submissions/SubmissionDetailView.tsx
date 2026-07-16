@@ -5,28 +5,14 @@ import { fetchFormSubmission } from "@/lib/queries/form-submissions-client";
 import {
   APPRAISAL_STATUS_LABELS,
   buildRootLayoutOrderFromRecord,
+  type FormSectionRecord,
+  type FormSubsectionRecord,
   type QuestionRecord,
 } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
-}
-
-type TableRow = {
-  sr: number;
-  section: string;
-  question: string;
-  weight: number;
-  scoreEarned: number;
-  answerText: string | null;
-};
-
-function isScoredQuestion(question: {
-  inputType: string;
-  totalMarks: number;
-}): boolean {
-  return question.totalMarks > 0 && question.inputType === "NUMBER";
 }
 
 function getAnswerLabel(
@@ -45,62 +31,6 @@ function getAnswerLabel(
   }
 
   return null;
-}
-
-function buildRows(
-  sections: Parameters<typeof buildRootLayoutOrderFromRecord>[0],
-  rootQuestions: QuestionRecord[],
-  allQuestions: QuestionRecord[],
-  answerMap: Map<number, EmployeeFormAnswerRecord>,
-): TableRow[] {
-  const rootLayout = buildRootLayoutOrderFromRecord(sections, rootQuestions);
-  const rows: TableRow[] = [];
-  let sr = 0;
-
-  const pushRow = (
-    question: QuestionRecord,
-    sectionLabel: string,
-  ) => {
-    sr += 1;
-    const answer = answerMap.get(question.id);
-    const scored = isScoredQuestion(question);
-
-    rows.push({
-      sr,
-      section: sectionLabel,
-      question: question.questionText,
-      weight: question.totalMarks,
-      scoreEarned: scored ? (answer?.pointsEarned ?? 0) : (answer?.pointsEarned ?? 0),
-      answerText: scored ? null : getAnswerLabel(question, answer),
-    });
-  };
-
-  if (rootLayout.length === 0) {
-    allQuestions.forEach((question) => pushRow(question, "—"));
-    return rows;
-  }
-
-  rootLayout.forEach((item) => {
-    if (item.kind === "section") {
-      const section = sections.find((current) => current.id === item.id);
-      if (!section) return;
-
-      section.subsections.forEach((subsection) => {
-        const label = `${section.title} › ${subsection.title}`;
-        subsection.questions.forEach((question) => pushRow(question, label));
-      });
-
-      section.questions.forEach((question) => pushRow(question, section.title));
-      return;
-    }
-
-    const question = rootQuestions.find((current) => current.id === item.id);
-    if (question) {
-      pushRow(question, "—");
-    }
-  });
-
-  return rows;
 }
 
 export default function SubmissionDetailView({
@@ -130,12 +60,76 @@ export default function SubmissionDetailView({
   const answerMap = new Map(
     data.answers.map((answer) => [answer.questionId, answer]),
   );
-  const rows = buildRows(
+  const rootLayout = buildRootLayoutOrderFromRecord(
     data.sections,
     data.rootQuestions,
-    data.questions,
-    answerMap,
   );
+
+  type TableRow = {
+    sr: number;
+    sectionTitle: string | null;
+    subsectionTitle: string | null;
+    question: QuestionRecord;
+    isFirstInSection: boolean;
+    sectionRowCount: number;
+  };
+
+  const rows: TableRow[] = [];
+  let sr = 0;
+
+  const collectQuestions = (
+    section: FormSectionRecord,
+    subsection: FormSubsectionRecord | null,
+  ) => {
+    const questions = subsection ? subsection.questions : section.questions;
+    const startIdx = rows.length;
+    questions.forEach((question) => {
+      sr += 1;
+      rows.push({
+        sr,
+        sectionTitle: section.title,
+        subsectionTitle: subsection?.title ?? null,
+        question,
+        isFirstInSection: false,
+        sectionRowCount: 0,
+      });
+    });
+    if (rows.length > startIdx) {
+      rows[startIdx].isFirstInSection = true;
+      for (let i = startIdx; i < rows.length; i++) {
+        rows[i].sectionRowCount = rows.length - startIdx;
+      }
+    }
+  };
+
+  rootLayout.forEach((item) => {
+    if (item.kind === "section") {
+      const section = data.sections.find((s) => s.id === item.id);
+      if (!section) return;
+      const startIdx = rows.length;
+      section.subsections.forEach((sub) => collectQuestions(section, sub));
+      collectQuestions(section, null);
+      if (rows.length > startIdx) {
+        rows[startIdx].isFirstInSection = true;
+        for (let i = startIdx; i < rows.length; i++) {
+          rows[i].sectionRowCount = rows.length - startIdx;
+        }
+      }
+    } else {
+      const question = data.rootQuestions.find((q) => q.id === item.id);
+      if (question) {
+        sr += 1;
+        rows.push({
+          sr,
+          sectionTitle: null,
+          subsectionTitle: null,
+          question,
+          isFirstInSection: true,
+          sectionRowCount: 1,
+        });
+      }
+    }
+  });
 
   const metaParts = [
     data.employeeName,
@@ -150,30 +144,30 @@ export default function SubmissionDetailView({
   ].filter(Boolean);
 
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
+    <div className="min-w-0 max-w-full overflow-x-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
       <div className="border-b border-slate-200 px-4 py-2.5 dark:border-white/10">
         <p className="truncate text-xs leading-5 text-slate-600 dark:text-slate-300" title={metaParts.join(" · ")}>
           {metaParts.join(" · ")}
         </p>
       </div>
 
-      <div className="w-full max-w-full overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-sm">
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
-              <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Sr Number
+              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Sr. No.
               </th>
-              <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Section
+              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Key Task / Function
               </th>
-              <th className="min-w-[280px] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Questions
+              <th className="min-w-[280px] border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Key Performance Indicators (KPIs)
               </th>
-              <th className="whitespace-nowrap px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Weight
               </th>
-              <th className="whitespace-nowrap px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Score Earned
               </th>
             </tr>
@@ -181,58 +175,69 @@ export default function SubmissionDetailView({
           <tbody className="divide-y divide-slate-100 dark:divide-white/5">
             {rows.length === 0 ? (
               <tr>
-                <td
-                  colSpan={5}
-                  className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400"
-                >
+                <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                   No questions were found for this submission.
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr
-                  key={`${row.sr}-${row.question}`}
-                  className="align-top hover:bg-slate-50/70 dark:hover:bg-white/[0.02]"
-                >
-                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-500 dark:text-slate-400">
-                    {row.sr}
-                  </td>
-                  <td className="max-w-[220px] px-3 py-2.5 text-slate-700 dark:text-slate-300">
-                    <span className="line-clamp-2" title={row.section}>
-                      {row.section}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-slate-900 dark:text-slate-100">
-                    <p className="leading-snug">{row.question}</p>
-                    {row.answerText ? (
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Response: {row.answerText}
-                      </p>
+              rows.map((row) => {
+                const { question } = row;
+                const answer = answerMap.get(question.id);
+                const answerText = getAnswerLabel(question, answer);
+
+                return (
+                  <tr key={question.id} className="align-top hover:bg-slate-50/70 dark:hover:bg-white/[0.02]">
+                    <td className="border-r border-slate-200 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-white/10 dark:text-slate-400">
+                      {row.sr}
+                    </td>
+                    {row.isFirstInSection ? (
+                      <td
+                        className="max-w-[220px] border-r border-slate-200 px-3 py-2.5 align-top text-slate-700 dark:border-white/10 dark:text-slate-300"
+                        rowSpan={row.sectionRowCount}
+                      >
+                        {row.sectionTitle ? (
+                          <span className="line-clamp-3" title={row.sectionTitle}>
+                            {row.sectionTitle}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
                     ) : null}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
-                    {row.weight}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums font-medium text-slate-900 dark:text-white">
-                    {row.scoreEarned}
-                  </td>
-                </tr>
-              ))
+                    <td className="border-r border-slate-200 px-3 py-2.5 text-slate-900 dark:border-white/10 dark:text-slate-100">
+                      {row.subsectionTitle ? (
+                        <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                          {row.subsectionTitle}
+                        </span>
+                      ) : null}
+                      <p className="max-w-[450px] break-words text-xs leading-snug">{question.questionText}</p>
+                      {answerText ? (
+                        <p className="mt-1 max-w-[400px] break-words text-[11px] text-slate-500 dark:text-slate-400">
+                          Response: {answerText}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-slate-700 dark:border-white/10 dark:text-slate-300">
+                      {question.totalMarks}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums font-medium text-slate-900 dark:text-white">
+                      {answer?.pointsEarned ?? 0}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
           {rows.length > 0 ? (
             <tfoot>
-              <tr className="border-t border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
-                <td
-                  colSpan={3}
-                  className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
-                >
+              <tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-white/20 dark:bg-slate-950/50">
+                <td colSpan={3} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                   Total
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-semibold text-slate-900 dark:text-white">
+                <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
                   {data.maxRawScore}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-semibold text-slate-900 dark:text-white">
+                <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:text-white">
                   {data.rawScore}
                 </td>
               </tr>

@@ -13,6 +13,8 @@ import {
   CATEGORY_LABELS,
   flattenAllQuestions,
   SUB_CATEGORY_LABELS,
+  type FormSectionRecord,
+  type FormSubsectionRecord,
   type QuestionRecord,
 } from "@/types/forms";
 
@@ -28,12 +30,6 @@ type AnswerState = Record<
     pointsEarned: string;
   }
 >;
-
-type FormRow = {
-  sr: number;
-  section: string;
-  question: QuestionRecord;
-};
 
 function buildInitialAnswers(
   questions: Array<{ id: number }>,
@@ -115,48 +111,6 @@ function isScoredQuestion(question: {
   totalMarks: number;
 }): boolean {
   return question.totalMarks > 0 && question.inputType === "NUMBER";
-}
-
-function buildFormRows(
-  sections: Parameters<typeof buildRootLayoutOrderFromRecord>[0],
-  rootQuestions: QuestionRecord[],
-  allQuestions: QuestionRecord[],
-): FormRow[] {
-  const rootLayout = buildRootLayoutOrderFromRecord(sections, rootQuestions);
-  const rows: FormRow[] = [];
-  let sr = 0;
-
-  const pushRow = (question: QuestionRecord, section: string) => {
-    sr += 1;
-    rows.push({ sr, section, question });
-  };
-
-  if (rootLayout.length === 0) {
-    allQuestions.forEach((question) => pushRow(question, "—"));
-    return rows;
-  }
-
-  rootLayout.forEach((item) => {
-    if (item.kind === "section") {
-      const section = sections.find((current) => current.id === item.id);
-      if (!section) return;
-
-      section.subsections.forEach((subsection) => {
-        const label = `${section.title} › ${subsection.title}`;
-        subsection.questions.forEach((question) => pushRow(question, label));
-      });
-
-      section.questions.forEach((question) => pushRow(question, section.title));
-      return;
-    }
-
-    const question = rootQuestions.find((current) => current.id === item.id);
-    if (question) {
-      pushRow(question, "—");
-    }
-  });
-
-  return rows;
 }
 
 export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) {
@@ -299,11 +253,82 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   }
 
   const { template } = data;
-  const rows = buildFormRows(
+  const rootLayout = buildRootLayoutOrderFromRecord(
     template.sections,
     template.questions,
-    flattenAllQuestions(template),
   );
+
+  type TableRow = {
+    sr: number;
+    sectionTitle: string;
+    sectionNumber: number | null;
+    subsectionTitle: string | null;
+    question: QuestionRecord;
+    isFirstInSection: boolean;
+    sectionRowCount: number;
+  };
+
+  const rows: TableRow[] = [];
+  let sr = 0;
+  let sectionNumber = 0;
+
+  const collectQuestions = (
+    section: FormSectionRecord,
+    subsection: FormSubsectionRecord | null,
+  ) => {
+    const questions = subsection ? subsection.questions : section.questions;
+    const startIdx = rows.length;
+    questions.forEach((question) => {
+      sr += 1;
+      rows.push({
+        sr,
+        sectionTitle: section.title,
+        sectionNumber: null,
+        subsectionTitle: subsection?.title ?? null,
+        question,
+        isFirstInSection: false,
+        sectionRowCount: 0,
+      });
+    });
+    if (rows.length > startIdx) {
+      rows[startIdx].isFirstInSection = true;
+      for (let i = startIdx; i < rows.length; i++) {
+        rows[i].sectionRowCount = rows.length - startIdx;
+      }
+    }
+  };
+
+  rootLayout.forEach((item) => {
+    if (item.kind === "section") {
+      const section = template.sections.find((s) => s.id === item.id);
+      if (!section) return;
+      sectionNumber += 1;
+      const startIdx = rows.length;
+      section.subsections.forEach((sub) => collectQuestions(section, sub));
+      collectQuestions(section, null);
+      if (rows.length > startIdx) {
+        rows[startIdx].isFirstInSection = true;
+        rows[startIdx].sectionNumber = sectionNumber;
+        for (let i = startIdx; i < rows.length; i++) {
+          rows[i].sectionRowCount = rows.length - startIdx;
+        }
+      }
+    } else {
+      const question = template.questions.find((q) => q.id === item.id);
+      if (question) {
+        sr += 1;
+        rows.push({
+          sr,
+          sectionTitle: "—",
+          sectionNumber: null,
+          subsectionTitle: null,
+          question,
+          isFirstInSection: true,
+          sectionRowCount: 1,
+        });
+      }
+    }
+  });
 
   const metaParts = [
     template.title,
@@ -320,50 +345,58 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     "h-9 w-full rounded-md border border-slate-300 bg-background px-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15";
 
   return (
-    <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden">
+    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
       {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
       {successMessage ? (
         <p className="text-sm text-emerald-600">{successMessage}</p>
       ) : null}
 
-      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-2.5 dark:border-white/10">
-          <p
-            className="truncate text-xs leading-5 text-slate-600 dark:text-slate-300"
-            title={metaParts.join(" · ")}
-          >
-            {metaParts.join(" · ")}
-          </p>
-        </div>
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 dark:border-white/10 dark:bg-slate-900">
+        <p
+          className="truncate text-xs leading-5 text-slate-600 dark:text-slate-300"
+          title={metaParts.join(" · ")}
+        >
+          {metaParts.join(" · ")}
+        </p>
+      </div>
 
+      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
         <div className="w-full max-w-full overflow-x-auto">
-          <table className="w-full min-w-[820px] text-left text-sm">
+          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
-                <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Sr Number
+                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" rowSpan={2}>
+                  Sr. No.
                 </th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Section
+                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" rowSpan={2}>
+                  Key Task / Function
                 </th>
-                <th className="min-w-[280px] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Questions
+                <th className="min-w-[280px] border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" rowSpan={2}>
+                  Key Performance Indicators (KPIs)
                 </th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <th className="border-r border-slate-200 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" colSpan={2}>
+                  Faculty&apos;s Performance
+                </th>
+                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" rowSpan={2}>
                   Weight
                 </th>
-                <th className="min-w-[140px] whitespace-nowrap px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" rowSpan={2}>
                   Score Earned
+                </th>
+              </tr>
+              <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
+                <th className="border-r border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                  Previous Year
+                </th>
+                <th className="border-r border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                  Current Year
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
               {rows.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400"
-                  >
+                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                     No questions were found for this form.
                   </td>
                 </tr>
@@ -379,118 +412,83 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
                   return (
                     <tr key={question.id} className="align-top">
-                      <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-500 dark:text-slate-400">
-                        {row.sr}
-                      </td>
-                      <td className="max-w-[220px] px-3 py-2.5 text-slate-700 dark:text-slate-300">
-                        <span className="line-clamp-2" title={row.section}>
-                          {row.section}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-slate-900 dark:text-slate-100">
-                        <p className="leading-snug">{question.questionText}</p>
-
-                        {question.inputType === "TEXT" ? (
-                          <input
-                            type="text"
-                            value={answer.textResponse}
-                            disabled={isReadOnly}
-                            onChange={(event) =>
-                              updateAnswer(
-                                question.id,
-                                "textResponse",
-                                event.target.value,
-                              )
-                            }
-                            className={`${inputClassName} mt-2`}
-                            placeholder="Your response"
-                          />
+                      {row.isFirstInSection ? (
+                        <>
+                          <td
+                            className="border-r border-slate-200 px-3 py-2.5 text-center align-top font-semibold text-slate-700 dark:border-white/10 dark:text-slate-300"
+                            rowSpan={row.sectionRowCount}
+                          >
+                            {row.sectionNumber ?? ""}
+                          </td>
+                          <td
+                            className="max-w-[200px] border-r border-slate-200 px-3 py-2.5 align-top text-slate-700 dark:border-white/10 dark:text-slate-300"
+                            rowSpan={row.sectionRowCount}
+                          >
+                            <span className="line-clamp-3" title={row.sectionTitle}>
+                              {row.sectionTitle}
+                            </span>
+                          </td>
+                        </>
+                      ) : null}
+                      <td className="border-r border-slate-200 px-3 py-2.5 text-slate-900 dark:border-white/10 dark:text-slate-100">
+                        {row.subsectionTitle ? (
+                          <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                            {row.subsectionTitle}
+                          </span>
                         ) : null}
-
-                        {question.inputType === "TEXTAREA" ? (
-                          <textarea
-                            value={answer.textResponse}
-                            disabled={isReadOnly}
-                            rows={3}
-                            onChange={(event) =>
-                              updateAnswer(
-                                question.id,
-                                "textResponse",
-                                event.target.value,
-                              )
-                            }
-                            className="mt-2 w-full rounded-md border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                            placeholder="Your response"
-                          />
-                        ) : null}
-
-                        {["RADIO", "SELECT"].includes(question.inputType) ? (
-                          <div className="mt-2 space-y-1.5">
+                        <p className="text-xs leading-snug">{question.questionText}</p>
+                        {question.options.length > 0 ? (
+                          <div className="mt-1.5 space-y-1">
                             {question.options.map((option) => (
-                              <label
-                                key={option.id}
-                                className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
-                              >
+                              <label key={option.id} className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
                                 <input
                                   type="radio"
                                   name={`question-${question.id}`}
                                   value={option.id}
-                                  checked={
-                                    answer.selectedOptionId === String(option.id)
-                                  }
+                                  checked={answer.selectedOptionId === String(option.id)}
                                   disabled={isReadOnly}
-                                  onChange={() =>
-                                    updateAnswer(
-                                      question.id,
-                                      "selectedOptionId",
-                                      String(option.id),
-                                    )
-                                  }
+                                  onChange={() => updateAnswer(question.id, "selectedOptionId", String(option.id))}
                                 />
-                                <span>
-                                  {option.optionLabel}
-                                  {option.pointsAssigned > 0
-                                    ? ` (${option.pointsAssigned} pts)`
-                                    : ""}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                        ) : null}
-
-                        {question.inputType === "CHECKBOX" ? (
-                          <div className="mt-2 space-y-1.5">
-                            {question.options.map((option) => (
-                              <label
-                                key={option.id}
-                                className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={
-                                    answer.selectedOptionId === String(option.id)
-                                  }
-                                  disabled={isReadOnly}
-                                  onChange={() =>
-                                    updateAnswer(
-                                      question.id,
-                                      "selectedOptionId",
-                                      answer.selectedOptionId === String(option.id)
-                                        ? ""
-                                        : String(option.id),
-                                    )
-                                  }
-                                />
-                                <span>{option.optionLabel}</span>
+                                <span>{option.optionLabel}{option.pointsAssigned > 0 ? ` (${option.pointsAssigned} pts)` : ""}</span>
                               </label>
                             ))}
                           </div>
                         ) : null}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                      <td className="border-r border-slate-200 px-2 py-2.5 dark:border-white/10">
+                        <input
+                          type="text"
+                          value=""
+                          disabled
+                          className="h-8 w-full rounded border border-slate-200 bg-slate-50 px-2 text-xs text-slate-400 dark:border-white/10 dark:bg-slate-800/50"
+                          placeholder="—"
+                        />
+                      </td>
+                      <td className="border-r border-slate-200 px-2 py-2.5 dark:border-white/10">
+                        {question.inputType === "TEXTAREA" ? (
+                          <textarea
+                            value={answer.textResponse}
+                            disabled={isReadOnly}
+                            rows={2}
+                            onChange={(e) => updateAnswer(question.id, "textResponse", e.target.value)}
+                            className="w-full rounded border border-slate-300 bg-background px-2 py-1 text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
+                            placeholder="Enter performance"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={answer.textResponse}
+                            disabled={isReadOnly}
+                            onChange={(e) => updateAnswer(question.id, "textResponse", e.target.value)}
+                            className="h-8 w-full rounded border border-slate-300 bg-background px-2 text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
+                            placeholder="Enter performance"
+                          />
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-slate-700 dark:border-white/10 dark:text-slate-300">
                         {question.totalMarks}
                       </td>
-                      <td className="px-3 py-2.5 text-right">
+                      <td className="px-2 py-2.5 text-right">
                         {scored ? (
                           <input
                             type="number"
@@ -499,27 +497,13 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                             step="0.5"
                             value={answer.pointsEarned}
                             disabled={isReadOnly}
-                            onChange={(event) =>
-                              updateScore(
-                                question.id,
-                                question.totalMarks,
-                                event.target.value,
-                              )
-                            }
-                            onBlur={(event) =>
-                              updateScore(
-                                question.id,
-                                question.totalMarks,
-                                event.target.value,
-                              )
-                            }
-                            className={`${inputClassName} ml-auto max-w-[120px] text-right tabular-nums`}
+                            onChange={(e) => updateScore(question.id, question.totalMarks, e.target.value)}
+                            onBlur={(e) => updateScore(question.id, question.totalMarks, e.target.value)}
+                            className="h-8 w-20 rounded border border-slate-300 bg-background px-2 text-right text-xs tabular-nums text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
                             placeholder={`0–${question.totalMarks}`}
                           />
                         ) : (
-                          <span className="tabular-nums text-slate-400">
-                            {answer.pointsEarned || "—"}
-                          </span>
+                          <span className="tabular-nums text-slate-400">—</span>
                         )}
                       </td>
                     </tr>
@@ -529,17 +513,14 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
             </tbody>
             {rows.length > 0 ? (
               <tfoot>
-                <tr className="border-t border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
-                  <td
-                    colSpan={3}
-                    className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
-                  >
-                    Total
+                <tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-white/20 dark:bg-slate-950/50">
+                  <td colSpan={5} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                    Overall Score
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-semibold text-slate-900 dark:text-white">
+                  <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
                     {maxRawScore}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-semibold text-slate-900 dark:text-white">
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:text-white">
                     {displayedRawScore}
                   </td>
                 </tr>

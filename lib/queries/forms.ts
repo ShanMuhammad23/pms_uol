@@ -405,27 +405,6 @@ async function syncFormStructure(
     }
   }
 
-  const existingSections = await client.query<{
-    id: string;
-    parent_section_id: string | null;
-  }>(`SELECT id, parent_section_id FROM form_sections WHERE template_id = $1`, [
-    templateId,
-  ]);
-
-  const sectionsToDelete = existingSections.rows.filter(
-    (row) => !sectionIds.has(Number(row.id)),
-  );
-  const subsectionsToDelete = sectionsToDelete.filter(
-    (row) => row.parent_section_id,
-  );
-  const topSectionsToDelete = sectionsToDelete.filter(
-    (row) => !row.parent_section_id,
-  );
-
-  for (const row of [...subsectionsToDelete, ...topSectionsToDelete]) {
-    await client.query(`DELETE FROM form_sections WHERE id = $1`, [row.id]);
-  }
-
   for (const section of input.sections) {
     const sectionId = await upsertSection(templateId, section, null, client);
 
@@ -449,6 +428,27 @@ async function syncFormStructure(
 
   for (const question of input.questions) {
     await syncQuestion(templateId, question, null, client);
+  }
+
+  const existingSections = await client.query<{
+    id: string;
+    parent_section_id: string | null;
+  }>(`SELECT id, parent_section_id FROM form_sections WHERE template_id = $1`, [
+    templateId,
+  ]);
+
+  const sectionsToDelete = existingSections.rows.filter(
+    (row) => !sectionIds.has(Number(row.id)),
+  );
+  const subsectionsToDelete = sectionsToDelete.filter(
+    (row) => row.parent_section_id,
+  );
+  const topSectionsToDelete = sectionsToDelete.filter(
+    (row) => !row.parent_section_id,
+  );
+
+  for (const row of [...subsectionsToDelete, ...topSectionsToDelete]) {
+    await client.query(`DELETE FROM form_sections WHERE id = $1`, [row.id]);
   }
 }
 
