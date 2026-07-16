@@ -5,7 +5,13 @@ import { motion } from "framer-motion";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { cn } from "@/lib/utils";
 
-export type StatCardTone = "navy" | "amber" | "orange" | "emerald" | "slate";
+export type StatCardTone =
+  | "navy"
+  | "amber"
+  | "orange"
+  | "violet"
+  | "emerald"
+  | "slate";
 
 interface StatCardProps {
   title: string;
@@ -54,6 +60,13 @@ export function StatCard({
       value: "text-orange-700 dark:text-orange-400",
       top: "from-orange-600 via-orange-500 to-orange-600",
       badge: "bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400",
+    },
+    violet: {
+      border: active ? "border-violet-500 dark:border-violet-400" : "border-violet-200 dark:border-violet-800/50",
+      bg: "bg-white dark:bg-slate-900",
+      value: "text-violet-700 dark:text-violet-400",
+      top: "from-violet-600 via-violet-500 to-violet-600",
+      badge: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400",
     },
     emerald: {
       border: active ? "border-emerald-500 dark:border-emerald-400" : "border-emerald-200 dark:border-emerald-800/50",

@@ -10,6 +10,7 @@ import {
   buildSubmissionCompletionByCategory,
 } from "@/app/helpers/dashboard-submission-charts";
 import {
+  buildBoardApprovalStats,
   buildHrAlignmentStats,
   buildManagerReviewStats,
   buildSelfAssessmentStats,
@@ -91,6 +92,11 @@ export function useDashboardChartMetrics({
     [filteredSubmissions],
   );
 
+  const boardApprovalStats = useMemo(
+    () => buildBoardApprovalStats(filteredSubmissions),
+    [filteredSubmissions],
+  );
+
   return {
     themedCategoryDistribution,
     filteredCalibrationData,
@@ -101,5 +107,6 @@ export function useDashboardChartMetrics({
     selfAssessmentStats,
     managerReviewStats,
     hrAlignmentStats,
+    boardApprovalStats,
   };
 }

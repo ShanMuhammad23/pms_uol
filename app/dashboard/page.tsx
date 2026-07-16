@@ -43,6 +43,7 @@ export default function HRDashboardPage() {
     selfAssessmentStats,
     managerReviewStats,
     hrAlignmentStats,
+    boardApprovalStats,
     filteredCalibrationData,
     ratingQuartileMatrix,
   } = useDashboardPage();
@@ -84,6 +85,7 @@ export default function HRDashboardPage() {
           selfAssessmentStats={selfAssessmentStats}
           managerReviewStats={managerReviewStats}
           hrAlignmentStats={hrAlignmentStats}
+          boardApprovalStats={boardApprovalStats}
           selectedFormStates={selectedFormStates}
           onFilterByFormState={filterByFormState}
         />

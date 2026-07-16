@@ -42,6 +42,15 @@ const HR_ALIGNMENT_COMPLETED_STATES: AppraisalStatus[] = [
   "COMPLETED",
 ];
 
+const BOARD_APPROVAL_PENDING_STATES: AppraisalStatus[] = [
+  "PENDING_BOARD_APPROVAL",
+];
+
+const BOARD_APPROVAL_COMPLETED_STATES: AppraisalStatus[] = [
+  "APPROVED",
+  "COMPLETED",
+];
+
 export function formatWorkflowPercentage(numerator: number, denominator: number): string {
   if (denominator <= 0) return "—";
 
@@ -95,4 +104,18 @@ export function buildHrAlignmentStats(
   const submitted = countByStatuses(submissions, HR_ALIGNMENT_COMPLETED_STATES);
 
   return toWorkflowStageStats(awaitingAlignment, submitted);
+}
+
+/** Pending = awaiting board approval; Approved = board approved. */
+export function buildBoardApprovalStats(
+  submissions: FormSubmissionListItem[],
+): WorkflowStageStats {
+  const pending = countByStatuses(submissions, BOARD_APPROVAL_PENDING_STATES);
+  const approved = countByStatuses(submissions, BOARD_APPROVAL_COMPLETED_STATES);
+
+  return {
+    awaiting: pending,
+    completed: approved,
+    percentageLabel: formatWorkflowPercentage(approved, pending + approved),
+  };
 }
