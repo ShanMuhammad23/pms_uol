@@ -23,7 +23,7 @@ import {
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
 import {
-  DASHBOARD_TABLE_COLUMNS,
+  resolveOrderedColumns,
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
@@ -114,13 +114,23 @@ export function DashboardSubmissionsTable({
   error,
   onClearAllFilters,
 }: DashboardSubmissionsTableProps) {
-  const { visibleIds, toggleColumn, showAll, isVisible } = useDashboardColumnVisibility();
+  const {
+    visibleIds,
+    columnOrder,
+    toggleColumn,
+    showAll,
+    hideAll,
+    setColumnPosition,
+  } = useDashboardColumnVisibility();
   const [page, setPage] = useState(1);
   const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
     EMPTY_MASTER_FILTER_STATE,
   );
 
-  const visibleColumns = DASHBOARD_TABLE_COLUMNS.filter((column) => isVisible(column.id));
+  const visibleColumns = useMemo(
+    () => resolveOrderedColumns(columnOrder, visibleIds),
+    [columnOrder, visibleIds],
+  );
   const colSpan = Math.max(visibleColumns.length, 1);
 
   const masterFilteredSubmissions = useMemo(
@@ -219,8 +229,11 @@ export function DashboardSubmissionsTable({
      
         <ColumnVisibilityDropdown
           visibleIds={visibleIds}
+          columnOrder={columnOrder}
           onToggle={toggleColumn}
           onShowAll={showAll}
+          onHideAll={hideAll}
+          onSetColumnPosition={setColumnPosition}
         />
       </div>
 
