@@ -151,9 +151,7 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
                 <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                   Weight
                 </th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Score Earned
-                </th>
+                
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -205,9 +203,7 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
                       <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-slate-700 dark:border-white/10 dark:text-slate-300">
                         {question.totalMarks}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-400">
-                        —
-                      </td>
+                      
                     </tr>
                   );
                 })
@@ -222,9 +218,7 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
                   <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
                     {allQuestions.reduce((sum, q) => sum + q.totalMarks, 0)}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:text-white">
-                    —
-                  </td>
+                 
                 </tr>
               </tfoot>
             ) : null}
