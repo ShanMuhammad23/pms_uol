@@ -626,24 +626,7 @@ export default function UsersManager() {
 
       {activeTab === "list" && !isLoading && !error && users && users.length > 0 ? (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {categoryStats.map((stat) => (
-              <div
-                key={stat.category}
-                className="rounded-xl border border-slate-300/80 p-4 dark:border-white/15"
-              >
-                <p className="text-xs font-medium uppercase tracking-wide text-foreground/70">
-                  {stat.label}
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-text-primary">
-                  {stat.count}
-                </p>
-                <p className="mt-1 text-xs text-foreground/70">
-                  {stat.count === 1 ? "Employee" : "Employees"}
-                </p>
-              </div>
-            ))}
-          </div>
+   
 
           <UsersListingTable
             users={users}
