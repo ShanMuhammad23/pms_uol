@@ -77,8 +77,9 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     console.error("Failed to assign form to employees:", error);
+    const detail = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Failed to assign form." },
+      { error: "Failed to assign form.", detail },
       { status: 500 },
     );
   }

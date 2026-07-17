@@ -757,14 +757,6 @@ export async function createFormTemplate(
 
     const cycleId = await resolveCycleId(input.cycleId);
 
-    await checkDuplicateTarget(
-      cycleId,
-      input.targetCategory,
-      input.targetSubCategory,
-      undefined,
-      client,
-    );
-
     const templateResult = await client.query<{ id: string }>(
       `INSERT INTO form_templates (
          title,
@@ -917,7 +909,7 @@ export async function assignFormTemplateToEmployees(
     throw new FormTemplateError("At least one employee is required.", 400);
   }
 
-  const templateResult = await db.query<{ id: string; cycle_id: number }>(
+  const templateResult = await db.query<{ id: string; cycle_id: number | null }>(
     `SELECT id, cycle_id
      FROM form_templates
      WHERE id = $1`,
@@ -928,44 +920,51 @@ export async function assignFormTemplateToEmployees(
     throw new FormTemplateError("Form template not found.", 404);
   }
 
-  const cycleId = Number(templateResult.rows[0].cycle_id);
+  const cycleId = templateResult.rows[0].cycle_id
+    ? Number(templateResult.rows[0].cycle_id)
+    : null;
 
-  const result = await db.query<{ employee_id: string }>(
-    `WITH selected_users AS (
-       SELECT id, employee_id
-       FROM users
-       WHERE employee_id = ANY($1::text[])
-         AND is_active = TRUE
-     ),
-     assigned AS (
-       INSERT INTO employee_form_assignments (employee_id, template_id)
-       SELECT su.id, $2
-       FROM selected_users su
-       ON CONFLICT (employee_id, template_id) DO UPDATE
-         SET updated_at = CURRENT_TIMESTAMP
-       RETURNING employee_id
-     ),
-     touched_appraisals AS (
-       INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
-       SELECT su.id, $3, $2, 'PENDING_SELF_ASSESSMENT'
-       FROM selected_users su
-       ON CONFLICT (employee_id, template_id) DO UPDATE
-         SET cycle_id = EXCLUDED.cycle_id,
-             template_id = EXCLUDED.template_id,
-             updated_at = CURRENT_TIMESTAMP
-       RETURNING employee_id
-     )
-     SELECT su.employee_id
-     FROM selected_users su`,
-    [normalizedCodes, templateId, cycleId],
+  // 1. Find matching active users
+  const usersResult = await db.query<{ id: string; employee_id: string }>(
+    `SELECT id, employee_id
+     FROM users
+     WHERE employee_id = ANY($1::text[])
+       AND is_active = TRUE`,
+    [normalizedCodes],
   );
 
-  if (result.rows.length === 0) {
+  if (usersResult.rows.length === 0) {
     throw new FormTemplateError("No matching active employees found.", 404);
   }
 
+  const userIds = usersResult.rows.map((r) => r.id);
+
+  // 2. Insert into employee_form_assignments (upsert)
+  await db.query(
+    `INSERT INTO employee_form_assignments (employee_id, template_id)
+     SELECT u.id, $2
+     FROM unnest($1::bigint[]) AS u(id)
+     ON CONFLICT (employee_id, template_id) DO UPDATE
+       SET updated_at = CURRENT_TIMESTAMP`,
+    [userIds, templateId],
+  );
+
+  // 3. Insert into appraisals (upsert on employee_id, cycle_id if cycle exists)
+  if (cycleId !== null) {
+    await db.query(
+      `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
+       SELECT u.id, $2, $3, 'PENDING_SELF_ASSESSMENT'
+       FROM unnest($1::bigint[]) AS u(id)
+       ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
+         SET template_id = EXCLUDED.template_id,
+             status = 'PENDING_SELF_ASSESSMENT',
+             updated_at = CURRENT_TIMESTAMP`,
+      [userIds, cycleId, templateId],
+    );
+  }
+
   return {
-    assignedCount: result.rows.length,
+    assignedCount: usersResult.rows.length,
     templateId,
   };
 }

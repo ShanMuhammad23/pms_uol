@@ -22,8 +22,11 @@ async function parseResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
 
   if (!response.ok) {
+    const message = data.detail
+      ? `${data.error} (${data.detail})`
+      : data.error ?? "Request failed.";
     throw new FormTemplateRequestError(
-      data.error ?? "Request failed.",
+      message,
       data.existingFormId,
       data.existingFormTitle,
     );
