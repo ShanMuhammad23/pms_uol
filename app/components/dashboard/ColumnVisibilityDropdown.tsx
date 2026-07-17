@@ -283,7 +283,7 @@ export function ColumnVisibilityDropdown({
         <div
           role="listbox"
           aria-multiselectable
-          className="absolute right-0 z-30 mt-2 w-88 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-white/10 dark:bg-slate-900"
+          className="absolute right-0 z-50 mt-2 w-88 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-white/10 dark:bg-slate-900"
         >
           <div className="mb-2 flex items-center justify-between gap-2 px-2 py-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">

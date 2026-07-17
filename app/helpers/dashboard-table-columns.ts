@@ -44,8 +44,7 @@ export type DashboardTableColumnId =
   | "qualificationSubject"
   | "qualificationInstitute"
   | "qualificationCountry"
-  | "status"
-  | "actions";
+  | "status";
 
 export type DashboardTableColumnDef = {
   id: DashboardTableColumnId;
@@ -94,6 +93,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "sapCode",
     label: "SAP Code",
+    width: 120,
     getValue: (row) => formatNullable(row.employeeId),
   },
   {
@@ -339,14 +339,6 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
     pinned: true,
     width: 160,
     getValue: (row) => APPRAISAL_STATE_CONFIG[row.status]?.label ?? row.status,
-  },
-  {
-    id: "actions",
-    label: "Actions",
-    pinned: true,
-    width: 80,
-    align: "center",
-    getValue: () => "",
   },
 ];
 

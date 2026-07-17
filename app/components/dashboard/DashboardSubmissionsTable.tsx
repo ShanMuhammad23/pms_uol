@@ -63,8 +63,6 @@ function columnCellClassName(
 
 const STICKY_EDGE_SHADOW_LEFT =
   "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.5)]";
-const STICKY_EDGE_SHADOW_RIGHT =
-  "shadow-[-8px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.5)]";
 
 function stickySelectHeaderClassName() {
   return cn(
@@ -83,29 +81,43 @@ function stickySelectCellClassName(isSelected: boolean) {
   );
 }
 
-function stickyActionsHeaderClassName() {
-  return cn(
-    "sticky right-0 top-0 z-40 border-b border-l border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900",
-    STICKY_EDGE_SHADOW_RIGHT,
-  );
+function stickyHeaderClassName() {
+  return "sticky top-0 z-30 border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900";
 }
 
-function stickyActionsCellClassName(isSelected: boolean) {
-  return cn(
-    "sticky right-0 z-20 border-b border-l border-slate-200 dark:border-white/10",
-    STICKY_EDGE_SHADOW_RIGHT,
-    isSelected
-      ? "bg-amber-50/60 dark:bg-amber-500/5"
-      : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
-  );
+function canOpenSubmission(submission: FormSubmissionListItem) {
+  return submission.id > 0 && submission.status !== "PENDING_SELF_ASSESSMENT";
 }
 
-function stickyHeaderClassName(column: DashboardTableColumnDef) {
-  if (column.id === "actions") {
-    return stickyActionsHeaderClassName();
+function SubmissionViewControl({
+  submission,
+}: {
+  submission: FormSubmissionListItem;
+}) {
+  if (!canOpenSubmission(submission)) {
+    return (
+      <button
+        type="button"
+        disabled
+        title="Self assessment not yet submitted"
+        aria-label="View submission unavailable"
+        className="inline-flex size-6 shrink-0 cursor-not-allowed items-center justify-center rounded-md text-slate-300 dark:text-slate-600"
+      >
+        <Eye className="h-3.5 w-3.5" />
+      </button>
+    );
   }
 
-  return "sticky top-0 z-30 border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900";
+  return (
+    <Link
+      href={`/dashboard/submissions/${submission.id}`}
+      title="View submission"
+      aria-label={`View submission for ${submission.employeeName}`}
+      className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
+    >
+      <Eye className="h-3.5 w-3.5" />
+    </Link>
+  );
 }
 
 function renderCell(
@@ -133,29 +145,22 @@ function renderCell(
     );
   }
 
-  if (columnId === "actions") {
-    const canOpenSubmission =
-      submission.id > 0 && submission.status !== "PENDING_SELF_ASSESSMENT";
-
-    if (!canOpenSubmission) {
-      return (
-        <button
-          disabled
-          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
-          title="Self assessment not yet submitted"
-        >
-          <Eye className="h-3.5 w-3.5" />
-        </button>
-      );
-    }
-
+  if (columnId === "sapCode") {
     return (
-      <Link
-        href={`/dashboard/submissions/${submission.id}`}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 dark:bg-amber-600 dark:hover:bg-amber-500"
-      >
-        <Eye className="h-3.5 w-3.5" />
-      </Link>
+      <span className="inline-flex items-center gap-1.5">
+        <SubmissionViewControl submission={submission} />
+        <span
+          className={cn(
+            "block text-slate-700 dark:text-slate-300",
+            column.wrap ? "whitespace-normal break-words" : "truncate",
+            !column.width && !column.wrap && "max-w-[220px]",
+          )}
+          style={column.width != null ? { maxWidth: column.width } : undefined}
+          title={value === "—" ? undefined : value}
+        >
+          {value}
+        </span>
+      </span>
     );
   }
 
@@ -405,7 +410,7 @@ export function DashboardSubmissionsTable({
         onMultiChange={handleMasterMultiChange}
         onClearAll={clearMasterFilters}
       />
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
+      <div className="relative z-50 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
         <div className="min-w-0">
           <p className="text-lg font-semibold text-slate-900 dark:text-white">
             Staff listing ( Total: {totalCount}
@@ -468,7 +473,7 @@ export function DashboardSubmissionsTable({
                   className={columnCellClassName(
                     column,
                     cn(
-                      stickyHeaderClassName(column),
+                      stickyHeaderClassName(),
                       "text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400",
                     ),
                   )}
@@ -538,16 +543,12 @@ export function DashboardSubmissionsTable({
                       </td>
                       {visibleColumns.map((column) => {
                         const value = column.getValue(submission);
-                        const isActions = column.id === "actions";
                         return (
                           <td
                             key={column.id}
                             className={columnCellClassName(
                               column,
-                              cn(
-                                "align-middle border-b border-slate-100 dark:border-white/[0.03]",
-                                isActions && stickyActionsCellClassName(isSelected),
-                              ),
+                              "align-middle border-b border-slate-100 dark:border-white/[0.03]",
                             )}
                             style={getColumnWidthStyle(column)}
                           >

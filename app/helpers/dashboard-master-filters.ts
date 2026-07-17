@@ -8,7 +8,6 @@ import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 /** Columns excluded from the master filter entirely. */
 const MASTER_FILTER_EXCLUDED_IDS = new Set<DashboardTableColumnId>([
-  "actions",
   "dateOfJoining",
   "hodReviewComments",
 ]);
