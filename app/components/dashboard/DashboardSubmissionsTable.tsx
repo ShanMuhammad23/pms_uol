@@ -30,7 +30,9 @@ import {
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
 import {
+  getColumnWidthStyle,
   resolveOrderedColumns,
+  type DashboardTableColumnDef,
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
@@ -46,18 +48,80 @@ interface DashboardSubmissionsTableProps {
   onClearAllFilters: () => void;
 }
 
+function columnCellClassName(
+  column: DashboardTableColumnDef,
+  extra?: string,
+) {
+  return cn(
+    "px-2 py-1",
+    column.wrap ? "whitespace-normal break-words" : "whitespace-nowrap",
+    column.align === "right" && "text-right",
+    column.align === "center" && "text-center",
+    extra,
+  );
+}
+
+const STICKY_EDGE_SHADOW_LEFT =
+  "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.5)]";
+const STICKY_EDGE_SHADOW_RIGHT =
+  "shadow-[-8px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.5)]";
+
+function stickySelectHeaderClassName() {
+  return cn(
+    "sticky left-0 top-0 z-40 border-b border-slate-200 bg-slate-50 px-3 py-3 dark:border-white/10 dark:bg-slate-900",
+    STICKY_EDGE_SHADOW_LEFT,
+  );
+}
+
+function stickySelectCellClassName(isSelected: boolean) {
+  return cn(
+    "sticky left-0 z-20 border-b border-slate-100 px-2 py-1 dark:border-white/[0.03]",
+    STICKY_EDGE_SHADOW_LEFT,
+    isSelected
+      ? "bg-amber-50/60 dark:bg-amber-500/5"
+      : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
+  );
+}
+
+function stickyActionsHeaderClassName() {
+  return cn(
+    "sticky right-0 top-0 z-40 border-b border-l border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900",
+    STICKY_EDGE_SHADOW_RIGHT,
+  );
+}
+
+function stickyActionsCellClassName(isSelected: boolean) {
+  return cn(
+    "sticky right-0 z-20 border-b border-l border-slate-200 dark:border-white/10",
+    STICKY_EDGE_SHADOW_RIGHT,
+    isSelected
+      ? "bg-amber-50/60 dark:bg-amber-500/5"
+      : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
+  );
+}
+
+function stickyHeaderClassName(column: DashboardTableColumnDef) {
+  if (column.id === "actions") {
+    return stickyActionsHeaderClassName();
+  }
+
+  return "sticky top-0 z-30 border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900";
+}
+
 function renderCell(
-  columnId: DashboardTableColumnId,
+  column: DashboardTableColumnDef,
   submission: FormSubmissionListItem,
   value: string,
 ) {
+  const columnId = column.id;
+
   if (columnId === "status") {
     const stateConfig = APPRAISAL_STATE_CONFIG[submission.status];
     const StateIcon = stateConfig.icon;
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+          "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold",
           stateConfig.bg,
           stateConfig.color,
           stateConfig.border,
@@ -143,9 +207,12 @@ function renderCell(
   return (
     <span
       className={cn(
-        "block max-w-[220px] truncate text-slate-700 dark:text-slate-300",
+        "block text-slate-700 dark:text-slate-300",
+        column.wrap ? "whitespace-normal break-words" : "truncate",
+        !column.width && !column.wrap && "max-w-[220px]",
         columnId === "employeeName" && "font-semibold text-slate-900 dark:text-white",
       )}
+      style={column.width != null ? { maxWidth: column.width } : undefined}
       title={value === "—" ? undefined : value}
     >
       {value}
@@ -364,11 +431,11 @@ export function DashboardSubmissionsTable({
         </div>
       </div>
 
-      <div className="w-full max-w-full overflow-x-auto overscroll-x-contain">
-        <table className="w-max min-w-full text-left text-sm">
+      <div className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain">
+        <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/5 dark:bg-white/[0.02]">
-              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-3 dark:bg-slate-900">
+            <tr>
+              <th className={stickySelectHeaderClassName()}>
                 <input
                   type="checkbox"
                   checked={allPageSelected}
@@ -386,11 +453,14 @@ export function DashboardSubmissionsTable({
               {visibleColumns.map((column) => (
                 <th
                   key={column.id}
-                  className={cn(
-                    "whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400",
-                    column.align === "right" && "text-right",
-                    column.align === "center" && "text-center",
+                  className={columnCellClassName(
+                    column,
+                    cn(
+                      stickyHeaderClassName(column),
+                      "text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400",
+                    ),
                   )}
+                  style={getColumnWidthStyle(column)}
                 >
                   {isMasterFilterableColumn(column.id) ? (
                     <TableColumnHeaderFilter
@@ -408,7 +478,7 @@ export function DashboardSubmissionsTable({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-white/[0.03]">
+          <tbody>
             {isLoading ? (
               <tr>
                 <td colSpan={colSpan} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -443,14 +513,7 @@ export function DashboardSubmissionsTable({
                         isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
                       )}
                     >
-                      <td
-                        className={cn(
-                          "sticky left-0 z-10 px-3 py-3",
-                          isSelected
-                            ? "bg-amber-50/60 dark:bg-amber-500/5"
-                            : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
-                        )}
-                      >
+                      <td className={stickySelectCellClassName(isSelected)}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -463,16 +526,20 @@ export function DashboardSubmissionsTable({
                       </td>
                       {visibleColumns.map((column) => {
                         const value = column.getValue(submission);
+                        const isActions = column.id === "actions";
                         return (
                           <td
                             key={column.id}
-                            className={cn(
-                              "whitespace-nowrap px-4 py-3 align-middle",
-                              column.align === "right" && "text-right",
-                              column.align === "center" && "text-center",
+                            className={columnCellClassName(
+                              column,
+                              cn(
+                                "align-middle border-b border-slate-100 dark:border-white/[0.03]",
+                                isActions && stickyActionsCellClassName(isSelected),
+                              ),
                             )}
+                            style={getColumnWidthStyle(column)}
                           >
-                            {renderCell(column.id, submission, value)}
+                            {renderCell(column, submission, value)}
                           </td>
                         );
                       })}

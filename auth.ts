@@ -63,8 +63,23 @@ export const authOptions: NextAuthOptions = {
       const existingUser = await getUserByEmail(email);
       return Boolean(existingUser?.isActive);
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
+        // Google profile id/role are not our DB fields — hydrate from users table.
+        if (account?.provider === "google") {
+          const email = user.email?.toString().trim();
+          if (email) {
+            const dbUser = await getUserByEmail(email);
+            if (dbUser?.isActive) {
+              token.id = dbUser.id;
+              token.role = dbUser.systemRole;
+              token.email = dbUser.email;
+              token.name = `${dbUser.firstName} ${dbUser.lastName}`.trim();
+              return token;
+            }
+          }
+        }
+
         token.role = (user as { role?: string }).role;
         token.id = user.id;
       }

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { signOutAndRedirect } from "@/lib/queries/auth-client";
 import {
   FileText,
   Grid3X3,
@@ -46,7 +47,7 @@ const Sidebar = () => {
   return (
     <aside
       className={cn(
-        "fixed top-0 left-0 z-40 flex h-full flex-col overflow-auto border border-r border-slate-300/80 bg-surface py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
+        "fixed top-0 left-0 z-40 flex h-full flex-col  overflow-auto border border-r border-slate-300/80  py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
         collapsed ? "w-[72px]" : "w-[264px]",
       )}
     >
@@ -181,7 +182,7 @@ const Sidebar = () => {
 
       <button
         type="button"
-        onClick={() => signOut()}
+        onClick={() => void signOutAndRedirect()}
         title={collapsed ? "Sign out" : undefined}
         className={cn(
           "mt-6 flex cursor-pointer items-center border-t border-slate-300/80 pt-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-white/15",

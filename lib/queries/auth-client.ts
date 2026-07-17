@@ -1,6 +1,6 @@
 "use client";
 
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 
 interface CredentialsInput {
   email: string;
@@ -39,4 +39,8 @@ export async function signInWithCredentials(input: CredentialsInput) {
 
 export async function signInWithGoogle() {
   await signIn("google", { callbackUrl: "/dashboard" });
+}
+
+export async function signOutAndRedirect() {
+  await signOut({ callbackUrl: "/" });
 }

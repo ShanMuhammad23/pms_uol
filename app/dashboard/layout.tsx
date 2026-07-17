@@ -1,7 +1,10 @@
 import React from "react";
 import DashboardShell from "@/app/components/layout/DashboardShell";
+import { requireSession } from "@/lib/auth/require-session";
 
-const layout = ({ children }: { children: React.ReactNode }) => {
+const layout = async ({ children }: { children: React.ReactNode }) => {
+  await requireSession();
+
   return <DashboardShell>{children}</DashboardShell>;
 };
 

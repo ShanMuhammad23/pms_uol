@@ -43,7 +43,7 @@ export function DashboardWorkflowStatsRow({
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5"
+      className="mb-8 flex gap-2 justify-between"
     >
       <EligibilityStatCard data={eligibilityData} delay={0} />
       <StatCard

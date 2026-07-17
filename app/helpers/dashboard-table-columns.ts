@@ -53,8 +53,24 @@ export type DashboardTableColumnDef = {
   /** Pinned columns stay visible and are excluded from hide toggles. */
   pinned?: boolean;
   align?: "left" | "right" | "center";
+  /** Fixed column width in pixels. Omit to size from content. */
+  width?: number;
+  /** Allow multi-line wrapping. Defaults to false (single line). */
+  wrap?: boolean;
   getValue: (row: FormSubmissionListItem) => string;
 };
+
+/** Inline style for fixed-width columns. */
+export function getColumnWidthStyle(
+  column: Pick<DashboardTableColumnDef, "width">,
+): { width: number; minWidth: number; maxWidth: number } | undefined {
+  if (column.width == null) return undefined;
+  return {
+    width: column.width,
+    minWidth: column.width,
+    maxWidth: column.width,
+  };
+}
 
 function formatNullable(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -83,26 +99,35 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "employeeName",
     label: "Employee Name",
+    width: 180,
     getValue: (row) => formatNullable(row.employeeName),
   },
   {
     id: "designation",
     label: "Designation",
+    width: 160,
+    wrap: true,
     getValue: (row) => formatNullable(row.designation),
   },
   {
     id: "roleCategory",
     label: "Role Category",
+    width: 100,
+    wrap: true,
     getValue: (row) => formatNullable(row.roleCategory),
   },
   {
     id: "facultyName",
     label: "ORG Level 1",
+    width: 160,
+    wrap: true,
     getValue: (row) => formatNullable(row.parentEntityName ?? row.entityName),
   },
   {
     id: "deptGroupName",
     label: "ORG Level 2",
+    width: 160,
+    wrap: true,
     getValue: (row) =>
       formatNullable(row.parentEntityName ? row.entityName : null),
   },
@@ -114,7 +139,9 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "scoreO",
     label: "Score (O)",
-    align: "right",
+    align: "center",
+    width: 80,
+    wrap: true,
     getValue: (row) => formatNumber(row.scoreO ?? row.rawScore, 2),
   },
   {
@@ -125,25 +152,33 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "creditHrsErpAdj",
     label: "CH Adj",
-    align: "right",
+    align: "center",
+    width: 80,
+    wrap: true,
     getValue: (row) => formatNumber(row.creditHrsErpScoreAdj),
   },
   {
     id: "pubOricScoreAdj",
     label: "ORIC Adj",
-    align: "right",
+    align: "center",
+    width: 80,
+    wrap: true,
     getValue: (row) => formatNumber(row.pubOricScoreAdj),
   },
   {
     id: "calibrationFactor",
-    label: "Calibration Factor",
-    align: "right",
+    label: "Cal. Fr",
+    align: "center",
+    width: 80,
+    wrap: true,
     getValue: (row) => formatNumber(row.calibrationFactor, 4),
   },
   {
     id: "normalizedScore",
-    label: "Normalized Score",
-    align: "right",
+    label: "Norm. Score",
+    align: "center",
+    width: 80,
+    wrap: true,
     getValue: (row) => formatNumber(row.normalizedScore),
   },
   {
@@ -177,13 +212,17 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "applicableDuration",
     label: "Applicable Dur",
-    align: "right",
+    align: "center",
+    width: 100,
+    wrap: true,
     getValue: (row) =>
       formatNumber(getSubmissionApplicableDurationFactor(row), 2),
   },
   {
     id: "remarksEvaluation",
     label: "Remarks Evaluation",
+    width: 220,
+    wrap: true,
     getValue: (row) => formatNullable(row.remarksEvaluation),
   },
   {
@@ -251,16 +290,22 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "hodReviewComments",
     label: "HOD Review Comments",
+    width: 220,
+    wrap: true,
     getValue: (row) => formatNullable(row.hodReviewComments),
   },
   {
     id: "remarksCompensation",
     label: "Remarks Compensation",
+    width: 220,
+    wrap: true,
     getValue: (row) => formatNullable(row.remarksCompensation),
   },
   {
     id: "qualification",
     label: "Qualification",
+    width: 140,
+    wrap: true,
     getValue: (row) => formatNullable(row.qualification),
   },
   {
@@ -272,28 +317,36 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
   {
     id: "qualificationSubject",
     label: "Subject",
+    width: 140,
+    wrap: true,
     getValue: (row) => formatNullable(row.qualificationSubject),
   },
   {
     id: "qualificationInstitute",
     label: "Institute",
+    width: 160,
+    wrap: true,
     getValue: (row) => formatNullable(row.qualificationInstitute),
   },
   {
     id: "qualificationCountry",
     label: "Country",
+    width: 100,
     getValue: (row) => formatNullable(row.qualificationCountry),
   },
   {
     id: "status",
     label: "Status",
     pinned: true,
+    width: 160,
     getValue: (row) => APPRAISAL_STATE_CONFIG[row.status]?.label ?? row.status,
   },
   {
     id: "actions",
     label: "Actions",
     pinned: true,
+    width: 80,
+    align: "center",
     getValue: () => "",
   },
 ];
