@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, FileText, Pencil, Trash2 } from "lucide-react";
+import { Copy, Eye, FileText, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -171,6 +171,13 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
                     >
                       <Pencil className="size-3.5" />
                       Edit
+                    </Link>
+                    <Link
+                      href={`/dashboard/forms/${template.id}/copy`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                    >
+                      <Copy className="size-3.5" />
+                      Copy
                     </Link>
                     <button
                       type="button"

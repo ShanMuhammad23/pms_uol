@@ -26,6 +26,7 @@ import {
   countAllQuestions,
   createClientId,
   createEmptyQuestion,
+  EMPLOYEE_CATEGORIES,
   FIELD_TYPES,
   FIELD_TYPE_LABELS,
   applyQuestionInputTypeChange,
@@ -73,6 +74,7 @@ interface FormBuilderWizardProps {
   initialData?: FormTemplateRecord;
   appraisalCycles?: AppraisalCycleRecord[];
   appraisalCount?: number;
+  copyMode?: boolean;
 }
 
 function mapRecordToState(record: FormTemplateRecord) {
@@ -1327,28 +1329,69 @@ export default function FormBuilderWizard({
   initialData,
   appraisalCycles = [],
   appraisalCount = 0,
+  copyMode = false,
 }: FormBuilderWizardProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const initialState = initialData ? mapRecordToState(initialData) : null;
 
   const [step, setStep] = useState(0);
-  const [title, setTitle] = useState(initialState?.title ?? "");
+  const [title, setTitle] = useState(
+    copyMode && initialState
+      ? `${initialState.title} (Copy)`
+      : initialState?.title ?? "",
+  );
   const [description, setDescription] = useState(initialState?.description ?? "");
   const [sections, setSections] = useState<FormSectionInput[]>(
-    initialState?.sections ?? [],
+    initialState?.sections.map((section) => ({
+      ...section,
+      id: copyMode ? undefined : section.id,
+      subsections: section.subsections.map((sub) => ({
+        ...sub,
+        id: copyMode ? undefined : sub.id,
+        questions: sub.questions.map((q) => ({
+          ...q,
+          id: copyMode ? undefined : q.id,
+          options: q.options.map((o) => ({
+            ...o,
+            id: copyMode ? undefined : o.id,
+          })),
+        })),
+      })),
+      questions: section.questions.map((q) => ({
+        ...q,
+        id: copyMode ? undefined : q.id,
+        options: q.options.map((o) => ({
+          ...o,
+          id: copyMode ? undefined : o.id,
+        })),
+      })),
+    })) ?? [],
   );
   const [questions, setQuestions] = useState<QuestionInput[]>(
-    initialState?.questions ?? [],
+    initialState?.questions.map((q) => ({
+      ...q,
+      id: copyMode ? undefined : q.id,
+      options: q.options.map((o) => ({
+        ...o,
+        id: copyMode ? undefined : o.id,
+      })),
+    })) ?? [],
   );
   const [cycleId, setCycleId] = useState<number | "">(
-    initialState?.cycleId ?? pickDefaultAppraisalCycleId(appraisalCycles),
+    copyMode
+      ? pickDefaultAppraisalCycleId(appraisalCycles)
+      : initialState?.cycleId ?? pickDefaultAppraisalCycleId(appraisalCycles),
   );
   const [targetCategory, setTargetCategory] = useState<EmployeeCategory | "">(
-    initialState?.targetCategory ?? "",
+    copyMode
+      ? initialState?.targetCategory ?? ""
+      : initialState?.targetCategory ?? EMPLOYEE_CATEGORIES[0],
   );
   const [targetSubCategory, setTargetSubCategory] = useState<SubCategory | "">(
-    initialState?.targetSubCategory ?? "",
+    copyMode
+      ? initialState?.targetSubCategory ?? ""
+      : initialState?.targetSubCategory ?? CATEGORY_SUB_MAP[EMPLOYEE_CATEGORIES[0]][0],
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -1465,23 +1508,6 @@ export default function FormBuilderWizard({
       !cycleId
     ) {
       nextErrors.cycleId = "Appraisal cycle is required.";
-    }
-
-    if (!targetCategory) {
-      nextErrors.targetCategory = "Employee category is required.";
-    }
-
-    if (!targetSubCategory) {
-      nextErrors.targetSubCategory = "Sub-category is required.";
-    }
-
-    if (
-      targetCategory &&
-      targetSubCategory &&
-      !CATEGORY_SUB_MAP[targetCategory].includes(targetSubCategory)
-    ) {
-      nextErrors.targetSubCategory =
-        "Selected sub-category does not belong to the chosen category.";
     }
 
     setErrors(nextErrors);
@@ -1643,7 +1669,7 @@ export default function FormBuilderWizard({
           />
         ) : (
           <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto rounded-2xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
-            <div className="w-full max-w-2xl">
+            <div className={templateId ? "w-full max-w-5xl" : "w-full max-w-2xl"}>
               <CategoryAssignmentStep
                 appraisalCycles={appraisalCycles}
                 cycleId={cycleId}
@@ -1653,6 +1679,8 @@ export default function FormBuilderWizard({
                 onCycleChange={setCycleId}
                 onCategoryChange={handleCategoryChange}
                 onSubCategoryChange={setTargetSubCategory}
+                templateId={templateId}
+                templateTitle={title}
               />
             </div>
           </div>
