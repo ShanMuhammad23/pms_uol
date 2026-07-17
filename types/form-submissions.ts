@@ -26,6 +26,10 @@ export interface FormSubmissionListItem {
   entityId: number | null;
   entityName: string | null;
   parentEntityName: string | null;
+  /** Entity with category code C1 on the assignment chain (self or ancestor). */
+  orgLevel1Name: string | null;
+  /** Entity with category code C2 on the assignment chain (self or ancestor). */
+  orgLevel2Name: string | null;
   status: AppraisalStatus;
   rawScore: number;
   maxRawScore: number;

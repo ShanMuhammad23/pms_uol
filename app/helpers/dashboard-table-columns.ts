@@ -121,15 +121,14 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] = [
     label: "ORG Level 1",
     width: 160,
     wrap: true,
-    getValue: (row) => formatNullable(row.parentEntityName ?? row.entityName),
+    getValue: (row) => formatNullable(row.orgLevel1Name),
   },
   {
     id: "deptGroupName",
     label: "ORG Level 2",
     width: 160,
     wrap: true,
-    getValue: (row) =>
-      formatNullable(row.parentEntityName ? row.entityName : null),
+    getValue: (row) => formatNullable(row.orgLevel2Name),
   },
   {
     id: "gradeGroup",

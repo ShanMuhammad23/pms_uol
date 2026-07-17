@@ -47,6 +47,8 @@ interface SubmissionListRow {
   entity_id: string | null;
   entity_name: string | null;
   parent_entity_name: string | null;
+  org_level_1_name: string | null;
+  org_level_2_name: string | null;
   status: AppraisalStatus;
   system_raw_score: number;
   max_raw_score: string;
@@ -196,6 +198,8 @@ function mapSubmissionRow(
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: row.entity_name,
     parentEntityName: row.parent_entity_name,
+    orgLevel1Name: row.org_level_1_name,
+    orgLevel2Name: row.org_level_2_name,
     status: row.status,
     rawScore,
     maxRawScore,
@@ -405,7 +409,21 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
        COALESCE(ssc.name, ssc_user.name) AS staff_sub_category_name,
        u.entity_id,
        ent.name AS entity_name,
-       parent_ent.name AS parent_entity_name,
+       p1.name AS parent_entity_name,
+       CASE
+         WHEN ent_cat.code = 'C1' THEN ent.name
+         WHEN p1_cat.code = 'C1' THEN p1.name
+         WHEN p2_cat.code = 'C1' THEN p2.name
+         WHEN p3_cat.code = 'C1' THEN p3.name
+         ELSE NULL
+       END AS org_level_1_name,
+       CASE
+         WHEN ent_cat.code = 'C2' THEN ent.name
+         WHEN p1_cat.code = 'C2' THEN p1.name
+         WHEN p2_cat.code = 'C2' THEN p2.name
+         WHEN p3_cat.code = 'C2' THEN p3.name
+         ELSE NULL
+       END AS org_level_2_name,
        COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT') AS status,
        COALESCE(ap.system_raw_score, 0) AS system_raw_score,
        ap.initial_rating,
@@ -439,7 +457,13 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
      LEFT JOIN staff_categories sc_user ON sc_user.id = u.staff_category_id
      LEFT JOIN staff_sub_categories ssc_user ON ssc_user.id = u.staff_sub_category_id
      LEFT JOIN entities ent ON ent.id = u.entity_id
-     LEFT JOIN entities parent_ent ON parent_ent.id = ent.parent_entity_id
+     LEFT JOIN entity_categories ent_cat ON ent_cat.id = ent.entity_category_id
+     LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
+     LEFT JOIN entity_categories p1_cat ON p1_cat.id = p1.entity_category_id
+     LEFT JOIN entities p2 ON p2.id = p1.parent_entity_id
+     LEFT JOIN entity_categories p2_cat ON p2_cat.id = p2.entity_category_id
+     LEFT JOIN entities p3 ON p3.id = p2.parent_entity_id
+     LEFT JOIN entity_categories p3_cat ON p3_cat.id = p3.entity_category_id
      ${quartileJoin}
      ${qualJoin}
      WHERE u.is_active = TRUE
