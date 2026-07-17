@@ -96,8 +96,7 @@ export function StatCard({
       className={cn(
         "group flex-1 relative cursor-pointer overflow-hidden rounded-2xl border p-5 shadow-sm transition-all duration-300",
         active ? "shadow-md ring-1 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950" : "hover:shadow-md",
-        t.border,
-        t.bg,
+        "border border-slate-200 dark:border-slate-700 bg-primary text-white",
     
       )}
     >
@@ -105,7 +104,7 @@ export function StatCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-base font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <p className="text-base font-semibold uppercase tracking-wider text-white">
               {title}
             </p>
             <span
@@ -120,14 +119,14 @@ export function StatCard({
           </div>
           <ul className="space-y-1.5">
             <li className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{awaitingtitle}</span>
-              <span className={cn("text-2xl font-bold tracking-tight tabular-nums", t.value)}>
+              <span className="text-xs text-white">{awaitingtitle}</span>
+              <span className={cn("text-2xl font-bold tracking-tight tabular-nums text-white")}>
                 {awaiting}
               </span>
             </li>
             <li className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{completedtitle}</span>
-              <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900 dark:text-white">
+              <span className="text-xs text-white">{completedtitle}</span>
+              <span className="text-2xl font-bold tracking-tight tabular-nums text-white">
                 {completed}
               </span>
             </li>

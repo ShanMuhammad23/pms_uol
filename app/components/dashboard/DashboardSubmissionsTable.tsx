@@ -134,8 +134,19 @@ function renderCell(
   }
 
   if (columnId === "actions") {
-    if (submission.id <= 0) {
-      return <span className="text-xs text-slate-400">—</span>;
+    const canOpenSubmission =
+      submission.id > 0 && submission.status !== "PENDING_SELF_ASSESSMENT";
+
+    if (!canOpenSubmission) {
+      return (
+        <button
+          disabled
+          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
+          title="Self assessment not yet submitted"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+      );
     }
 
     return (

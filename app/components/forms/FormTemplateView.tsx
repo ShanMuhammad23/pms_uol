@@ -134,11 +134,11 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
+      <div className="my-6">
+        <div className="border border-slate-200 dark:border-neutral-700 rounded-md overflow-x-auto">
+          <table className="w-full">
+            <thead className="text-slate-900 dark:text-slate-50 text-left text-sm font-semibold border-b border-slate-300 dark:border-neutral-600 whitespace-nowrap">
+              <tr className="divide-x divide-slate-300 dark:divide-neutral-600">
                 <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                   Sr. No.
                 </th>
@@ -154,7 +154,7 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
                 
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+            <tbody className="text-sm divide-y divide-slate-200 dark:divide-neutral-700">
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">

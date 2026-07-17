@@ -28,10 +28,10 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
       variants={itemVariants}
       transition={{ delay }}
       whileHover={{ y: -3, transition: { duration: 0.2 } }}
-      className="group flex-1 relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+      className="group flex-1 relative overflow-hidden rounded-2xl border border-slate-200 bg-primary text-white p-5 shadow-sm transition-all duration-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <p className="text-xs font-semibold uppercase tracking-wider ">
           Appraisal Eligibility
         </p>
         <span
@@ -72,14 +72,14 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
                 key={entry.name}
                 className="flex items-center justify-between gap-2 text-xs"
               >
-                <span className="flex min-w-0 items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                <span className="flex min-w-0 items-center gap-1.5 text-white">
                   <span
                     className="h-2 w-2 shrink-0 rounded-full"
                     style={{ backgroundColor: entry.color }}
                   />
                   <span className="truncate">{entry.name}</span>
                 </span>
-                <span className="shrink-0 font-semibold tabular-nums text-slate-900 dark:text-white">
+                <span className="shrink-0 font-semibold tabular-nums text-white">
                   {entry.value} ({((entry.value / totalCount) * 100).toFixed(1)}%)
                 </span>
            

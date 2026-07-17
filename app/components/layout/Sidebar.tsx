@@ -40,7 +40,7 @@ const Sidebar = () => {
       "sidebar-nav-link",
       collapsed && "justify-center px-0",
       active
-        ? "border-r-4 border-primary bg-primary/10"
+        ? "border-r-4 border-primary "
         : "border-primary hover:border-r-4 hover:bg-primary/10",
     );
 
