@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import type { PieLabelRenderProps } from "recharts";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { CustomTooltip } from "@/app/components/dashboard/CustomTooltip";
@@ -8,6 +9,40 @@ import { CustomTooltip } from "@/app/components/dashboard/CustomTooltip";
 interface EligibilityStatCardProps {
   data: Array<{ name: string; value: number; color: string }>;
   delay: number;
+}
+
+function renderSlicePercentLabel({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent,
+}: PieLabelRenderProps) {
+  const value = percent ?? 0;
+  if (value < 0.05) {
+    return null;
+  }
+
+  const RADIAN = Math.PI / 180;
+  const radius =
+    Number(innerRadius ?? 0) +
+    (Number(outerRadius ?? 0) - Number(innerRadius ?? 0)) * 0.55;
+  const x = Number(cx ?? 0) + radius * Math.cos(-Number(midAngle ?? 0) * RADIAN);
+  const y = Number(cy ?? 0) + radius * Math.sin(-Number(midAngle ?? 0) * RADIAN);
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#ffffff"
+      textAnchor="middle"
+      dominantBaseline="central"
+      className="text-[9px] font-semibold"
+    >
+      {`${Math.round(value * 100)}%`}
+    </text>
+  );
 }
 
 export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
@@ -22,7 +57,12 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
   const totalCount = eligibleCount + notEligible;
   const eligibilityPercentage =
     totalCount > 0 ? Math.round((eligibleCount / totalCount) * 100) : 0;
-
+  const resolveEntryName = (name: string) => {
+    if (name === "Fully Eligible") return "Full";
+    if (name === "Partially Eligible") return "Partial";
+    if (name === "Not Eligible") return "None";
+    return name;
+  };
   return (
     <motion.div
       variants={itemVariants}
@@ -56,6 +96,8 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
                   dataKey="value"
                   nameKey="name"
                   strokeWidth={0}
+                  label={renderSlicePercentLabel}
+                  labelLine={false}
                 >
                   {data.map((entry, index) => (
                     <Cell key={`eligibility-mini-${index}`} fill={entry.color} />
@@ -77,12 +119,10 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
                     className="h-2 w-2 shrink-0 rounded-full"
                     style={{ backgroundColor: entry.color }}
                   />
-                  <span className="truncate">{entry.name}</span>
+                  <span className="truncate">{resolveEntryName(entry.name)}</span>
+                  
                 </span>
-                <span className="shrink-0 font-semibold tabular-nums text-white">
-                  {entry.value} ({((entry.value / totalCount) * 100).toFixed(1)}%)
-                </span>
-           
+                <span className="text-xs text-white">{entry.value}</span>
               </li>
             ))}
           </ul>
