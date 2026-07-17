@@ -530,7 +530,7 @@ function ModernFormDesignStep({
           className="flex-1 overflow-y-auto p-6"
         >
           {activePanel === "builder" ? (
-            <div className="mx-auto max-w-3xl space-y-4">
+            <div className=" space-y-4">
               {/* Empty State */}
               {sections.length === 0 && questions.length === 0 && (
                 <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-16 text-center dark:border-slate-800">

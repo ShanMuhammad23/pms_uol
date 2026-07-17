@@ -134,8 +134,19 @@ function renderCell(
   }
 
   if (columnId === "actions") {
-    if (submission.id <= 0) {
-      return <span className="text-xs text-slate-400">—</span>;
+    const canOpenSubmission =
+      submission.id > 0 && submission.status !== "PENDING_SELF_ASSESSMENT";
+
+    if (!canOpenSubmission) {
+      return (
+        <button
+          disabled
+          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
+          title="Self assessment not yet submitted"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+      );
     }
 
     return (
@@ -289,18 +300,23 @@ export function DashboardSubmissionsTable({
     return masterFilteredSubmissions.slice(start, start + PAGE_SIZE);
   }, [page, masterFilteredSubmissions]);
 
-  const pageEmployeeIds = useMemo(
-    () => paginatedSubmissions.map((row) => row.employeeId),
-    [paginatedSubmissions],
-  );
-  const selectedOnPageCount = pageEmployeeIds.filter((id) =>
-    selectedEmployeeIds.has(id),
-  ).length;
-  const allPageSelected =
-    pageEmployeeIds.length > 0 && selectedOnPageCount === pageEmployeeIds.length;
-  const somePageSelected =
-    selectedOnPageCount > 0 && selectedOnPageCount < pageEmployeeIds.length;
+  const filteredEmployeeIds = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const row of masterFilteredSubmissions) {
+      if (seen.has(row.employeeId)) continue;
+      seen.add(row.employeeId);
+      ids.push(row.employeeId);
+    }
+    return ids;
+  }, [masterFilteredSubmissions]);
+
   const selectedCount = selectedEmployeeIds.size;
+  const allFilteredSelected =
+    filteredEmployeeIds.length > 0 &&
+    filteredEmployeeIds.every((id) => selectedEmployeeIds.has(id));
+  const someFilteredSelected =
+    selectedCount > 0 && !allFilteredSelected;
 
   const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
@@ -318,19 +334,15 @@ export function DashboardSubmissionsTable({
     });
   };
 
-  const toggleSelectAllOnPage = () => {
+  const toggleSelectAllFiltered = () => {
     setSelectedEmployeeIds((current) => {
-      const next = new Set(current);
-      if (allPageSelected) {
-        for (const id of pageEmployeeIds) {
-          next.delete(id);
-        }
-      } else {
-        for (const id of pageEmployeeIds) {
-          next.add(id);
-        }
+      if (
+        filteredEmployeeIds.length > 0 &&
+        filteredEmployeeIds.every((id) => current.has(id))
+      ) {
+        return new Set();
       }
-      return next;
+      return new Set(filteredEmployeeIds);
     });
   };
 
@@ -438,15 +450,15 @@ export function DashboardSubmissionsTable({
               <th className={stickySelectHeaderClassName()}>
                 <input
                   type="checkbox"
-                  checked={allPageSelected}
+                  checked={allFilteredSelected}
                   ref={(element) => {
                     if (element) {
-                      element.indeterminate = somePageSelected;
+                      element.indeterminate = someFilteredSelected;
                     }
                   }}
-                  onChange={toggleSelectAllOnPage}
-                  disabled={pageEmployeeIds.length === 0}
-                  aria-label="Select all staff on this page"
+                  onChange={toggleSelectAllFiltered}
+                  disabled={filteredEmployeeIds.length === 0}
+                  aria-label="Select all filtered staff"
                   className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
                 />
               </th>
