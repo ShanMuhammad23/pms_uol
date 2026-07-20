@@ -97,4 +97,5 @@ export interface FormSubmissionDetail {
   questions: QuestionRecord[];
   answers: EmployeeFormAnswerRecord[];
   managerAnswers: EmployeeFormAnswerRecord[];
+  canEditManagerReview: boolean;
 }

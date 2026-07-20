@@ -22,7 +22,6 @@ import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices
 import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
 interface UseDashboardChartMetricsParams {
-  submissions: FormSubmissionListItem[];
   filteredSubmissions: FormSubmissionListItem[];
   staffCategories: StaffCategoryWithSubCategories[];
   isDarkMode: boolean;
@@ -31,7 +30,6 @@ interface UseDashboardChartMetricsParams {
 }
 
 export function useDashboardChartMetrics({
-  submissions,
   filteredSubmissions,
   staffCategories,
   isDarkMode,
@@ -48,9 +46,9 @@ export function useDashboardChartMetrics({
     [filteredSubmissions, staffCategories, isDarkMode],
   );
 
-  const totalEligibleCount = useMemo(
-    () => countEligibleSubmissions(submissions),
-    [submissions],
+  const filteredEligibleCount = useMemo(
+    () => countEligibleSubmissions(filteredSubmissions),
+    [filteredSubmissions],
   );
 
   const filteredCalibrationData = useMemo(
@@ -58,9 +56,9 @@ export function useDashboardChartMetrics({
       buildCalibrationData(
         filteredSubmissions,
         institutionalQuotaRows,
-        totalEligibleCount,
+        filteredEligibleCount,
       ),
-    [filteredSubmissions, institutionalQuotaRows, totalEligibleCount],
+    [filteredSubmissions, institutionalQuotaRows, filteredEligibleCount],
   );
 
   const ratingQuartileMatrix = useMemo(

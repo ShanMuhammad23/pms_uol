@@ -55,3 +55,13 @@ export interface SaveEmployeeFormInput {
   answers: EmployeeFormAnswerInput[];
   submit?: boolean;
 }
+
+export interface ManagerReviewAnswerInput {
+  questionId: number;
+  pointsEarned?: number;
+  remarks?: string | null;
+}
+
+export interface SaveManagerReviewInput {
+  answers: ManagerReviewAnswerInput[];
+}

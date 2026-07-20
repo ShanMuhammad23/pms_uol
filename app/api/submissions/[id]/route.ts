@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
-import { requireSubmissionReviewerApi } from "@/lib/auth/require-submission-reviewer";
+import {
+  assertSubmissionAccessible,
+  submissionAccessErrorResponse,
+  SubmissionAccessError,
+} from "@/lib/auth/submission-access";
+import { isHeadRole } from "@/lib/auth/home-path";
+import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-reviewer";
 import {
   FormSubmissionError,
   getFormSubmissionById,
+  getFormSubmissionSummaryById,
   updateAppraisalRemarks,
   type AppraisalRemarksField,
 } from "@/lib/queries/form-submissions";
@@ -17,7 +24,7 @@ const REMARKS_FIELDS = [
 ] as const satisfies readonly AppraisalRemarksField[];
 
 export async function GET(_request: Request, context: RouteContext) {
-  const auth = await requireSubmissionReviewerApi();
+  const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -30,7 +37,25 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   try {
-    const submission = await getFormSubmissionById(submissionId);
+    const summary = await getFormSubmissionSummaryById(submissionId);
+
+    if (!summary) {
+      return NextResponse.json({ error: "Submission not found." }, { status: 404 });
+    }
+
+    await assertSubmissionAccessible(auth, summary);
+
+    const role = auth.user?.role;
+    const reviewerUserId = auth.user?.id ? Number(auth.user.id) : null;
+    const canEditManagerReview =
+      summary.status === "PENDING_HEAD_REVIEW" &&
+      (isHeadRole(role) || role === "SUPER_ADMIN");
+
+    const submission = await getFormSubmissionById(submissionId, {
+      reviewerUserId,
+      seedManagerAnswers: canEditManagerReview,
+      canEditManagerReview,
+    });
 
     if (!submission) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
@@ -38,6 +63,10 @@ export async function GET(_request: Request, context: RouteContext) {
 
     return NextResponse.json(submission);
   } catch (error) {
+    if (error instanceof SubmissionAccessError) {
+      return submissionAccessErrorResponse(error);
+    }
+
     if (error instanceof FormSubmissionError) {
       return NextResponse.json(
         { error: error.message },
@@ -54,7 +83,7 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const auth = await requireSubmissionReviewerApi();
+  const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -67,6 +96,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   try {
+    const summary = await getFormSubmissionSummaryById(submissionId);
+
+    if (!summary) {
+      return NextResponse.json({ error: "Submission not found." }, { status: 404 });
+    }
+
+    await assertSubmissionAccessible(auth, summary);
+
     const body = (await request.json()) as Record<string, unknown>;
     const field = REMARKS_FIELDS.find((candidate) => candidate in body);
 
@@ -95,6 +132,10 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json(updated);
   } catch (error) {
+    if (error instanceof SubmissionAccessError) {
+      return submissionAccessErrorResponse(error);
+    }
+
     if (error instanceof FormSubmissionError) {
       return NextResponse.json(
         { error: error.message },

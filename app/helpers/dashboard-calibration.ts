@@ -1,7 +1,10 @@
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { RATING_LABELS } from "@/types/forms";
 import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
-import { isSubmissionEligible } from "@/app/helpers/dashboard-workflow-stats";
+import {
+  countEligibleSubmissions,
+  isSubmissionEligible,
+} from "@/app/helpers/dashboard-workflow-stats";
 
 const RATING_NORMALIZE: Record<string, string> = {
   Unsatisfactory: "Unsatisfactory",
@@ -30,12 +33,11 @@ export function getSubmissionDisplayRating(submission: FormSubmissionListItem): 
 }
 
 /**
- * @param submissions Filtered submissions — drives Actual Distribution only.
+ * @param submissions Filtered submissions — drives Actual Distribution.
  * @param quotas Chart quota series from DB (`/api/institutional-quotas`).
- *               When omitted/undefined (still loading), returns empty series.
- * @param quotaEligibleCount Total eligible headcount (unfiltered). Institutional
- *               Quota always uses this so filters do not reshape the quota curve.
- *               Defaults to eligible count within `submissions` when omitted.
+ * @param quotaEligibleCount Eligible headcount (Fully + Partially) within the
+ *               current filter selection. Institutional Quota targets are
+ *               calculated from this count so the curve follows dashboard filters.
  */
 export function buildCalibrationData(
   submissions: FormSubmissionListItem[],
@@ -49,7 +51,7 @@ export function buildCalibrationData(
   const chartSubmissions = filterSubmissionsForCharts(submissions);
   const eligibleSubmissions = chartSubmissions.filter(isSubmissionEligible);
   const quotaBaseCount =
-    quotaEligibleCount ?? eligibleSubmissions.length;
+    quotaEligibleCount ?? countEligibleSubmissions(submissions);
   const counts = new Map(quotas.map((row) => [row.rating, 0]));
 
   eligibleSubmissions.forEach((submission) => {

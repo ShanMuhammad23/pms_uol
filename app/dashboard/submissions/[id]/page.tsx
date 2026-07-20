@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import SubmissionDetailView from "@/app/components/submissions/SubmissionDetailView";
-import { requireSubmissionReviewerSession } from "@/lib/auth/require-submission-reviewer";
+import { requireSubmissionAccessSession } from "@/lib/auth/require-submission-reviewer";
 
 interface SubmissionDetailPageProps {
   params: Promise<{ id: string }>;
@@ -11,7 +11,7 @@ interface SubmissionDetailPageProps {
 export default async function SubmissionDetailPage({
   params,
 }: SubmissionDetailPageProps) {
-  await requireSubmissionReviewerSession();
+  await requireSubmissionAccessSession();
 
   const { id } = await params;
   const submissionId = Number(id);
