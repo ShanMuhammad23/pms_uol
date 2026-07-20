@@ -26,7 +26,7 @@ export default function MyFormsList() {
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-400">
         Loading your assigned forms...
       </div>
     );
@@ -34,7 +34,7 @@ export default function MyFormsList() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         Failed to load assigned forms.
       </div>
     );
@@ -42,12 +42,12 @@ export default function MyFormsList() {
 
   if (!data || data.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
-        <ClipboardList className="mx-auto size-8 text-foreground/50" />
-        <p className="mt-3 text-sm font-medium text-text-primary">
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center shadow-sm dark:border-white/10 dark:bg-slate-900">
+        <ClipboardList className="mx-auto size-8 text-slate-300 dark:text-slate-600" />
+        <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">
           No forms assigned yet
         </p>
-        <p className="mt-1 text-sm text-foreground/70">
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           A form will appear here once it is assigned to you by an administrator.
         </p>
       </div>
@@ -55,23 +55,23 @@ export default function MyFormsList() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900">
       <table className="min-w-full text-sm">
-        <thead className="bg-primary/5">
+        <thead className="bg-slate-50 dark:bg-slate-900">
           <tr>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
               Form
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
               Category
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
               Questions
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
               Status
             </th>
-            <th className="px-4 py-3 text-right font-semibold text-text-primary">
+            <th className="border-b border-slate-200 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
               Action
             </th>
           </tr>
@@ -80,37 +80,37 @@ export default function MyFormsList() {
           {data.map((form) => (
             <tr
               key={form.templateId}
-              className="border-t border-slate-300/80 dark:border-white/15"
+              className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]"
             >
-              <td className="px-4 py-3">
-                <p className="font-medium text-text-primary">{form.title}</p>
+              <td className="border-b border-slate-100 px-4 py-3 dark:border-white/[0.03]">
+                <p className="font-semibold text-slate-900 dark:text-white">{form.title}</p>
                 {form.description ? (
-                  <p className="mt-0.5 text-xs text-foreground/70">
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                     {form.description}
                   </p>
                 ) : null}
               </td>
-              <td className="px-4 py-3 text-text-primary">
+              <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
                 {form.staffCategoryName ?? "—"}
-                <span className="block text-xs text-foreground/70">
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
                   {form.staffSubCategoryName ?? "—"}
                 </span>
               </td>
-              <td className="px-4 py-3 text-text-primary">
+              <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
                 {form.questionCount}
               </td>
-              <td className="px-4 py-3">
+              <td className="border-b border-slate-100 px-4 py-3 dark:border-white/[0.03]">
                 <span
                   className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLASSES[form.status]}`}
                 >
                   {STATUS_LABELS[form.status]}
                 </span>
               </td>
-              <td className="px-4 py-3">
+              <td className="border-b border-slate-100 px-4 py-3 text-right dark:border-white/[0.03]">
                 <div className="flex justify-end">
                   <Link
                     href={`/dashboard/my-forms/${form.templateId}`}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-primary/10 dark:border-white/15 dark:text-slate-300"
                   >
                     <Eye className="size-3.5" />
                     {form.status === "SUBMITTED" ? "View" : "Fill Form"}

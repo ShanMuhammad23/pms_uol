@@ -23,6 +23,7 @@ import {
   type FormSubsectionRecord,
   type QuestionRecord,
 } from "@/types/forms";
+import { cn } from "@/lib/utils";
 
 interface EmployeeFormFillProps {
   templateId: number;
@@ -348,7 +349,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
+      <div className="rounded-xl border border-slate-300/80 p-6 text-sm text-foreground/70 shadow-sm dark:border-white/15">
         Loading form...
       </div>
     );
@@ -356,7 +357,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
   if (error || !data) {
     return (
-      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         Failed to load this form.
       </div>
     );
@@ -458,254 +459,266 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Status</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Status</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
             {statusLabel}
           </p>
         </div>
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Score</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Score</p>
+          <p className="mt-1 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
             {displayedRawScore} / {maxRawScore}
           </p>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-neutral-700">
-        <table className="w-full min-w-[980px]">
-          <thead className="border-b border-slate-300 text-left text-sm font-semibold dark:border-neutral-600">
-            <tr>
-              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-                Sr. No.
-              </th>
-              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-                Key Task / Function
-              </th>
-              <th className="min-w-[260px] border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-                Key Performance Indicators (KPIs)
-              </th>
-              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-                Weight
-              </th>
-              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-                Score
-              </th>
-              <th className="min-w-[220px] border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-                Remarks
-              </th>
-              <th className="min-w-[200px] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Attachments
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 text-sm dark:divide-neutral-700">
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400"
-                >
-                  No questions were found for this form.
-                </td>
+      <div className="min-w-0 max-w-full overflow-x-hidden rounded-xl border border-slate-300 shadow-md shadow-slate-200/50 dark:border-slate-700 dark:shadow-slate-900/30 bg-white dark:bg-slate-900">
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
+          <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+          Scroll horizontally to view all columns
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="bg-slate-800 dark:bg-slate-950/80">
+                <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                  Sr. No.
+                </th>
+                <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                  Key Task / Function
+                </th>
+                <th className="min-w-[260px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                  Key Performance Indicators (KPIs)
+                </th>
+                <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                  Weight
+                </th>
+                <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
+                  Score
+                </th>
+                <th className="min-w-[220px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                  Remarks
+                </th>
+                <th className="min-w-[200px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:text-slate-300">
+                  Attachments
+                </th>
               </tr>
-            ) : (
-              rows.map((row) => {
-                const { question } = row;
-                const answer = answers[question.id] ?? {
-                  pointsEarned: "",
-                  remarks: "",
-                  attachments: [],
-                };
-                const scored = isScoredQuestion(question);
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/30"
+                  >
+                    No questions were found for this form.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, rowIdx) => {
+                  const { question } = row;
+                  const answer = answers[question.id] ?? {
+                    pointsEarned: "",
+                    remarks: "",
+                    attachments: [],
+                  };
+                  const scored = isScoredQuestion(question);
+                  const isEvenRow = rowIdx % 2 === 0;
 
-                return (
-                  <tr key={question.id} className="align-top">
-                    <td className="border-r border-slate-200 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-white/10 dark:text-slate-400">
-                      {row.sr}
-                    </td>
-                    {row.isFirstInSection ? (
-                      <td
-                        className="max-w-[220px] border-r border-slate-200 px-3 py-2.5 align-top text-slate-700 dark:border-white/10 dark:text-slate-300"
-                        rowSpan={row.sectionRowCount}
-                      >
-                        {row.sectionTitle ? (
-                          <span
-                            className="line-clamp-3"
-                            title={row.sectionTitle}
-                          >
-                            {row.sectionTitle}
+                  return (
+                    <tr key={question.id} className={cn(
+                      "align-top border-b border-slate-100 dark:border-slate-700/40",
+                      isEvenRow
+                        ? "bg-white dark:bg-slate-900/40"
+                        : "bg-slate-50/60 dark:bg-slate-800/20",
+                    )}>
+                      <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
+                        {row.sr}
+                      </td>
+                      {row.isFirstInSection ? (
+                        <td
+                          className="max-w-[220px] border-r border-slate-100 px-3 py-2.5 align-top bg-amber-50/80 dark:bg-amber-950/20 dark:border-slate-700/40"
+                          rowSpan={row.sectionRowCount}
+                        >
+                          {row.sectionTitle ? (
+                            <span
+                              className="line-clamp-3 font-semibold text-amber-800 dark:text-amber-200"
+                              title={row.sectionTitle}
+                            >
+                              {row.sectionTitle}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      ) : null}
+                      <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+                        {row.subsectionTitle ? (
+                          <span className="mb-1 block text-xs font-medium text-amber-600 dark:text-amber-400/70">
+                            {row.subsectionTitle}
                           </span>
+                        ) : null}
+                        <p className="max-w-[420px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
+                          {question.questionText}
+                        </p>
+                        {question.options.length > 0 ? (
+                          <ul className="mt-1.5 space-y-0.5">
+                            {question.options.map((option) => (
+                              <li
+                                key={option.id}
+                                className="max-w-[400px] break-words text-[11px] text-slate-500 dark:text-slate-400"
+                              >
+                                • {option.optionLabel}
+                                {option.pointsAssigned > 0
+                                  ? ` (${option.pointsAssigned} pts)`
+                                  : ""}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
+                        {question.totalMarks}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                        {scored ? (
+                          <input
+                            type="number"
+                            min={0}
+                            max={question.totalMarks}
+                            step="0.5"
+                            value={answer.pointsEarned}
+                            disabled={isReadOnly}
+                            onChange={(e) =>
+                              updateScore(
+                                question.id,
+                                question.totalMarks,
+                                e.target.value,
+                              )
+                            }
+                            onBlur={(e) =>
+                              updateScore(
+                                question.id,
+                                question.totalMarks,
+                                e.target.value,
+                              )
+                            }
+                            className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums text-teal-700 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
+                            placeholder={`0–${question.totalMarks}`}
+                          />
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="tabular-nums text-slate-400">—</span>
                         )}
                       </td>
-                    ) : null}
-                    <td className="border-r border-slate-200 px-3 py-2.5 text-slate-900 dark:border-white/10 dark:text-slate-100">
-                      {row.subsectionTitle ? (
-                        <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                          {row.subsectionTitle}
-                        </span>
-                      ) : null}
-                      <p className="max-w-[420px] break-words text-xs leading-snug">
-                        {question.questionText}
-                      </p>
-                      {question.options.length > 0 ? (
-                        <ul className="mt-1.5 space-y-0.5">
-                          {question.options.map((option) => (
-                            <li
-                              key={option.id}
-                              className="max-w-[400px] break-words text-[11px] text-slate-500 dark:text-slate-400"
-                            >
-                              • {option.optionLabel}
-                              {option.pointsAssigned > 0
-                                ? ` (${option.pointsAssigned} pts)`
-                                : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </td>
-                    <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-slate-700 dark:border-white/10 dark:text-slate-300">
-                      {question.totalMarks}
-                    </td>
-                    <td className="border-r border-slate-200 px-2 py-2.5 text-right dark:border-white/10">
-                      {scored ? (
-                        <input
-                          type="number"
-                          min={0}
-                          max={question.totalMarks}
-                          step="0.5"
-                          value={answer.pointsEarned}
+                      <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
+                        <textarea
+                          value={answer.remarks}
                           disabled={isReadOnly}
+                          rows={2}
                           onChange={(e) =>
-                            updateScore(
-                              question.id,
-                              question.totalMarks,
-                              e.target.value,
-                            )
+                            updateAnswer(question.id, "remarks", e.target.value)
                           }
-                          onBlur={(e) =>
-                            updateScore(
-                              question.id,
-                              question.totalMarks,
-                              e.target.value,
-                            )
-                          }
-                          className="h-8 w-20 rounded border border-slate-300 bg-background px-2 text-right text-xs tabular-nums text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                          placeholder={`0–${question.totalMarks}`}
+                          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                          placeholder="Optional remarks"
                         />
-                      ) : (
-                        <span className="tabular-nums text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="border-r border-slate-200 px-2 py-2.5 dark:border-white/10">
-                      <textarea
-                        value={answer.remarks}
-                        disabled={isReadOnly}
-                        rows={2}
-                        onChange={(e) =>
-                          updateAnswer(question.id, "remarks", e.target.value)
-                        }
-                        className="w-full rounded border border-slate-300 bg-background px-2 py-1 text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                        placeholder="Optional remarks"
-                      />
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <div className="space-y-2">
-                        {(answer.attachments ?? []).map((attachment) => (
-                          <div
-                            key={attachment.id}
-                            className="flex items-start justify-between gap-2 rounded border border-slate-200 px-2 py-1.5 dark:border-white/10"
-                          >
-                            <a
-                              href={getEmployeeFormAttachmentDownloadUrl(
-                                templateId,
-                                attachment.id,
-                              )}
-                              className="min-w-0 flex-1 truncate text-[11px] font-medium text-primary hover:underline"
-                              title={attachment.originalFilename}
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div className="space-y-2">
+                          {(answer.attachments ?? []).map((attachment) => (
+                            <div
+                              key={attachment.id}
+                              className="flex items-start justify-between gap-2 rounded border border-slate-200 px-2 py-1.5 dark:border-white/10"
                             >
-                              {attachment.originalFilename}
-                              <span className="ml-1 text-slate-400">
-                                ({formatBytes(attachment.sizeBytes)})
-                              </span>
-                            </a>
-                            {!isReadOnly ? (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleDeleteAttachment(
+                              <a
+                                href={getEmployeeFormAttachmentDownloadUrl(
+                                  templateId,
+                                  attachment.id,
+                                )}
+                                className="min-w-0 flex-1 truncate text-[11px] font-medium text-primary hover:underline"
+                                title={attachment.originalFilename}
+                              >
+                                {attachment.originalFilename}
+                                <span className="ml-1 text-slate-400">
+                                  ({formatBytes(attachment.sizeBytes)})
+                                </span>
+                              </a>
+                              {!isReadOnly ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleDeleteAttachment(
+                                      question.id,
+                                      attachment.id,
+                                    )
+                                  }
+                                  className="inline-flex size-6 items-center justify-center rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                  aria-label={`Remove ${attachment.originalFilename}`}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              ) : null}
+                            </div>
+                          ))}
+
+                          {!isReadOnly ? (
+                            <>
+                              <input
+                                ref={(element) => {
+                                  fileInputRefs.current[question.id] = element;
+                                }}
+                                type="file"
+                                className="hidden"
+                                onChange={(event) =>
+                                  void handleUpload(
                                     question.id,
-                                    attachment.id,
+                                    event.target.files?.[0] ?? null,
                                   )
                                 }
-                                className="inline-flex size-6 items-center justify-center rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                aria-label={`Remove ${attachment.originalFilename}`}
+                              />
+                              <button
+                                type="button"
+                                disabled={uploadingQuestionId === question.id}
+                                onClick={() =>
+                                  fileInputRefs.current[question.id]?.click()
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-primary/10 disabled:opacity-60 dark:border-white/15 dark:text-slate-300"
                               >
-                                <Trash2 className="size-3.5" />
+                                <Paperclip className="size-3.5" />
+                                {uploadingQuestionId === question.id
+                                  ? "Uploading..."
+                                  : "Attach file"}
                               </button>
-                            ) : null}
-                          </div>
-                        ))}
-
-                        {!isReadOnly ? (
-                          <>
-                            <input
-                              ref={(element) => {
-                                fileInputRefs.current[question.id] = element;
-                              }}
-                              type="file"
-                              className="hidden"
-                              onChange={(event) =>
-                                void handleUpload(
-                                  question.id,
-                                  event.target.files?.[0] ?? null,
-                                )
-                              }
-                            />
-                            <button
-                              type="button"
-                              disabled={uploadingQuestionId === question.id}
-                              onClick={() =>
-                                fileInputRefs.current[question.id]?.click()
-                              }
-                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-text-primary hover:bg-primary/10 disabled:opacity-60 dark:border-white/15"
-                            >
-                              <Paperclip className="size-3.5" />
-                              {uploadingQuestionId === question.id
-                                ? "Uploading..."
-                                : "Attach file"}
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-          {rows.length > 0 ? (
-            <tfoot>
-              <tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-white/20 dark:bg-slate-950/50">
-                <td
-                  colSpan={3}
-                  className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400"
-                >
-                  Overall Score
-                </td>
-                <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
-                  {maxRawScore}
-                </td>
-                <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
-                  {displayedRawScore}
-                </td>
-                <td colSpan={2} />
-              </tr>
-            </tfoot>
-          ) : null}
-        </table>
+                            </>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            {rows.length > 0 ? (
+              <tfoot>
+                <tr className="bg-slate-800 dark:bg-slate-950/80">
+                  <td
+                    colSpan={3}
+                    className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200 dark:text-slate-300"
+                  >
+                    Overall Score
+                  </td>
+                  <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-100 dark:border-slate-700/50 dark:text-slate-200">
+                    {maxRawScore}
+                  </td>
+                  <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
+                    {displayedRawScore}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            ) : null}
+          </table>
+        </div>
       </div>
 
       {!isReadOnly ? (
