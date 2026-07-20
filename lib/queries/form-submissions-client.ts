@@ -27,6 +27,25 @@ export async function fetchFormSubmission(
 
 export type RemarksField = "remarksEvaluation" | "remarksCompensation";
 
+export async function saveManagerReview(
+  id: number,
+  answers: Array<{
+    questionId: number;
+    pointsEarned?: number;
+    remarks?: string | null;
+  }>,
+): Promise<{ managerAnswers: FormSubmissionDetail["managerAnswers"] }> {
+  const response = await fetch(`/api/submissions/${id}/manager-review`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers }),
+  });
+
+  return parseResponse<{ managerAnswers: FormSubmissionDetail["managerAnswers"] }>(
+    response,
+  );
+}
+
 export async function updateSubmissionRemarks(
   id: number,
   field: RemarksField,

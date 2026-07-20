@@ -1,7 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { fetchFormSubmission } from "@/lib/queries/form-submissions-client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import {
+  fetchFormSubmission,
+  saveManagerReview,
+} from "@/lib/queries/form-submissions-client";
+import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   APPRAISAL_STATUS_LABELS,
   buildRootLayoutOrderFromRecord,
@@ -17,31 +22,112 @@ interface SubmissionDetailViewProps {
   submissionId: number;
 }
 
-function getAnswerLabel(
-  question: QuestionRecord,
-  answer: EmployeeFormAnswerRecord | undefined,
-): string | null {
-  if (answer?.textResponse?.trim()) {
-    return answer.textResponse.trim();
+type ManagerDraft = {
+  pointsEarned: string;
+  remarks: string;
+};
+
+function clampScore(value: string, maxMarks: number): string {
+  if (value === "") return "";
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return "";
+  if (parsed < 0) return "0";
+  if (parsed > maxMarks) return String(maxMarks);
+  return value;
+}
+
+function buildManagerDraftMap(
+  questions: QuestionRecord[],
+  managerAnswers: EmployeeFormAnswerRecord[],
+  employeeAnswers: EmployeeFormAnswerRecord[],
+): Map<number, ManagerDraft> {
+  const employeeMap = new Map(
+    employeeAnswers.map((answer) => [answer.questionId, answer]),
+  );
+  const managerMap = new Map(
+    managerAnswers.map((answer) => [answer.questionId, answer]),
+  );
+  const drafts = new Map<number, ManagerDraft>();
+
+  for (const question of questions) {
+    if (!isScoredQuestion(question)) continue;
+
+    const manager = managerMap.get(question.id);
+    const employee = employeeMap.get(question.id);
+    const points =
+      manager?.pointsEarned ?? employee?.pointsEarned ?? undefined;
+    const remarks = manager?.remarks ?? employee?.remarks ?? "";
+
+    drafts.set(question.id, {
+      pointsEarned: points === undefined ? "" : String(points),
+      remarks: remarks ?? "",
+    });
   }
 
-  if (answer?.selectedOptionId) {
-    return (
-      question.options.find((option) => option.id === answer.selectedOptionId)
-        ?.optionLabel ?? `Option ${answer.selectedOptionId}`
-    );
-  }
-
-  return null;
+  return drafts;
 }
 
 export default function SubmissionDetailView({
   submissionId,
 }: SubmissionDetailViewProps) {
+  const queryClient = useQueryClient();
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
+    new Map(),
+  );
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["form-submission", submissionId],
     queryFn: () => fetchFormSubmission(submissionId),
   });
+
+  useEffect(() => {
+    if (!data) return;
+
+    setManagerDrafts(
+      buildManagerDraftMap(data.questions, data.managerAnswers, data.answers),
+    );
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      if (!data) {
+        throw new Error("Submission not loaded.");
+      }
+
+      const answers = data.questions
+        .filter(isScoredQuestion)
+        .map((question) => {
+          const draft = managerDrafts.get(question.id);
+          return {
+            questionId: question.id,
+            pointsEarned:
+              draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+            remarks: draft?.remarks?.trim() || null,
+          };
+        });
+
+      return saveManagerReview(submissionId, answers);
+    },
+    onSuccess: (result) => {
+      setSaveMessage("Manager review saved.");
+      queryClient.setQueryData(["form-submission", submissionId], (current) => {
+        if (!current || typeof current !== "object") return current;
+        return {
+          ...current,
+          managerAnswers: result.managerAnswers,
+        };
+      });
+    },
+    onError: (mutationError: Error) => {
+      setSaveMessage(mutationError.message);
+    },
+  });
+
+  const answerMap = useMemo(
+    () => new Map(data?.answers.map((answer) => [answer.questionId, answer])),
+    [data?.answers],
+  );
 
   if (isLoading) {
     return (
@@ -59,12 +145,6 @@ export default function SubmissionDetailView({
     );
   }
 
-  const answerMap = new Map(
-    data.answers.map((answer) => [answer.questionId, answer]),
-  );
-  const managerAnswerMap = new Map(
-    data.managerAnswers.map((answer) => [answer.questionId, answer]),
-  );
   const rootLayout = buildRootLayoutOrderFromRecord(
     data.sections,
     data.rootQuestions,
@@ -137,29 +217,62 @@ export default function SubmissionDetailView({
   });
 
   const statusStyles: Record<AppraisalStatus, string> = {
-    PENDING_SELF_ASSESSMENT: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-    PENDING_HEAD_REVIEW: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-    PENDING_HR_CALIBRATION: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
-    PENDING_BOARD_APPROVAL: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
-    APPROVED: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300",
-    COMPLETED: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+    PENDING_SELF_ASSESSMENT:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+    PENDING_HEAD_REVIEW:
+      "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+    PENDING_HR_CALIBRATION:
+      "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
+    PENDING_BOARD_APPROVAL:
+      "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
+    APPROVED:
+      "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300",
+    COMPLETED:
+      "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  };
+
+  const selfTotal = data.answers.reduce((sum, a) => sum + a.pointsEarned, 0);
+  const managerTotal = [...managerDrafts.values()].reduce((sum, draft) => {
+    const value = Number(draft.pointsEarned);
+    return sum + (Number.isNaN(value) ? 0 : value);
+  }, 0);
+
+  const updateManagerDraft = (
+    questionId: number,
+    patch: Partial<ManagerDraft>,
+  ) => {
+    setManagerDrafts((current) => {
+      const next = new Map(current);
+      const existing = next.get(questionId) ?? { pointsEarned: "", remarks: "" };
+      next.set(questionId, { ...existing, ...patch });
+      return next;
+    });
+    setSaveMessage(null);
   };
 
   return (
-    <div className="min-w-0 max-w-full overflow-x-hidden rounded-xl border border-slate-300 dark:border-slate-700 shadow-md shadow-slate-200/50 dark:shadow-slate-900/30 bg-white dark:bg-slate-900">
-      {/* Meta Header */}
-      <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+    <div className="min-w-0 max-w-full overflow-x-hidden rounded-xl border border-slate-300 bg-white shadow-md shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-900/30">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{data.employeeName}</span>
+          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+            {data.employeeName}
+          </span>
           {data.employeeId ? (
             <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
               SAP {data.employeeId}
             </span>
           ) : null}
-          <span className={cn("rounded-md px-2 py-0.5 text-xs font-semibold", statusStyles[data.status])}>
+          <span
+            className={cn(
+              "rounded-md px-2 py-0.5 text-xs font-semibold",
+              statusStyles[data.status],
+            )}
+          >
             {APPRAISAL_STATUS_LABELS[data.status]}
           </span>
-          <span className="text-xs text-slate-500 dark:text-slate-400">{data.templateTitle}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {data.templateTitle}
+          </span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
           <span className="font-semibold text-indigo-700 dark:text-indigo-300">
@@ -167,7 +280,8 @@ export default function SubmissionDetailView({
           </span>
           {data.performanceLevelName ? (
             <span className="font-medium text-teal-700 dark:text-teal-300">
-              {data.performanceLevelName}{data.quartileName ? ` · ${data.quartileName}` : ""}
+              {data.performanceLevelName}
+              {data.quartileName ? ` · ${data.quartileName}` : ""}
             </span>
           ) : null}
           {data.submittedAt ? (
@@ -178,38 +292,70 @@ export default function SubmissionDetailView({
         </div>
       </div>
 
+      {data.canEditManagerReview ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-violet-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-violet-950/20">
+          <p className="text-violet-800 dark:text-violet-200">
+            Manager scores are pre-filled from self assessment. Edit any value and
+            save your review.
+          </p>
+          <button
+            type="button"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+          >
+            {saveMutation.isPending ? "Saving..." : "Save Manager Review"}
+          </button>
+        </div>
+      ) : null}
+
+      {saveMessage ? (
+        <div className="border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+          {saveMessage}
+        </div>
+      ) : null}
+
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
-        <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
         Scroll horizontally to view all columns
       </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse text-left text-sm">
           <thead>
             <tr className="bg-slate-800 dark:bg-slate-950/80">
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Sr. No.
               </th>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Key Task / Function
               </th>
-              <th className="min-w-[280px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+              <th className="min-w-[260px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Key Performance Indicators (KPIs)
               </th>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Weight
               </th>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
-                Self Assessed
+              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+                Self Score
               </th>
-              <th className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300 dark:text-violet-400">
-                Manager Review
+              <th className="min-w-[180px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+                Self Remarks
+              </th>
+              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
+                Manager Score
+              </th>
+              <th className="min-w-[180px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
+                Manager Remarks
               </th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/30">
+                <td
+                  colSpan={8}
+                  className="bg-slate-50 px-3 py-8 text-center text-sm text-slate-500 dark:bg-slate-800/30 dark:text-slate-400"
+                >
                   No questions were found for this submission.
                 </td>
               </tr>
@@ -217,27 +363,36 @@ export default function SubmissionDetailView({
               rows.map((row, rowIdx) => {
                 const { question } = row;
                 const answer = answerMap.get(question.id);
-                const managerAnswer = managerAnswerMap.get(question.id);
-                const answerText = getAnswerLabel(question, answer);
+                const scored = isScoredQuestion(question);
+                const managerDraft = managerDrafts.get(question.id) ?? {
+                  pointsEarned: "",
+                  remarks: "",
+                };
                 const isEvenRow = rowIdx % 2 === 0;
 
                 return (
-                  <tr key={question.id} className={cn(
-                    "align-top border-b border-slate-100 dark:border-slate-700/40",
-                    isEvenRow
-                      ? "bg-white dark:bg-slate-900/40"
-                      : "bg-slate-50/60 dark:bg-slate-800/20"
-                  )}>
-                    <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
+                  <tr
+                    key={question.id}
+                    className={cn(
+                      "align-top border-b border-slate-100 dark:border-slate-700/40",
+                      isEvenRow
+                        ? "bg-white dark:bg-slate-900/40"
+                        : "bg-slate-50/60 dark:bg-slate-800/20",
+                    )}
+                  >
+                    <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40">
                       {row.sr}
                     </td>
                     {row.isFirstInSection ? (
                       <td
-                        className="max-w-[220px] border-r border-slate-100 px-3 py-2.5 align-top bg-amber-50/80 dark:bg-amber-950/20 dark:border-slate-700/40"
+                        className="max-w-[220px] border-r border-slate-100 bg-amber-50/80 px-3 py-2.5 align-top dark:border-slate-700/40 dark:bg-amber-950/20"
                         rowSpan={row.sectionRowCount}
                       >
                         {row.sectionTitle ? (
-                          <span className="line-clamp-3 font-semibold text-amber-800 dark:text-amber-200" title={row.sectionTitle}>
+                          <span
+                            className="line-clamp-3 font-semibold text-amber-800 dark:text-amber-200"
+                            title={row.sectionTitle}
+                          >
                             {row.sectionTitle}
                           </span>
                         ) : (
@@ -251,21 +406,81 @@ export default function SubmissionDetailView({
                           {row.subsectionTitle}
                         </span>
                       ) : null}
-                      <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">{question.questionText}</p>
-                      {answerText ? (
-                        <p className="mt-1 max-w-[400px] break-words text-[11px] text-slate-500 dark:text-slate-400">
-                          <span className="font-medium text-slate-600 dark:text-slate-300">Response:</span> {answerText}
-                        </p>
-                      ) : null}
+                      <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
+                        {question.questionText}
+                      </p>
                     </td>
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
-                      {question.totalMarks}
+                      {scored ? question.totalMarks : "—"}
                     </td>
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-bold text-teal-700 dark:border-slate-700/40 dark:text-teal-300">
-                      {answer?.pointsEarned ?? 0}
+                      {scored ? (answer?.pointsEarned ?? 0) : "—"}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums font-bold text-violet-700 dark:text-violet-300">
-                      {managerAnswer?.pointsEarned ?? 0}
+                    <td className="border-r border-slate-100 px-3 py-2.5 text-xs text-slate-600 dark:border-slate-700/40 dark:text-slate-300">
+                      {scored ? (
+                        answer?.remarks?.trim() ? (
+                          <p className="whitespace-pre-wrap break-words">
+                            {answer.remarks}
+                          </p>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                      {scored ? (
+                        data.canEditManagerReview ? (
+                          <input
+                            type="number"
+                            min={0}
+                            max={question.totalMarks}
+                            step="0.5"
+                            value={managerDraft.pointsEarned}
+                            onChange={(event) =>
+                              updateManagerDraft(question.id, {
+                                pointsEarned: clampScore(
+                                  event.target.value,
+                                  question.totalMarks,
+                                ),
+                              })
+                            }
+                            className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
+                          />
+                        ) : (
+                          <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                            {managerDraft.pointsEarned || 0}
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2.5">
+                      {scored ? (
+                        data.canEditManagerReview ? (
+                          <textarea
+                            value={managerDraft.remarks}
+                            rows={2}
+                            onChange={(event) =>
+                              updateManagerDraft(question.id, {
+                                remarks: event.target.value,
+                              })
+                            }
+                            className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                            placeholder="Optional remarks"
+                          />
+                        ) : managerDraft.remarks.trim() ? (
+                          <p className="whitespace-pre-wrap break-words text-xs text-slate-600 dark:text-slate-300">
+                            {managerDraft.remarks}
+                          </p>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -275,18 +490,23 @@ export default function SubmissionDetailView({
           {rows.length > 0 ? (
             <tfoot>
               <tr className="bg-slate-800 dark:bg-slate-950/80">
-                <td colSpan={3} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200 dark:text-slate-300">
+                <td
+                  colSpan={3}
+                  className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200"
+                >
                   Total
                 </td>
-                <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-100 dark:border-slate-700/50 dark:text-slate-200">
+                <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-100">
                   {data.maxRawScore}
                 </td>
-                <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
-                  {data.answers.reduce((sum, a) => sum + a.pointsEarned, 0)}
+                <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-teal-300">
+                  {selfTotal}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-bold text-violet-300 dark:text-violet-400">
-                  {data.managerAnswers.reduce((sum, a) => sum + a.pointsEarned, 0)}
+                <td className="border-r border-slate-700 px-3 py-2.5" />
+                <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-violet-300">
+                  {managerTotal}
                 </td>
+                <td className="px-3 py-2.5" />
               </tr>
             </tfoot>
           ) : null}

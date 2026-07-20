@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { isHeadRole } from "@/lib/auth/home-path";
-import { resolveEntitySubtreeIds } from "@/lib/queries/entity-scope";
-import { listFormSubmissions } from "@/lib/queries/form-submissions";
+import { listEntities } from "@/lib/queries/entities";
+import { filterEntitiesForHeadDashboard } from "@/app/helpers/entity-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export async function GET() {
   }
 
   try {
-    let scopedEntityIds: number[] | undefined;
+    const entities = await listEntities();
 
     if (isHeadRole(auth.user?.role)) {
       const headEntityId = auth.user?.entityId;
@@ -21,15 +21,14 @@ export async function GET() {
         return NextResponse.json([]);
       }
 
-      scopedEntityIds = await resolveEntitySubtreeIds(headEntityId);
+      return NextResponse.json(filterEntitiesForHeadDashboard(entities, headEntityId));
     }
 
-    const submissions = await listFormSubmissions({ scopedEntityIds });
-    return NextResponse.json(submissions);
+    return NextResponse.json(entities);
   } catch (error) {
-    console.error("Failed to list form submissions:", error);
+    console.error("Failed to list entities:", error);
     return NextResponse.json(
-      { error: "Failed to load form submissions." },
+      { error: "Failed to load entities." },
       { status: 500 },
     );
   }

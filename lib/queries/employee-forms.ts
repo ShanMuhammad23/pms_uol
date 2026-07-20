@@ -19,8 +19,12 @@ import type {
   EmployeeFormStatus,
   SaveEmployeeFormInput,
 } from "@/types/employee-forms";
-import type { FormTemplateRecord, QuestionRecord } from "@/types/forms";
-import { flattenAllQuestions } from "@/types/forms";
+import type {
+  AppraisalStatus,
+  FormTemplateRecord,
+  QuestionRecord,
+} from "@/types/forms";
+import { APPRAISAL_STATUSES, flattenAllQuestions } from "@/types/forms";
 
 function getTemplateQuestions(template: FormTemplateRecord): QuestionRecord[] {
   return flattenAllQuestions(template);
@@ -261,6 +265,20 @@ function resolveFormStatus(
   }
 
   return answerCount > 0 ? "DRAFT" : "NOT_STARTED";
+}
+
+function resolveAppraisalWorkflowStatus(
+  appraisal: AppraisalRow | null,
+): AppraisalStatus {
+  if (!appraisal?.status) {
+    return "PENDING_SELF_ASSESSMENT";
+  }
+
+  if ((APPRAISAL_STATUSES as string[]).includes(appraisal.status)) {
+    return appraisal.status as AppraisalStatus;
+  }
+
+  return "PENDING_SELF_ASSESSMENT";
 }
 
 async function getAppraisalForUserTemplate(
@@ -546,9 +564,6 @@ export async function listAssignedFormsForUser(
     const items = await Promise.all(
       explicitAssignments.map(async (assigned) => {
         const appraisal = await getAppraisalForUserTemplate(userId, assigned.templateId);
-        const answers = appraisal
-          ? await getAnswersForAppraisal(Number(appraisal.id), userId)
-          : [];
 
         return {
           templateId: assigned.templateId,
@@ -557,7 +572,7 @@ export async function listAssignedFormsForUser(
           staffCategoryName: assigned.staffCategoryName,
           staffSubCategoryName: assigned.staffSubCategoryName,
           questionCount: assigned.questionCount,
-          status: resolveFormStatus(appraisal, answers.length),
+          status: resolveAppraisalWorkflowStatus(appraisal),
           submittedAt: appraisal?.submitted_at ?? null,
           updatedAt: appraisal?.updated_at ?? null,
         } satisfies AssignedFormListItem;
@@ -577,9 +592,6 @@ export async function listAssignedFormsForUser(
     userId,
     assigned.templateId,
   );
-  const answers = appraisal
-    ? await getAnswersForAppraisal(Number(appraisal.id), userId)
-    : [];
 
   return [
     {
@@ -589,7 +601,7 @@ export async function listAssignedFormsForUser(
       staffCategoryName: assigned.staffCategoryName,
       staffSubCategoryName: assigned.staffSubCategoryName,
       questionCount: assigned.questionCount,
-      status: resolveFormStatus(appraisal, answers.length),
+      status: resolveAppraisalWorkflowStatus(appraisal),
       submittedAt: appraisal?.submitted_at ?? null,
       updatedAt: appraisal?.updated_at ?? null,
     },

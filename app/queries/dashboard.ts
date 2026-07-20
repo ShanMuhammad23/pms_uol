@@ -1,10 +1,12 @@
 "use client";
 
+import { useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { useDashboardChartMetrics } from "@/app/queries/charts";
 import { useDashboardFilters } from "@/app/queries/dashboard-filters";
 import { useFormSubmissionsQuery } from "@/app/queries/forms";
 import {
-  useEntitiesQuery,
+  useDashboardEntitiesQuery,
   useStaffCategoriesWithSubCategoriesQuery,
   useUniqueDesignationsQuery,
 } from "@/app/queries/organization";
@@ -16,9 +18,17 @@ import {
   usePerformanceMatrixQuery,
 } from "@/app/queries/performance";
 import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
+import { submissionInEntitySubtree } from "@/app/helpers/entity-scope";
+import { isHeadRole } from "@/lib/auth/home-path";
 
 export function useDashboardPage() {
   const isDarkMode = useIsDarkMode();
+  const { data: session } = useSession();
+  const isHead = isHeadRole(session?.user?.role);
+  const headEntityId =
+    isHead && session?.user?.entityId != null
+      ? Number(session.user.entityId)
+      : null;
 
   const { data: financialYears } = useFinancialYearsQuery();
   const activeFinancialYearId = useActiveFinancialYearId(financialYears);
@@ -32,7 +42,8 @@ export function useDashboardPage() {
   const { data: staffCategories = [], isLoading: staffCategoriesLoading } =
     useStaffCategoriesWithSubCategoriesQuery();
 
-  const { data: entities = [], isLoading: entitiesLoading } = useEntitiesQuery();
+  const { data: entities = [], isLoading: entitiesLoading } =
+    useDashboardEntitiesQuery();
 
   const { data: designations = [], isLoading: designationsLoading } =
     useUniqueDesignationsQuery();
@@ -42,6 +53,16 @@ export function useDashboardPage() {
     isLoading: submissionsLoading,
     error: submissionsError,
   } = useFormSubmissionsQuery();
+
+  const scopedSubmissions = useMemo(() => {
+    if (headEntityId == null || !Number.isFinite(headEntityId)) {
+      return submissions;
+    }
+
+    return submissions.filter((submission) =>
+      submissionInEntitySubtree(submission, headEntityId, entities),
+    );
+  }, [submissions, headEntityId, entities]);
 
   const matrixForDistribution = useMatrixForDistribution(performanceMatrix);
 
@@ -79,14 +100,13 @@ export function useDashboardPage() {
     clearAllFilters,
     filterByFormState,
   } = useDashboardFilters({
-    submissions,
+    submissions: scopedSubmissions,
     staffCategories,
     entities,
     designations,
   });
 
   const chartMetrics = useDashboardChartMetrics({
-    submissions,
     filteredSubmissions,
     staffCategories,
     isDarkMode,
@@ -120,7 +140,7 @@ export function useDashboardPage() {
     designationsLoading,
     submissionsLoading,
     submissionsError,
-    submissions,
+    submissions: scopedSubmissions,
     performanceMatrixLoading,
     filteredSubmissions,
     activeFilters,

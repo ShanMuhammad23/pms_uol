@@ -49,6 +49,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     boardApprovalStats,
     filteredCalibrationData,
     ratingQuartileMatrix,
+    chartSubmissions,
   } = useDashboardPage();
 
   return (
@@ -94,7 +95,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
         <DashboardPrimaryCharts
           calibrationData={filteredCalibrationData}
           ratingQuartileMatrix={ratingQuartileMatrix}
-          employeeCount={filteredSubmissions.length}
+          employeeCount={chartSubmissions.length}
           performanceMatrixLoading={performanceMatrixLoading}
           role={role}
         />

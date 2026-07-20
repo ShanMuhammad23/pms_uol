@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { buildCalibrationData } from "@/app/helpers/dashboard-calibration";
+import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
 import { createPieLabelRenderer } from "@/app/helpers/dashboard-chart-utils";
 import { buildEligibilityData } from "@/app/helpers/dashboard-eligibility";
 import { buildRatingQuartileMatrix } from "@/app/helpers/dashboard-rating-matrix";
@@ -21,7 +22,6 @@ import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices
 import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
 interface UseDashboardChartMetricsParams {
-  submissions: FormSubmissionListItem[];
   filteredSubmissions: FormSubmissionListItem[];
   staffCategories: StaffCategoryWithSubCategories[];
   isDarkMode: boolean;
@@ -30,21 +30,25 @@ interface UseDashboardChartMetricsParams {
 }
 
 export function useDashboardChartMetrics({
-  submissions,
   filteredSubmissions,
   staffCategories,
   isDarkMode,
   matrixForDistribution,
   institutionalQuotaRows,
 }: UseDashboardChartMetricsParams) {
+  const chartSubmissions = useMemo(
+    () => filterSubmissionsForCharts(filteredSubmissions),
+    [filteredSubmissions],
+  );
+
   const themedCategoryDistribution = useMemo(
     () => buildSubmissionCategoryCounts(filteredSubmissions, staffCategories, isDarkMode),
     [filteredSubmissions, staffCategories, isDarkMode],
   );
 
-  const totalEligibleCount = useMemo(
-    () => countEligibleSubmissions(submissions),
-    [submissions],
+  const filteredEligibleCount = useMemo(
+    () => countEligibleSubmissions(filteredSubmissions),
+    [filteredSubmissions],
   );
 
   const filteredCalibrationData = useMemo(
@@ -52,14 +56,14 @@ export function useDashboardChartMetrics({
       buildCalibrationData(
         filteredSubmissions,
         institutionalQuotaRows,
-        totalEligibleCount,
+        filteredEligibleCount,
       ),
-    [filteredSubmissions, institutionalQuotaRows, totalEligibleCount],
+    [filteredSubmissions, institutionalQuotaRows, filteredEligibleCount],
   );
 
   const ratingQuartileMatrix = useMemo(
-    () => buildRatingQuartileMatrix(filteredSubmissions, matrixForDistribution),
-    [filteredSubmissions, matrixForDistribution],
+    () => buildRatingQuartileMatrix(chartSubmissions, matrixForDistribution),
+    [chartSubmissions, matrixForDistribution],
   );
 
   const filteredCompletionByCategory = useMemo(
@@ -108,5 +112,6 @@ export function useDashboardChartMetrics({
     managerReviewStats,
     hrAlignmentStats,
     boardApprovalStats,
+    chartSubmissions,
   };
 }

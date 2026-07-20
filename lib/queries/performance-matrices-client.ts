@@ -34,6 +34,22 @@ export async function fetchPerformanceMatrix(
   return parseResponse<PerformanceLevelWithQuartiles[]>(response);
 }
 
+export async function fetchDashboardPerformanceMatrix(
+  financialYearId: number,
+  matrixLabel?: string,
+): Promise<PerformanceLevelWithQuartiles[]> {
+  const params = new URLSearchParams({
+    financialYearId: String(financialYearId),
+  });
+  if (matrixLabel?.trim()) {
+    params.set("matrixLabel", matrixLabel.trim());
+  }
+  const response = await fetch(
+    `/api/performance-levels?${params.toString()}`,
+  );
+  return parseResponse<PerformanceLevelWithQuartiles[]>(response);
+}
+
 export async function fetchPerformanceMatrixLabels(
   financialYearId: number,
 ): Promise<string[]> {

@@ -45,6 +45,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: `${user.firstName} ${user.lastName}`.trim(),
           role: user.systemRole,
+          entityId: user.entityId,
         };
       },
     }),
@@ -73,6 +74,7 @@ export const authOptions: NextAuthOptions = {
             if (dbUser?.isActive) {
               token.id = dbUser.id;
               token.role = dbUser.systemRole;
+              token.entityId = dbUser.entityId ?? null;
               token.email = dbUser.email;
               token.name = `${dbUser.firstName} ${dbUser.lastName}`.trim();
               return token;
@@ -82,6 +84,15 @@ export const authOptions: NextAuthOptions = {
 
         token.role = (user as { role?: string }).role;
         token.id = user.id;
+        token.entityId =
+          (user as { entityId?: number | null }).entityId ?? null;
+      }
+
+      if (token.email && token.entityId == null) {
+        const dbUser = await getUserByEmail(token.email);
+        if (dbUser?.isActive) {
+          token.entityId = dbUser.entityId ?? null;
+        }
       }
 
       return token;
@@ -90,6 +101,10 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.role = token.role as string | undefined;
         session.user.id = token.id as string | undefined;
+        session.user.entityId =
+          token.entityId === null || token.entityId === undefined
+            ? null
+            : Number(token.entityId);
       }
 
       return session;

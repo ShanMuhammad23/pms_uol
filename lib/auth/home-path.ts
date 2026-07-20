@@ -7,6 +7,10 @@ export function isEmployeeRole(role: string | null | undefined): boolean {
   return role === "EMPLOYEE";
 }
 
+export function isHeadRole(role: string | null | undefined): boolean {
+  return role === "HEAD";
+}
+
 export function getPostLoginPath(role: string | null | undefined): string {
   return isEmployeeRole(role) ? EMPLOYEE_HOME_PATH : DEFAULT_HOME_PATH;
 }

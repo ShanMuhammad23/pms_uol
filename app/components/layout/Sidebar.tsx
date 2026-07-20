@@ -182,17 +182,19 @@ const Sidebar = () => {
                 </Link>
               </li>
 
-              <li>
-                <Link
-                  href="/dashboard/entity-categories"
-                  aria-current={isEntityCategories ? "page" : undefined}
-                  title="Entity & Categories"
-                  className={navLinkClass(isEntityCategories)}
-                >
-                  <List className="size-4 shrink-0" />
-                  {!collapsed ? "Entity & Categories" : null}
-                </Link>
-              </li>
+              {isSuperAdmin ? (
+                <li>
+                  <Link
+                    href="/dashboard/entity-categories"
+                    aria-current={isEntityCategories ? "page" : undefined}
+                    title="Entity & Categories"
+                    className={navLinkClass(isEntityCategories)}
+                  >
+                    <List className="size-4 shrink-0" />
+                    {!collapsed ? "Entity & Categories" : null}
+                  </Link>
+                </li>
+              ) : null}
 
               {isSuperAdmin ? (
                 <li>

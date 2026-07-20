@@ -9,12 +9,14 @@ import {
   resolvePerformanceQuartile,
 } from "@/lib/queries/performance-rating";
 import { getFormTemplateById } from "@/lib/queries/forms";
+import { isScoredQuestion } from "@/app/helpers/form-questions";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
+import type { ManagerReviewAnswerInput } from "@/types/employee-forms";
 import type {
   FormSubmissionDetail,
   FormSubmissionListItem,
 } from "@/types/form-submissions";
-import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
+import type { AppraisalStatus, PerformanceRating, QuestionRecord } from "@/types/forms";
 import { flattenAllQuestions } from "@/types/forms";
 
 export class FormSubmissionError extends Error {
@@ -176,7 +178,10 @@ function mapSubmissionRow(
   const rawScore = row.system_raw_score ?? 0;
   const maxRawScore = Number(row.max_raw_score);
   const scorePercent = calculateScorePercent(rawScore, maxRawScore);
-  const resolved = resolvePerformanceQuartile(scorePercent, quartileBands);
+  const hasAppraisal = Boolean(row.id);
+  const resolved = hasAppraisal
+    ? resolvePerformanceQuartile(scorePercent, quartileBands)
+    : null;
   const scoreO = toNumber(row.initial_score_numeric) ?? rawScore;
   const normalizedScore =
     toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric);
@@ -287,7 +292,9 @@ function formatReferenceDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
+export async function listFormSubmissions(options?: {
+  scopedEntityIds?: number[];
+}): Promise<FormSubmissionListItem[]> {
   const [
     excelReady,
     roleCategoryReady,
@@ -400,6 +407,14 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
     ? `LEFT JOIN performance_quartiles pq ON pq.id = ap.performance_quartile_id`
     : "";
 
+  const scopedEntityIds = options?.scopedEntityIds ?? null;
+  const entityScopeClause =
+    scopedEntityIds && scopedEntityIds.length > 0
+      ? `AND u.entity_id = ANY($2::bigint[])`
+      : scopedEntityIds && scopedEntityIds.length === 0
+        ? `AND FALSE`
+        : "";
+
   const result = await db.query<SubmissionListRow>(
     `SELECT
        ap.id,
@@ -474,8 +489,11 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
      ${qualJoin}
      WHERE u.is_active = TRUE
        AND u.employee_id <> 'EMP-0001'
+       ${entityScopeClause}
      ORDER BY u.first_name, u.last_name, u.employee_id`,
-    [eligibilityContext.cycleId],
+    scopedEntityIds && scopedEntityIds.length > 0
+      ? [eligibilityContext.cycleId, scopedEntityIds]
+      : [eligibilityContext.cycleId],
   );
 
   return result.rows.map((row) =>
@@ -486,8 +504,143 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
   );
 }
 
+export async function getFormSubmissionSummaryById(
+  id: number,
+): Promise<Pick<FormSubmissionListItem, "id" | "entityId" | "status"> | null> {
+  const result = await db.query<{
+    id: string;
+    entity_id: string | null;
+    status: AppraisalStatus;
+  }>(
+    `SELECT ap.id, u.entity_id, ap.status
+     FROM appraisals ap
+     INNER JOIN users u ON u.id = ap.employee_id
+     WHERE ap.id = $1
+     LIMIT 1`,
+    [id],
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: Number(row.id),
+    entityId: row.entity_id ? Number(row.entity_id) : null,
+    status: row.status,
+  };
+}
+
+async function seedManagerAnswersFromSelfAssessment(
+  appraisalId: number,
+  reviewerUserId: number,
+  employeeUserId: number,
+): Promise<void> {
+  const existing = await getAnswersForSubmission(appraisalId, reviewerUserId);
+  if (existing.length > 0) {
+    return;
+  }
+
+  const employeeAnswers = await getAnswersForSubmission(
+    appraisalId,
+    employeeUserId,
+  );
+
+  if (employeeAnswers.length === 0) {
+    return;
+  }
+
+  await db.query(
+    `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
+  );
+
+  for (const answer of employeeAnswers) {
+    await db.query(
+      `INSERT INTO appraisal_answers (
+         appraisal_id,
+         question_id,
+         filled_by_id,
+         text_response,
+         selected_option_id,
+         points_earned,
+         remarks
+       ) VALUES ($1, $2, $3, NULL, NULL, $4, $5)
+       ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
+      [
+        appraisalId,
+        answer.questionId,
+        reviewerUserId,
+        answer.pointsEarned,
+        answer.remarks,
+      ],
+    );
+  }
+}
+
+export async function saveManagerReviewAnswers(
+  appraisalId: number,
+  reviewerUserId: number,
+  answers: ManagerReviewAnswerInput[],
+  templateQuestions: QuestionRecord[],
+): Promise<EmployeeFormAnswerRecord[]> {
+  const questionById = new Map(templateQuestions.map((q) => [q.id, q]));
+
+  await db.query(
+    `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
+  );
+
+  for (const answer of answers) {
+    const question = questionById.get(answer.questionId);
+    if (!question || !isScoredQuestion(question)) {
+      continue;
+    }
+
+    const pointsEarned = Number(answer.pointsEarned ?? 0);
+    if (
+      Number.isNaN(pointsEarned) ||
+      pointsEarned < 0 ||
+      pointsEarned > Number(question.totalMarks)
+    ) {
+      throw new FormSubmissionError(
+        `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
+      );
+    }
+
+    const remarks =
+      typeof answer.remarks === "string"
+        ? answer.remarks.trim() || null
+        : null;
+
+    await db.query(
+      `INSERT INTO appraisal_answers (
+         appraisal_id,
+         question_id,
+         filled_by_id,
+         text_response,
+         selected_option_id,
+         points_earned,
+         remarks
+       ) VALUES ($1, $2, $3, NULL, NULL, $4, $5)
+       ON CONFLICT (appraisal_id, question_id, filled_by_id)
+       DO UPDATE SET
+         points_earned = EXCLUDED.points_earned,
+         remarks = EXCLUDED.remarks,
+         updated_at = CURRENT_TIMESTAMP`,
+      [appraisalId, answer.questionId, reviewerUserId, pointsEarned, remarks],
+    );
+  }
+
+  return getAnswersForSubmission(appraisalId, reviewerUserId);
+}
+
 export async function getFormSubmissionById(
   id: number,
+  options?: {
+    reviewerUserId?: number | null;
+    seedManagerAnswers?: boolean;
+    canEditManagerReview?: boolean;
+  },
 ): Promise<FormSubmissionDetail | null> {
   const submissions = await listFormSubmissions();
   const summary = submissions.find((item) => item.id === id);
@@ -496,8 +649,8 @@ export async function getFormSubmissionById(
     return null;
   }
 
-  const employeeResult = await db.query<{ user_id: string; head_id: string | null }>(
-    `SELECT ap.employee_id::text AS user_id, u.head_id::text AS head_id
+  const employeeResult = await db.query<{ user_id: string }>(
+    `SELECT ap.employee_id::text AS user_id
      FROM appraisals ap
      INNER JOIN users u ON u.id = ap.employee_id
      WHERE ap.id = $1`,
@@ -509,14 +662,28 @@ export async function getFormSubmissionById(
     return null;
   }
 
-  const headId = employeeResult.rows[0]?.head_id
-    ? Number(employeeResult.rows[0].head_id)
-    : null;
+  const reviewerUserId =
+    options?.reviewerUserId != null && Number.isFinite(options.reviewerUserId)
+      ? Number(options.reviewerUserId)
+      : null;
+
+  if (
+    options?.seedManagerAnswers &&
+    reviewerUserId != null &&
+    summary.status === "PENDING_HEAD_REVIEW"
+  ) {
+    await seedManagerAnswersFromSelfAssessment(
+      id,
+      reviewerUserId,
+      employeeUserId,
+    );
+  }
 
   const answers = await getAnswersForSubmission(id, employeeUserId);
-  const managerAnswers = headId
-    ? await getAnswersForSubmission(id, headId)
-    : [];
+  const managerAnswers =
+    reviewerUserId != null
+      ? await getAnswersForSubmission(id, reviewerUserId)
+      : [];
 
   let questions: FormSubmissionDetail["questions"] = [];
   let sections: FormSubmissionDetail["sections"] = [];
@@ -560,6 +727,7 @@ export async function getFormSubmissionById(
     questions,
     answers,
     managerAnswers,
+    canEditManagerReview: Boolean(options?.canEditManagerReview),
   };
 }
 
