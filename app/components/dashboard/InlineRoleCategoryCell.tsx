@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/app/queries/keys";
 import { updateEmployeeRoleCategory } from "@/lib/queries/form-submissions-client";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
+import type { UserRecord } from "@/types/users";
 import { cn } from "@/lib/utils";
 
 interface InlineRoleCategoryCellProps {
@@ -41,11 +42,15 @@ export function InlineRoleCategoryCell({
       updateEmployeeRoleCategory(employeeId, nextValue),
     onMutate: async (nextValue) => {
       setError(null);
-      await queryClient.cancelQueries({ queryKey: queryKeys.formSubmissions });
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: queryKeys.formSubmissions }),
+        queryClient.cancelQueries({ queryKey: queryKeys.users }),
+      ]);
 
-      const previous = queryClient.getQueryData<FormSubmissionListItem[]>(
+      const previousSubmissions = queryClient.getQueryData<FormSubmissionListItem[]>(
         queryKeys.formSubmissions,
       );
+      const previousUsers = queryClient.getQueryData<UserRecord[]>(queryKeys.users);
 
       queryClient.setQueryData<FormSubmissionListItem[]>(
         queryKeys.formSubmissions,
@@ -57,11 +62,25 @@ export function InlineRoleCategoryCell({
           ),
       );
 
-      return { previous };
+      queryClient.setQueryData<UserRecord[]>(queryKeys.users, (current) =>
+        current?.map((row) =>
+          row.employeeId === employeeId
+            ? { ...row, roleCategory: nextValue }
+            : row,
+        ),
+      );
+
+      return { previousSubmissions, previousUsers };
     },
     onError: (mutationError, _nextValue, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKeys.formSubmissions, context.previous);
+      if (context?.previousSubmissions) {
+        queryClient.setQueryData(
+          queryKeys.formSubmissions,
+          context.previousSubmissions,
+        );
+      }
+      if (context?.previousUsers) {
+        queryClient.setQueryData(queryKeys.users, context.previousUsers);
       }
       setError(
         mutationError instanceof Error
@@ -79,6 +98,13 @@ export function InlineRoleCategoryCell({
               ? { ...row, roleCategory: result.roleCategory }
               : row,
           ),
+      );
+      queryClient.setQueryData<UserRecord[]>(queryKeys.users, (current) =>
+        current?.map((row) =>
+          row.employeeId === result.employeeId
+            ? { ...row, roleCategory: result.roleCategory }
+            : row,
+        ),
       );
       setEditing(false);
     },

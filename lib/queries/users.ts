@@ -247,11 +247,15 @@ function mapUserRow(row: UserRow): UserRecord {
     systemRole: row.system_role,
     empCategory: row.emp_category,
     empSubCategory: row.emp_sub_category,
-    staffCategoryId: row.staff_category_id,
+    staffCategoryId:
+      row.staff_category_id != null ? Number(row.staff_category_id) : null,
     staffCategoryName: row.staff_category_name,
-    staffSubCategoryId: row.staff_sub_category_id,
+    staffSubCategoryId:
+      row.staff_sub_category_id != null
+        ? Number(row.staff_sub_category_id)
+        : null,
     staffSubCategoryName: row.staff_sub_category_name,
-    entityId: row.entity_id,
+    entityId: row.entity_id != null ? Number(row.entity_id) : null,
     entityName: row.entity_name,
     parentEntityName: row.parent_entity_name,
     headId: row.head_id ? Number(row.head_id) : null,

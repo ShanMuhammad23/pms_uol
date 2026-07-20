@@ -4,11 +4,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Pencil, Plus, Table2, Users, X } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
+import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { UsersListingTable } from "@/app/components/users/UsersListingTable";
+import { queryKeys } from "@/app/queries/keys";
+import {
+  useEntitiesQuery,
+  useUniqueDesignationsQuery,
+} from "@/app/queries/organization";
+import { useUsersPageFilters } from "@/app/queries/users-filters";
 import {
   createUser,
   deleteUser,
-  fetchEntities,
   fetchStaffCategoriesForUsers,
   fetchUsers,
   updateUser,
@@ -68,22 +74,48 @@ export default function UsersManager() {
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
   const [activeTab, setActiveTab] = useState<UserSectionTab>("list");
 
-  const { data: entities, isLoading: entitiesLoading } = useQuery({
-    queryKey: ["entities"],
-    queryFn: fetchEntities,
-  });
+  const { data: entities = [], isLoading: entitiesLoading } = useEntitiesQuery();
+  const { data: designations = [], isLoading: designationsLoading } =
+    useUniqueDesignationsQuery();
   const { data: staffCategories = [], isLoading: staffCategoriesLoading } = useQuery({
     queryKey: ["staff-categories-for-users"],
     queryFn: fetchStaffCategoriesForUsers,
   });
 
   const {
-    data: users,
+    data: users = [],
     isLoading: usersLoading,
     error,
   } = useQuery({
-    queryKey: ["users"],
+    queryKey: queryKeys.users,
     queryFn: fetchUsers,
+  });
+
+  const {
+    selectedCategory0EntityIds,
+    selectedCategory1EntityIds,
+    selectedCategory2EntityIds,
+    selectedRoleCategories,
+    selectedDesignations,
+    category0Options,
+    category0DistributionOptions,
+    category1Options,
+    category2Options,
+    roleCategoryOptions,
+    designationOptions,
+    filteredUsers,
+    activeFilters,
+    handleCategory0EntityChange,
+    handleCategory0DistributionSelect,
+    handleCategory1EntityChange,
+    handleCategory2EntityChange,
+    handleRoleCategoryChange,
+    handleDesignationChange,
+    clearAllFilters,
+  } = useUsersPageFilters({
+    users,
+    entities,
+    designations,
   });
 
   const selectedStaffCategory = useMemo(
@@ -96,21 +128,8 @@ export default function UsersManager() {
   const subCategoryOptions = selectedStaffCategory?.subCategories ?? [];
 
   const headOptions = useMemo(() => {
-    if (!users) {
-      return [];
-    }
-
     return users.filter((user) => !editingUser || user.id !== editingUser.id);
   }, [users, editingUser]);
-
-  const categoryStats = useMemo(() => {
-    return staffCategories.map((category) => ({
-      category: category.id,
-      label: category.name,
-      count:
-        users?.filter((user) => user.staffCategoryId === category.id).length ?? 0,
-    }));
-  }, [staffCategories, users]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -118,7 +137,7 @@ export default function UsersManager() {
   };
 
   const invalidateList = () => {
-    queryClient.invalidateQueries({ queryKey: ["users"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.users });
   };
 
   const createMutation = useMutation({
@@ -614,7 +633,7 @@ export default function UsersManager() {
         </div>
       ) : null}
 
-      {activeTab === "list" && !isLoading && !error && (!users || users.length === 0) ? (
+      {activeTab === "list" && !isLoading && !error && users.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
           <Users className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">No users yet</p>
@@ -624,15 +643,40 @@ export default function UsersManager() {
         </div>
       ) : null}
 
-      {activeTab === "list" && !isLoading && !error && users && users.length > 0 ? (
+      {activeTab === "list" && !isLoading && !error && users.length > 0 ? (
         <div className="space-y-4">
-   
+          <DashboardFilterBar
+            selectedCategory0EntityIds={selectedCategory0EntityIds}
+            onCategory0EntityChange={handleCategory0EntityChange}
+            selectedCategory1EntityIds={selectedCategory1EntityIds}
+            onCategory1EntityChange={handleCategory1EntityChange}
+            selectedCategory2EntityIds={selectedCategory2EntityIds}
+            onCategory2EntityChange={handleCategory2EntityChange}
+            category0Options={category0Options}
+            category0DistributionOptions={category0DistributionOptions}
+            onCategory0DistributionSelect={handleCategory0DistributionSelect}
+            category1Options={category1Options}
+            category2Options={category2Options}
+            selectedRoleCategories={selectedRoleCategories}
+            onRoleCategoryChange={handleRoleCategoryChange}
+            roleCategoryOptions={roleCategoryOptions}
+            selectedDesignations={selectedDesignations}
+            onDesignationChange={handleDesignationChange}
+            designationOptions={designationOptions}
+            designationsLoading={designationsLoading}
+            entitiesLoading={entitiesLoading}
+            activeFilters={activeFilters}
+            onClearAllFilters={clearAllFilters}
+            showFormStatus={false}
+          />
 
           <UsersListingTable
-            users={users}
+            users={filteredUsers}
+            allUsers={users}
             onEdit={handleEdit}
             onDelete={handleDelete}
             deletePending={deleteMutation.isPending}
+            onClearAllFilters={clearAllFilters}
           />
         </div>
       ) : null}
