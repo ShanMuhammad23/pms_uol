@@ -6,6 +6,8 @@ import {
 } from "@/lib/auth/submission-access";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-reviewer";
+import { headCanReviewSubmission } from "@/app/helpers/manager-review";
+import { listEntities } from "@/lib/queries/entities";
 import {
   FormSubmissionError,
   getFormSubmissionById,
@@ -47,9 +49,15 @@ export async function GET(_request: Request, context: RouteContext) {
 
     const role = auth.user?.role;
     const reviewerUserId = auth.user?.id ? Number(auth.user.id) : null;
+    const headEntityId = auth.user?.entityId;
+    const entities = await listEntities();
     const canEditManagerReview =
       summary.status === "PENDING_HEAD_REVIEW" &&
-      (isHeadRole(role) || role === "SUPER_ADMIN");
+      (isHeadRole(role) || role === "SUPER_ADMIN") &&
+      (role === "SUPER_ADMIN" ||
+        (headEntityId != null &&
+          Number.isFinite(headEntityId) &&
+          headCanReviewSubmission(headEntityId, summary, entities)));
 
     const submission = await getFormSubmissionById(submissionId, {
       reviewerUserId,

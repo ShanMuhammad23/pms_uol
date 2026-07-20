@@ -761,6 +761,7 @@ export async function saveEmployeeForm(
          SET system_raw_score = $1,
              submitted_at = CURRENT_TIMESTAMP,
              status = 'PENDING_HEAD_REVIEW',
+             manager_level = 1,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [rawScore, appraisal.id],

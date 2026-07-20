@@ -133,6 +133,7 @@ CREATE TABLE appraisals (
     cycle_id INT NOT NULL REFERENCES appraisal_cycles(id) ON DELETE RESTRICT,
     template_id BIGINT REFERENCES form_templates(id) ON DELETE SET NULL, -- Form structure context
     status appraisal_status NOT NULL DEFAULT 'PENDING_SELF_ASSESSMENT',
+    manager_level INT NOT NULL DEFAULT 1,
     
     -- Automatic aggregate tracking calculated on submission runtime
     system_raw_score INT DEFAULT 0, 

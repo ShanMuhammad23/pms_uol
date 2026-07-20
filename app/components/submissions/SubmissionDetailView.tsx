@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   fetchFormSubmission,
+  approveManagerReview,
   saveManagerReview,
 } from "@/lib/queries/form-submissions-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
@@ -118,6 +119,43 @@ export default function SubmissionDetailView({
           managerAnswers: result.managerAnswers,
         };
       });
+    },
+    onError: (mutationError: Error) => {
+      setSaveMessage(mutationError.message);
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      if (data?.canEditManagerReview) {
+        const answers = data.questions
+          .filter(isScoredQuestion)
+          .map((question) => {
+            const draft = managerDrafts.get(question.id);
+            return {
+              questionId: question.id,
+              pointsEarned:
+                draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+              remarks: draft?.remarks?.trim() || null,
+            };
+          });
+        await saveManagerReview(submissionId, answers);
+      }
+
+      return approveManagerReview(submissionId);
+    },
+    onSuccess: (result) => {
+      setSaveMessage("Manager review approved.");
+      queryClient.setQueryData(["form-submission", submissionId], (current) => {
+        if (!current || typeof current !== "object") return current;
+        return {
+          ...current,
+          status: result.status,
+          managerLevel: result.managerLevel,
+          canEditManagerReview: false,
+        };
+      });
+      queryClient.invalidateQueries({ queryKey: ["form-submissions"] });
     },
     onError: (mutationError: Error) => {
       setSaveMessage(mutationError.message);
@@ -301,10 +339,18 @@ export default function SubmissionDetailView({
           <button
             type="button"
             onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || approveMutation.isPending}
+            className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
+          >
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={() => approveMutation.mutate()}
+            disabled={saveMutation.isPending || approveMutation.isPending}
             className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
           >
-            {saveMutation.isPending ? "Saving..." : "Save Manager Review"}
+            {approveMutation.isPending ? "Approving..." : "Approve Review"}
           </button>
         </div>
       ) : null}

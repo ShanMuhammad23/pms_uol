@@ -27,6 +27,18 @@ export async function fetchFormSubmission(
 
 export type RemarksField = "remarksEvaluation" | "remarksCompensation";
 
+export async function approveManagerReview(
+  id: number,
+): Promise<{ managerLevel: number; status: FormSubmissionDetail["status"] }> {
+  const response = await fetch(`/api/submissions/${id}/manager-review`, {
+    method: "POST",
+  });
+
+  return parseResponse<{ managerLevel: number; status: FormSubmissionDetail["status"] }>(
+    response,
+  );
+}
+
 export async function saveManagerReview(
   id: number,
   answers: Array<{
