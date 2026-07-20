@@ -176,7 +176,10 @@ function mapSubmissionRow(
   const rawScore = row.system_raw_score ?? 0;
   const maxRawScore = Number(row.max_raw_score);
   const scorePercent = calculateScorePercent(rawScore, maxRawScore);
-  const resolved = resolvePerformanceQuartile(scorePercent, quartileBands);
+  const hasAppraisal = Boolean(row.id);
+  const resolved = hasAppraisal
+    ? resolvePerformanceQuartile(scorePercent, quartileBands)
+    : null;
   const scoreO = toNumber(row.initial_score_numeric) ?? rawScore;
   const normalizedScore =
     toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric);
@@ -287,7 +290,9 @@ function formatReferenceDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
+export async function listFormSubmissions(options?: {
+  scopedEntityIds?: number[];
+}): Promise<FormSubmissionListItem[]> {
   const [
     excelReady,
     roleCategoryReady,
@@ -400,6 +405,14 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
     ? `LEFT JOIN performance_quartiles pq ON pq.id = ap.performance_quartile_id`
     : "";
 
+  const scopedEntityIds = options?.scopedEntityIds ?? null;
+  const entityScopeClause =
+    scopedEntityIds && scopedEntityIds.length > 0
+      ? `AND u.entity_id = ANY($2::bigint[])`
+      : scopedEntityIds && scopedEntityIds.length === 0
+        ? `AND FALSE`
+        : "";
+
   const result = await db.query<SubmissionListRow>(
     `SELECT
        ap.id,
@@ -474,8 +487,11 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
      ${qualJoin}
      WHERE u.is_active = TRUE
        AND u.employee_id <> 'EMP-0001'
+       ${entityScopeClause}
      ORDER BY u.first_name, u.last_name, u.employee_id`,
-    [eligibilityContext.cycleId],
+    scopedEntityIds && scopedEntityIds.length > 0
+      ? [eligibilityContext.cycleId, scopedEntityIds]
+      : [eligibilityContext.cycleId],
   );
 
   return result.rows.map((row) =>

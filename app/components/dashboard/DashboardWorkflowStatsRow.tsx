@@ -1,17 +1,23 @@
 "use client";
 
-import { AlertTriangle, Gavel, Scale, User } from "lucide-react";
+import { Gavel, Scale, User } from "lucide-react";
 import { motion } from "framer-motion";
+import { useSession } from "next-auth/react";
 import { EligibilityStatCard } from "@/app/components/dashboard/EligibilityStatCard";
+import { ManagerReviewStatCard } from "@/app/components/dashboard/ManagerReviewStatCard";
 import { StatCard } from "@/app/components/dashboard/StatCard";
 import { containerVariants } from "@/app/helpers/dashboard-animations";
 import type { FormState } from "@/app/helpers/dashboard-types";
-import type { WorkflowStageStats } from "@/app/helpers/dashboard-workflow-stats";
+import type {
+  ManagerReviewDualStats,
+  WorkflowStageStats,
+} from "@/app/helpers/dashboard-workflow-stats";
+import { isHeadRole } from "@/lib/auth/home-path";
 
 interface DashboardWorkflowStatsRowProps {
   eligibilityData: Array<{ name: string; value: number; color: string }>;
   selfAssessmentStats: WorkflowStageStats;
-  managerReviewStats: WorkflowStageStats;
+  managerReviewStats: ManagerReviewDualStats;
   hrAlignmentStats: WorkflowStageStats;
   boardApprovalStats: WorkflowStageStats;
   selectedFormStates: string[] | null;
@@ -38,6 +44,9 @@ export function DashboardWorkflowStatsRow({
   selectedFormStates,
   onFilterByFormState,
 }: DashboardWorkflowStatsRowProps) {
+  const { data: session } = useSession();
+  const showHrAndBoardStats = !isHeadRole(session?.user?.role);
+
   return (
     <motion.div
       variants={containerVariants}
@@ -59,45 +68,43 @@ export function DashboardWorkflowStatsRow({
         onClick={() => onFilterByFormState("PENDING_SELF_ASSESSMENT")}
         active={isFormStateActive(selectedFormStates, "PENDING_SELF_ASSESSMENT")}
       />
-      <StatCard
-        title="Manager Review"
-        awaiting={managerReviewStats.awaiting}
-        completed={managerReviewStats.completed}
-        percentageLabel={managerReviewStats.percentageLabel}
-        awaitingtitle="Submitted"
-        completedtitle="Reviewed"
-        tone="amber"
-        icon={AlertTriangle}
+      <ManagerReviewStatCard
+        manager1={managerReviewStats.manager1}
+        manager2={managerReviewStats.manager2}
         delay={0.2}
         onClick={() => onFilterByFormState("PENDING_HEAD_REVIEW")}
         active={isFormStateActive(selectedFormStates, "PENDING_HEAD_REVIEW")}
       />
-      <StatCard
-        title="HR Alignment"
-        awaiting={hrAlignmentStats.awaiting}
-        completed={hrAlignmentStats.completed}
-        percentageLabel={hrAlignmentStats.percentageLabel}
-        awaitingtitle="Submitted"
-        completedtitle="Aligned"
-        tone="orange"
-        icon={Scale}
-        delay={0.3}
-        onClick={() => onFilterByFormState("PENDING_HR_CALIBRATION")}
-        active={isFormStateActive(selectedFormStates, "PENDING_HR_CALIBRATION")}
-      />
-      <StatCard
-        title="Board Approval"
-        awaiting={boardApprovalStats.awaiting}
-        completed={boardApprovalStats.completed}
-        percentageLabel={boardApprovalStats.percentageLabel}
-        awaitingtitle="Pending"
-        completedtitle="Approved"
-        tone="violet"
-        icon={Gavel}
-        delay={0.4}
-        onClick={() => onFilterByFormState("PENDING_BOARD_APPROVAL")}
-        active={isFormStateActive(selectedFormStates, "PENDING_BOARD_APPROVAL")}
-      />
+      {showHrAndBoardStats ? (
+        <>
+          <StatCard
+            title="HR Alignment"
+            awaiting={hrAlignmentStats.awaiting}
+            completed={hrAlignmentStats.completed}
+            percentageLabel={hrAlignmentStats.percentageLabel}
+            awaitingtitle="Submitted"
+            completedtitle="Aligned"
+            tone="orange"
+            icon={Scale}
+            delay={0.3}
+            onClick={() => onFilterByFormState("PENDING_HR_CALIBRATION")}
+            active={isFormStateActive(selectedFormStates, "PENDING_HR_CALIBRATION")}
+          />
+          <StatCard
+            title="Board Approval"
+            awaiting={boardApprovalStats.awaiting}
+            completed={boardApprovalStats.completed}
+            percentageLabel={boardApprovalStats.percentageLabel}
+            awaitingtitle="Pending"
+            completedtitle="Approved"
+            tone="violet"
+            icon={Gavel}
+            delay={0.4}
+            onClick={() => onFilterByFormState("PENDING_BOARD_APPROVAL")}
+            active={isFormStateActive(selectedFormStates, "PENDING_BOARD_APPROVAL")}
+          />
+        </>
+      ) : null}
     </motion.div>
   );
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
-import { listUniqueDesignations } from "@/lib/queries/designations";
+import { listFinancialYears } from "@/lib/queries/financial-years";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +11,12 @@ export async function GET() {
   }
 
   try {
-    const designations = await listUniqueDesignations();
-    return NextResponse.json(designations);
+    const years = await listFinancialYears();
+    return NextResponse.json(years);
   } catch (error) {
-    console.error("Failed to list designations:", error);
+    console.error("Failed to list financial years:", error);
     return NextResponse.json(
-      { error: "Failed to load designations." },
+      { error: "Failed to load financial years." },
       { status: 500 },
     );
   }

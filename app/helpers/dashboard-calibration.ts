@@ -1,5 +1,6 @@
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { RATING_LABELS } from "@/types/forms";
+import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
 import { isSubmissionEligible } from "@/app/helpers/dashboard-workflow-stats";
 
 const RATING_NORMALIZE: Record<string, string> = {
@@ -45,7 +46,8 @@ export function buildCalibrationData(
     return [];
   }
 
-  const eligibleSubmissions = submissions.filter(isSubmissionEligible);
+  const chartSubmissions = filterSubmissionsForCharts(submissions);
+  const eligibleSubmissions = chartSubmissions.filter(isSubmissionEligible);
   const quotaBaseCount =
     quotaEligibleCount ?? eligibleSubmissions.length;
   const counts = new Map(quotas.map((row) => [row.rating, 0]));

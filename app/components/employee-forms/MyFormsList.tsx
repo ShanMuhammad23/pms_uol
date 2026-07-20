@@ -3,20 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { ClipboardList, Eye } from "lucide-react";
 import Link from "next/link";
+import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { fetchAssignedForms } from "@/lib/queries/employee-forms-client";
-import type { EmployeeFormStatus } from "@/types/employee-forms";
+import type { AppraisalStatus } from "@/types/forms";
+import { cn } from "@/lib/utils";
 
-const STATUS_LABELS: Record<EmployeeFormStatus, string> = {
-  NOT_STARTED: "Not started",
-  DRAFT: "Draft saved",
-  SUBMITTED: "Submitted",
-};
-
-const STATUS_CLASSES: Record<EmployeeFormStatus, string> = {
-  NOT_STARTED: "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-300",
-  DRAFT: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400",
-  SUBMITTED: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400",
-};
+function isFillable(status: AppraisalStatus, submittedAt: string | null): boolean {
+  return status === "PENDING_SELF_ASSESSMENT" && !submittedAt;
+}
 
 export default function MyFormsList() {
   const { data, isLoading, error } = useQuery({
@@ -77,48 +71,59 @@ export default function MyFormsList() {
           </tr>
         </thead>
         <tbody>
-          {data.map((form) => (
-            <tr
-              key={form.templateId}
-              className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]"
-            >
-              <td className="border-b border-slate-100 px-4 py-3 dark:border-white/[0.03]">
-                <p className="font-semibold text-slate-900 dark:text-white">{form.title}</p>
-                {form.description ? (
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    {form.description}
-                  </p>
-                ) : null}
-              </td>
-              <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
-                {form.staffCategoryName ?? "—"}
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
-                  {form.staffSubCategoryName ?? "—"}
-                </span>
-              </td>
-              <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
-                {form.questionCount}
-              </td>
-              <td className="border-b border-slate-100 px-4 py-3 dark:border-white/[0.03]">
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLASSES[form.status]}`}
-                >
-                  {STATUS_LABELS[form.status]}
-                </span>
-              </td>
-              <td className="border-b border-slate-100 px-4 py-3 text-right dark:border-white/[0.03]">
-                <div className="flex justify-end">
-                  <Link
-                    href={`/dashboard/my-forms/${form.templateId}`}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-primary/10 dark:border-white/15 dark:text-slate-300"
+          {data.map((form) => {
+            const statusConfig = APPRAISAL_STATE_CONFIG[form.status];
+            const canFill = isFillable(form.status, form.submittedAt);
+
+            return (
+              <tr
+                key={form.templateId}
+                className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]"
+              >
+                <td className="border-b border-slate-100 px-4 py-3 dark:border-white/[0.03]">
+                  <p className="font-semibold text-slate-900 dark:text-white">{form.title}</p>
+                  {form.description ? (
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      {form.description}
+                    </p>
+                  ) : null}
+                </td>
+                <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
+                  {form.staffCategoryName ?? "—"}
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    {form.staffSubCategoryName ?? "—"}
+                  </span>
+                </td>
+                <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
+                  {form.questionCount}
+                </td>
+                <td className="border-b border-slate-100 px-4 py-3 dark:border-white/[0.03]">
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
+                      statusConfig.bg,
+                      statusConfig.color,
+                      statusConfig.border,
+                      "border",
+                    )}
                   >
-                    <Eye className="size-3.5" />
-                    {form.status === "SUBMITTED" ? "View" : "Fill Form"}
-                  </Link>
-                </div>
-              </td>
-            </tr>
-          ))}
+                    {statusConfig.label}
+                  </span>
+                </td>
+                <td className="border-b border-slate-100 px-4 py-3 text-right dark:border-white/[0.03]">
+                  <div className="flex justify-end">
+                    <Link
+                      href={`/dashboard/my-forms/${form.templateId}`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-primary/10 dark:border-white/15 dark:text-slate-300"
+                    >
+                      <Eye className="size-3.5" />
+                      {canFill ? "Fill Form" : "View"}
+                    </Link>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

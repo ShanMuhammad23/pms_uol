@@ -1,4 +1,5 @@
 import type { RatingQuartileMatrixData } from "@/app/helpers/dashboard-types";
+import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
 import {
   buildQuartileBandsFromMatrix,
   getMatrixQuartileColumnHeaders,
@@ -14,6 +15,7 @@ export function buildRatingQuartileMatrix(
 ): RatingQuartileMatrixData {
   const sortedMatrix = sortPerformanceMatrix(matrix);
   const columns = getMatrixQuartileColumnHeaders(sortedMatrix);
+  const chartSubmissions = filterSubmissionsForCharts(submissions);
   const bands = buildQuartileBandsFromMatrix(sortedMatrix);
   const counts = new Map<string, number>();
 
@@ -23,7 +25,7 @@ export function buildRatingQuartileMatrix(
     });
   });
 
-  submissions.forEach((submission) => {
+  chartSubmissions.forEach((submission) => {
     const resolved = resolvePerformanceQuartile(submission.scorePercent, bands);
 
     if (resolved) {

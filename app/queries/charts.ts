@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { buildCalibrationData } from "@/app/helpers/dashboard-calibration";
+import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
 import { createPieLabelRenderer } from "@/app/helpers/dashboard-chart-utils";
 import { buildEligibilityData } from "@/app/helpers/dashboard-eligibility";
 import { buildRatingQuartileMatrix } from "@/app/helpers/dashboard-rating-matrix";
@@ -37,6 +38,11 @@ export function useDashboardChartMetrics({
   matrixForDistribution,
   institutionalQuotaRows,
 }: UseDashboardChartMetricsParams) {
+  const chartSubmissions = useMemo(
+    () => filterSubmissionsForCharts(filteredSubmissions),
+    [filteredSubmissions],
+  );
+
   const themedCategoryDistribution = useMemo(
     () => buildSubmissionCategoryCounts(filteredSubmissions, staffCategories, isDarkMode),
     [filteredSubmissions, staffCategories, isDarkMode],
@@ -58,8 +64,8 @@ export function useDashboardChartMetrics({
   );
 
   const ratingQuartileMatrix = useMemo(
-    () => buildRatingQuartileMatrix(filteredSubmissions, matrixForDistribution),
-    [filteredSubmissions, matrixForDistribution],
+    () => buildRatingQuartileMatrix(chartSubmissions, matrixForDistribution),
+    [chartSubmissions, matrixForDistribution],
   );
 
   const filteredCompletionByCategory = useMemo(
@@ -108,5 +114,6 @@ export function useDashboardChartMetrics({
     managerReviewStats,
     hrAlignmentStats,
     boardApprovalStats,
+    chartSubmissions,
   };
 }

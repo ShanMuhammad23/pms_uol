@@ -75,7 +75,7 @@ export const APPRAISAL_STATUSES: AppraisalStatus[] = [
 
 export const APPRAISAL_STATUS_LABELS: Record<AppraisalStatus, string> = {
   PENDING_SELF_ASSESSMENT: "Self Assessment",
-  PENDING_HEAD_REVIEW: "Head Review",
+  PENDING_HEAD_REVIEW: "Manager Review",
   PENDING_HR_CALIBRATION: "HR Alignment",
   PENDING_BOARD_APPROVAL: "Board Approval",
   APPROVED: "Approved",

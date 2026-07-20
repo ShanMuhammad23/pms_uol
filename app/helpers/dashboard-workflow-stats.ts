@@ -86,14 +86,36 @@ export function buildSelfAssessmentStats(
   return toWorkflowStageStats(eligible, submitted);
 }
 
-/** Awaiting Review = SA submitted to manager; Submitted = forwarded to HR. */
-export function buildManagerReviewStats(
+export type ManagerReviewDualStats = {
+  manager1: WorkflowStageStats;
+  manager2: WorkflowStageStats;
+};
+
+function buildSingleManagerReviewStats(
   submissions: FormSubmissionListItem[],
 ): WorkflowStageStats {
   const awaitingReview = countByStatuses(submissions, SUBMITTED_SELF_ASSESSMENT_STATES);
   const submittedForHr = countByStatuses(submissions, SUBMITTED_FOR_HR_STATES);
 
   return toWorkflowStageStats(awaitingReview, submittedForHr);
+}
+
+/**
+ * Manager 1 = leaf entity head (all SA-submitted forms).
+ * Manager 2 = parent entity head (only forms whose entity has a parent).
+ * Same Submitted / Reviewed labels; counts scoped per level.
+ */
+export function buildManagerReviewStats(
+  submissions: FormSubmissionListItem[],
+): ManagerReviewDualStats {
+  const manager2Pool = submissions.filter(
+    (submission) => Boolean(submission.parentEntityName),
+  );
+
+  return {
+    manager1: buildSingleManagerReviewStats(submissions),
+    manager2: buildSingleManagerReviewStats(manager2Pool),
+  };
 }
 
 /** Awaiting Alignment = sent to HR; Submitted = past HR calibration. */

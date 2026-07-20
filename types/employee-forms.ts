@@ -1,4 +1,4 @@
-import type { FormTemplateRecord } from "@/types/forms";
+import type { AppraisalStatus, FormTemplateRecord } from "@/types/forms";
 
 export type EmployeeFormStatus = "NOT_STARTED" | "DRAFT" | "SUBMITTED";
 
@@ -9,7 +9,8 @@ export interface AssignedFormListItem {
   staffCategoryName: string | null;
   staffSubCategoryName: string | null;
   questionCount: number;
-  status: EmployeeFormStatus;
+  /** Workflow status from appraisals.status (dashboard-aligned). */
+  status: AppraisalStatus;
   submittedAt: string | null;
   updatedAt: string | null;
 }
