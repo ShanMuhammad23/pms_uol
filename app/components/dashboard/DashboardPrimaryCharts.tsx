@@ -23,6 +23,7 @@ interface DashboardPrimaryChartsProps {
   ratingQuartileMatrix: RatingQuartileMatrixData;
   employeeCount: number;
   performanceMatrixLoading: boolean;
+  role?: string | null;
 }
 
 export function DashboardPrimaryCharts({
@@ -30,7 +31,10 @@ export function DashboardPrimaryCharts({
   ratingQuartileMatrix,
   employeeCount,
   performanceMatrixLoading,
+  role,
 }: DashboardPrimaryChartsProps) {
+  const isHead = role === "HEAD";
+
   return (
     <motion.div
       variants={containerVariants}
@@ -41,7 +45,7 @@ export function DashboardPrimaryCharts({
       <ChartCard
         title="Performance Rating Curve"
         delay={0.35}
-        className="lg:col-span-6"
+        className={isHead ? "lg:col-span-12" : "lg:col-span-6"}
       >
         <div className="h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -77,35 +81,39 @@ export function DashboardPrimaryCharts({
               >
                 <LabelList dataKey="quota" position="top" offset={8} style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }} />
               </Area>
-              <Area
-                type="monotone"
-                dataKey="actual"
-                name="Actual Distribution"
-                stroke="#d97706"
-                strokeWidth={2}
-                fill="url(#actualGrad)"
-                dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}
-              >
-                <LabelList dataKey="actual" position="top" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
-              </Area>
+              {isHead ? null : (
+                <Area
+                  type="monotone"
+                  dataKey="actual"
+                  name="Actual Distribution"
+                  stroke="#d97706"
+                  strokeWidth={2}
+                  fill="url(#actualGrad)"
+                  dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}
+                >
+                  <LabelList dataKey="actual" position="top" offset={8} style={{ fontSize: 11, fill: "#d97706", fontWeight: 600 }} />
+                </Area>
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </ChartCard>
 
-      <ChartCard
-        title="Performance Rating Quartile Matrix"
-        delay={0.36}
-        className="lg:col-span-6"
-      >
-        <CalibrationDistributionMatrix
-          rows={ratingQuartileMatrix.rows}
-          columns={ratingQuartileMatrix.columns}
-          employeeCount={employeeCount}
-          isLoading={performanceMatrixLoading}
-          hideHeader
-        />
-      </ChartCard>
+      {isHead ? null : (
+        <ChartCard
+          title="Performance Rating Quartile Matrix"
+          delay={0.36}
+          className="lg:col-span-6"
+        >
+          <CalibrationDistributionMatrix
+            rows={ratingQuartileMatrix.rows}
+            columns={ratingQuartileMatrix.columns}
+            employeeCount={employeeCount}
+            isLoading={performanceMatrixLoading}
+            hideHeader
+          />
+        </ChartCard>
+      )}
     </motion.div>
   );
 }

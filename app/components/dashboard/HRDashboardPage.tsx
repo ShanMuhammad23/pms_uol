@@ -6,7 +6,11 @@ import { DashboardSubmissionsTable } from "@/app/components/dashboard/DashboardS
 import { DashboardWorkflowStatsRow } from "@/app/components/dashboard/DashboardWorkflowStatsRow";
 import { useDashboardPage } from "@/app/queries/dashboard";
 
-export default function HRDashboardPage() {
+interface HRDashboardPageProps {
+  role?: string | null;
+}
+
+export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   const {
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
@@ -92,6 +96,7 @@ export default function HRDashboardPage() {
           ratingQuartileMatrix={ratingQuartileMatrix}
           employeeCount={filteredSubmissions.length}
           performanceMatrixLoading={performanceMatrixLoading}
+          role={role}
         />
 
         <DashboardSubmissionsTable

@@ -10,5 +10,5 @@ export default async function DashboardPage() {
     redirect(getPostLoginPath(session.user?.role));
   }
 
-  return <HRDashboardPage />;
+  return <HRDashboardPage role={session.user?.role ?? null} />;
 }

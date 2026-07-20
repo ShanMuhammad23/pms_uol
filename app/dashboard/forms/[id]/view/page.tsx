@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import FormTemplateView from "@/app/components/forms/FormTemplateView";
 import PrintTrigger from "@/app/components/forms/PrintTrigger";
 import PdfDownloadTrigger from "@/app/components/forms/PdfDownloadTrigger";
@@ -60,26 +60,36 @@ export default async function ViewFormPage({
           <ArrowLeft className="size-4" />
           Back to Forms
         </Link>
-        <h1 className="mt-3 text-2xl font-bold">View Form</h1>
-        <p className="mt-1 text-sm text-foreground/70">
-          Read-only preview of this form template and its configuration.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link
-            href={`/dashboard/forms/${templateId}/assign`}
-            className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-          >
-            Assign Employees
-          </Link>
-          <PrintButton printUrl={`/dashboard/forms/${templateId}/view?print=true`} />
-        </div>
       </div>
 
       <div className={isPrintMode ? "print-content print-full-width" : ""}>
         {isPrintMode ? (
           <div className="print-title">{template.title}</div>
         ) : null}
-        <FormTemplateView template={template} />
+        <FormTemplateView
+          template={template}
+          headerActions={
+            <>
+              <Link
+                href={`/dashboard/forms/${templateId}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 dark:border-primary/50 dark:bg-primary/15 dark:hover:bg-primary/25"
+              >
+                <Pencil className="size-3.5" />
+                Edit Form
+              </Link>
+              <Link
+                href={`/dashboard/forms/${templateId}/assign`}
+                className="inline-flex items-center rounded-lg border border-success/30 bg-success/10 px-3 py-1.5 text-sm font-medium text-success hover:bg-success/20 dark:border-success/50 dark:bg-success/15 dark:hover:bg-success/25"
+              >
+                Assign Employees
+              </Link>
+              <PrintButton
+                className="inline-flex items-center gap-1.5 rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-sm font-medium text-secondary hover:bg-secondary/20 dark:border-secondary/50 dark:bg-secondary/15 dark:hover:bg-secondary/25"
+                printUrl={`/dashboard/forms/${templateId}/view?print=true`}
+              />
+            </>
+          }
+        />
       </div>
     </div>
   );

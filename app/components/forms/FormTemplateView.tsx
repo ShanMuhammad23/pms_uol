@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { Pencil } from "lucide-react";
 import type { FormTemplateRecord, QuestionRecord, FormSectionRecord, FormSubsectionRecord, FieldType } from "@/types/forms";
 import {
   CATEGORY_LABELS,
@@ -9,13 +7,15 @@ import {
   flattenAllQuestions,
   SUB_CATEGORY_LABELS,
 } from "@/types/forms";
+import { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 interface FormTemplateViewProps {
   template: FormTemplateRecord;
+  headerActions?: ReactNode;
 }
 
-export default function FormTemplateView({ template }: FormTemplateViewProps) {
+export default function FormTemplateView({ template, headerActions }: FormTemplateViewProps) {
   const allQuestions = flattenAllQuestions(template);
   const rootLayout = buildRootLayoutOrderFromRecord(
     template.sections,
@@ -91,8 +91,8 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       <div className="flex flex-wrap items-start justify-between gap-4 no-print">
-        <div>
-          <h2 className="text-xl font-semibold text-text-primary">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold break-words text-text-primary">
             {template.title}
           </h2>
           {template.description ? (
@@ -101,37 +101,23 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
             </p>
           ) : null}
         </div>
-
-        <Link
-          href={`/dashboard/forms/${template.id}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-        >
-          <Pencil className="size-3.5" />
-          Edit Form
-        </Link>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3 no-print">
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Category</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
-            {CATEGORY_LABELS[template.targetCategory]}
-          </p>
-          <p className="text-xs text-foreground/70">
-            {SUB_CATEGORY_LABELS[template.targetSubCategory]}
-          </p>
-        </div>
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Appraisal Cycle</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
-            FY {template.fiscalYear}
-          </p>
-        </div>
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Questions</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
-            {allQuestions.length}
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-900/30 dark:text-indigo-100">
+            <span className="text-indigo-600 dark:text-indigo-300">Category</span>
+            <span className="font-medium text-text-primary">
+              {CATEGORY_LABELS[template.targetCategory]}
+              {template.targetSubCategory ? ` · ${SUB_CATEGORY_LABELS[template.targetSubCategory]}` : ""}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-900/30 dark:text-emerald-100">
+            <span className="text-emerald-600 dark:text-emerald-300">Appraisal Cycle</span>
+            <span className="font-medium text-text-primary">FY {template.fiscalYear}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/30 dark:text-amber-100">
+            <span className="text-amber-600 dark:text-amber-300">Questions</span>
+            <span className="font-medium text-text-primary">{allQuestions.length}</span>
+          </span>
+          {headerActions}
         </div>
       </div>
 
@@ -140,10 +126,10 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
           <table className="w-full">
             <thead>
               <tr className="bg-indigo-600 dark:bg-indigo-800/80">
-                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
-                  Sr. No.
+                <th className=" border-r border-indigo-500/30  text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Sr
                 </th>
-                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                <th className="w-[240px] border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Key Task / Function
                 </th>
                 <th className="min-w-[280px] border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
@@ -152,6 +138,7 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
                 <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Weight
                 </th>
+                
               </tr>
             </thead>
             <tbody className="text-sm">
