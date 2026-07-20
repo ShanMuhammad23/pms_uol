@@ -1,18 +1,24 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { CheckCircle2, Paperclip, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import {
+  deleteEmployeeFormAttachment,
   fetchEmployeeForm,
+  getEmployeeFormAttachmentDownloadUrl,
   saveEmployeeForm,
+  uploadEmployeeFormAttachment,
 } from "@/lib/queries/employee-forms-client";
-import type { EmployeeFormAnswerInput } from "@/types/employee-forms";
+import type {
+  EmployeeFormAnswerAttachment,
+  EmployeeFormAnswerInput,
+} from "@/types/employee-forms";
 import {
   buildRootLayoutOrderFromRecord,
-  CATEGORY_LABELS,
   flattenAllQuestions,
-  SUB_CATEGORY_LABELS,
   type FormSectionRecord,
   type FormSubsectionRecord,
   type QuestionRecord,
@@ -25,9 +31,9 @@ interface EmployeeFormFillProps {
 type AnswerState = Record<
   number,
   {
-    textResponse: string;
-    selectedOptionId: string;
     pointsEarned: string;
+    remarks: string;
+    attachments: EmployeeFormAnswerAttachment[];
   }
 >;
 
@@ -35,31 +41,26 @@ function buildInitialAnswers(
   questions: Array<{ id: number }>,
   existingAnswers: Array<{
     questionId: number;
-    textResponse: string | null;
-    selectedOptionId: number | null;
     pointsEarned: number;
+    remarks: string | null;
+    attachments: EmployeeFormAnswerAttachment[];
   }>,
 ): AnswerState {
   const map: AnswerState = {};
 
   for (const question of questions) {
     map[question.id] = {
-      textResponse: "",
-      selectedOptionId: "",
       pointsEarned: "",
+      remarks: "",
+      attachments: [],
     };
   }
 
   for (const answer of existingAnswers) {
     map[answer.questionId] = {
-      textResponse: answer.textResponse ?? "",
-      selectedOptionId: answer.selectedOptionId
-        ? String(answer.selectedOptionId)
-        : "",
-      pointsEarned:
-        answer.pointsEarned > 0
-          ? String(answer.pointsEarned)
-          : answer.textResponse ?? "",
+      pointsEarned: String(answer.pointsEarned ?? ""),
+      remarks: answer.remarks ?? "",
+      attachments: answer.attachments ?? [],
     };
   }
 
@@ -70,18 +71,13 @@ function toPayload(answers: AnswerState): EmployeeFormAnswerInput[] {
   return Object.entries(answers)
     .map(([questionId, value]) => ({
       questionId: Number(questionId),
-      textResponse: value.textResponse.trim() || null,
-      selectedOptionId: value.selectedOptionId
-        ? Number(value.selectedOptionId)
-        : null,
       pointsEarned:
         value.pointsEarned !== "" ? Number(value.pointsEarned) : undefined,
+      remarks: value.remarks.trim() || null,
     }))
     .filter(
       (answer) =>
-        answer.textResponse ||
-        answer.selectedOptionId ||
-        answer.pointsEarned !== undefined,
+        answer.pointsEarned !== undefined || Boolean(answer.remarks),
     );
 }
 
@@ -110,14 +106,29 @@ function isScoredQuestion(question: {
   inputType: string;
   totalMarks: number;
 }): boolean {
-  return question.totalMarks > 0 && question.inputType === "NUMBER";
+  return Number(question.totalMarks) > 0;
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) {
   const queryClient = useQueryClient();
+  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [answers, setAnswers] = useState<AnswerState>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [thankYouOpen, setThankYouOpen] = useState(false);
+  const [submittedScore, setSubmittedScore] = useState<{
+    rawScore: number;
+    maxRawScore: number;
+  } | null>(null);
+  const [uploadingQuestionId, setUploadingQuestionId] = useState<number | null>(
+    null,
+  );
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["my-form", templateId],
@@ -135,7 +146,17 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   }, [data]);
 
   const isReadOnly = data?.status === "SUBMITTED";
-  const maxRawScore = data?.maxRawScore ?? 0;
+  const maxRawScore = useMemo(() => {
+    if (!data) {
+      return 0;
+    }
+
+    const fromTemplate = flattenAllQuestions(data.template)
+      .filter(isScoredQuestion)
+      .reduce((sum, question) => sum + Number(question.totalMarks), 0);
+
+    return fromTemplate > 0 ? fromTemplate : (data.maxRawScore ?? 0);
+  }, [data]);
 
   const liveRawScore = useMemo(() => {
     if (!data) {
@@ -165,13 +186,20 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
       }),
     onSuccess: (result, submit) => {
       setFormError(null);
-      setSuccessMessage(
-        submit
-          ? `Form submitted. Raw score: ${result.rawScore} / ${result.maxRawScore}.`
-          : "Draft saved successfully.",
-      );
       queryClient.setQueryData(["my-form", templateId], result);
       queryClient.invalidateQueries({ queryKey: ["my-forms"] });
+
+      if (submit) {
+        setSubmittedScore({
+          rawScore: result.rawScore,
+          maxRawScore: result.maxRawScore,
+        });
+        setThankYouOpen(true);
+        setSuccessMessage(null);
+        return;
+      }
+
+      setSuccessMessage("Draft saved successfully.");
     },
     onError: (mutationError: Error) => {
       setSuccessMessage(null);
@@ -179,9 +207,12 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     },
   });
 
+  const closeThankYouDialog = () => {
+    setThankYouOpen(false);
+  };
   const updateAnswer = (
     questionId: number,
-    field: keyof AnswerState[number],
+    field: "pointsEarned" | "remarks",
     value: string,
   ) => {
     setAnswers((current) => ({
@@ -236,6 +267,85 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     saveMutation.mutate(submit);
   };
 
+  const handleUpload = async (questionId: number, file: File | null) => {
+    if (!file || isReadOnly) {
+      return;
+    }
+
+    setFormError(null);
+    setSuccessMessage(null);
+    setUploadingQuestionId(questionId);
+
+    try {
+      // Persist current scores/remarks first so attachment stays tied to draft answers.
+      await saveEmployeeForm(templateId, {
+        answers: toPayload(answers),
+        submit: false,
+      });
+
+      const attachment = await uploadEmployeeFormAttachment(
+        templateId,
+        questionId,
+        file,
+      );
+
+      setAnswers((current) => ({
+        ...current,
+        [questionId]: {
+          ...current[questionId],
+          attachments: [...(current[questionId]?.attachments ?? []), attachment],
+        },
+      }));
+
+      await queryClient.invalidateQueries({ queryKey: ["my-form", templateId] });
+      setSuccessMessage("Attachment uploaded.");
+    } catch (uploadError) {
+      setFormError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Failed to upload attachment.",
+      );
+    } finally {
+      setUploadingQuestionId(null);
+      const input = fileInputRefs.current[questionId];
+      if (input) {
+        input.value = "";
+      }
+    }
+  };
+
+  const handleDeleteAttachment = async (
+    questionId: number,
+    attachmentId: number,
+  ) => {
+    if (isReadOnly) {
+      return;
+    }
+
+    setFormError(null);
+    setSuccessMessage(null);
+
+    try {
+      await deleteEmployeeFormAttachment(templateId, attachmentId);
+      setAnswers((current) => ({
+        ...current,
+        [questionId]: {
+          ...current[questionId],
+          attachments: (current[questionId]?.attachments ?? []).filter(
+            (item) => item.id !== attachmentId,
+          ),
+        },
+      }));
+      setSuccessMessage("Attachment removed.");
+    } catch (deleteError) {
+      setFormError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Failed to remove attachment.",
+      );
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="rounded-xl border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
@@ -260,8 +370,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
   type TableRow = {
     sr: number;
-    sectionTitle: string;
-    sectionNumber: number | null;
+    sectionTitle: string | null;
     subsectionTitle: string | null;
     question: QuestionRecord;
     isFirstInSection: boolean;
@@ -270,7 +379,6 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
   const rows: TableRow[] = [];
   let sr = 0;
-  let sectionNumber = 0;
 
   const collectQuestions = (
     section: FormSectionRecord,
@@ -283,7 +391,6 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
       rows.push({
         sr,
         sectionTitle: section.title,
-        sectionNumber: null,
         subsectionTitle: subsection?.title ?? null,
         question,
         isFirstInSection: false,
@@ -302,13 +409,11 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     if (item.kind === "section") {
       const section = template.sections.find((s) => s.id === item.id);
       if (!section) return;
-      sectionNumber += 1;
       const startIdx = rows.length;
       section.subsections.forEach((sub) => collectQuestions(section, sub));
       collectQuestions(section, null);
       if (rows.length > startIdx) {
         rows[startIdx].isFirstInSection = true;
-        rows[startIdx].sectionNumber = sectionNumber;
         for (let i = startIdx; i < rows.length; i++) {
           rows[i].sectionRowCount = rows.length - startIdx;
         }
@@ -319,8 +424,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         sr += 1;
         rows.push({
           sr,
-          sectionTitle: "—",
-          sectionNumber: null,
+          sectionTitle: null,
           subsectionTitle: null,
           question,
           isFirstInSection: true,
@@ -330,204 +434,278 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     }
   });
 
-  const metaParts = [
-    template.title,
-    `${CATEGORY_LABELS[template.targetCategory]} / ${SUB_CATEGORY_LABELS[template.targetSubCategory]}`,
-    `Score ${displayedRawScore}/${maxRawScore}`,
+  const statusLabel =
     data.status === "SUBMITTED"
       ? `Submitted${data.submittedAt ? ` ${new Date(data.submittedAt).toLocaleString()}` : ""}`
       : data.status === "DRAFT"
         ? "Draft"
-        : "Not started",
-  ].filter(Boolean);
-
-  const inputClassName =
-    "h-9 w-full rounded-md border border-slate-300 bg-background px-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15";
+        : "Not started";
 
   return (
-    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
       {successMessage ? (
         <p className="text-sm text-emerald-600">{successMessage}</p>
       ) : null}
 
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 dark:border-white/10 dark:bg-slate-900">
-        <p
-          className="truncate text-xs leading-5 text-slate-600 dark:text-slate-300"
-          title={metaParts.join(" · ")}
-        >
-          {metaParts.join(" · ")}
-        </p>
+      <div>
+        <h2 className="text-xl font-semibold text-text-primary">
+          {template.title}
+        </h2>
+        {template.description ? (
+          <p className="mt-1 text-sm text-foreground/70">{template.description}</p>
+        ) : null}
       </div>
 
-      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
-        <div className="w-full max-w-full overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
-                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" rowSpan={2}>
-                  Sr. No.
-                </th>
-                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" rowSpan={2}>
-                  Key Task / Function
-                </th>
-                <th className="min-w-[280px] border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" rowSpan={2}>
-                  Key Performance Indicators (KPIs)
-                </th>
-                <th className="border-r border-slate-200 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" colSpan={2}>
-                  Faculty&apos;s Performance
-                </th>
-                <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400" rowSpan={2}>
-                  Weight
-                </th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" rowSpan={2}>
-                  Score Earned
-                </th>
-              </tr>
-              <tr className="border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/50">
-                <th className="border-r border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-                  Previous Year
-                </th>
-                <th className="border-r border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-                  Current Year
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                    No questions were found for this form.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => {
-                  const { question } = row;
-                  const answer = answers[question.id] ?? {
-                    textResponse: "",
-                    selectedOptionId: "",
-                    pointsEarned: "",
-                  };
-                  const scored = isScoredQuestion(question);
-
-                  return (
-                    <tr key={question.id} className="align-top">
-                      {row.isFirstInSection ? (
-                        <>
-                          <td
-                            className="border-r border-slate-200 px-3 py-2.5 text-center align-top font-semibold text-slate-700 dark:border-white/10 dark:text-slate-300"
-                            rowSpan={row.sectionRowCount}
-                          >
-                            {row.sectionNumber ?? ""}
-                          </td>
-                          <td
-                            className="max-w-[200px] border-r border-slate-200 px-3 py-2.5 align-top text-slate-700 dark:border-white/10 dark:text-slate-300"
-                            rowSpan={row.sectionRowCount}
-                          >
-                            <span className="line-clamp-3" title={row.sectionTitle}>
-                              {row.sectionTitle}
-                            </span>
-                          </td>
-                        </>
-                      ) : null}
-                      <td className="border-r border-slate-200 px-3 py-2.5 text-slate-900 dark:border-white/10 dark:text-slate-100">
-                        {row.subsectionTitle ? (
-                          <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                            {row.subsectionTitle}
-                          </span>
-                        ) : null}
-                        <p className="text-xs leading-snug">{question.questionText}</p>
-                        {question.options.length > 0 ? (
-                          <div className="mt-1.5 space-y-1">
-                            {question.options.map((option) => (
-                              <label key={option.id} className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-                                <input
-                                  type="radio"
-                                  name={`question-${question.id}`}
-                                  value={option.id}
-                                  checked={answer.selectedOptionId === String(option.id)}
-                                  disabled={isReadOnly}
-                                  onChange={() => updateAnswer(question.id, "selectedOptionId", String(option.id))}
-                                />
-                                <span>{option.optionLabel}{option.pointsAssigned > 0 ? ` (${option.pointsAssigned} pts)` : ""}</span>
-                              </label>
-                            ))}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="border-r border-slate-200 px-2 py-2.5 dark:border-white/10">
-                        <input
-                          type="text"
-                          value=""
-                          disabled
-                          className="h-8 w-full rounded border border-slate-200 bg-slate-50 px-2 text-xs text-slate-400 dark:border-white/10 dark:bg-slate-800/50"
-                          placeholder="—"
-                        />
-                      </td>
-                      <td className="border-r border-slate-200 px-2 py-2.5 dark:border-white/10">
-                        {question.inputType === "TEXTAREA" ? (
-                          <textarea
-                            value={answer.textResponse}
-                            disabled={isReadOnly}
-                            rows={2}
-                            onChange={(e) => updateAnswer(question.id, "textResponse", e.target.value)}
-                            className="w-full rounded border border-slate-300 bg-background px-2 py-1 text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                            placeholder="Enter performance"
-                          />
-                        ) : (
-                          <input
-                            type="text"
-                            value={answer.textResponse}
-                            disabled={isReadOnly}
-                            onChange={(e) => updateAnswer(question.id, "textResponse", e.target.value)}
-                            className="h-8 w-full rounded border border-slate-300 bg-background px-2 text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                            placeholder="Enter performance"
-                          />
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-slate-700 dark:border-white/10 dark:text-slate-300">
-                        {question.totalMarks}
-                      </td>
-                      <td className="px-2 py-2.5 text-right">
-                        {scored ? (
-                          <input
-                            type="number"
-                            min={0}
-                            max={question.totalMarks}
-                            step="0.5"
-                            value={answer.pointsEarned}
-                            disabled={isReadOnly}
-                            onChange={(e) => updateScore(question.id, question.totalMarks, e.target.value)}
-                            onBlur={(e) => updateScore(question.id, question.totalMarks, e.target.value)}
-                            className="h-8 w-20 rounded border border-slate-300 bg-background px-2 text-right text-xs tabular-nums text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-                            placeholder={`0–${question.totalMarks}`}
-                          />
-                        ) : (
-                          <span className="tabular-nums text-slate-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-            {rows.length > 0 ? (
-              <tfoot>
-                <tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-white/20 dark:bg-slate-950/50">
-                  <td colSpan={5} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                    Overall Score
-                  </td>
-                  <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
-                    {maxRawScore}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:text-white">
-                    {displayedRawScore}
-                  </td>
-                </tr>
-              </tfoot>
-            ) : null}
-          </table>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
+          <p className="text-xs font-medium text-foreground/70">Status</p>
+          <p className="mt-1 text-sm font-semibold text-text-primary">
+            {statusLabel}
+          </p>
         </div>
+        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
+          <p className="text-xs font-medium text-foreground/70">Score</p>
+          <p className="mt-1 text-sm font-semibold text-text-primary">
+            {displayedRawScore} / {maxRawScore}
+          </p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-neutral-700">
+        <table className="w-full min-w-[980px]">
+          <thead className="border-b border-slate-300 text-left text-sm font-semibold dark:border-neutral-600">
+            <tr>
+              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Sr. No.
+              </th>
+              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Key Task / Function
+              </th>
+              <th className="min-w-[260px] border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Key Performance Indicators (KPIs)
+              </th>
+              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Weight
+              </th>
+              <th className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Score
+              </th>
+              <th className="min-w-[220px] border-r border-slate-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
+                Remarks
+              </th>
+              <th className="min-w-[200px] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Attachments
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 text-sm dark:divide-neutral-700">
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400"
+                >
+                  No questions were found for this form.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const { question } = row;
+                const answer = answers[question.id] ?? {
+                  pointsEarned: "",
+                  remarks: "",
+                  attachments: [],
+                };
+                const scored = isScoredQuestion(question);
+
+                return (
+                  <tr key={question.id} className="align-top">
+                    <td className="border-r border-slate-200 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-white/10 dark:text-slate-400">
+                      {row.sr}
+                    </td>
+                    {row.isFirstInSection ? (
+                      <td
+                        className="max-w-[220px] border-r border-slate-200 px-3 py-2.5 align-top text-slate-700 dark:border-white/10 dark:text-slate-300"
+                        rowSpan={row.sectionRowCount}
+                      >
+                        {row.sectionTitle ? (
+                          <span
+                            className="line-clamp-3"
+                            title={row.sectionTitle}
+                          >
+                            {row.sectionTitle}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                    ) : null}
+                    <td className="border-r border-slate-200 px-3 py-2.5 text-slate-900 dark:border-white/10 dark:text-slate-100">
+                      {row.subsectionTitle ? (
+                        <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                          {row.subsectionTitle}
+                        </span>
+                      ) : null}
+                      <p className="max-w-[420px] break-words text-xs leading-snug">
+                        {question.questionText}
+                      </p>
+                      {question.options.length > 0 ? (
+                        <ul className="mt-1.5 space-y-0.5">
+                          {question.options.map((option) => (
+                            <li
+                              key={option.id}
+                              className="max-w-[400px] break-words text-[11px] text-slate-500 dark:text-slate-400"
+                            >
+                              • {option.optionLabel}
+                              {option.pointsAssigned > 0
+                                ? ` (${option.pointsAssigned} pts)`
+                                : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-slate-700 dark:border-white/10 dark:text-slate-300">
+                      {question.totalMarks}
+                    </td>
+                    <td className="border-r border-slate-200 px-2 py-2.5 text-right dark:border-white/10">
+                      {scored ? (
+                        <input
+                          type="number"
+                          min={0}
+                          max={question.totalMarks}
+                          step="0.5"
+                          value={answer.pointsEarned}
+                          disabled={isReadOnly}
+                          onChange={(e) =>
+                            updateScore(
+                              question.id,
+                              question.totalMarks,
+                              e.target.value,
+                            )
+                          }
+                          onBlur={(e) =>
+                            updateScore(
+                              question.id,
+                              question.totalMarks,
+                              e.target.value,
+                            )
+                          }
+                          className="h-8 w-20 rounded border border-slate-300 bg-background px-2 text-right text-xs tabular-nums text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
+                          placeholder={`0–${question.totalMarks}`}
+                        />
+                      ) : (
+                        <span className="tabular-nums text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="border-r border-slate-200 px-2 py-2.5 dark:border-white/10">
+                      <textarea
+                        value={answer.remarks}
+                        disabled={isReadOnly}
+                        rows={2}
+                        onChange={(e) =>
+                          updateAnswer(question.id, "remarks", e.target.value)
+                        }
+                        className="w-full rounded border border-slate-300 bg-background px-2 py-1 text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
+                        placeholder="Optional remarks"
+                      />
+                    </td>
+                    <td className="px-2 py-2.5">
+                      <div className="space-y-2">
+                        {(answer.attachments ?? []).map((attachment) => (
+                          <div
+                            key={attachment.id}
+                            className="flex items-start justify-between gap-2 rounded border border-slate-200 px-2 py-1.5 dark:border-white/10"
+                          >
+                            <a
+                              href={getEmployeeFormAttachmentDownloadUrl(
+                                templateId,
+                                attachment.id,
+                              )}
+                              className="min-w-0 flex-1 truncate text-[11px] font-medium text-primary hover:underline"
+                              title={attachment.originalFilename}
+                            >
+                              {attachment.originalFilename}
+                              <span className="ml-1 text-slate-400">
+                                ({formatBytes(attachment.sizeBytes)})
+                              </span>
+                            </a>
+                            {!isReadOnly ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleDeleteAttachment(
+                                    question.id,
+                                    attachment.id,
+                                  )
+                                }
+                                className="inline-flex size-6 items-center justify-center rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                aria-label={`Remove ${attachment.originalFilename}`}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+
+                        {!isReadOnly ? (
+                          <>
+                            <input
+                              ref={(element) => {
+                                fileInputRefs.current[question.id] = element;
+                              }}
+                              type="file"
+                              className="hidden"
+                              onChange={(event) =>
+                                void handleUpload(
+                                  question.id,
+                                  event.target.files?.[0] ?? null,
+                                )
+                              }
+                            />
+                            <button
+                              type="button"
+                              disabled={uploadingQuestionId === question.id}
+                              onClick={() =>
+                                fileInputRefs.current[question.id]?.click()
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-text-primary hover:bg-primary/10 disabled:opacity-60 dark:border-white/15"
+                            >
+                              <Paperclip className="size-3.5" />
+                              {uploadingQuestionId === question.id
+                                ? "Uploading..."
+                                : "Attach file"}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+          {rows.length > 0 ? (
+            <tfoot>
+              <tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-white/20 dark:bg-slate-950/50">
+                <td
+                  colSpan={3}
+                  className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+                >
+                  Overall Score
+                </td>
+                <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
+                  {maxRawScore}
+                </td>
+                <td className="whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-slate-900 dark:border-white/10 dark:text-white">
+                  {displayedRawScore}
+                </td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
       </div>
 
       {!isReadOnly ? (
@@ -559,6 +737,91 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
           · read-only · score {data.rawScore}/{data.maxRawScore}
         </p>
       )}
+
+      <AnimatePresence>
+        {thankYouOpen && submittedScore ? (
+          <motion.div
+            key="employee-form-thank-you"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="employee-form-thank-you-title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-4"
+          >
+            <motion.button
+              type="button"
+              aria-label="Close thank you dialog"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeThankYouDialog}
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+              className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/15 dark:bg-slate-900"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    <CheckCircle2 className="size-6" />
+                  </span>
+                  <div>
+                    <h2
+                      id="employee-form-thank-you-title"
+                      className="text-lg font-semibold text-slate-900 dark:text-white"
+                    >
+                      Thank you
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      Your form has been submitted successfully.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeThankYouDialog}
+                  aria-label="Close"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:border-white/15 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-slate-950/50">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Your score
+                </p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
+                  {submittedScore.rawScore}
+                  <span className="text-base font-semibold text-slate-500 dark:text-slate-400">
+                    {" "}
+                    / {submittedScore.maxRawScore}
+                  </span>
+                </p>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <Button
+                  type="button"
+                  className="!w-auto px-5"
+                  onClick={closeThankYouDialog}
+                >
+                  Close
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

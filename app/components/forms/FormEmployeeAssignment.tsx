@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   assignFormTemplateToEmployees,
   fetchFormTemplateAssignments,
+  unassignFormTemplateFromEmployees,
 } from "@/lib/queries/forms-client";
 import { fetchUsers } from "@/lib/queries/users-client";
 import type { UserRecord } from "@/types/users";
@@ -216,6 +217,16 @@ export default function FormEmployeeAssignment({
   const somePageSelected =
     selectedOnPageCount > 0 && selectedOnPageCount < pageEmployeeIds.length;
   const selectedCount = selectedEmployeeIds.size;
+  const selectedAssignedIds = useMemo(
+    () => [...selectedEmployeeIds].filter((id) => assignedEmployeeIds.has(id)),
+    [assignedEmployeeIds, selectedEmployeeIds],
+  );
+  const selectedUnassignedIds = useMemo(
+    () => [...selectedEmployeeIds].filter((id) => !assignedEmployeeIds.has(id)),
+    [assignedEmployeeIds, selectedEmployeeIds],
+  );
+  const selectedAssignedCount = selectedAssignedIds.length;
+  const selectedUnassignedCount = selectedUnassignedIds.length;
 
   const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
@@ -263,6 +274,25 @@ export default function FormEmployeeAssignment({
     },
   });
 
+  const unassignMutation = useMutation({
+    mutationFn: (employeeIds: string[]) =>
+      unassignFormTemplateFromEmployees(templateId, employeeIds),
+    onSuccess: async (result: {
+      unassignedCount: number;
+      templateId: number;
+    }) => {
+      setMessage(`Unassigned form from ${result.unassignedCount} employees.`);
+      setIsError(false);
+      setSelectedEmployeeIds(new Set());
+      await refetch();
+    },
+    onError: (error: Error) => {
+      setIsError(true);
+      setMessage(error.message);
+    },
+  });
+
+  const isMutating = assignMutation.isPending || unassignMutation.isPending;
   function handleFilterChange(id: FilterId, next: FilterSelection) {
     setFilters((prev) => ({ ...prev, [id]: next }));
   }
@@ -289,7 +319,9 @@ export default function FormEmployeeAssignment({
       <div className="shrink-0 px-5 pt-4">
         <h2 className="text-base font-semibold text-text-primary">Assign Employees</h2>
         <p className="mt-0.5 text-sm text-foreground/70">
-          Select employees to assign: <span className="font-medium">{templateTitle}</span>
+          Select employees to assign or unassign:{" "}
+          <span className="font-medium">{templateTitle}</span>. An employee can
+          only have one form in the same appraisal cycle.
         </p>
       </div>
 
@@ -393,14 +425,29 @@ export default function FormEmployeeAssignment({
           </p>
           <button
             type="button"
-            disabled={selectedCount === 0 || assignMutation.isPending}
+            disabled={selectedAssignedCount === 0 || isMutating}
             onClick={() => {
               setMessage(null);
-              assignMutation.mutate([...selectedEmployeeIds]);
+              unassignMutation.mutate(selectedAssignedIds);
+            }}
+            className="inline-flex items-center rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"
+          >
+            {unassignMutation.isPending
+              ? "Unassigning..."
+              : `Unassign Selected${selectedAssignedCount > 0 ? ` (${selectedAssignedCount})` : ""}`}
+          </button>
+          <button
+            type="button"
+            disabled={selectedUnassignedCount === 0 || isMutating}
+            onClick={() => {
+              setMessage(null);
+              assignMutation.mutate(selectedUnassignedIds);
             }}
             className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
           >
-            {assignMutation.isPending ? "Assigning..." : "Assign Selected"}
+            {assignMutation.isPending
+              ? "Assigning..."
+              : `Assign Selected${selectedUnassignedCount > 0 ? ` (${selectedUnassignedCount})` : ""}`}
           </button>
         </div>
       </div>
@@ -495,7 +542,7 @@ export default function FormEmployeeAssignment({
                             {value}
                             {isAssigned ? (
                               <span className="ml-2 inline-flex items-center rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                Already assigned
+                                Assigned
                               </span>
                             ) : null}
                           </span>

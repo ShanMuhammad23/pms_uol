@@ -48,7 +48,7 @@ export default function MyFormsList() {
           No forms assigned yet
         </p>
         <p className="mt-1 text-sm text-foreground/70">
-          A form will appear here once one is published for your staff category.
+          A form will appear here once it is assigned to you by an administrator.
         </p>
       </div>
     );

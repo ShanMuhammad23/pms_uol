@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { signOutAndRedirect } from "@/lib/queries/auth-client";
 import {
+  ClipboardList,
   FileText,
   Grid3X3,
   LayoutDashboard,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { useSidebar } from "@/app/components/layout/sidebar-context";
+import { isEmployeeRole } from "@/lib/auth/home-path";
 import { cn } from "@/lib/utils";
 
 const Sidebar = () => {
@@ -26,8 +28,10 @@ const Sidebar = () => {
   const { data: session } = useSession();
   const { collapsed, toggle } = useSidebar();
   const user = session?.user;
+  const isEmployee = isEmployeeRole(user?.role);
   const isDashboard = pathname === "/dashboard";
   const isProfile = pathname === "/dashboard/profile";
+  const isMyForms = pathname.startsWith("/dashboard/my-forms");
   const isForms = pathname.startsWith("/dashboard/forms");
   const isUsers = pathname.startsWith("/dashboard/users");
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
@@ -86,97 +90,125 @@ const Sidebar = () => {
 
       <nav aria-label="Primary sidebar navigation" className="flex-1">
         <ul className="space-y-0.5 text-sm font-medium text-foreground/75">
-          <li>
-            <Link
-              href="/dashboard"
-              aria-current={isDashboard ? "page" : undefined}
-              title="Dashboard"
-              className={navLinkClass(isDashboard)}
-            >
-              <LayoutDashboard className="size-4 shrink-0" />
-              {!collapsed ? "Dashboard" : null}
-            </Link>
-          </li>
-
-          {isSuperAdmin ? (
+          {isEmployee ? (
             <li>
               <Link
-                href="/dashboard/forms"
-                aria-current={isForms ? "page" : undefined}
-                title="Forms"
-                className={navLinkClass(isForms)}
+                href="/dashboard/my-forms"
+                aria-current={isMyForms ? "page" : undefined}
+                title="My Forms"
+                className={navLinkClass(isMyForms)}
               >
-                <FileText className="size-4 shrink-0" />
-                {!collapsed ? "Forms" : null}
+                <ClipboardList className="size-4 shrink-0" />
+                {!collapsed ? "My Forms" : null}
               </Link>
             </li>
-          ) : null}
+          ) : (
+            <>
+              <li>
+                <Link
+                  href="/dashboard"
+                  aria-current={isDashboard ? "page" : undefined}
+                  title="Dashboard"
+                  className={navLinkClass(isDashboard)}
+                >
+                  <LayoutDashboard className="size-4 shrink-0" />
+                  {!collapsed ? "Dashboard" : null}
+                </Link>
+              </li>
 
-          {isSuperAdmin ? (
-            <li>
-              <Link
-                href="/dashboard/users"
-                aria-current={isUsers ? "page" : undefined}
-                title="Users"
-                className={navLinkClass(isUsers)}
-              >
-                <Users className="size-4 shrink-0" />
-                {!collapsed ? "Users" : null}
-              </Link>
-            </li>
-          ) : null}
+              <li>
+                <Link
+                  href="/dashboard/my-forms"
+                  aria-current={isMyForms ? "page" : undefined}
+                  title="My Forms"
+                  className={navLinkClass(isMyForms)}
+                >
+                  <ClipboardList className="size-4 shrink-0" />
+                  {!collapsed ? "My Forms" : null}
+                </Link>
+              </li>
 
-          {isSuperAdmin ? (
-            <li>
-              <Link
-                href="/dashboard/matrices-and-cycles"
-                aria-current={isMatricesAndCycles ? "page" : undefined}
-                title="Matrices and Cycles"
-                className={navLinkClass(isMatricesAndCycles)}
-              >
-                <Grid3X3 className="size-4 shrink-0" />
-                {!collapsed ? "Matrices and Cycles" : null}
-              </Link>
-            </li>
-          ) : null}
+              {isSuperAdmin ? (
+                <li>
+                  <Link
+                    href="/dashboard/forms"
+                    aria-current={isForms ? "page" : undefined}
+                    title="Forms"
+                    className={navLinkClass(isForms)}
+                  >
+                    <FileText className="size-4 shrink-0" />
+                    {!collapsed ? "Forms" : null}
+                  </Link>
+                </li>
+              ) : null}
 
-          <li>
-            <Link
-              href="/dashboard/profile"
-              aria-current={isProfile ? "page" : undefined}
-              title="Profile"
-              className={navLinkClass(isProfile)}
-            >
-              <SquareUserRound className="size-4 shrink-0" />
-              {!collapsed ? "Profile" : null}
-            </Link>
-          </li>
+              {isSuperAdmin ? (
+                <li>
+                  <Link
+                    href="/dashboard/users"
+                    aria-current={isUsers ? "page" : undefined}
+                    title="Users"
+                    className={navLinkClass(isUsers)}
+                  >
+                    <Users className="size-4 shrink-0" />
+                    {!collapsed ? "Users" : null}
+                  </Link>
+                </li>
+              ) : null}
 
-          <li>
-            <Link
-              href="/dashboard/entity-categories"
-              aria-current={isEntityCategories ? "page" : undefined}
-              title="Entity & Categories"
-              className={navLinkClass(isEntityCategories)}
-            >
-              <List className="size-4 shrink-0" />
-              {!collapsed ? "Entity & Categories" : null}
-            </Link>
-          </li>
+              {isSuperAdmin ? (
+                <li>
+                  <Link
+                    href="/dashboard/matrices-and-cycles"
+                    aria-current={isMatricesAndCycles ? "page" : undefined}
+                    title="Matrices and Cycles"
+                    className={navLinkClass(isMatricesAndCycles)}
+                  >
+                    <Grid3X3 className="size-4 shrink-0" />
+                    {!collapsed ? "Matrices and Cycles" : null}
+                  </Link>
+                </li>
+              ) : null}
 
-          {isSuperAdmin ? (
-            <li>
-              <Link
-                href="/dashboard/staff-categories"
-                aria-current={isStaffCategories ? "page" : undefined}
-                title="Staff Categories"
-                className={navLinkClass(isStaffCategories)}
-              >
-                <Layers className="size-4 shrink-0" />
-                {!collapsed ? "Staff Categories" : null}
-              </Link>
-            </li>
-          ) : null}
+              <li>
+                <Link
+                  href="/dashboard/profile"
+                  aria-current={isProfile ? "page" : undefined}
+                  title="Profile"
+                  className={navLinkClass(isProfile)}
+                >
+                  <SquareUserRound className="size-4 shrink-0" />
+                  {!collapsed ? "Profile" : null}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/dashboard/entity-categories"
+                  aria-current={isEntityCategories ? "page" : undefined}
+                  title="Entity & Categories"
+                  className={navLinkClass(isEntityCategories)}
+                >
+                  <List className="size-4 shrink-0" />
+                  {!collapsed ? "Entity & Categories" : null}
+                </Link>
+              </li>
+
+              {isSuperAdmin ? (
+                <li>
+                  <Link
+                    href="/dashboard/staff-categories"
+                    aria-current={isStaffCategories ? "page" : undefined}
+                    title="Staff Categories"
+                    className={navLinkClass(isStaffCategories)}
+                  >
+                    <Layers className="size-4 shrink-0" />
+                    {!collapsed ? "Staff Categories" : null}
+                  </Link>
+                </li>
+              ) : null}
+            </>
+          )}
         </ul>
       </nav>
 

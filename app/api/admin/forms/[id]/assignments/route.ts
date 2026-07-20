@@ -4,10 +4,29 @@ import {
   assignFormTemplateToEmployees,
   FormTemplateError,
   listFormTemplateAssignedEmployees,
+  unassignFormTemplateFromEmployees,
 } from "@/lib/queries/forms";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+function parseEmployeeIds(body: { employeeIds?: unknown }): string[] | NextResponse {
+  if (!Array.isArray(body.employeeIds) || body.employeeIds.length === 0) {
+    return NextResponse.json(
+      { error: "employeeIds must be a non-empty array." },
+      { status: 400 },
+    );
+  }
+
+  if (!body.employeeIds.every((item) => typeof item === "string" && item.trim())) {
+    return NextResponse.json(
+      { error: "Each employeeId must be a non-empty string." },
+      { status: 400 },
+    );
+  }
+
+  return body.employeeIds as string[];
 }
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -52,24 +71,12 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const body = (await request.json()) as { employeeIds?: unknown };
-    if (!Array.isArray(body.employeeIds) || body.employeeIds.length === 0) {
-      return NextResponse.json(
-        { error: "employeeIds must be a non-empty array." },
-        { status: 400 },
-      );
+    const employeeIds = parseEmployeeIds(body);
+    if (employeeIds instanceof NextResponse) {
+      return employeeIds;
     }
 
-    if (!body.employeeIds.every((item) => typeof item === "string" && item.trim())) {
-      return NextResponse.json(
-        { error: "Each employeeId must be a non-empty string." },
-        { status: 400 },
-      );
-    }
-
-    const result = await assignFormTemplateToEmployees(
-      templateId,
-      body.employeeIds as string[],
-    );
+    const result = await assignFormTemplateToEmployees(templateId, employeeIds);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof FormTemplateError) {
@@ -85,3 +92,40 @@ export async function POST(request: Request, context: RouteContext) {
   }
 }
 
+export async function DELETE(request: Request, context: RouteContext) {
+  const auth = await requireSuperAdminApi();
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const { id } = await context.params;
+  const templateId = Number(id);
+  if (Number.isNaN(templateId)) {
+    return NextResponse.json({ error: "Invalid template id." }, { status: 400 });
+  }
+
+  try {
+    const body = (await request.json()) as { employeeIds?: unknown };
+    const employeeIds = parseEmployeeIds(body);
+    if (employeeIds instanceof NextResponse) {
+      return employeeIds;
+    }
+
+    const result = await unassignFormTemplateFromEmployees(
+      templateId,
+      employeeIds,
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof FormTemplateError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
+    console.error("Failed to unassign form from employees:", error);
+    const detail = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: "Failed to unassign form.", detail },
+      { status: 500 },
+    );
+  }
+}

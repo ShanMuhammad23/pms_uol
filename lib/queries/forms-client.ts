@@ -101,6 +101,20 @@ export async function assignFormTemplateToEmployees(
   return parseResponse<{ assignedCount: number; templateId: number }>(response);
 }
 
+export async function unassignFormTemplateFromEmployees(
+  templateId: number,
+  employeeIds: string[],
+): Promise<{ unassignedCount: number; templateId: number }> {
+  const response = await fetch(`/api/admin/forms/${templateId}/assignments`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ employeeIds }),
+  });
+
+  return parseResponse<{ unassignedCount: number; templateId: number }>(response);
+}
+
 export async function fetchFormTemplateAssignments(
   templateId: number,
 ): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {

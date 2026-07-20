@@ -135,13 +135,18 @@ async function getAnswersForSubmission(
   appraisalId: number,
   filledById: number,
 ): Promise<EmployeeFormAnswerRecord[]> {
+  await db.query(
+    `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
+  );
+
   const result = await db.query<{
     question_id: string;
     text_response: string | null;
     selected_option_id: string | null;
     points_earned: number;
+    remarks: string | null;
   }>(
-    `SELECT question_id, text_response, selected_option_id, points_earned
+    `SELECT question_id, text_response, selected_option_id, points_earned, remarks
      FROM appraisal_answers
      WHERE appraisal_id = $1
        AND filled_by_id = $2`,
@@ -155,6 +160,8 @@ async function getAnswersForSubmission(
       ? Number(row.selected_option_id)
       : null,
     pointsEarned: row.points_earned,
+    remarks: row.remarks ?? null,
+    attachments: [],
   }));
 }
 
@@ -433,7 +440,6 @@ export async function listFormSubmissions(): Promise<FormSubmissionListItem[]> {
            SELECT SUM(fq.total_marks)::text
            FROM form_questions fq
            WHERE fq.template_id = ap.template_id
-             AND fq.input_type = 'NUMBER'
              AND fq.total_marks > 0
          ),
          '0'

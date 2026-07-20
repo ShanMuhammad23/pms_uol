@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { EmployeeAccessGuard } from "@/app/components/layout/EmployeeAccessGuard";
 import Sidebar from "@/app/components/layout/Sidebar";
 import {
   SIDEBAR_COLLAPSED_WIDTH,
@@ -42,7 +43,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             maxWidth: `calc(100vw - ${resolvedWidth}px)`,
           }}
         >
-          {children}
+          <EmployeeAccessGuard>{children}</EmployeeAccessGuard>
         </main>
       </div>
     </SidebarContext.Provider>

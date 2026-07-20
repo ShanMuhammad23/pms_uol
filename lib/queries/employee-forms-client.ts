@@ -1,5 +1,6 @@
 import type {
   AssignedFormListItem,
+  EmployeeFormAnswerAttachment,
   EmployeeFormDetail,
   SaveEmployeeFormInput,
 } from "@/types/employee-forms";
@@ -37,4 +38,40 @@ export async function saveEmployeeForm(
   });
 
   return parseResponse<EmployeeFormDetail>(response);
+}
+
+export async function uploadEmployeeFormAttachment(
+  templateId: number,
+  questionId: number,
+  file: File,
+): Promise<EmployeeFormAnswerAttachment> {
+  const formData = new FormData();
+  formData.set("questionId", String(questionId));
+  formData.set("file", file);
+
+  const response = await fetch(`/api/my-forms/${templateId}/attachments`, {
+    method: "POST",
+    body: formData,
+  });
+
+  return parseResponse<EmployeeFormAnswerAttachment>(response);
+}
+
+export async function deleteEmployeeFormAttachment(
+  templateId: number,
+  attachmentId: number,
+): Promise<void> {
+  const response = await fetch(
+    `/api/my-forms/${templateId}/attachments/${attachmentId}`,
+    { method: "DELETE" },
+  );
+
+  await parseResponse<{ success: true }>(response);
+}
+
+export function getEmployeeFormAttachmentDownloadUrl(
+  templateId: number,
+  attachmentId: number,
+): string {
+  return `/api/my-forms/${templateId}/attachments/${attachmentId}`;
 }

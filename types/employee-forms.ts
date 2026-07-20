@@ -14,11 +14,22 @@ export interface AssignedFormListItem {
   updatedAt: string | null;
 }
 
+export interface EmployeeFormAnswerAttachment {
+  id: number;
+  questionId: number;
+  originalFilename: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export interface EmployeeFormAnswerRecord {
   questionId: number;
   textResponse: string | null;
   selectedOptionId: number | null;
   pointsEarned: number;
+  remarks: string | null;
+  attachments: EmployeeFormAnswerAttachment[];
 }
 
 export interface EmployeeFormDetail {
@@ -36,6 +47,7 @@ export interface EmployeeFormAnswerInput {
   textResponse?: string | null;
   selectedOptionId?: number | null;
   pointsEarned?: number;
+  remarks?: string | null;
 }
 
 export interface SaveEmployeeFormInput {

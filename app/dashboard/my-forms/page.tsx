@@ -9,7 +9,7 @@ export default async function MyFormsPage() {
       <div>
         <h1 className="text-2xl font-bold">My Forms</h1>
         <p className="mt-1 text-sm text-foreground/70">
-          View and complete appraisal forms assigned to your staff category.
+          View and complete appraisal forms assigned to you.
         </p>
       </div>
 

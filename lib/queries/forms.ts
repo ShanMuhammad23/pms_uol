@@ -509,7 +509,7 @@ function mapQuestionRow(
     sortOrder: question.sort_order,
     selfAssessmentEnabled: question.self_assessment_enabled,
     hodAssessmentEnabled: question.hod_assessment_enabled,
-    totalMarks: question.total_marks,
+    totalMarks: Number(question.total_marks),
     sectionId: question.section_id ? Number(question.section_id) : undefined,
     options: optionsByQuestionId.get(Number(question.id)) ?? [],
   };
@@ -924,7 +924,6 @@ export async function assignFormTemplateToEmployees(
     ? Number(templateResult.rows[0].cycle_id)
     : null;
 
-  // 1. Find matching active users
   const usersResult = await db.query<{ id: string; employee_id: string }>(
     `SELECT id, employee_id
      FROM users
@@ -939,7 +938,60 @@ export async function assignFormTemplateToEmployees(
 
   const userIds = usersResult.rows.map((r) => r.id);
 
-  // 2. Insert into employee_form_assignments (upsert)
+  // One form per employee per appraisal cycle.
+  if (cycleId !== null) {
+    const conflicts = await db.query<{
+      employee_id: string;
+      employee_name: string;
+      other_title: string;
+    }>(
+      `WITH conflict_rows AS (
+         SELECT
+           u.employee_id,
+           CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+           ft.title AS other_title
+         FROM employee_form_assignments efa
+         INNER JOIN form_templates ft ON ft.id = efa.template_id
+         INNER JOIN users u ON u.id = efa.employee_id
+         WHERE efa.employee_id = ANY($1::bigint[])
+           AND ft.cycle_id = $2
+           AND efa.template_id <> $3
+
+         UNION
+
+         SELECT
+           u.employee_id,
+           CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+           COALESCE(ft.title, 'Another form') AS other_title
+         FROM appraisals ap
+         INNER JOIN users u ON u.id = ap.employee_id
+         LEFT JOIN form_templates ft ON ft.id = ap.template_id
+         WHERE ap.employee_id = ANY($1::bigint[])
+           AND ap.cycle_id = $2
+           AND ap.template_id IS DISTINCT FROM $3
+       )
+       SELECT employee_id, employee_name, other_title
+       FROM conflict_rows
+       ORDER BY employee_name, employee_id
+       LIMIT 8`,
+      [userIds, cycleId, templateId],
+    );
+
+    if (conflicts.rows.length > 0) {
+      const details = conflicts.rows
+        .map(
+          (row) =>
+            `${row.employee_name} (${row.employee_id}) → "${row.other_title}"`,
+        )
+        .join("; ");
+      const extra = conflicts.rows.length === 8 ? " (and more)" : "";
+      throw new FormTemplateError(
+        `Each employee can only have one form in an appraisal cycle. Already assigned elsewhere: ${details}${extra}. Unassign them from the other form first.`,
+        409,
+      );
+    }
+  }
+
   await db.query(
     `INSERT INTO employee_form_assignments (employee_id, template_id)
      SELECT u.id, $2
@@ -949,7 +1001,6 @@ export async function assignFormTemplateToEmployees(
     [userIds, templateId],
   );
 
-  // 3. Insert into appraisals (upsert on employee_id, cycle_id if cycle exists)
   if (cycleId !== null) {
     await db.query(
       `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
@@ -957,8 +1008,12 @@ export async function assignFormTemplateToEmployees(
        FROM unnest($1::bigint[]) AS u(id)
        ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
          SET template_id = EXCLUDED.template_id,
-             status = 'PENDING_SELF_ASSESSMENT',
-             updated_at = CURRENT_TIMESTAMP`,
+             status = CASE
+               WHEN appraisals.submitted_at IS NULL THEN 'PENDING_SELF_ASSESSMENT'
+               ELSE appraisals.status
+             END,
+             updated_at = CURRENT_TIMESTAMP
+       WHERE appraisals.submitted_at IS NULL`,
       [userIds, cycleId, templateId],
     );
   }
@@ -967,6 +1022,124 @@ export async function assignFormTemplateToEmployees(
     assignedCount: usersResult.rows.length,
     templateId,
   };
+}
+
+export async function unassignFormTemplateFromEmployees(
+  templateId: number,
+  employeeCodes: string[],
+): Promise<{ unassignedCount: number; templateId: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    throw new FormTemplateError("At least one employee is required.", 400);
+  }
+
+  const templateResult = await db.query<{ id: string; cycle_id: number | null }>(
+    `SELECT id, cycle_id
+     FROM form_templates
+     WHERE id = $1`,
+    [templateId],
+  );
+
+  if (!templateResult.rows[0]) {
+    throw new FormTemplateError("Form template not found.", 404);
+  }
+
+  const cycleId = templateResult.rows[0].cycle_id
+    ? Number(templateResult.rows[0].cycle_id)
+    : null;
+
+  const usersResult = await db.query<{ id: string; employee_id: string }>(
+    `SELECT id, employee_id
+     FROM users
+     WHERE employee_id = ANY($1::text[])`,
+    [normalizedCodes],
+  );
+
+  if (usersResult.rows.length === 0) {
+    throw new FormTemplateError("No matching employees found.", 404);
+  }
+
+  const userIds = usersResult.rows.map((r) => r.id);
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const deletedAssignments = await client.query<{ employee_id: string }>(
+      `DELETE FROM employee_form_assignments
+       WHERE template_id = $1
+         AND employee_id = ANY($2::bigint[])
+       RETURNING employee_id`,
+      [templateId, userIds],
+    );
+
+    if (deletedAssignments.rows.length === 0) {
+      await client.query("ROLLBACK");
+      throw new FormTemplateError(
+        "None of the selected employees are assigned to this form.",
+        404,
+      );
+    }
+
+    const removedUserIds = deletedAssignments.rows.map((row) => row.employee_id);
+
+    // Remove only not-yet-submitted appraisals for this template (and cycle when set).
+    if (cycleId !== null) {
+      await client.query(
+        `DELETE FROM appraisal_answers
+         WHERE appraisal_id IN (
+           SELECT id
+           FROM appraisals
+           WHERE employee_id = ANY($1::bigint[])
+             AND template_id = $2
+             AND cycle_id = $3
+             AND submitted_at IS NULL
+         )`,
+        [removedUserIds, templateId, cycleId],
+      );
+
+      await client.query(
+        `DELETE FROM appraisals
+         WHERE employee_id = ANY($1::bigint[])
+           AND template_id = $2
+           AND cycle_id = $3
+           AND submitted_at IS NULL`,
+        [removedUserIds, templateId, cycleId],
+      );
+    } else {
+      await client.query(
+        `DELETE FROM appraisal_answers
+         WHERE appraisal_id IN (
+           SELECT id
+           FROM appraisals
+           WHERE employee_id = ANY($1::bigint[])
+             AND template_id = $2
+             AND submitted_at IS NULL
+         )`,
+        [removedUserIds, templateId],
+      );
+
+      await client.query(
+        `DELETE FROM appraisals
+         WHERE employee_id = ANY($1::bigint[])
+           AND template_id = $2
+           AND submitted_at IS NULL`,
+        [removedUserIds, templateId],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return {
+      unassignedCount: deletedAssignments.rows.length,
+      templateId,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listFormTemplateAssignedEmployees(

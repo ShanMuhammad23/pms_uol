@@ -3,8 +3,16 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { db } from "@/lib/db";
 import { getFormTemplateById } from "@/lib/queries/forms";
+import {
+  deleteFormAttachmentFile,
+  resolveFormAttachmentAbsolutePath,
+  storeFormAttachmentFile,
+  ALLOWED_FORM_ATTACHMENT_MIME_TYPES,
+  MAX_FORM_ATTACHMENT_BYTES,
+} from "@/lib/uploads/form-attachments";
 import type {
   AssignedFormListItem,
+  EmployeeFormAnswerAttachment,
   EmployeeFormAnswerInput,
   EmployeeFormAnswerRecord,
   EmployeeFormDetail,
@@ -30,6 +38,49 @@ interface AppraisalRow {
   submitted_at: string | null;
   updated_at: string;
   system_raw_score: number;
+}
+
+let remarksColumnReady: boolean | null = null;
+let attachmentsTableReady: boolean | null = null;
+
+async function ensureRemarksColumn(client?: PoolClient): Promise<void> {
+  if (remarksColumnReady) {
+    return;
+  }
+
+  const executor = client ?? db;
+  await executor.query(
+    `ALTER TABLE appraisal_answers
+     ADD COLUMN IF NOT EXISTS remarks TEXT`,
+  );
+  remarksColumnReady = true;
+}
+
+async function ensureAttachmentsTable(client?: PoolClient): Promise<void> {
+  if (attachmentsTableReady) {
+    return;
+  }
+
+  const executor = client ?? db;
+  await executor.query(`
+    CREATE TABLE IF NOT EXISTS appraisal_answer_attachments (
+      id BIGSERIAL PRIMARY KEY,
+      appraisal_id BIGINT NOT NULL REFERENCES appraisals(id) ON DELETE CASCADE,
+      question_id BIGINT NOT NULL REFERENCES form_questions(id) ON DELETE CASCADE,
+      filled_by_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      original_filename TEXT NOT NULL,
+      stored_filename TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      mime_type TEXT,
+      size_bytes BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await executor.query(`
+    CREATE INDEX IF NOT EXISTS idx_answer_attachments_lookup
+      ON appraisal_answer_attachments (appraisal_id, question_id, filled_by_id)
+  `);
+  attachmentsTableReady = true;
 }
 
 export class EmployeeFormError extends Error {
@@ -241,26 +292,81 @@ async function getAnswersForAppraisal(
   client?: PoolClient,
 ): Promise<EmployeeFormAnswerRecord[]> {
   const executor = client ?? db;
+  await ensureRemarksColumn(client);
+  await ensureAttachmentsTable(client);
+
   const result = await executor.query<{
     question_id: string;
     text_response: string | null;
     selected_option_id: string | null;
     points_earned: number;
+    remarks: string | null;
   }>(
-    `SELECT question_id, text_response, selected_option_id, points_earned
+    `SELECT question_id, text_response, selected_option_id, points_earned, remarks
      FROM appraisal_answers
      WHERE appraisal_id = $1
        AND filled_by_id = $2`,
     [appraisalId, userId],
   );
 
+  const attachments = await listAttachmentsForAppraisal(
+    appraisalId,
+    userId,
+    client,
+  );
+  const attachmentsByQuestion = new Map<number, EmployeeFormAnswerAttachment[]>();
+  for (const attachment of attachments) {
+    const current = attachmentsByQuestion.get(attachment.questionId) ?? [];
+    current.push(attachment);
+    attachmentsByQuestion.set(attachment.questionId, current);
+  }
+
+  return result.rows.map((row) => {
+    const questionId = Number(row.question_id);
+    return {
+      questionId,
+      textResponse: row.text_response,
+      selectedOptionId: row.selected_option_id
+        ? Number(row.selected_option_id)
+        : null,
+      pointsEarned: row.points_earned,
+      remarks: row.remarks,
+      attachments: attachmentsByQuestion.get(questionId) ?? [],
+    };
+  });
+}
+
+async function listAttachmentsForAppraisal(
+  appraisalId: number,
+  userId: number,
+  client?: PoolClient,
+): Promise<EmployeeFormAnswerAttachment[]> {
+  const executor = client ?? db;
+  await ensureAttachmentsTable(client);
+
+  const result = await executor.query<{
+    id: string;
+    question_id: string;
+    original_filename: string;
+    mime_type: string | null;
+    size_bytes: string;
+    created_at: string;
+  }>(
+    `SELECT id, question_id, original_filename, mime_type, size_bytes::text, created_at::text
+     FROM appraisal_answer_attachments
+     WHERE appraisal_id = $1
+       AND filled_by_id = $2
+     ORDER BY created_at ASC, id ASC`,
+    [appraisalId, userId],
+  );
+
   return result.rows.map((row) => ({
+    id: Number(row.id),
     questionId: Number(row.question_id),
-    textResponse: row.text_response,
-    selectedOptionId: row.selected_option_id
-      ? Number(row.selected_option_id)
-      : null,
-    pointsEarned: row.points_earned,
+    originalFilename: row.original_filename,
+    mimeType: row.mime_type,
+    sizeBytes: Number(row.size_bytes),
+    createdAt: row.created_at,
   }));
 }
 
@@ -285,7 +391,7 @@ async function getOrCreateAppraisal(
 }
 
 function isScoredQuestion(question: QuestionRecord): boolean {
-  return question.totalMarks > 0 && question.inputType === "NUMBER";
+  return Number(question.totalMarks) > 0;
 }
 
 function calculateRawScore(
@@ -304,7 +410,7 @@ function calculateRawScore(
 function calculateMaxRawScore(template: FormTemplateRecord): number {
   return getTemplateQuestions(template)
     .filter(isScoredQuestion)
-    .reduce((sum, question) => sum + question.totalMarks, 0);
+    .reduce((sum, question) => sum + Number(question.totalMarks), 0);
 }
 
 function validateAnswers(
@@ -340,42 +446,39 @@ function validateAnswers(
       continue;
     }
 
-    if (isScored || question.inputType === "NUMBER") {
-      const value = answer.pointsEarned ?? Number(answer.textResponse);
+    if (isScored) {
+      const value = Number(answer.pointsEarned);
       if (Number.isNaN(value)) {
         throw new EmployeeFormError(
           `Enter a valid score for "${question.questionText.slice(0, 80)}".`,
         );
       }
-      if (value < 0 || value > question.totalMarks) {
+      if (value < 0 || value > Number(question.totalMarks)) {
         throw new EmployeeFormError(
           `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
+        );
+      }
+    } else if (question.inputType === "NUMBER") {
+      const value = answer.pointsEarned ?? Number(answer.textResponse);
+      if (Number.isNaN(value)) {
+        throw new EmployeeFormError(
+          `Enter a valid number for "${question.questionText.slice(0, 80)}".`,
         );
       }
     }
 
     if (["TEXT", "TEXTAREA"].includes(question.inputType)) {
-      if (submit && question.isRequired && !answer.textResponse?.trim()) {
-        throw new EmployeeFormError(
-          `Question "${question.questionText.slice(0, 80)}" is required.`,
-        );
-      }
+      // Employee fill is score + optional remarks; narrative text is not required.
+      continue;
     }
 
     if (["RADIO", "SELECT"].includes(question.inputType)) {
-      if (submit && question.isRequired && !answer.selectedOptionId) {
-        throw new EmployeeFormError(
-          `Select an option for "${question.questionText.slice(0, 80)}".`,
-        );
-      }
+      // Options are display-only on the employee fill screen.
+      continue;
     }
 
     if (question.inputType === "CHECKBOX") {
-      if (submit && question.isRequired && !answer.selectedOptionId) {
-        throw new EmployeeFormError(
-          `Select at least one option for "${question.questionText.slice(0, 80)}".`,
-        );
-      }
+      continue;
     }
   }
 
@@ -389,6 +492,7 @@ function normalizeAnswer(
   textResponse: string | null;
   selectedOptionId: number | null;
   pointsEarned: number;
+  remarks: string | null;
 } {
   const question = getTemplateQuestions(template).find(
     (item) => item.id === answer.questionId,
@@ -398,14 +502,18 @@ function normalizeAnswer(
     throw new EmployeeFormError("One or more answers reference invalid questions.");
   }
 
+  const remarks = answer.remarks?.trim() || null;
+  const scoredPoints = isScoredQuestion(question)
+    ? Number(answer.pointsEarned ?? 0)
+    : 0;
+
   if (question.inputType === "NUMBER" || isScoredQuestion(question)) {
-    const pointsEarned = Number(
-      answer.pointsEarned ?? answer.textResponse ?? 0,
-    );
+    const pointsEarned = Number(answer.pointsEarned ?? 0);
     return {
-      textResponse: String(pointsEarned),
+      textResponse: null,
       selectedOptionId: null,
       pointsEarned,
+      remarks,
     };
   }
 
@@ -417,14 +525,16 @@ function normalizeAnswer(
     return {
       textResponse: null,
       selectedOptionId: answer.selectedOptionId ?? null,
-      pointsEarned: option?.pointsAssigned ?? 0,
+      pointsEarned: option?.pointsAssigned ?? scoredPoints,
+      remarks,
     };
   }
 
   return {
     textResponse: answer.textResponse?.trim() || null,
     selectedOptionId: null,
-    pointsEarned: 0,
+    pointsEarned: scoredPoints,
+    remarks,
   };
 }
 
@@ -569,6 +679,7 @@ export async function saveEmployeeForm(
       const normalized = normalizeAnswer(template, answer);
       normalizedAnswers.push({ questionId: answer.questionId, normalized });
 
+      await ensureRemarksColumn(client);
       await client.query(
         `INSERT INTO appraisal_answers (
            appraisal_id,
@@ -576,13 +687,15 @@ export async function saveEmployeeForm(
            filled_by_id,
            text_response,
            selected_option_id,
-           points_earned
-         ) VALUES ($1, $2, $3, $4, $5, $6)
+           points_earned,
+           remarks
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (appraisal_id, question_id, filled_by_id)
          DO UPDATE SET
            text_response = EXCLUDED.text_response,
            selected_option_id = EXCLUDED.selected_option_id,
            points_earned = EXCLUDED.points_earned,
+           remarks = EXCLUDED.remarks,
            updated_at = CURRENT_TIMESTAMP`,
         [
           appraisal.id,
@@ -591,6 +704,7 @@ export async function saveEmployeeForm(
           normalized.textResponse,
           normalized.selectedOptionId,
           normalized.pointsEarned,
+          normalized.remarks,
         ],
       );
     }
@@ -607,14 +721,15 @@ export async function saveEmployeeForm(
           (answer) => answer.questionId === question.id,
         );
 
-        if (!saved || saved.textResponse === null) {
+        if (!saved) {
           throw new EmployeeFormError(
             `Enter a score for "${question.questionText.slice(0, 80)}".`,
           );
         }
 
-        const score = saved.pointsEarned;
-        if (score < 0 || score > question.totalMarks) {
+        const score = Number(saved.pointsEarned);
+        const maxMarks = Number(question.totalMarks);
+        if (Number.isNaN(score) || score < 0 || score > maxMarks) {
           throw new EmployeeFormError(
             `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
           );
@@ -656,4 +771,219 @@ export async function saveEmployeeForm(
   }
 
   return getEmployeeFormDetail(userId, templateId);
+}
+
+export async function addEmployeeFormAttachment(
+  userId: number,
+  templateId: number,
+  questionId: number,
+  file: {
+    originalFilename: string;
+    mimeType: string | null;
+    bytes: Buffer;
+  },
+): Promise<EmployeeFormAnswerAttachment> {
+  await assertTemplateAssignedToUser(userId, templateId);
+
+  const template = await getFormTemplateById(templateId);
+  if (!template) {
+    throw new EmployeeFormError("Form not found.", 404);
+  }
+
+  const question = getTemplateQuestions(template).find(
+    (item) => item.id === questionId,
+  );
+  if (!question) {
+    throw new EmployeeFormError("Question not found on this form.", 404);
+  }
+
+  if (file.bytes.byteLength === 0) {
+    throw new EmployeeFormError("Empty files are not allowed.", 400);
+  }
+
+  if (file.bytes.byteLength > MAX_FORM_ATTACHMENT_BYTES) {
+    throw new EmployeeFormError("Attachment must be 10 MB or smaller.", 400);
+  }
+
+  if (
+    file.mimeType &&
+    !ALLOWED_FORM_ATTACHMENT_MIME_TYPES.has(file.mimeType)
+  ) {
+    throw new EmployeeFormError(
+      "Unsupported file type. Use PDF, image, Word, Excel, or plain text.",
+      400,
+    );
+  }
+
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+    await ensureRemarksColumn(client);
+    await ensureAttachmentsTable(client);
+
+    const existing = await getAppraisalForUserTemplate(
+      userId,
+      templateId,
+      client,
+    );
+    if (existing?.submitted_at) {
+      throw new EmployeeFormError(
+        "This form has already been submitted and cannot be edited.",
+        409,
+      );
+    }
+
+    const appraisal = await getOrCreateAppraisal(userId, templateId, client);
+
+    await client.query(
+      `INSERT INTO appraisal_answers (
+         appraisal_id,
+         question_id,
+         filled_by_id,
+         text_response,
+         selected_option_id,
+         points_earned,
+         remarks
+       ) VALUES ($1, $2, $3, NULL, NULL, 0, NULL)
+       ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
+      [appraisal.id, questionId, userId],
+    );
+
+    const stored = await storeFormAttachmentFile({
+      appraisalId: Number(appraisal.id),
+      questionId,
+      originalFilename: file.originalFilename,
+      bytes: file.bytes,
+    });
+
+    const result = await client.query<{
+      id: string;
+      question_id: string;
+      original_filename: string;
+      mime_type: string | null;
+      size_bytes: string;
+      created_at: string;
+    }>(
+      `INSERT INTO appraisal_answer_attachments (
+         appraisal_id,
+         question_id,
+         filled_by_id,
+         original_filename,
+         stored_filename,
+         relative_path,
+         mime_type,
+         size_bytes
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, question_id, original_filename, mime_type, size_bytes::text, created_at::text`,
+      [
+        appraisal.id,
+        questionId,
+        userId,
+        file.originalFilename,
+        stored.storedFilename,
+        stored.relativePath,
+        file.mimeType,
+        file.bytes.byteLength,
+      ],
+    );
+
+    await client.query("COMMIT");
+
+    const row = result.rows[0];
+    return {
+      id: Number(row.id),
+      questionId: Number(row.question_id),
+      originalFilename: row.original_filename,
+      mimeType: row.mime_type,
+      sizeBytes: Number(row.size_bytes),
+      createdAt: row.created_at,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getEmployeeFormAttachmentForDownload(
+  userId: number,
+  templateId: number,
+  attachmentId: number,
+): Promise<{
+  absolutePath: string;
+  originalFilename: string;
+  mimeType: string | null;
+}> {
+  await assertTemplateAssignedToUser(userId, templateId);
+  await ensureAttachmentsTable();
+
+  const result = await db.query<{
+    relative_path: string;
+    original_filename: string;
+    mime_type: string | null;
+    appraisal_employee_id: string;
+  }>(
+    `SELECT
+       att.relative_path,
+       att.original_filename,
+       att.mime_type,
+       ap.employee_id::text AS appraisal_employee_id
+     FROM appraisal_answer_attachments att
+     INNER JOIN appraisals ap ON ap.id = att.appraisal_id
+     WHERE att.id = $1
+       AND ap.template_id = $2`,
+    [attachmentId, templateId],
+  );
+
+  if (result.rows.length === 0) {
+    throw new EmployeeFormError("Attachment not found.", 404);
+  }
+
+  const row = result.rows[0];
+  if (Number(row.appraisal_employee_id) !== userId) {
+    throw new EmployeeFormError("Attachment not found.", 404);
+  }
+
+  return {
+    absolutePath: resolveFormAttachmentAbsolutePath(row.relative_path),
+    originalFilename: row.original_filename,
+    mimeType: row.mime_type,
+  };
+}
+
+export async function deleteEmployeeFormAttachment(
+  userId: number,
+  templateId: number,
+  attachmentId: number,
+): Promise<void> {
+  await assertTemplateAssignedToUser(userId, templateId);
+  await ensureAttachmentsTable();
+
+  const appraisal = await getAppraisalForUserTemplate(userId, templateId);
+  if (!appraisal) {
+    throw new EmployeeFormError("Attachment not found.", 404);
+  }
+  if (appraisal.submitted_at) {
+    throw new EmployeeFormError(
+      "This form has already been submitted and cannot be edited.",
+      409,
+    );
+  }
+
+  const result = await db.query<{ relative_path: string }>(
+    `DELETE FROM appraisal_answer_attachments
+     WHERE id = $1
+       AND appraisal_id = $2
+       AND filled_by_id = $3
+     RETURNING relative_path`,
+    [attachmentId, appraisal.id, userId],
+  );
+
+  if (result.rows.length === 0) {
+    throw new EmployeeFormError("Attachment not found.", 404);
+  }
+
+  await deleteFormAttachmentFile(result.rows[0].relative_path);
 }
