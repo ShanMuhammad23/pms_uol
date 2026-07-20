@@ -16,7 +16,7 @@ import type {
   FormSubmissionDetail,
   FormSubmissionListItem,
 } from "@/types/form-submissions";
-import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
+import type { AppraisalStatus, PerformanceRating, QuestionRecord } from "@/types/forms";
 import { flattenAllQuestions } from "@/types/forms";
 
 export class FormSubmissionError extends Error {
