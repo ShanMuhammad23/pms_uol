@@ -478,9 +478,9 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
           <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
           Scroll horizontally to view all columns
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[70vh]">
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="bg-slate-800 dark:bg-slate-950/80">
                 <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Sr. No.

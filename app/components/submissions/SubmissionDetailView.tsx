@@ -319,9 +319,9 @@ export default function SubmissionDetailView({
         Scroll horizontally to view all columns
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[70vh]">
         <table className="min-w-full border-collapse text-left text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-slate-800 dark:bg-slate-950/80">
               <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Sr. No.
