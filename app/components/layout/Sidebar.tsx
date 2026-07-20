@@ -9,8 +9,6 @@ import {
   FileText,
   Grid3X3,
   LayoutDashboard,
-  List,
-  Layers,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -35,8 +33,6 @@ const Sidebar = () => {
   const isForms = pathname.startsWith("/dashboard/forms");
   const isUsers = pathname.startsWith("/dashboard/users");
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
-  const isEntityCategories = pathname === "/dashboard/entity-categories";
-  const isStaffCategories = pathname.startsWith("/dashboard/staff-categories");
   const isMatricesAndCycles = pathname.startsWith("/dashboard/matrices-and-cycles");
 
   const navLinkClass = (active: boolean) =>
@@ -181,34 +177,6 @@ const Sidebar = () => {
                   {!collapsed ? "Profile" : null}
                 </Link>
               </li>
-
-              {isSuperAdmin ? (
-                <li>
-                  <Link
-                    href="/dashboard/entity-categories"
-                    aria-current={isEntityCategories ? "page" : undefined}
-                    title="Entity & Categories"
-                    className={navLinkClass(isEntityCategories)}
-                  >
-                    <List className="size-4 shrink-0" />
-                    {!collapsed ? "Entity & Categories" : null}
-                  </Link>
-                </li>
-              ) : null}
-
-              {isSuperAdmin ? (
-                <li>
-                  <Link
-                    href="/dashboard/staff-categories"
-                    aria-current={isStaffCategories ? "page" : undefined}
-                    title="Staff Categories"
-                    className={navLinkClass(isStaffCategories)}
-                  >
-                    <Layers className="size-4 shrink-0" />
-                    {!collapsed ? "Staff Categories" : null}
-                  </Link>
-                </li>
-              ) : null}
             </>
           )}
         </ul>

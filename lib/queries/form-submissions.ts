@@ -46,10 +46,6 @@ interface SubmissionListRow {
   emp_sub_category: string | null;
   template_id: number | null;
   template_title: string | null;
-  staff_category_id: number | null;
-  staff_category_name: string | null;
-  staff_sub_category_id: number | null;
-  staff_sub_category_name: string | null;
   entity_id: string | null;
   entity_name: string | null;
   parent_entity_name: string | null;
@@ -215,10 +211,6 @@ function mapSubmissionRow(
     empSubCategory: row.emp_sub_category,
     templateId: row.template_id,
     templateTitle: row.template_title,
-    staffCategoryId: row.staff_category_id,
-    staffCategoryName: row.staff_category_name,
-    staffSubCategoryId: row.staff_sub_category_id,
-    staffSubCategoryName: row.staff_sub_category_name,
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: row.entity_name,
     parentEntityName: row.parent_entity_name,
@@ -439,10 +431,6 @@ export async function listFormSubmissions(options?: {
        ${qualSelect}
        ap.template_id,
        ft.title AS template_title,
-       COALESCE(ft.staff_category_id, u.staff_category_id) AS staff_category_id,
-       COALESCE(sc.name, sc_user.name) AS staff_category_name,
-       COALESCE(ft.staff_sub_category_id, u.staff_sub_category_id) AS staff_sub_category_id,
-       COALESCE(ssc.name, ssc_user.name) AS staff_sub_category_name,
        u.entity_id,
        ent.name AS entity_name,
        p1.name AS parent_entity_name,
@@ -488,10 +476,6 @@ export async function listFormSubmissions(options?: {
        LIMIT 1
      ) ap ON TRUE
      LEFT JOIN form_templates ft ON ft.id = ap.template_id
-     LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
-     LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
-     LEFT JOIN staff_categories sc_user ON sc_user.id = u.staff_category_id
-     LEFT JOIN staff_sub_categories ssc_user ON ssc_user.id = u.staff_sub_category_id
      LEFT JOIN entities ent ON ent.id = u.entity_id
      LEFT JOIN entity_categories ent_cat ON ent_cat.id = ent.entity_category_id
      LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
@@ -782,8 +766,6 @@ export async function getFormSubmissionById(
     employeeEmail: summary.employeeEmail,
     templateId: summary.templateId,
     templateTitle: summary.templateTitle,
-    staffCategoryName: summary.staffCategoryName,
-    staffSubCategoryName: summary.staffSubCategoryName,
     status: summary.status,
     managerLevel: summary.managerLevel,
     rawScore: summary.rawScore,

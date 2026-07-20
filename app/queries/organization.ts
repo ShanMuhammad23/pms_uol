@@ -8,7 +8,6 @@ import {
   fetchEntities,
 } from "@/lib/queries/entities-client";
 import { fetchUniqueDesignations } from "@/lib/queries/designations-client";
-import { fetchStaffCategoriesWithSubCategories } from "@/lib/queries/staff-categories-client";
 import type { EntityRecord } from "@/types/entities";
 
 export function useEntitiesQuery() {
@@ -29,13 +28,6 @@ export function useUniqueDesignationsQuery() {
   return useQuery({
     queryKey: queryKeys.designations,
     queryFn: fetchUniqueDesignations,
-  });
-}
-
-export function useStaffCategoriesWithSubCategoriesQuery() {
-  return useQuery({
-    queryKey: queryKeys.staffCategoriesWithSubCategories,
-    queryFn: fetchStaffCategoriesWithSubCategories,
   });
 }
 

@@ -2,9 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Pencil, Plus, Table2, Users, X } from "lucide-react";
+import { Plus, Table2, Users } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
+import { EditUserModal } from "@/app/components/users/EditUserModal";
 import { UsersListingTable } from "@/app/components/users/UsersListingTable";
 import { queryKeys } from "@/app/queries/keys";
 import {
@@ -15,7 +16,6 @@ import { useUsersPageFilters } from "@/app/queries/users-filters";
 import {
   createUser,
   deleteUser,
-  fetchStaffCategoriesForUsers,
   fetchUsers,
   updateUser,
 } from "@/lib/queries/users-client";
@@ -44,8 +44,6 @@ interface UserFormState {
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId: string;
-  staffSubCategoryId: string;
   entityId: string;
   headId: string;
   isActive: boolean;
@@ -60,8 +58,6 @@ const emptyForm: UserFormState = {
   systemRole: "EMPLOYEE",
   empCategory: "ADMINISTRATION",
   empSubCategory: "SYSTEM_ADMIN",
-  staffCategoryId: "",
-  staffSubCategoryId: "",
   entityId: "",
   headId: "",
   isActive: true,
@@ -77,10 +73,6 @@ export default function UsersManager() {
   const { data: entities = [], isLoading: entitiesLoading } = useEntitiesQuery();
   const { data: designations = [], isLoading: designationsLoading } =
     useUniqueDesignationsQuery();
-  const { data: staffCategories = [], isLoading: staffCategoriesLoading } = useQuery({
-    queryKey: ["staff-categories-for-users"],
-    queryFn: fetchStaffCategoriesForUsers,
-  });
 
   const {
     data: users = [],
@@ -118,22 +110,12 @@ export default function UsersManager() {
     designations,
   });
 
-  const selectedStaffCategory = useMemo(
-    () =>
-      staffCategories.find(
-        (staffCategory) => String(staffCategory.id) === form.staffCategoryId,
-      ),
-    [staffCategories, form.staffCategoryId],
-  );
-  const subCategoryOptions = selectedStaffCategory?.subCategories ?? [];
-
   const headOptions = useMemo(() => {
-    return users.filter((user) => !editingUser || user.id !== editingUser.id);
-  }, [users, editingUser]);
+    return users;
+  }, [users]);
 
   const resetForm = () => {
     setForm(emptyForm);
-    setEditingUser(null);
   };
 
   const invalidateList = () => {
@@ -168,8 +150,9 @@ export default function UsersManager() {
         tone: "success",
         text: `User "${user.firstName} ${user.lastName}" updated successfully.`,
       });
-      resetForm();
+      setEditingUser(null);
       invalidateList();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.formSubmissions });
     },
     onError: (mutationError: Error) => {
       setFormMessage({ tone: "error", text: mutationError.message });
@@ -184,7 +167,7 @@ export default function UsersManager() {
         text: "User deleted successfully.",
       });
       if (editingUser) {
-        resetForm();
+        setEditingUser(null);
       }
       invalidateList();
     },
@@ -193,82 +176,30 @@ export default function UsersManager() {
     },
   });
 
-  const isSubmitting = createMutation.isPending || updateMutation.isPending;
-  const isLoading = entitiesLoading || usersLoading || staffCategoriesLoading;
+  const isSubmitting = createMutation.isPending;
+  const isLoading = entitiesLoading || usersLoading;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormMessage(null);
-    const staffCategory = staffCategories.find(
-      (item) => String(item.id) === form.staffCategoryId,
-    );
-    const staffSubCategory = staffCategory?.subCategories.find(
-      (item) => String(item.id) === form.staffSubCategoryId,
-    );
 
-    if (!staffCategory || !staffSubCategory) {
-      setFormMessage({
-        tone: "error",
-        text: "Please select a valid staff category and sub-category.",
-      });
-      return;
-    }
-
-    const payload = {
+    createMutation.mutate({
       employeeId: form.employeeId.trim(),
       email: form.email.trim(),
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       systemRole: form.systemRole,
-      // Legacy enum fields retained for backward compatibility until DB enum migration is removed.
       empCategory: "ADMINISTRATION",
       empSubCategory: "SYSTEM_ADMIN",
-      staffCategoryId: form.staffCategoryId ? Number(form.staffCategoryId) : null,
-      staffSubCategoryId: form.staffSubCategoryId
-        ? Number(form.staffSubCategoryId)
-        : null,
       entityId: form.entityId ? Number(form.entityId) : null,
       headId: form.headId ? Number(form.headId) : null,
       isActive: form.isActive,
-    };
-
-    if (editingUser) {
-      updateMutation.mutate({
-        id: editingUser.id,
-        input: {
-          ...payload,
-          ...(form.password ? { password: form.password } : {}),
-        },
-      });
-      return;
-    }
-
-    createMutation.mutate({
-      ...payload,
       password: form.password,
     });
   };
 
   const handleEdit = (user: UserRecord) => {
-    setActiveTab("list");
     setEditingUser(user);
-    setForm({
-      employeeId: user.employeeId,
-      email: user.email,
-      password: "",
-      firstName: user.firstName,
-      lastName: user.lastName,
-      systemRole: user.systemRole,
-      empCategory: user.empCategory,
-      empSubCategory: user.empSubCategory,
-      staffCategoryId: user.staffCategoryId ? String(user.staffCategoryId) : "",
-      staffSubCategoryId: user.staffSubCategoryId
-        ? String(user.staffSubCategoryId)
-        : "",
-      entityId: user.entityId ? String(user.entityId) : "",
-      headId: user.headId ? String(user.headId) : "",
-      isActive: user.isActive,
-    });
     setFormMessage(null);
   };
 
@@ -286,7 +217,7 @@ export default function UsersManager() {
   };
 
   const handleCancelEdit = () => {
-    resetForm();
+    setEditingUser(null);
     setFormMessage(null);
   };
 
@@ -305,28 +236,15 @@ export default function UsersManager() {
     <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-text-primary">
-            {editingUser ? "Edit User" : "Add User"}
-          </h2>
+          <h2 className="text-lg font-semibold text-text-primary">Add User</h2>
           <p className="mt-1 text-sm text-foreground/70">
-            Manage employee accounts, roles, categories, and reporting lines.
+            Create employee accounts with roles, categories, and reporting lines.
           </p>
         </div>
-
-        {editingUser ? (
-          <button
-            type="button"
-            onClick={handleCancelEdit}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-          >
-            <X className="size-3.5" />
-            Cancel
-          </button>
-        ) : null}
       </div>
 
       <AnimatePresence>
-        {formMessage ? (
+        {formMessage && !editingUser ? (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -389,9 +307,8 @@ export default function UsersManager() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, password: event.target.value }))
               }
-              required={!editingUser}
-              minLength={editingUser ? undefined : 8}
-              placeholder={editingUser ? "Leave blank to keep current password" : ""}
+              required
+              minLength={8}
               className={inputClassName}
             />
           </div>
@@ -448,61 +365,6 @@ export default function UsersManager() {
               {USER_ROLES.map((role) => (
                 <option key={role} value={role}>
                   {USER_ROLE_LABELS[role]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="user-staff-category" className="mb-1.5 block text-sm font-medium text-text-primary">
-              Staff Category
-            </label>
-            <select
-              id="user-staff-category"
-              value={form.staffCategoryId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  staffCategoryId: event.target.value,
-                  staffSubCategoryId: "",
-                }))
-              }
-              required
-              className={inputClassName}
-            >
-              <option value="" disabled>
-                Select category
-              </option>
-              {staffCategories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="user-staff-sub-category" className="mb-1.5 block text-sm font-medium text-text-primary">
-              Staff Sub-Category
-            </label>
-            <select
-              id="user-staff-sub-category"
-              value={form.staffSubCategoryId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  staffSubCategoryId: event.target.value,
-                }))
-              }
-              required
-              className={inputClassName}
-            >
-              <option value="" disabled>
-                Select sub-category
-              </option>
-              {subCategoryOptions.map((subCategory) => (
-                <option key={subCategory.id} value={subCategory.id}>
-                  {subCategory.name}
                 </option>
               ))}
             </select>
@@ -570,17 +432,8 @@ export default function UsersManager() {
           disabled={isSubmitting}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
         >
-          {editingUser ? (
-            <>
-              <Pencil className="size-4" />
-              Update User
-            </>
-          ) : (
-            <>
-              <Plus className="size-4" />
-              Add User
-            </>
-          )}
+          <Plus className="size-4" />
+          Add User
         </button>
       </form>
     </div>
@@ -619,7 +472,13 @@ export default function UsersManager() {
         </nav>
       </div>
 
-      {activeTab === "add" || editingUser ? renderFormCard() : null}
+      {activeTab === "add" ? renderFormCard() : null}
+
+      {activeTab === "list" && formMessage?.tone === "success" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300">
+          {formMessage.text}
+        </div>
+      ) : null}
 
       {activeTab === "list" && isLoading ? (
         <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
@@ -677,6 +536,25 @@ export default function UsersManager() {
             onDelete={handleDelete}
             deletePending={deleteMutation.isPending}
             onClearAllFilters={clearAllFilters}
+          />
+
+          <EditUserModal
+            open={editingUser != null}
+            user={editingUser}
+            users={users}
+            entities={entities}
+            isSubmitting={updateMutation.isPending}
+            errorMessage={
+              editingUser && formMessage?.tone === "error"
+                ? formMessage.text
+                : null
+            }
+            onClose={handleCancelEdit}
+            onSubmit={(input) => {
+              if (!editingUser) return;
+              setFormMessage(null);
+              updateMutation.mutate({ id: editingUser.id, input });
+            }}
           />
         </div>
       ) : null}

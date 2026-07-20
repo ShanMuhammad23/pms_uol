@@ -21,11 +21,9 @@ import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormState } from "@/app/helpers/dashboard-types";
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
-import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
 interface UseDashboardFiltersParams {
   submissions: FormSubmissionListItem[];
-  staffCategories: StaffCategoryWithSubCategories[];
   entities: EntityRecord[];
   designations: string[];
 }
@@ -86,7 +84,6 @@ function setPrunedSelection<T extends string | number>(
 
 export function useDashboardFilters({
   submissions,
-  staffCategories,
   entities,
   designations,
 }: UseDashboardFiltersParams) {
@@ -96,10 +93,6 @@ export function useDashboardFilters({
   const [selectedCategory1EntityIds, setSelectedCategory1EntityIds] =
     useState<MultiFilterSelection<number>>(null);
   const [selectedCategory2EntityIds, setSelectedCategory2EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
-  const [selectedCategoryIds, setSelectedCategoryIds] =
-    useState<MultiFilterSelection<number>>(null);
-  const [selectedSubCategoryIds, setSelectedSubCategoryIds] =
     useState<MultiFilterSelection<number>>(null);
   const [selectedRoleCategories, setSelectedRoleCategories] =
     useState<MultiFilterSelection<string>>(null);
@@ -123,26 +116,6 @@ export function useDashboardFilters({
     [entities, selectedCategory1EntityIds],
   );
 
-  const availableSubCategories = useMemo(() => {
-    const categories =
-      selectedCategoryIds === null
-        ? staffCategories
-        : staffCategories.filter((category) =>
-            selectedCategoryIds.includes(category.id),
-          );
-
-    const byId = new Map<number, StaffCategoryWithSubCategories["subCategories"][number]>();
-    for (const category of categories) {
-      for (const subCategory of category.subCategories) {
-        byId.set(subCategory.id, subCategory);
-      }
-    }
-
-    return [...byId.values()].sort((left, right) =>
-      left.name.localeCompare(right.name),
-    );
-  }, [selectedCategoryIds, staffCategories]);
-
   useEffect(() => {
     setPrunedSelection(
       setSelectedCategory1EntityIds,
@@ -157,25 +130,15 @@ export function useDashboardFilters({
     );
   }, [category2Entities]);
 
-  useEffect(() => {
-    setPrunedSelection(
-      setSelectedSubCategoryIds,
-      availableSubCategories.map((subCategory) => subCategory.id),
-    );
-  }, [availableSubCategories]);
-
   const baseFilterState = useMemo<Omit<SubmissionFilterState, never>>(
     () => ({
       searchQuery,
       selectedCategory0EntityIds,
       selectedCategory1EntityIds,
       selectedCategory2EntityIds,
-      selectedCategoryIds,
-      selectedSubCategoryIds,
       selectedRoleCategories,
       selectedDesignations,
       selectedFormStates,
-      staffCategories,
       entities,
     }),
     [
@@ -183,12 +146,9 @@ export function useDashboardFilters({
       selectedCategory0EntityIds,
       selectedCategory1EntityIds,
       selectedCategory2EntityIds,
-      selectedCategoryIds,
-      selectedSubCategoryIds,
       selectedRoleCategories,
       selectedDesignations,
       selectedFormStates,
-      staffCategories,
       entities,
     ],
   );
@@ -280,21 +240,6 @@ export function useDashboardFilters({
     [category2Entities, countForDimension, entities],
   );
 
-  const staffCategoryOptions = useMemo<MultiSelectOption[]>(
-    () =>
-      staffCategories.map((category) => ({
-        value: String(category.id),
-        label: category.name,
-        count: countForDimension(
-          "staffCategory",
-          (submission) =>
-            submission.staffCategoryId === category.id ||
-            submission.staffCategoryName === category.name,
-        ),
-      })),
-    [staffCategories, countForDimension],
-  );
-
   const roleCategoryOptions = useMemo<MultiSelectOption[]>(() => {
     const counts = new Map<string, number>();
 
@@ -336,21 +281,6 @@ export function useDashboardFilters({
         });
       });
   }, [submissions, baseFilterState, selectedRoleCategories]);
-
-  const staffSubCategoryOptions = useMemo<MultiSelectOption[]>(
-    () =>
-      availableSubCategories.map((subCategory) => ({
-        value: String(subCategory.id),
-        label: subCategory.name,
-        count: countForDimension(
-          "staffSubCategory",
-          (submission) =>
-            submission.staffSubCategoryId === subCategory.id ||
-            submission.staffSubCategoryName === subCategory.name,
-        ),
-      })),
-    [availableSubCategories, countForDimension],
-  );
 
   const designationOptions = useMemo<MultiSelectOption[]>(
     () =>
@@ -404,16 +334,8 @@ export function useDashboardFilters({
     setSelectedCategory2EntityIds(fromStringIds(values));
   }, []);
 
-  const handleStaffCategoryChange = useCallback((values: string[] | null) => {
-    setSelectedCategoryIds(fromStringIds(values));
-  }, []);
-
   const handleRoleCategoryChange = useCallback((values: string[] | null) => {
     setSelectedRoleCategories(values);
-  }, []);
-
-  const handleSubCategoryChange = useCallback((values: string[] | null) => {
-    setSelectedSubCategoryIds(fromStringIds(values));
   }, []);
 
   const handleDesignationChange = useCallback((values: string[] | null) => {
@@ -468,20 +390,6 @@ export function useDashboardFilters({
       });
     }
 
-    if (selectedCategoryIds !== null) {
-      filters.push({
-        label: formatMultiChipLabel(
-          "Staff Category",
-          selectedCategoryIds.map(String),
-          (value) =>
-            staffCategories.find((category) => category.id === Number(value))
-              ?.name ?? value,
-        ),
-        onRemove: () => setSelectedCategoryIds(null),
-        color: "amber",
-      });
-    }
-
     if (selectedRoleCategories !== null) {
       filters.push({
         label: formatMultiChipLabel(
@@ -491,21 +399,6 @@ export function useDashboardFilters({
         ),
         onRemove: () => setSelectedRoleCategories(null),
         color: "amber",
-      });
-    }
-
-    if (selectedSubCategoryIds !== null) {
-      filters.push({
-        label: formatMultiChipLabel(
-          "Staff Sub-Category",
-          selectedSubCategoryIds.map(String),
-          (value) =>
-            availableSubCategories.find(
-              (subCategory) => subCategory.id === Number(value),
-            )?.name ?? value,
-        ),
-        onRemove: () => setSelectedSubCategoryIds(null),
-        color: "blue",
       });
     }
 
@@ -546,14 +439,10 @@ export function useDashboardFilters({
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
-    selectedCategoryIds,
     selectedRoleCategories,
-    selectedSubCategoryIds,
     selectedDesignations,
     selectedFormStates,
     searchQuery,
-    staffCategories,
-    availableSubCategories,
     entities,
   ]);
 
@@ -562,8 +451,6 @@ export function useDashboardFilters({
     setSelectedCategory0EntityIds(null);
     setSelectedCategory1EntityIds(null);
     setSelectedCategory2EntityIds(null);
-    setSelectedCategoryIds(null);
-    setSelectedSubCategoryIds(null);
     setSelectedRoleCategories(null);
     setSelectedDesignations(null);
     setSelectedFormStates(null);
@@ -589,8 +476,6 @@ export function useDashboardFilters({
     selectedCategory0EntityIds: toStringSelection(selectedCategory0EntityIds),
     selectedCategory1EntityIds: toStringSelection(selectedCategory1EntityIds),
     selectedCategory2EntityIds: toStringSelection(selectedCategory2EntityIds),
-    selectedCategoryIds: toStringSelection(selectedCategoryIds),
-    selectedSubCategoryIds: toStringSelection(selectedSubCategoryIds),
     selectedRoleCategories,
     selectedDesignations,
     selectedFormStates:
@@ -599,8 +484,6 @@ export function useDashboardFilters({
     category0DistributionOptions,
     category1Options,
     category2Options,
-    staffCategoryOptions,
-    staffSubCategoryOptions,
     roleCategoryOptions,
     designationOptions,
     formStateOptions,
@@ -610,9 +493,7 @@ export function useDashboardFilters({
     handleCategory0DistributionSelect,
     handleCategory1EntityChange,
     handleCategory2EntityChange,
-    handleStaffCategoryChange,
     handleRoleCategoryChange,
-    handleSubCategoryChange,
     handleDesignationChange,
     handleFormStateChange,
     clearAllFilters,

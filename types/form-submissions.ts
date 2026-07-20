@@ -19,10 +19,6 @@ export interface FormSubmissionListItem {
   empSubCategory: string | null;
   templateId: number | null;
   templateTitle: string | null;
-  staffCategoryId: number | null;
-  staffCategoryName: string | null;
-  staffSubCategoryId: number | null;
-  staffSubCategoryName: string | null;
   entityId: number | null;
   entityName: string | null;
   parentEntityName: string | null;
@@ -83,8 +79,6 @@ export interface FormSubmissionDetail {
   templateId: number | null;
   templateTitle: string | null;
   templateDescription: string | null;
-  staffCategoryName: string | null;
-  staffSubCategoryName: string | null;
   status: AppraisalStatus;
   /** 1 = direct entity head review; 2 = parent entity head review. */
   managerLevel: number | null;

@@ -2,21 +2,26 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Grid3X3, Pencil, Plus, Trash2, X } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { Grid3X3, Pencil, Plus, Trash2, UserCheck, X } from "lucide-react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  getPerformanceLevelColor,
+  getPerformanceLevelTint,
+} from "@/app/helpers/dashboard-helpers";
 import { fetchFinancialYears } from "@/lib/queries/financial-years-client";
 import {
   assignPerformanceMatrixToEmployees,
   createPerformanceLevel,
   createPerformanceQuartile,
-  fetchPerformanceMatrixLabels,
   deletePerformanceLevel,
   deletePerformanceQuartile,
   fetchPerformanceMatrix,
+  fetchPerformanceMatrixLabels,
   updatePerformanceLevel,
   updatePerformanceQuartile,
 } from "@/lib/queries/performance-matrices-client";
 import { fetchUsers } from "@/lib/queries/users-client";
+import { cn } from "@/lib/utils";
 import {
   formatPerformanceScore,
   type PerformanceLevelRecord,
@@ -26,17 +31,31 @@ import {
 import PerformanceMatrixGrid from "./PerformanceMatrixGrid";
 
 type MessageTone = "success" | "error";
+type MatricesPanel = "overview" | "assign" | "add-matrix";
+type DialogKind = "level" | "quartile" | null;
 
 interface FormMessage {
   tone: MessageTone;
   text: string;
 }
 
+const panels: Array<{
+  id: MatricesPanel;
+  label: string;
+  icon: typeof Grid3X3;
+}> = [
+  { id: "overview", label: "Overview", icon: Grid3X3 },
+  { id: "assign", label: "Assign", icon: UserCheck },
+  { id: "add-matrix", label: "Add Matrix", icon: Plus },
+];
+
 export default function PerformanceMatricesManager() {
   const queryClient = useQueryClient();
   const [selectedFinancialYearId, setSelectedFinancialYearId] = useState<
     number | null
   >(null);
+  const [activePanel, setActivePanel] = useState<MatricesPanel>("overview");
+  const [openDialog, setOpenDialog] = useState<DialogKind>(null);
 
   const [levelName, setLevelName] = useState("");
   const [matrixLabel, setMatrixLabel] = useState("Default");
@@ -55,9 +74,10 @@ export default function PerformanceMatricesManager() {
     useState<PerformanceQuartileRecord | null>(null);
 
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
 
-  const { data: financialYears, isLoading: yearsLoading } = useQuery({
+  const { data: financialYears } = useQuery({
     queryKey: ["financial-years"],
     queryFn: fetchFinancialYears,
   });
@@ -99,6 +119,9 @@ export default function PerformanceMatricesManager() {
     queryClient.invalidateQueries({
       queryKey: ["performance-matrix", selectedFinancialYearId],
     });
+    queryClient.invalidateQueries({
+      queryKey: ["performance-matrix-labels", selectedFinancialYearId],
+    });
   };
 
   const resetLevelForm = () => {
@@ -116,6 +139,66 @@ export default function PerformanceMatricesManager() {
     setEditingQuartile(null);
   };
 
+  const closeDialog = () => {
+    setOpenDialog(null);
+    setDialogError(null);
+    resetLevelForm();
+    resetQuartileForm();
+  };
+
+  const selectedLevelQuartiles =
+    matrix?.find((level) => level.id === selectedLevelId)?.quartiles ?? [];
+  const selectedLevel = matrix?.find((level) => level.id === selectedLevelId);
+  const selectedLevelIndex =
+    matrix?.findIndex((level) => level.id === selectedLevelId) ?? -1;
+
+  const openLevelDialog = (level?: PerformanceLevelWithQuartiles) => {
+    setDialogError(null);
+    setFormMessage(null);
+    if (level) {
+      setEditingLevel(level);
+      setMatrixLabel(level.matrixLabel);
+      setLevelName(level.name);
+      setLevelSortOrder(String(level.sortOrder));
+    } else {
+      resetLevelForm();
+      setLevelSortOrder(String(matrix?.length ?? 0));
+    }
+    setOpenDialog("level");
+  };
+
+  const openQuartileDialog = (quartile?: PerformanceQuartileRecord) => {
+    setDialogError(null);
+    setFormMessage(null);
+
+    if (!selectedLevelId && !quartile && (!matrix || matrix.length === 0)) {
+      setFormMessage({
+        tone: "error",
+        text: "Add a performance level before creating quartiles.",
+      });
+      return;
+    }
+
+    if (quartile) {
+      setEditingQuartile(quartile);
+      setQuartileName(quartile.name);
+      setScoreMin(formatPerformanceScore(quartile.scoreMin));
+      setScoreMax(formatPerformanceScore(quartile.scoreMax));
+      setQuartileSortOrder(String(quartile.sortOrder));
+    } else {
+      resetQuartileForm();
+      const levelId = selectedLevelId ?? matrix?.[0]?.id ?? null;
+      if (levelId) {
+        setSelectedLevelId(levelId);
+      }
+      const quartiles =
+        matrix?.find((level) => level.id === (levelId ?? selectedLevelId))
+          ?.quartiles ?? [];
+      setQuartileSortOrder(String(quartiles.length));
+    }
+    setOpenDialog("quartile");
+  };
+
   const createLevelMutation = useMutation({
     mutationFn: createPerformanceLevel,
     onSuccess: (level) => {
@@ -123,11 +206,12 @@ export default function PerformanceMatricesManager() {
         tone: "success",
         text: `Performance level "${level.name}" created successfully.`,
       });
-      resetLevelForm();
+      closeDialog();
+      setSelectedLevelId(level.id);
       invalidateMatrix();
     },
     onError: (mutationError: Error) => {
-      setFormMessage({ tone: "error", text: mutationError.message });
+      setDialogError(mutationError.message);
     },
   });
 
@@ -158,11 +242,11 @@ export default function PerformanceMatricesManager() {
         tone: "success",
         text: `Performance level "${level.name}" updated successfully.`,
       });
-      resetLevelForm();
+      closeDialog();
       invalidateMatrix();
     },
     onError: (mutationError: Error) => {
-      setFormMessage({ tone: "error", text: mutationError.message });
+      setDialogError(mutationError.message);
     },
   });
 
@@ -173,13 +257,8 @@ export default function PerformanceMatricesManager() {
         tone: "success",
         text: "Performance level deleted successfully.",
       });
-      if (editingLevel) {
-        resetLevelForm();
-      }
-      if (selectedLevelId) {
-        setSelectedLevelId(null);
-        resetQuartileForm();
-      }
+      closeDialog();
+      setSelectedLevelId(null);
       invalidateMatrix();
     },
     onError: (mutationError: Error) => {
@@ -194,11 +273,11 @@ export default function PerformanceMatricesManager() {
         tone: "success",
         text: `Quartile "${quartile.name}" created successfully.`,
       });
-      resetQuartileForm();
+      closeDialog();
       invalidateMatrix();
     },
     onError: (mutationError: Error) => {
-      setFormMessage({ tone: "error", text: mutationError.message });
+      setDialogError(mutationError.message);
     },
   });
 
@@ -220,11 +299,11 @@ export default function PerformanceMatricesManager() {
         tone: "success",
         text: `Quartile "${quartile.name}" updated successfully.`,
       });
-      resetQuartileForm();
+      closeDialog();
       invalidateMatrix();
     },
     onError: (mutationError: Error) => {
-      setFormMessage({ tone: "error", text: mutationError.message });
+      setDialogError(mutationError.message);
     },
   });
 
@@ -235,9 +314,7 @@ export default function PerformanceMatricesManager() {
         tone: "success",
         text: "Quartile deleted successfully.",
       });
-      if (editingQuartile) {
-        resetQuartileForm();
-      }
+      closeDialog();
       invalidateMatrix();
     },
     onError: (mutationError: Error) => {
@@ -245,40 +322,35 @@ export default function PerformanceMatricesManager() {
     },
   });
 
-  const selectedLevelQuartiles =
-    matrix?.find((level) => level.id === selectedLevelId)?.quartiles ?? [];
-
   const handleLevelSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setFormMessage(null);
+    setDialogError(null);
 
     if (!selectedFinancialYearId) {
-      setFormMessage({
-        tone: "error",
-        text: "Select a financial year first.",
-      });
+      setDialogError("Select a financial year first.");
       return;
     }
 
     if (!levelName.trim()) {
-      setFormMessage({ tone: "error", text: "Level name is required." });
+      setDialogError("Level name is required.");
       return;
     }
 
     const sortOrder = Number(levelSortOrder);
 
     if (!Number.isInteger(sortOrder) || sortOrder < 0) {
-      setFormMessage({
-        tone: "error",
-        text: "Sort order must be a non-negative integer.",
-      });
+      setDialogError("Sort order must be a non-negative integer.");
       return;
     }
 
     if (editingLevel) {
       updateLevelMutation.mutate({
         id: editingLevel.id,
-        input: { matrixLabel: matrixLabel.trim(), name: levelName.trim(), sortOrder },
+        input: {
+          matrixLabel: matrixLabel.trim(),
+          name: levelName.trim(),
+          sortOrder,
+        },
       });
       return;
     }
@@ -293,18 +365,15 @@ export default function PerformanceMatricesManager() {
 
   const handleQuartileSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setFormMessage(null);
+    setDialogError(null);
 
     if (!selectedLevelId) {
-      setFormMessage({
-        tone: "error",
-        text: "Select a performance level first.",
-      });
+      setDialogError("Select a performance level first.");
       return;
     }
 
     if (!quartileName.trim()) {
-      setFormMessage({ tone: "error", text: "Quartile name is required." });
+      setDialogError("Quartile name is required.");
       return;
     }
 
@@ -313,34 +382,22 @@ export default function PerformanceMatricesManager() {
     const sortOrder = Number(quartileSortOrder);
 
     if (!Number.isFinite(parsedMin) || !Number.isFinite(parsedMax)) {
-      setFormMessage({
-        tone: "error",
-        text: "Score min and max must be valid numbers.",
-      });
+      setDialogError("Score min and max must be valid numbers.");
       return;
     }
 
     if (parsedMin < 0 || parsedMax < 0) {
-      setFormMessage({
-        tone: "error",
-        text: "Scores must be zero or greater.",
-      });
+      setDialogError("Scores must be zero or greater.");
       return;
     }
 
     if (parsedMin >= parsedMax) {
-      setFormMessage({
-        tone: "error",
-        text: "Minimum score must be less than maximum score.",
-      });
+      setDialogError("Minimum score must be less than maximum score.");
       return;
     }
 
     if (!Number.isInteger(sortOrder) || sortOrder < 0) {
-      setFormMessage({
-        tone: "error",
-        text: "Sort order must be a non-negative integer.",
-      });
+      setDialogError("Sort order must be a non-negative integer.");
       return;
     }
 
@@ -365,14 +422,6 @@ export default function PerformanceMatricesManager() {
     });
   };
 
-  const handleEditLevel = (level: PerformanceLevelWithQuartiles) => {
-    setEditingLevel(level);
-    setMatrixLabel(level.matrixLabel);
-    setLevelName(level.name);
-    setLevelSortOrder(String(level.sortOrder));
-    setFormMessage(null);
-  };
-
   const handleDeleteLevel = (level: PerformanceLevelWithQuartiles) => {
     const confirmed = window.confirm(
       `Delete performance level "${level.name}"?\n\nThis action cannot be undone.`,
@@ -384,15 +433,6 @@ export default function PerformanceMatricesManager() {
 
     setFormMessage(null);
     deleteLevelMutation.mutate(level.id);
-  };
-
-  const handleEditQuartile = (quartile: PerformanceQuartileRecord) => {
-    setEditingQuartile(quartile);
-    setQuartileName(quartile.name);
-    setScoreMin(formatPerformanceScore(quartile.scoreMin));
-    setScoreMax(formatPerformanceScore(quartile.scoreMax));
-    setQuartileSortOrder(String(quartile.sortOrder));
-    setFormMessage(null);
   };
 
   const handleDeleteQuartile = (quartile: PerformanceQuartileRecord) => {
@@ -412,14 +452,33 @@ export default function PerformanceMatricesManager() {
     createLevelMutation.isPending || updateLevelMutation.isPending;
   const isQuartileSubmitting =
     createQuartileMutation.isPending || updateQuartileMutation.isPending;
-  const matrixOptions = Array.from(
-    new Set([...(matrixLabels ?? []), "Default"]),
-  ).sort((a, b) => a.localeCompare(b));
 
-  const handleCreateMatrixLabel = () => {
+  const matrixOptions = useMemo(
+    () =>
+      Array.from(new Set([...(matrixLabels ?? []), "Default"])).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [matrixLabels],
+  );
+
+  const totalQuartiles = useMemo(
+    () => matrix?.reduce((sum, level) => sum + level.quartiles.length, 0) ?? 0,
+    [matrix],
+  );
+
+  const handleCreateMatrixLabel = (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     const label = newMatrixLabel.trim();
     if (!label) {
       setFormMessage({ tone: "error", text: "Matrix label is required." });
+      return;
+    }
+
+    if (matrixOptions.some((option) => option.toLowerCase() === label.toLowerCase())) {
+      setFormMessage({
+        tone: "error",
+        text: `Matrix "${label}" already exists for this financial year.`,
+      });
       return;
     }
 
@@ -428,612 +487,815 @@ export default function PerformanceMatricesManager() {
     setNewMatrixLabel("");
     setSelectedLevelId(null);
     resetQuartileForm();
+    setActivePanel("overview");
     setFormMessage({
       tone: "success",
-      text: `Matrix "${label}" selected. Add performance levels to initialize it.`,
+      text: `Matrix "${label}" created. Add performance levels to initialize it.`,
     });
   };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
-        <h2 className="text-lg font-semibold text-text-primary">
-          Performance Matrix Configuration
-        </h2>
-        <p className="mt-1 text-sm text-foreground/70">
-          Select a financial year, define performance levels, and assign quartile
-          score ranges. The combined matrix appears below.
-        </p>
-
-        <div className="mt-4 max-w-xs">
-          <label
-            htmlFor="matrix-financial-year"
-            className="mb-1.5 block text-sm font-medium text-text-primary"
-          >
-            Financial Year
-          </label>
-          <select
-            id="matrix-financial-year"
-            value={selectedFinancialYearId ?? ""}
-            onChange={(event) => {
-              setSelectedFinancialYearId(Number(event.target.value));
-              setSelectedMatrixLabel("Default");
-              setSelectedLevelId(null);
-              resetLevelForm();
-              resetQuartileForm();
-              setFormMessage(null);
-            }}
-            disabled={yearsLoading || !financialYears?.length}
-            className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-          >
-            {!financialYears?.length ? (
-              <option value="">No financial years available</option>
-            ) : (
-              financialYears.map((year) => (
-                <option key={year.id} value={year.id}>
-                  {year.label} ({year.year})
-                  {year.isActive ? " — Active" : ""}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-        <div className="mt-4 max-w-xs">
-          <label
-            htmlFor="matrix-label-filter"
-            className="mb-1.5 block text-sm font-medium text-text-primary"
-          >
-            Performance Matrix
-          </label>
-          <select
-            id="matrix-label-filter"
-            value={selectedMatrixLabel}
-            onChange={(event) => {
-              setSelectedMatrixLabel(event.target.value);
-              setMatrixLabel(event.target.value);
-              setSelectedLevelId(null);
-              resetQuartileForm();
-              setFormMessage(null);
-            }}
-            className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-          >
-            {matrixOptions.map((label) => (
-              <option key={label} value={label}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 dark:border-white/20">
-          <p className="text-sm font-semibold text-text-primary">
-            Add Another Performance Matrix
-          </p>
-          <p className="mt-1 text-xs text-foreground/70">
-            Create a new matrix label for this financial year (for example: Matrix A, Matrix B).
-          </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              value={newMatrixLabel}
-              onChange={(event) => setNewMatrixLabel(event.target.value)}
-              placeholder="Enter new matrix label"
-              className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15 sm:max-w-sm"
-            />
-            <button
-              type="button"
-              onClick={handleCreateMatrixLabel}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
-            >
-              <Plus className="size-4" />
-              Add Matrix
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-5">
       <AnimatePresence>
         {formMessage ? (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className={`overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
+            className={cn(
+              "overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium",
               formMessage.tone === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
-                : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
-            }`}
+                : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300",
+            )}
           >
             {formMessage.text}
           </motion.div>
         ) : null}
       </AnimatePresence>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-base font-semibold text-text-primary">
-                {editingLevel ? "Edit Performance Level" : "Add Performance Level"}
-              </h3>
-              <p className="mt-1 text-sm text-foreground/70">
-                Levels define the rows in the performance matrix.
-              </p>
-            </div>
+      <div className="rounded-xl border border-slate-300/80 dark:border-white/15">
+        <div className="flex flex-wrap gap-1 border-b border-slate-300/80 p-2 dark:border-white/15">
+          {panels.map((panel) => {
+            const Icon = panel.icon;
+            const isActive = activePanel === panel.id;
 
-            {editingLevel ? (
+            return (
               <button
+                key={panel.id}
                 type="button"
                 onClick={() => {
-                  resetLevelForm();
-                  setFormMessage(null);
+                  setActivePanel(panel.id);
+                  if (panel.id === "add-matrix") {
+                    setNewMatrixLabel("");
+                    setFormMessage(null);
+                  }
                 }}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition",
+                  isActive
+                    ? "bg-primary text-white shadow-sm"
+                    : "text-foreground/70 hover:bg-primary/10 hover:text-text-primary",
+                )}
               >
-                <X className="size-3.5" />
-                Cancel
+                <Icon className="size-4" />
+                {panel.label}
               </button>
-            ) : null}
-          </div>
-
-          <form onSubmit={handleLevelSubmit} className="mt-4 space-y-4">
-            <div>
-              <label
-                htmlFor="matrix-label"
-                className="mb-1.5 block text-sm font-medium text-text-primary"
-              >
-                Matrix Label
-              </label>
-              <input
-                id="matrix-label"
-                type="text"
-                value={matrixLabel}
-                onChange={(event) => setMatrixLabel(event.target.value)}
-                required
-                disabled={!selectedFinancialYearId}
-                className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-                placeholder="Default / Matrix A"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="level-name"
-                className="mb-1.5 block text-sm font-medium text-text-primary"
-              >
-                Level Name
-              </label>
-              <input
-                id="level-name"
-                type="text"
-                value={levelName}
-                onChange={(event) => setLevelName(event.target.value)}
-                required
-                disabled={!selectedFinancialYearId}
-                className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-                placeholder="Excellent"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="level-sort-order"
-                className="mb-1.5 block text-sm font-medium text-text-primary"
-              >
-                Sort Order
-              </label>
-              <input
-                id="level-sort-order"
-                type="number"
-                min={0}
-                value={levelSortOrder}
-                onChange={(event) => setLevelSortOrder(event.target.value)}
-                disabled={!selectedFinancialYearId}
-                className="w-full max-w-xs rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={!selectedFinancialYearId || isLevelSubmitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
-            >
-              {editingLevel ? (
-                <>
-                  <Pencil className="size-4" />
-                  Update Level
-                </>
-              ) : (
-                <>
-                  <Plus className="size-4" />
-                  Add Level
-                </>
-              )}
-            </button>
-          </form>
-
-          {matrixLoading ? (
-            <p className="mt-6 text-sm text-foreground/70">Loading levels...</p>
-          ) : null}
-
-          {matrixError ? (
-            <p className="mt-6 text-sm text-red-600 dark:text-red-400">
-              Failed to load performance levels.
-            </p>
-          ) : null}
-
-          {!matrixLoading && matrix && matrix.length > 0 ? (
-            <div className="mt-6 overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
-              <table className="min-w-full text-sm">
-                <thead className="bg-primary/5">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                      Matrix
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                      Name
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                      Sort
-                    </th>
-                   
-                    <th className="px-4 py-3 text-right font-semibold text-text-primary">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matrix.map((level) => (
-                    <tr
-                      key={level.id}
-                      className={`border-t border-slate-300/80 dark:border-white/15 ${
-                        selectedLevelId === level.id ? "bg-primary/5" : ""
-                      }`}
-                    >
-                      <td className="px-4 py-3 font-medium text-text-primary">
-                        {level.matrixLabel}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-text-primary">
-                        {level.name}
-                      </td>
-                      <td className="px-4 py-3 text-text-primary">
-                        {level.sortOrder}
-                      </td>
-                      
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedLevelId(level.id);
-                              resetQuartileForm();
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-                          >
-                            Quartiles
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleEditLevel(level)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-                          >
-                            <Pencil className="size-3.5" />
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteLevel(level)}
-                            disabled={deleteLevelMutation.isPending}
-                            className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
-                          >
-                            <Trash2 className="size-3.5" />
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
+            );
+          })}
         </div>
 
-        <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-base font-semibold text-text-primary">
-                {editingQuartile ? "Edit Quartile" : "Add Quartile"}
-              </h3>
-              <p className="mt-1 text-sm text-foreground/70">
-                Quartiles define score ranges within a performance level.
-              </p>
-            </div>
+        <div className="p-5">
+          {activePanel === "overview" ? (
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
+                  <label
+                    htmlFor="matrix-financial-year"
+                    className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
+                  >
+                    Financial Year
+                  </label>
+                  <select
+                    id="matrix-financial-year"
+                    value={selectedFinancialYearId ?? ""}
+                    onChange={(event) => {
+                      setSelectedFinancialYearId(Number(event.target.value));
+                      setSelectedMatrixLabel("Default");
+                      setSelectedLevelId(null);
+                      resetLevelForm();
+                      resetQuartileForm();
+                      setFormMessage(null);
+                    }}
+                    disabled={!financialYears?.length}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                  >
+                    {!financialYears?.length ? (
+                      <option value="">No financial years available</option>
+                    ) : (
+                      financialYears.map((year) => (
+                        <option key={year.id} value={year.id}>
+                          {year.label}
+                          {year.isActive ? " — Active" : ""}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
 
-            {editingQuartile ? (
-              <button
-                type="button"
-                onClick={() => {
-                  resetQuartileForm();
-                  setFormMessage(null);
-                }}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-              >
-                <X className="size-3.5" />
-                Cancel
-              </button>
-            ) : null}
-          </div>
+                <div className="rounded-xl border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
+                  <label
+                    htmlFor="overview-matrix-label"
+                    className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
+                  >
+                    Matrix
+                  </label>
+                  <select
+                    id="overview-matrix-label"
+                    value={selectedMatrixLabel}
+                    onChange={(event) => {
+                      setSelectedMatrixLabel(event.target.value);
+                      setMatrixLabel(event.target.value);
+                      setSelectedLevelId(null);
+                      resetQuartileForm();
+                      setFormMessage(null);
+                    }}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                  >
+                    {matrixOptions.map((label) => (
+                      <option key={label} value={label}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-          <div className="mt-4 max-w-xs">
-            <label
-              htmlFor="quartile-level"
-              className="mb-1.5 block text-sm font-medium text-text-primary"
-            >
-              Performance Level
-            </label>
-            <select
-              id="quartile-level"
-              value={selectedLevelId ?? ""}
-              onChange={(event) => {
-                setSelectedLevelId(Number(event.target.value));
-                resetQuartileForm();
-                setFormMessage(null);
-              }}
-              disabled={!matrix?.length}
-              className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-            >
-              <option value="">Select a level</option>
-              {matrix?.map((level) => (
-                <option key={level.id} value={level.id}>
-                  {level.name}
-                </option>
-              ))}
-            </select>
-          </div>
+                <div className="rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-950/20">
+                  <p className="text-xs font-medium uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                    Levels
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-violet-900 dark:text-violet-100">
+                    {matrix?.length ?? 0}
+                  </p>
+                </div>
 
-          <form onSubmit={handleQuartileSubmit} className="mt-4 space-y-4">
-            <div>
-              <label
-                htmlFor="quartile-name"
-                className="mb-1.5 block text-sm font-medium text-text-primary"
-              >
-                Quartile Name
-              </label>
-              <input
-                id="quartile-name"
-                type="text"
-                value={quartileName}
-                onChange={(event) => setQuartileName(event.target.value)}
-                required
-                disabled={!selectedLevelId}
-                className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-                placeholder="Q1"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="score-min"
-                  className="mb-1.5 block text-sm font-medium text-text-primary"
-                >
-                  Score Min
-                </label>
-                <input
-                  id="score-min"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={scoreMin}
-                  onChange={(event) => setScoreMin(event.target.value)}
-                  required
-                  disabled={!selectedLevelId}
-                  className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-                />
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/20">
+                  <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                    Quartiles
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-emerald-900 dark:text-emerald-100">
+                    {totalQuartiles}
+                  </p>
+                </div>
               </div>
 
               <div>
-                <label
-                  htmlFor="score-max"
-                  className="mb-1.5 block text-sm font-medium text-text-primary"
-                >
-                  Score Max
-                </label>
-                <input
-                  id="score-max"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={scoreMax}
-                  onChange={(event) => setScoreMax(event.target.value)}
-                  required
-                  disabled={!selectedLevelId}
-                  className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="quartile-sort-order"
-                className="mb-1.5 block text-sm font-medium text-text-primary"
-              >
-                Sort Order
-              </label>
-              <input
-                id="quartile-sort-order"
-                type="number"
-                min={0}
-                value={quartileSortOrder}
-                onChange={(event) => setQuartileSortOrder(event.target.value)}
-                disabled={!selectedLevelId}
-                className="w-full max-w-xs rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={!selectedLevelId || isQuartileSubmitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
-            >
-              {editingQuartile ? (
-                <>
-                  <Pencil className="size-4" />
-                  Update Quartile
-                </>
-              ) : (
-                <>
-                  <Plus className="size-4" />
-                  Add Quartile
-                </>
-              )}
-            </button>
-          </form>
-
-          {selectedLevelId && selectedLevelQuartiles.length > 0 ? (
-            <div className="mt-6 overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
-              <table className="min-w-full text-sm">
-                <thead className="bg-primary/5">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                      Name
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                      Score Range
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                      Sort
-                    </th>
-                    <th className="px-4 py-3 text-right font-semibold text-text-primary">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedLevelQuartiles.map((quartile) => (
-                    <tr
-                      key={quartile.id}
-                      className="border-t border-slate-300/80 dark:border-white/15"
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-text-primary">
+                      Combined matrix
+                    </h3>
+                    <p className="text-sm text-foreground/70">
+                      Click a level row to select it, then edit or add quartiles.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openLevelDialog()}
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white hover:bg-primary/90"
                     >
-                      <td className="px-4 py-3 font-medium text-text-primary">
-                        {quartile.name}
-                      </td>
-                      <td className="px-4 py-3 text-text-primary">
-                        {formatPerformanceScore(quartile.scoreMin)} –{" "}
-                        {formatPerformanceScore(quartile.scoreMax)}
-                      </td>
-                      <td className="px-4 py-3 text-text-primary">
-                        {quartile.sortOrder}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
+                      <Plus className="size-4" />
+                      Add Level
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openQuartileDialog()}
+                      disabled={!matrix?.length}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                    >
+                      <Plus className="size-4" />
+                      Add Quartile
+                    </button>
+                  </div>
+                </div>
+
+                {matrixLoading ? (
+                  <p className="text-sm text-foreground/70">Loading matrix…</p>
+                ) : matrixError ? (
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    Failed to load performance matrix.
+                  </p>
+                ) : (
+                  <PerformanceMatrixGrid
+                    levels={matrix ?? []}
+                    selectedLevelId={selectedLevelId}
+                    onSelectLevel={(levelId) => {
+                      setSelectedLevelId(levelId);
+                      setFormMessage(null);
+                    }}
+                  />
+                )}
+              </div>
+
+              {selectedLevel ? (
+                <div
+                  className={cn(
+                    "rounded-xl border p-4",
+                    getPerformanceLevelTint(
+                      selectedLevel.name,
+                      Math.max(selectedLevelIndex, 0),
+                    ),
+                  )}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide opacity-70">
+                        Selected level
+                      </p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "size-2.5 rounded-full",
+                            getPerformanceLevelColor(
+                              selectedLevel.name,
+                              Math.max(selectedLevelIndex, 0),
+                            ),
+                          )}
+                        />
+                        <p className="text-base font-semibold">
+                          {selectedLevel.name}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openLevelDialog(selectedLevel)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-background px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                      >
+                        <Pencil className="size-3.5" />
+                        Edit level
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLevel(selectedLevel)}
+                        disabled={deleteLevelMutation.isPending}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
+                      >
+                        <Trash2 className="size-3.5" />
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openQuartileDialog()}
+                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                      >
+                        <Plus className="size-3.5" />
+                        Add quartile
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedLevelQuartiles.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedLevelQuartiles.map((quartile) => (
+                        <div
+                          key={quartile.id}
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-300/80 bg-background/80 px-2.5 py-1.5 text-xs dark:border-white/15"
+                        >
+                          <span className="font-semibold text-text-primary">
+                            {quartile.name}
+                          </span>
+                          <span className="tabular-nums text-foreground/70">
+                            {formatPerformanceScore(quartile.scoreMin)}–
+                            {formatPerformanceScore(quartile.scoreMax)}
+                          </span>
                           <button
                             type="button"
-                            onClick={() => handleEditQuartile(quartile)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                            onClick={() => openQuartileDialog(quartile)}
+                            className="rounded p-0.5 text-foreground/60 hover:bg-primary/10 hover:text-primary"
+                            aria-label={`Edit ${quartile.name}`}
                           >
-                            <Pencil className="size-3.5" />
-                            Edit
+                            <Pencil className="size-3" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteQuartile(quartile)}
                             disabled={deleteQuartileMutation.isPending}
-                            className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
+                            className="rounded p-0.5 text-red-500 hover:bg-red-500/10 disabled:opacity-60"
+                            aria-label={`Delete ${quartile.name}`}
                           >
-                            <Trash2 className="size-3.5" />
-                            Delete
+                            <Trash2 className="size-3" />
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm opacity-80">
+                      No quartiles on this level yet.
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </div>
-          ) : selectedLevelId ? (
-            <p className="mt-6 text-sm text-foreground/70">
-              No quartiles defined for this level yet.
-            </p>
+          ) : null}
+
+          {activePanel === "assign" ? (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-semibold text-text-primary">
+                  Assign matrix to employees
+                </h3>
+                <p className="mt-1 text-sm text-foreground/70">
+                  Map employees to the currently selected performance matrix
+                  label.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-sky-200 bg-sky-50/50 px-4 py-3 dark:border-sky-500/30 dark:bg-sky-950/20">
+                <p className="text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                  Assigning
+                </p>
+                <p className="mt-1 text-lg font-bold text-sky-900 dark:text-sky-100">
+                  {selectedMatrixLabel}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="assign-employees"
+                  className="mb-1.5 block text-sm font-medium text-text-primary"
+                >
+                  Employees
+                </label>
+                <select
+                  id="assign-employees"
+                  multiple
+                  value={selectedEmployeeIds}
+                  onChange={(event) => {
+                    const selected = Array.from(
+                      event.currentTarget.selectedOptions,
+                    ).map((option) => option.value);
+                    setSelectedEmployeeIds(selected);
+                  }}
+                  className="min-h-40 w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                >
+                  {(users ?? []).map((user) => (
+                    <option key={user.id} value={user.employeeId}>
+                      {user.employeeId} -{" "}
+                      {`${user.firstName} ${user.lastName}`.trim()}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-foreground/60">
+                  Hold Ctrl/Cmd to select multiple employees.
+                  {selectedEmployeeIds.length > 0
+                    ? ` ${selectedEmployeeIds.length} selected.`
+                    : ""}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={
+                  !selectedFinancialYearId ||
+                  selectedEmployeeIds.length === 0 ||
+                  assignMatrixMutation.isPending
+                }
+                onClick={() => {
+                  if (!selectedFinancialYearId) {
+                    return;
+                  }
+                  setFormMessage(null);
+                  assignMatrixMutation.mutate({
+                    financialYearId: selectedFinancialYearId,
+                    matrixLabel: selectedMatrixLabel,
+                    employeeIds: selectedEmployeeIds,
+                  });
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+              >
+                <UserCheck className="size-4" />
+                Assign selected employees
+              </button>
+            </div>
+          ) : null}
+
+          {activePanel === "add-matrix" ? (
+            <div className="mx-auto max-w-lg space-y-4">
+              <div>
+                <h3 className="text-base font-semibold text-text-primary">
+                  Add performance matrix
+                </h3>
+                <p className="mt-1 text-sm text-foreground/70">
+                  Create a new matrix label for the selected financial year,
+                  then add levels to initialize it.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-300/80 bg-slate-50/50 p-5 dark:border-white/15 dark:bg-white/5">
+                <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50/70 px-3 py-2 dark:border-sky-500/30 dark:bg-sky-950/20">
+                  <p className="text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                    Financial year
+                  </p>
+                  <p className="mt-0.5 text-sm font-semibold text-sky-900 dark:text-sky-100">
+                    {financialYears?.find(
+                      (year) => year.id === selectedFinancialYearId,
+                    )?.label ?? "Select a financial year first"}
+                  </p>
+                </div>
+
+                <form onSubmit={handleCreateMatrixLabel} className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="new-matrix-label"
+                      className="mb-1.5 block text-sm font-medium text-text-primary"
+                    >
+                      Matrix Label
+                    </label>
+                    <input
+                      id="new-matrix-label"
+                      type="text"
+                      value={newMatrixLabel}
+                      onChange={(event) => setNewMatrixLabel(event.target.value)}
+                      required
+                      disabled={!selectedFinancialYearId}
+                      placeholder="e.g. Matrix A / Faculty Matrix"
+                      className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                    />
+                  </div>
+
+                  {matrixOptions.length > 0 ? (
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/60">
+                        Existing matrices
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {matrixOptions.map((label, index) => (
+                          <span
+                            key={label}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+                              getPerformanceLevelTint(label, index),
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "size-1.5 rounded-full",
+                                getPerformanceLevelColor(label, index),
+                              )}
+                            />
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    disabled={
+                      !selectedFinancialYearId || !newMatrixLabel.trim()
+                    }
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+                  >
+                    <Plus className="size-4" />
+                    Create matrix
+                  </button>
+                </form>
+              </div>
+            </div>
           ) : null}
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
-          <h3 className="text-base font-semibold text-text-primary">
-            Assign Performance Matrix to Employees
-          </h3>
-          <p className="mt-1 text-sm text-foreground/70">
-            Assign the selected performance matrix label to multiple employees.
-          </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <select
-              value={selectedMatrixLabel}
-              onChange={(event) => setSelectedMatrixLabel(event.target.value)}
-              className="rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-            >
-              {[...(matrixLabels ?? []), "Default"]
-                .filter((value, idx, arr) => arr.indexOf(value) === idx)
-                .map((label) => (
-                  <option key={label} value={label}>
-                    {label}
-                  </option>
-                ))}
-            </select>
-            <select
-              multiple
-              value={selectedEmployeeIds}
-              onChange={(event) => {
-                const selected = Array.from(event.currentTarget.selectedOptions).map(
-                  (option) => option.value,
-                );
-                setSelectedEmployeeIds(selected);
-              }}
-              className="min-h-28 rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-            >
-              {(users ?? []).map((user) => (
-                <option key={user.id} value={user.employeeId}>
-                  {user.employeeId} - {`${user.firstName} ${user.lastName}`.trim()}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            disabled={
-              !selectedFinancialYearId ||
-              selectedEmployeeIds.length === 0 ||
-              assignMatrixMutation.isPending
-            }
-            onClick={() => {
-              if (!selectedFinancialYearId) {
-                return;
-              }
-              setFormMessage(null);
-              assignMatrixMutation.mutate({
-                financialYearId: selectedFinancialYearId,
-                matrixLabel: selectedMatrixLabel,
-                employeeIds: selectedEmployeeIds,
-              });
-            }}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+      <AnimatePresence>
+        {openDialog === "level" ? (
+          <motion.div
+            key="level-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="level-dialog-title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-4"
           >
-            Assign Selected Employees
-          </button>
-        </div>
+            <motion.button
+              type="button"
+              aria-label="Close level dialog"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeDialog}
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+            />
 
-        <div className="flex items-center gap-2">
-          <Grid3X3 className="size-5 text-primary" />
-          <h3 className="text-base font-semibold text-text-primary">
-            Combined Performance Matrix
-          </h3>
-        </div>
-        <p className="text-sm text-foreground/70">
-          Levels and quartiles combined into a single matrix view for the selected
-          financial year.
-        </p>
-        <PerformanceMatrixGrid levels={matrix ?? []} />
-      </div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+              className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2
+                    id="level-dialog-title"
+                    className="text-lg font-semibold text-text-primary"
+                  >
+                    {editingLevel
+                      ? "Edit performance level"
+                      : "Add performance level"}
+                  </h2>
+                  <p className="mt-1 text-sm text-foreground/70">
+                    Levels become the colored rows in the combined matrix.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeDialog}
+                  aria-label="Close"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-foreground/70 hover:bg-primary/10 hover:text-text-primary dark:border-white/15"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              {dialogError ? (
+                <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300">
+                  {dialogError}
+                </p>
+              ) : null}
+
+              <form onSubmit={handleLevelSubmit} className="mt-4 space-y-4">
+                <div>
+                  <label
+                    htmlFor="dialog-matrix-label"
+                    className="mb-1.5 block text-sm font-medium text-text-primary"
+                  >
+                    Matrix Label
+                  </label>
+                  <input
+                    id="dialog-matrix-label"
+                    type="text"
+                    value={matrixLabel}
+                    onChange={(event) => setMatrixLabel(event.target.value)}
+                    required
+                    disabled={!selectedFinancialYearId}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                    placeholder="Default / Matrix A"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="dialog-level-name"
+                    className="mb-1.5 block text-sm font-medium text-text-primary"
+                  >
+                    Level Name
+                  </label>
+                  <input
+                    id="dialog-level-name"
+                    type="text"
+                    value={levelName}
+                    onChange={(event) => setLevelName(event.target.value)}
+                    required
+                    disabled={!selectedFinancialYearId}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                    placeholder="Excellent"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="dialog-level-sort-order"
+                    className="mb-1.5 block text-sm font-medium text-text-primary"
+                  >
+                    Sort Order
+                  </label>
+                  <input
+                    id="dialog-level-sort-order"
+                    type="number"
+                    min={0}
+                    value={levelSortOrder}
+                    onChange={(event) => setLevelSortOrder(event.target.value)}
+                    disabled={!selectedFinancialYearId}
+                    className="w-full max-w-xs rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={!selectedFinancialYearId || isLevelSubmitting}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+                  >
+                    {editingLevel ? (
+                      <>
+                        <Pencil className="size-4" />
+                        Update Level
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="size-4" />
+                        Add Level
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeDialog}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {openDialog === "quartile" ? (
+          <motion.div
+            key="quartile-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="quartile-dialog-title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-4"
+          >
+            <motion.button
+              type="button"
+              aria-label="Close quartile dialog"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeDialog}
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+              className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2
+                    id="quartile-dialog-title"
+                    className="text-lg font-semibold text-text-primary"
+                  >
+                    {editingQuartile ? "Edit quartile" : "Add quartile"}
+                  </h2>
+                  <p className="mt-1 text-sm text-foreground/70">
+                    Quartiles define score ranges within a performance level.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeDialog}
+                  aria-label="Close"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-foreground/70 hover:bg-primary/10 hover:text-text-primary dark:border-white/15"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              {dialogError ? (
+                <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300">
+                  {dialogError}
+                </p>
+              ) : null}
+
+              <form onSubmit={handleQuartileSubmit} className="mt-4 space-y-4">
+                <div>
+                  <label
+                    htmlFor="dialog-quartile-level"
+                    className="mb-1.5 block text-sm font-medium text-text-primary"
+                  >
+                    Performance Level
+                  </label>
+                  <select
+                    id="dialog-quartile-level"
+                    value={selectedLevelId ?? ""}
+                    onChange={(event) => {
+                      setSelectedLevelId(Number(event.target.value));
+                      setDialogError(null);
+                    }}
+                    disabled={!!editingQuartile || !matrix?.length}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                  >
+                    <option value="">Select a level</option>
+                    {matrix?.map((level) => (
+                      <option key={level.id} value={level.id}>
+                        {level.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="dialog-quartile-name"
+                    className="mb-1.5 block text-sm font-medium text-text-primary"
+                  >
+                    Quartile Name
+                  </label>
+                  <input
+                    id="dialog-quartile-name"
+                    type="text"
+                    value={quartileName}
+                    onChange={(event) => setQuartileName(event.target.value)}
+                    required
+                    disabled={!selectedLevelId}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                    placeholder="Q1"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="dialog-score-min"
+                      className="mb-1.5 block text-sm font-medium text-text-primary"
+                    >
+                      Score Min
+                    </label>
+                    <input
+                      id="dialog-score-min"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={scoreMin}
+                      onChange={(event) => setScoreMin(event.target.value)}
+                      required
+                      disabled={!selectedLevelId}
+                      className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="dialog-score-max"
+                      className="mb-1.5 block text-sm font-medium text-text-primary"
+                    >
+                      Score Max
+                    </label>
+                    <input
+                      id="dialog-score-max"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={scoreMax}
+                      onChange={(event) => setScoreMax(event.target.value)}
+                      required
+                      disabled={!selectedLevelId}
+                      className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="dialog-quartile-sort-order"
+                    className="mb-1.5 block text-sm font-medium text-text-primary"
+                  >
+                    Sort Order
+                  </label>
+                  <input
+                    id="dialog-quartile-sort-order"
+                    type="number"
+                    min={0}
+                    value={quartileSortOrder}
+                    onChange={(event) =>
+                      setQuartileSortOrder(event.target.value)
+                    }
+                    disabled={!selectedLevelId}
+                    className="w-full max-w-xs rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={!selectedLevelId || isQuartileSubmitting}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+                  >
+                    {editingQuartile ? (
+                      <>
+                        <Pencil className="size-4" />
+                        Update Quartile
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="size-4" />
+                        Add Quartile
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeDialog}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

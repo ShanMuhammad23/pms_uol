@@ -6,7 +6,6 @@ import {
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { APPRAISAL_STATUSES, type AppraisalStatus } from "@/types/forms";
-import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
 export function formatRoleCategoryValue(
   value: string | null | undefined,
@@ -23,12 +22,9 @@ export type SubmissionFilterState = {
   selectedCategory0EntityIds: MultiFilterSelection<number>;
   selectedCategory1EntityIds: MultiFilterSelection<number>;
   selectedCategory2EntityIds: MultiFilterSelection<number>;
-  selectedCategoryIds: MultiFilterSelection<number>;
-  selectedSubCategoryIds: MultiFilterSelection<number>;
   selectedRoleCategories: MultiFilterSelection<string>;
   selectedDesignations: MultiFilterSelection<string>;
   selectedFormStates: MultiFilterSelection<FormState>;
-  staffCategories: StaffCategoryWithSubCategories[];
   entities: EntityRecord[];
 };
 
@@ -160,44 +156,6 @@ export function matchesSubmissionFilters(
     filters.entities,
   );
 
-  const selectedCategoryNames =
-    filters.selectedCategoryIds === null
-      ? null
-      : new Set(
-          filters.staffCategories
-            .filter((category) => filters.selectedCategoryIds!.includes(category.id))
-            .map((category) => category.name),
-        );
-
-  const matchesCategory =
-    filters.selectedCategoryIds === null ||
-    (filters.selectedCategoryIds.length > 0 &&
-      ((submission.staffCategoryId != null &&
-        filters.selectedCategoryIds.includes(submission.staffCategoryId)) ||
-        (submission.staffCategoryName != null &&
-          selectedCategoryNames?.has(submission.staffCategoryName) === true)));
-
-  const selectedSubCategoryNames =
-    filters.selectedSubCategoryIds === null
-      ? null
-      : new Set(
-          filters.staffCategories
-            .flatMap((category) => category.subCategories)
-            .filter((subCategory) =>
-              filters.selectedSubCategoryIds!.includes(subCategory.id),
-            )
-            .map((subCategory) => subCategory.name),
-        );
-
-  const matchesSubCategory =
-    filters.selectedSubCategoryIds === null ||
-    (filters.selectedSubCategoryIds.length > 0 &&
-      ((submission.staffSubCategoryId != null &&
-        filters.selectedSubCategoryIds.includes(submission.staffSubCategoryId)) ||
-        (submission.staffSubCategoryName != null &&
-          selectedSubCategoryNames?.has(submission.staffSubCategoryName) ===
-            true)));
-
   const matchesRoleCategory = matchesMultiSelection(
     filters.selectedRoleCategories,
     formatRoleCategoryValue(submission.roleCategory),
@@ -219,8 +177,6 @@ export function matchesSubmissionFilters(
     matchesEntity0 &&
     matchesEntity1 &&
     matchesEntity2 &&
-    matchesCategory &&
-    matchesSubCategory &&
     matchesRoleCategory &&
     matchesDesignation &&
     matchesFormState
@@ -231,8 +187,6 @@ export type FilterDimension =
   | "category0"
   | "category1"
   | "category2"
-  | "staffCategory"
-  | "staffSubCategory"
   | "roleCategory"
   | "designation"
   | "formState";
@@ -250,10 +204,6 @@ export function matchesSubmissionFiltersExcluding(
       exclude === "category1" ? null : filters.selectedCategory1EntityIds,
     selectedCategory2EntityIds:
       exclude === "category2" ? null : filters.selectedCategory2EntityIds,
-    selectedCategoryIds:
-      exclude === "staffCategory" ? null : filters.selectedCategoryIds,
-    selectedSubCategoryIds:
-      exclude === "staffSubCategory" ? null : filters.selectedSubCategoryIds,
     selectedRoleCategories:
       exclude === "roleCategory" ? null : filters.selectedRoleCategories,
     selectedDesignations:

@@ -12,8 +12,6 @@ export type UsersTableColumnId =
   | "gradeGroup"
   | "dateOfJoining"
   | "systemRole"
-  | "staffCategory"
-  | "staffSubCategory"
   | "reportingHead"
   | "qualification"
   | "qualificationYear"
@@ -101,18 +99,6 @@ export const USERS_TABLE_COLUMNS: UsersTableColumnDef[] = [
     id: "systemRole",
     label: "System Role",
     getValue: (row) => USER_ROLE_LABELS[row.systemRole],
-  },
-  {
-    id: "staffCategory",
-    label: "Staff Category",
-    getValue: (row) =>
-      formatNullable(row.staffCategoryName ?? row.empCategory),
-  },
-  {
-    id: "staffSubCategory",
-    label: "Staff Sub-Category",
-    getValue: (row) =>
-      formatNullable(row.staffSubCategoryName ?? row.empSubCategory),
   },
   {
     id: "reportingHead",

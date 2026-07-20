@@ -6,8 +6,6 @@ export interface AssignedFormListItem {
   templateId: number;
   title: string;
   description: string | null;
-  staffCategoryName: string | null;
-  staffSubCategoryName: string | null;
   questionCount: number;
   /** Workflow status from appraisals.status (dashboard-aligned). */
   status: AppraisalStatus;

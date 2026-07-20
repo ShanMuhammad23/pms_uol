@@ -25,8 +25,6 @@ interface FormEmployeeAssignmentProps {
 }
 
 type FilterId =
-  | "staffCategoryName"
-  | "staffSubCategoryName"
   | "entityName"
   | "designation"
   | "roleCategory"
@@ -37,8 +35,6 @@ type FilterSelection = string[] | null;
 type FilterState = Record<FilterId, FilterSelection>;
 
 const FILTER_CONFIG: { id: FilterId; label: string }[] = [
-  { id: "staffCategoryName", label: "Staff Category" },
-  { id: "staffSubCategoryName", label: "Sub-Category" },
   { id: "entityName", label: "Entity" },
   { id: "designation", label: "Designation" },
   { id: "roleCategory", label: "Role Category" },
@@ -46,8 +42,6 @@ const FILTER_CONFIG: { id: FilterId; label: string }[] = [
 ];
 
 const EMPTY_FILTERS: FilterState = {
-  staffCategoryName: null,
-  staffSubCategoryName: null,
   entityName: null,
   designation: null,
   roleCategory: null,
@@ -305,8 +299,6 @@ export default function FormEmployeeAssignment({
     { id: "employeeId", label: "SAP Code", width: 120, getValue: (u) => u.employeeId },
     { id: "name", label: "Employee Name", width: 200, getValue: (u) => `${u.firstName} ${u.lastName}`.trim() },
     { id: "designation", label: "Designation", width: 180, getValue: (u) => u.designation ?? "—" },
-    { id: "staffCategoryName", label: "Staff Category", width: 150, getValue: (u) => u.staffCategoryName ?? "—" },
-    { id: "staffSubCategoryName", label: "Sub-Category", width: 150, getValue: (u) => u.staffSubCategoryName ?? "—" },
     { id: "entityName", label: "Entity", width: 160, getValue: (u) => u.entityName ?? "—" },
     { id: "gradeGroup", label: "Grade Group", width: 100, getValue: (u) => u.gradeGroup ?? "—" },
     { id: "roleCategory", label: "Role Category", width: 150, getValue: (u) => u.roleCategory ?? "—" },

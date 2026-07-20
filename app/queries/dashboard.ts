@@ -7,7 +7,6 @@ import { useDashboardFilters } from "@/app/queries/dashboard-filters";
 import { useFormSubmissionsQuery } from "@/app/queries/forms";
 import {
   useDashboardEntitiesQuery,
-  useStaffCategoriesWithSubCategoriesQuery,
   useUniqueDesignationsQuery,
 } from "@/app/queries/organization";
 import {
@@ -39,9 +38,6 @@ export function useDashboardPage() {
   const { data: institutionalQuotaRows } =
     useInstitutionalQuotaChartQuery(activeFinancialYearId);
 
-  const { data: staffCategories = [], isLoading: staffCategoriesLoading } =
-    useStaffCategoriesWithSubCategoriesQuery();
-
   const { data: entities = [], isLoading: entitiesLoading } =
     useDashboardEntitiesQuery();
 
@@ -72,8 +68,6 @@ export function useDashboardPage() {
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
-    selectedCategoryIds,
-    selectedSubCategoryIds,
     selectedRoleCategories,
     selectedDesignations,
     selectedFormStates,
@@ -81,8 +75,6 @@ export function useDashboardPage() {
     category0DistributionOptions,
     category1Options,
     category2Options,
-    staffCategoryOptions,
-    staffSubCategoryOptions,
     roleCategoryOptions,
     designationOptions,
     formStateOptions,
@@ -92,23 +84,19 @@ export function useDashboardPage() {
     handleCategory0DistributionSelect,
     handleCategory1EntityChange,
     handleCategory2EntityChange,
-    handleStaffCategoryChange,
     handleRoleCategoryChange,
-    handleSubCategoryChange,
     handleDesignationChange,
     handleFormStateChange,
     clearAllFilters,
     filterByFormState,
   } = useDashboardFilters({
     submissions: scopedSubmissions,
-    staffCategories,
     entities,
     designations,
   });
 
   const chartMetrics = useDashboardChartMetrics({
     filteredSubmissions,
-    staffCategories,
     isDarkMode,
     matrixForDistribution,
     institutionalQuotaRows,
@@ -121,8 +109,6 @@ export function useDashboardPage() {
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
-    selectedCategoryIds,
-    selectedSubCategoryIds,
     selectedRoleCategories,
     selectedDesignations,
     selectedFormStates,
@@ -130,13 +116,10 @@ export function useDashboardPage() {
     category0DistributionOptions,
     category1Options,
     category2Options,
-    staffCategoryOptions,
-    staffSubCategoryOptions,
     roleCategoryOptions,
     designationOptions,
     formStateOptions,
     entitiesLoading,
-    staffCategoriesLoading,
     designationsLoading,
     submissionsLoading,
     submissionsError,
@@ -148,9 +131,7 @@ export function useDashboardPage() {
     handleCategory0DistributionSelect,
     handleCategory1EntityChange,
     handleCategory2EntityChange,
-    handleStaffCategoryChange,
     handleRoleCategoryChange,
-    handleSubCategoryChange,
     handleDesignationChange,
     handleFormStateChange,
     clearAllFilters,

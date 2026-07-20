@@ -57,9 +57,6 @@ export default function MyFormsList() {
               Form
             </th>
             <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
-              Category
-            </th>
-            <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
               Questions
             </th>
             <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
@@ -87,12 +84,6 @@ export default function MyFormsList() {
                       {form.description}
                     </p>
                   ) : null}
-                </td>
-                <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
-                  {form.staffCategoryName ?? "—"}
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">
-                    {form.staffSubCategoryName ?? "—"}
-                  </span>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
                   {form.questionCount}

@@ -39,10 +39,6 @@ export interface UserRecord {
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId: number | null;
-  staffCategoryName: string | null;
-  staffSubCategoryId: number | null;
-  staffSubCategoryName: string | null;
   entityId: number | null;
   entityName: string | null;
   parentEntityName: string | null;
@@ -66,8 +62,6 @@ export interface CreateUserInput {
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId?: number | null;
-  staffSubCategoryId?: number | null;
   entityId?: number | null;
   headId?: number | null;
   isActive?: boolean;
@@ -79,13 +73,20 @@ export interface UpdateUserInput {
   password?: string;
   firstName: string;
   lastName: string;
+  designation?: string | null;
+  roleCategory?: string | null;
+  gradeGroup?: string | null;
+  dateOfJoining?: string | null;
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId?: number | null;
-  staffSubCategoryId?: number | null;
   entityId?: number | null;
   headId?: number | null;
+  qualification?: string | null;
+  qualificationYear?: number | null;
+  qualificationSubject?: string | null;
+  qualificationInstitute?: string | null;
+  qualificationCountry?: string | null;
   isActive?: boolean;
 }
 

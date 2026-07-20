@@ -7,10 +7,6 @@ import { createPieLabelRenderer } from "@/app/helpers/dashboard-chart-utils";
 import { buildEligibilityData } from "@/app/helpers/dashboard-eligibility";
 import { buildRatingQuartileMatrix } from "@/app/helpers/dashboard-rating-matrix";
 import {
-  buildSubmissionCategoryCounts,
-  buildSubmissionCompletionByCategory,
-} from "@/app/helpers/dashboard-submission-charts";
-import {
   buildBoardApprovalStats,
   buildHrAlignmentStats,
   buildManagerReviewStats,
@@ -19,11 +15,9 @@ import {
 } from "@/app/helpers/dashboard-workflow-stats";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
-import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
 
 interface UseDashboardChartMetricsParams {
   filteredSubmissions: FormSubmissionListItem[];
-  staffCategories: StaffCategoryWithSubCategories[];
   isDarkMode: boolean;
   matrixForDistribution: PerformanceLevelWithQuartiles[];
   institutionalQuotaRows?: Array<{ rating: string; quota: number }>;
@@ -31,7 +25,6 @@ interface UseDashboardChartMetricsParams {
 
 export function useDashboardChartMetrics({
   filteredSubmissions,
-  staffCategories,
   isDarkMode,
   matrixForDistribution,
   institutionalQuotaRows,
@@ -39,11 +32,6 @@ export function useDashboardChartMetrics({
   const chartSubmissions = useMemo(
     () => filterSubmissionsForCharts(filteredSubmissions),
     [filteredSubmissions],
-  );
-
-  const themedCategoryDistribution = useMemo(
-    () => buildSubmissionCategoryCounts(filteredSubmissions, staffCategories, isDarkMode),
-    [filteredSubmissions, staffCategories, isDarkMode],
   );
 
   const filteredEligibleCount = useMemo(
@@ -64,11 +52,6 @@ export function useDashboardChartMetrics({
   const ratingQuartileMatrix = useMemo(
     () => buildRatingQuartileMatrix(chartSubmissions, matrixForDistribution),
     [chartSubmissions, matrixForDistribution],
-  );
-
-  const filteredCompletionByCategory = useMemo(
-    () => buildSubmissionCompletionByCategory(filteredSubmissions, staffCategories),
-    [filteredSubmissions, staffCategories],
   );
 
   const pieLabelRenderer = useMemo(
@@ -102,10 +85,8 @@ export function useDashboardChartMetrics({
   );
 
   return {
-    themedCategoryDistribution,
     filteredCalibrationData,
     ratingQuartileMatrix,
-    filteredCompletionByCategory,
     pieLabelRenderer,
     eligibilityData,
     selfAssessmentStats,

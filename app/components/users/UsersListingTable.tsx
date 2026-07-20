@@ -92,14 +92,6 @@ function renderCell(
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
-          onClick={() => onEdit(user)}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-        >
-          <Pencil className="size-3.5" />
-          Edit
-        </button>
-        <button
-          type="button"
           onClick={() => onDelete(user)}
           disabled={deletePending}
           className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
@@ -108,6 +100,28 @@ function renderCell(
           Delete
         </button>
       </div>
+    );
+  }
+
+  if (column.id === "sapCode") {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onEdit(user)}
+          title="Edit user"
+          aria-label={`Edit ${user.firstName} ${user.lastName}`}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <span
+          className="block max-w-[180px] truncate text-slate-700 dark:text-slate-300"
+          title={value === "—" ? undefined : value}
+        >
+          {value}
+        </span>
+      </span>
     );
   }
 

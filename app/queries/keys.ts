@@ -6,7 +6,6 @@ export const queryKeys = {
     ["institutional-quotas", financialYearId] as const,
   institutionalQuotaChart: (financialYearId: number | null) =>
     ["institutional-quota-chart", financialYearId] as const,
-  staffCategoriesWithSubCategories: ["staff-categories-with-subcategories"] as const,
   entities: ["entities"] as const,
   designations: ["designations"] as const,
   formSubmissions: ["form-submissions"] as const,

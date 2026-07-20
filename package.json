@@ -14,6 +14,7 @@
     "db:migrate:role-category": "node scripts/migrate-role-category-column.mjs",
     "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs",
     "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
+    "db:update:emails-from-excel": "node scripts/update-emails-from-excel.mjs",
     "db:recompute:eligibility": "node scripts/recompute-appraisal-eligibility.mjs",
     "db:normalize:entity-names": "node scripts/normalize-entity-names.mjs"
   },

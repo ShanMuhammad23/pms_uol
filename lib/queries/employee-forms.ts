@@ -30,12 +30,6 @@ function getTemplateQuestions(template: FormTemplateRecord): QuestionRecord[] {
   return flattenAllQuestions(template);
 }
 
-interface UserStaffRow {
-  id: string;
-  staff_category_id: number | null;
-  staff_sub_category_id: number | null;
-}
-
 interface AppraisalRow {
   id: string;
   status: string;
@@ -97,85 +91,6 @@ export class EmployeeFormError extends Error {
   }
 }
 
-async function getUserStaffCategories(
-  userId: number,
-  client?: PoolClient,
-): Promise<UserStaffRow> {
-  const executor = client ?? db;
-  const result = await executor.query<UserStaffRow>(
-    `SELECT id, staff_category_id, staff_sub_category_id
-     FROM users
-     WHERE id = $1`,
-    [userId],
-  );
-
-  if (result.rows.length === 0) {
-    throw new EmployeeFormError("User not found.", 404);
-  }
-
-  return result.rows[0];
-}
-
-async function getAssignedTemplateForUser(
-  userId: number,
-  client?: PoolClient,
-): Promise<{
-  templateId: number;
-  title: string;
-  description: string | null;
-  staffCategoryName: string | null;
-  staffSubCategoryName: string | null;
-  questionCount: number;
-} | null> {
-  const user = await getUserStaffCategories(userId, client);
-
-  if (!user.staff_category_id || !user.staff_sub_category_id) {
-    return null;
-  }
-
-  const executor = client ?? db;
-  const result = await executor.query<{
-    id: string;
-    title: string;
-    description: string | null;
-    staff_category_name: string | null;
-    staff_sub_category_name: string | null;
-    question_count: string;
-  }>(
-    `SELECT
-       ft.id,
-       ft.title,
-       ft.description,
-       sc.name AS staff_category_name,
-       ssc.name AS staff_sub_category_name,
-       COUNT(fq.id)::text AS question_count
-     FROM form_templates ft
-     LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
-     LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
-     LEFT JOIN form_questions fq ON fq.template_id = ft.id
-     WHERE ft.staff_category_id = $1
-       AND ft.staff_sub_category_id = $2
-     GROUP BY ft.id, sc.name, ssc.name
-     LIMIT 1`,
-    [user.staff_category_id, user.staff_sub_category_id],
-  );
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  const row = result.rows[0];
-
-  return {
-    templateId: Number(row.id),
-    title: row.title,
-    description: row.description,
-    staffCategoryName: row.staff_category_name,
-    staffSubCategoryName: row.staff_sub_category_name,
-    questionCount: Number(row.question_count),
-  };
-}
-
 async function listExplicitlyAssignedTemplatesForUser(
   userId: number,
   client?: PoolClient,
@@ -184,8 +99,6 @@ async function listExplicitlyAssignedTemplatesForUser(
     templateId: number;
     title: string;
     description: string | null;
-    staffCategoryName: string | null;
-    staffSubCategoryName: string | null;
     questionCount: number;
   }>
 > {
@@ -194,24 +107,18 @@ async function listExplicitlyAssignedTemplatesForUser(
     id: string;
     title: string;
     description: string | null;
-    staff_category_name: string | null;
-    staff_sub_category_name: string | null;
     question_count: string;
   }>(
     `SELECT
        ft.id,
        ft.title,
        ft.description,
-       sc.name AS staff_category_name,
-       ssc.name AS staff_sub_category_name,
        COUNT(fq.id)::text AS question_count
      FROM employee_form_assignments efa
      INNER JOIN form_templates ft ON ft.id = efa.template_id
-     LEFT JOIN staff_categories sc ON sc.id = ft.staff_category_id
-     LEFT JOIN staff_sub_categories ssc ON ssc.id = ft.staff_sub_category_id
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
      WHERE efa.employee_id = $1
-     GROUP BY ft.id, sc.name, ssc.name
+     GROUP BY ft.id
      ORDER BY ft.id DESC`,
     [userId],
   );
@@ -220,8 +127,6 @@ async function listExplicitlyAssignedTemplatesForUser(
     templateId: Number(row.id),
     title: row.title,
     description: row.description,
-    staffCategoryName: row.staff_category_name,
-    staffSubCategoryName: row.staff_sub_category_name,
     questionCount: Number(row.question_count),
   }));
 }
@@ -235,19 +140,10 @@ async function assertTemplateAssignedToUser(
     userId,
     client,
   );
-  if (explicitAssignments.length > 0) {
-    const matched = explicitAssignments.some(
-      (template) => template.templateId === templateId,
-    );
-    if (!matched) {
-      throw new EmployeeFormError("This form is not assigned to you.", 403);
-    }
-    return;
-  }
-
-  const assigned = await getAssignedTemplateForUser(userId, client);
-
-  if (!assigned || assigned.templateId !== templateId) {
+  const matched = explicitAssignments.some(
+    (template) => template.templateId === templateId,
+  );
+  if (!matched) {
     throw new EmployeeFormError("This form is not assigned to you.", 403);
   }
 }
@@ -560,52 +456,22 @@ export async function listAssignedFormsForUser(
   userId: number,
 ): Promise<AssignedFormListItem[]> {
   const explicitAssignments = await listExplicitlyAssignedTemplatesForUser(userId);
-  if (explicitAssignments.length > 0) {
-    const items = await Promise.all(
-      explicitAssignments.map(async (assigned) => {
-        const appraisal = await getAppraisalForUserTemplate(userId, assigned.templateId);
 
-        return {
-          templateId: assigned.templateId,
-          title: assigned.title,
-          description: assigned.description,
-          staffCategoryName: assigned.staffCategoryName,
-          staffSubCategoryName: assigned.staffSubCategoryName,
-          questionCount: assigned.questionCount,
-          status: resolveAppraisalWorkflowStatus(appraisal),
-          submittedAt: appraisal?.submitted_at ?? null,
-          updatedAt: appraisal?.updated_at ?? null,
-        } satisfies AssignedFormListItem;
-      }),
-    );
+  return Promise.all(
+    explicitAssignments.map(async (assigned) => {
+      const appraisal = await getAppraisalForUserTemplate(userId, assigned.templateId);
 
-    return items;
-  }
-
-  const assigned = await getAssignedTemplateForUser(userId);
-
-  if (!assigned) {
-    return [];
-  }
-
-  const appraisal = await getAppraisalForUserTemplate(
-    userId,
-    assigned.templateId,
+      return {
+        templateId: assigned.templateId,
+        title: assigned.title,
+        description: assigned.description,
+        questionCount: assigned.questionCount,
+        status: resolveAppraisalWorkflowStatus(appraisal),
+        submittedAt: appraisal?.submitted_at ?? null,
+        updatedAt: appraisal?.updated_at ?? null,
+      } satisfies AssignedFormListItem;
+    }),
   );
-
-  return [
-    {
-      templateId: assigned.templateId,
-      title: assigned.title,
-      description: assigned.description,
-      staffCategoryName: assigned.staffCategoryName,
-      staffSubCategoryName: assigned.staffSubCategoryName,
-      questionCount: assigned.questionCount,
-      status: resolveAppraisalWorkflowStatus(appraisal),
-      submittedAt: appraisal?.submitted_at ?? null,
-      updatedAt: appraisal?.updated_at ?? null,
-    },
-  ];
 }
 
 export async function getEmployeeFormDetail(
