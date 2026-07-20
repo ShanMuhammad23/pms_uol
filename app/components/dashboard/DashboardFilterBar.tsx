@@ -45,9 +45,11 @@ interface DashboardFilterBarProps {
   onDesignationChange: (value: string[] | null) => void;
   designationOptions: MultiSelectOption[];
   designationsLoading: boolean;
-  selectedFormStates: string[] | null;
-  onFormStateChange: (value: string[] | null) => void;
-  formStateOptions: MultiSelectOption[];
+  selectedFormStates?: string[] | null;
+  onFormStateChange?: (value: string[] | null) => void;
+  formStateOptions?: MultiSelectOption[];
+  /** When false, hides the Form Status dropdown (e.g. users page). Defaults to true. */
+  showFormStatus?: boolean;
   entitiesLoading: boolean;
   activeFilters: ActiveFilter[];
   onClearAllFilters: () => void;
@@ -72,9 +74,10 @@ export function DashboardFilterBar({
   onDesignationChange,
   designationOptions,
   designationsLoading,
-  selectedFormStates,
+  selectedFormStates = null,
   onFormStateChange,
-  formStateOptions,
+  formStateOptions = [],
+  showFormStatus = true,
   entitiesLoading,
   activeFilters,
   onClearAllFilters,
@@ -176,14 +179,16 @@ export function DashboardFilterBar({
                     searchable
                   />
 
-                  <MultiSelectFilterDropdown
-                    label="Form Status"
-                    icon={Briefcase}
-                    options={formStateOptions}
-                    selectedValues={selectedFormStates}
-                    onChange={onFormStateChange}
-                    placeholder="All"
-                  />
+                  {showFormStatus && onFormStateChange ? (
+                    <MultiSelectFilterDropdown
+                      label="Form Status"
+                      icon={Briefcase}
+                      options={formStateOptions}
+                      selectedValues={selectedFormStates}
+                      onChange={onFormStateChange}
+                      placeholder="All"
+                    />
+                  ) : null}
                 </div>
               </div>
             </motion.div>

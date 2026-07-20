@@ -10,4 +10,5 @@ export const queryKeys = {
   entities: ["entities"] as const,
   designations: ["designations"] as const,
   formSubmissions: ["form-submissions"] as const,
+  users: ["users"] as const,
 };
