@@ -35,7 +35,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       <div className="flex min-h-screen w-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground transition-colors">
         <Sidebar />
         <main
-          className="min-h-screen min-w-0 overflow-x-hidden bg-background p-4 text-foreground transition-[margin,width] duration-300 ease-in-out"
+          className="dashboard-main min-h-screen min-w-0 overflow-x-hidden bg-background p-4 text-foreground transition-[margin,width] duration-300 ease-in-out"
           style={{
             marginLeft: resolvedWidth,
             width: `calc(100vw - ${resolvedWidth}px)`,

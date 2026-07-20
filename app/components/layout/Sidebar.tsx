@@ -47,7 +47,7 @@ const Sidebar = () => {
   return (
     <aside
       className={cn(
-        "fixed top-0 left-0 z-40 flex h-full flex-col  overflow-auto border border-r border-slate-300/80  py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
+        "no-print fixed top-0 left-0 z-40 flex h-full flex-col  overflow-auto border border-r border-slate-300/80  py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
         collapsed ? "w-[72px]" : "w-[264px]",
       )}
     >
