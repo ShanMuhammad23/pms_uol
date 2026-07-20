@@ -18,7 +18,7 @@ import {
   usePerformanceMatrixQuery,
 } from "@/app/queries/performance";
 import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
-import { submissionInEntitySubtree } from "@/app/helpers/entity-scope";
+import { submissionVisibleToHead } from "@/app/helpers/manager-review";
 import { isHeadRole } from "@/lib/auth/home-path";
 
 export function useDashboardPage() {
@@ -60,7 +60,7 @@ export function useDashboardPage() {
     }
 
     return submissions.filter((submission) =>
-      submissionInEntitySubtree(submission, headEntityId, entities),
+      submissionVisibleToHead(headEntityId, submission, entities),
     );
   }, [submissions, headEntityId, entities]);
 

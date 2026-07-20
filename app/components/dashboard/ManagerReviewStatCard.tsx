@@ -35,11 +35,25 @@ export function ManagerReviewStatCard({
           : "hover:shadow-md",
       )}
     >
-      <div className="mb-3 flex items-center gap-2">
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-200" aria-hidden />
+      
+      <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-base font-semibold uppercase tracking-wider text-white">
-          Manager Review
-        </p>
+          Review
+        </p> 
+        <div className="flex items-center gap-2 ">
+      <span
+            className="mt-0.5 inline-block rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+            title="Completion percentage"
+          >
+            {manager1.percentageLabel}
+          </span>
+          <span
+            className="mt-0.5 inline-block rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+            title="Completion percentage"
+          >
+            {manager2.percentageLabel}
+          </span>
+      </div>
       </div>
 
       <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1.5 items-center">
@@ -48,23 +62,13 @@ export function ManagerReviewStatCard({
           <p className="text-[10px] font-semibold uppercase tracking-wider text-white/90">
             Manager 1
           </p>
-          <span
-            className="mt-0.5 inline-block rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-            title="Completion percentage"
-          >
-            {manager1.percentageLabel}
-          </span>
+        
         </div>
         <div className="text-center">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-white/90">
             Manager 2
           </p>
-          <span
-            className="mt-0.5 inline-block rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-            title="Completion percentage"
-          >
-            {manager2.percentageLabel}
-          </span>
+          
         </div>
 
         <span className="text-xs text-white">Submitted</span>

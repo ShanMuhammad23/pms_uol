@@ -1,4 +1,5 @@
 import { getSubmissionEligibilityStatus } from "@/app/helpers/dashboard-eligibility";
+import { submissionRequiresSecondManagerReview } from "@/app/helpers/manager-review";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AppraisalStatus } from "@/types/forms";
 
@@ -91,30 +92,46 @@ export type ManagerReviewDualStats = {
   manager2: WorkflowStageStats;
 };
 
-function buildSingleManagerReviewStats(
+function buildManagerReviewStatsForLevel(
   submissions: FormSubmissionListItem[],
+  level: 1 | 2,
 ): WorkflowStageStats {
-  const awaitingReview = countByStatuses(submissions, SUBMITTED_SELF_ASSESSMENT_STATES);
-  const submittedForHr = countByStatuses(submissions, SUBMITTED_FOR_HR_STATES);
+  const awaiting = submissions.filter(
+    (submission) =>
+      submission.status === "PENDING_HEAD_REVIEW" &&
+      (submission.managerLevel ?? 1) === level,
+  ).length;
 
-  return toWorkflowStageStats(awaitingReview, submittedForHr);
+  const completed = submissions.filter((submission) => {
+    const managerLevel = submission.managerLevel ?? 1;
+
+    if (level === 1) {
+      return (
+        (submission.status === "PENDING_HEAD_REVIEW" && managerLevel > 1) ||
+        SUBMITTED_FOR_HR_STATES.includes(submission.status)
+      );
+    }
+
+    return SUBMITTED_FOR_HR_STATES.includes(submission.status);
+  }).length;
+
+  return toWorkflowStageStats(awaiting, completed);
 }
 
 /**
- * Manager 1 = leaf entity head (all SA-submitted forms).
- * Manager 2 = parent entity head (only forms whose entity has a parent).
- * Same Submitted / Reviewed labels; counts scoped per level.
+ * Manager 1 / Manager 2 stats are scoped by appraisals.manager_level.
+ * Manager 2 pool only includes submissions that require a second review.
  */
 export function buildManagerReviewStats(
   submissions: FormSubmissionListItem[],
 ): ManagerReviewDualStats {
-  const manager2Pool = submissions.filter(
-    (submission) => Boolean(submission.parentEntityName),
+  const manager2Pool = submissions.filter((submission) =>
+    submissionRequiresSecondManagerReview(submission),
   );
 
   return {
-    manager1: buildSingleManagerReviewStats(submissions),
-    manager2: buildSingleManagerReviewStats(manager2Pool),
+    manager1: buildManagerReviewStatsForLevel(submissions, 1),
+    manager2: buildManagerReviewStatsForLevel(manager2Pool, 2),
   };
 }
 

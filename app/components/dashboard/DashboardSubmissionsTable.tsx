@@ -164,18 +164,31 @@ function renderCell(
     );
   }
 
-  if (columnId === "eligible") {
+  if (columnId === "eligible" || columnId === "applicableDuration") {
     const status = getSubmissionEligibilityStatus(submission);
-    const label = getEligibilityShortLabel(status);
     const backgroundColor = ELIGIBILITY_CONFIG[status].light;
 
+    if (columnId === "eligible") {
+      const label = getEligibilityShortLabel(status);
+      return (
+        <span
+          className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white"
+          style={{ backgroundColor }}
+          title={status}
+        >
+          {label}
+        </span>
+      );
+    }
+
+    // applicableDuration — same color as Eligible badge, plain number text
     return (
       <span
         className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white"
         style={{ backgroundColor }}
         title={status}
       >
-        {label}
+        {value}
       </span>
     );
   }

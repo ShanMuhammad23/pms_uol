@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Session } from "next-auth";
 import { NextResponse } from "next/server";
+import { headCanReviewSubmission } from "@/app/helpers/manager-review";
 import { submissionInEntitySubtree } from "@/app/helpers/entity-scope";
 import { isHeadRole } from "@/lib/auth/home-path";
 import {
@@ -27,7 +28,10 @@ export function canOpenSubmissionDetail(role: string | undefined): boolean {
 
 export async function assertSubmissionAccessible(
   session: Session,
-  submission: Pick<FormSubmissionListItem, "entityId">,
+  submission: Pick<
+    FormSubmissionListItem,
+    "entityId" | "status" | "managerLevel"
+  >,
 ): Promise<void> {
   const role = session.user?.role;
 
@@ -46,6 +50,13 @@ export async function assertSubmissionAccessible(
 
   const entities = await listEntities();
   if (!submissionInEntitySubtree(submission, headEntityId, entities)) {
+    throw new SubmissionAccessError("Forbidden", 403);
+  }
+
+  if (
+    submission.status === "PENDING_HEAD_REVIEW" &&
+    !headCanReviewSubmission(headEntityId, submission, entities)
+  ) {
     throw new SubmissionAccessError("Forbidden", 403);
   }
 }

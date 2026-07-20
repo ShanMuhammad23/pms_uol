@@ -75,7 +75,7 @@ export function CalibrationDistributionMatrix({
                 >
                   <td
                     className={cn(
-                      "whitespace-nowrap px-3 py-2.5 font-medium text-white dark:text-slate-200",
+                      "whitespace-nowrap px-3 py-2.5 font-bold text-white dark:text-slate-200 text-lg",
                       getPerformanceLevelColor(row.rating),
                     )}
                   >
@@ -89,7 +89,7 @@ export function CalibrationDistributionMatrix({
                         <div className="space-y-0.1">
                           <span
                             className={cn(
-                              "text-base inline-flex min-w-8 items-center justify-center text-white dark:text-slate-200 rounded-md  font-bold tabular-nums",
+                              "text-lg inline-flex min-w-8 items-center justify-center text-white dark:text-slate-200 rounded-md  font-bold tabular-nums",
                               cell.count > 0
                                 ? " text-primary dark:bg-amber-950/40 dark:text-amber-300"
                                 : "text-white dark:text-slate-200",

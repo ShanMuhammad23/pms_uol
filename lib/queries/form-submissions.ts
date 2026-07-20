@@ -18,6 +18,10 @@ import type {
 } from "@/types/form-submissions";
 import type { AppraisalStatus, PerformanceRating, QuestionRecord } from "@/types/forms";
 import { flattenAllQuestions } from "@/types/forms";
+import {
+  resolveManagerApprovalAdvance,
+} from "@/app/helpers/manager-review";
+import { listEntities } from "@/lib/queries/entities";
 
 export class FormSubmissionError extends Error {
   constructor(
@@ -52,6 +56,7 @@ interface SubmissionListRow {
   org_level_1_name: string | null;
   org_level_2_name: string | null;
   status: AppraisalStatus;
+  manager_level: number | null;
   system_raw_score: number;
   max_raw_score: string;
   initial_score_numeric: string | null;
@@ -112,6 +117,13 @@ async function hasRoleCategoryColumn(): Promise<boolean> {
   );
 
   return Boolean(result.rows[0]?.exists);
+}
+
+async function ensureManagerLevelColumn(): Promise<void> {
+  await db.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS manager_level INT NOT NULL DEFAULT 1`,
+  );
 }
 
 async function hasQualificationsTable(): Promise<boolean> {
@@ -213,6 +225,7 @@ function mapSubmissionRow(
     orgLevel1Name: row.org_level_1_name,
     orgLevel2Name: row.org_level_2_name,
     status: row.status,
+    managerLevel: row.manager_level != null ? Number(row.manager_level) : null,
     rawScore,
     maxRawScore,
     scorePercent,
@@ -307,6 +320,7 @@ export async function listFormSubmissions(options?: {
     hasQualificationsTable(),
     getActiveFinancialYearQuartileBands(),
     getEligibilityContext(),
+    ensureManagerLevelColumn(),
   ]);
 
   const roleCategorySelect = roleCategoryReady
@@ -447,6 +461,7 @@ export async function listFormSubmissions(options?: {
          ELSE NULL
        END AS org_level_2_name,
        COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT') AS status,
+       ap.manager_level,
        COALESCE(ap.system_raw_score, 0) AS system_raw_score,
        ap.initial_rating,
        ap.calibrated_rating,
@@ -506,13 +521,19 @@ export async function listFormSubmissions(options?: {
 
 export async function getFormSubmissionSummaryById(
   id: number,
-): Promise<Pick<FormSubmissionListItem, "id" | "entityId" | "status"> | null> {
+): Promise<
+  Pick<
+    FormSubmissionListItem,
+    "id" | "entityId" | "status" | "managerLevel"
+  > | null
+> {
   const result = await db.query<{
     id: string;
     entity_id: string | null;
     status: AppraisalStatus;
+    manager_level: number | null;
   }>(
-    `SELECT ap.id, u.entity_id, ap.status
+    `SELECT ap.id, u.entity_id, ap.status, ap.manager_level
      FROM appraisals ap
      INNER JOIN users u ON u.id = ap.employee_id
      WHERE ap.id = $1
@@ -529,6 +550,7 @@ export async function getFormSubmissionSummaryById(
     id: Number(row.id),
     entityId: row.entity_id ? Number(row.entity_id) : null,
     status: row.status,
+    managerLevel: row.manager_level != null ? Number(row.manager_level) : null,
   };
 }
 
@@ -634,6 +656,56 @@ export async function saveManagerReviewAnswers(
   return getAnswersForSubmission(appraisalId, reviewerUserId);
 }
 
+export async function approveManagerReview(
+  appraisalId: number,
+  reviewerEntityId: number,
+): Promise<{
+  managerLevel: number;
+  status: AppraisalStatus;
+}> {
+  await ensureManagerLevelColumn();
+
+  const current = await db.query<{
+    status: AppraisalStatus;
+    manager_level: number;
+  }>(
+    `SELECT status, manager_level
+     FROM appraisals
+     WHERE id = $1`,
+    [appraisalId],
+  );
+
+  const row = current.rows[0];
+  if (!row) {
+    throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  if (row.status !== "PENDING_HEAD_REVIEW") {
+    throw new FormSubmissionError(
+      "Manager review is not open for this submission.",
+      409,
+    );
+  }
+
+  const entities = await listEntities();
+  const advance = resolveManagerApprovalAdvance(
+    row.manager_level ?? 1,
+    reviewerEntityId,
+    entities,
+  );
+
+  await db.query(
+    `UPDATE appraisals
+     SET status = $2,
+         manager_level = $3,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1`,
+    [appraisalId, advance.status, advance.managerLevel],
+  );
+
+  return advance;
+}
+
 export async function getFormSubmissionById(
   id: number,
   options?: {
@@ -713,6 +785,7 @@ export async function getFormSubmissionById(
     staffCategoryName: summary.staffCategoryName,
     staffSubCategoryName: summary.staffSubCategoryName,
     status: summary.status,
+    managerLevel: summary.managerLevel,
     rawScore: summary.rawScore,
     maxRawScore: summary.maxRawScore,
     scorePercent: summary.scorePercent,

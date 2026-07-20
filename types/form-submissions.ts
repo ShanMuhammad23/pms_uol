@@ -31,6 +31,8 @@ export interface FormSubmissionListItem {
   /** Entity with category code C2 on the assignment chain (self or ancestor). */
   orgLevel2Name: string | null;
   status: AppraisalStatus;
+  /** 1 = direct entity head review; 2 = parent entity head review. */
+  managerLevel: number | null;
   rawScore: number;
   maxRawScore: number;
   scorePercent: number;
@@ -84,6 +86,8 @@ export interface FormSubmissionDetail {
   staffCategoryName: string | null;
   staffSubCategoryName: string | null;
   status: AppraisalStatus;
+  /** 1 = direct entity head review; 2 = parent entity head review. */
+  managerLevel: number | null;
   rawScore: number;
   maxRawScore: number;
   scorePercent: number;
