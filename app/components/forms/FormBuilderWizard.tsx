@@ -15,7 +15,6 @@ import type {
   AppraisalCycleRecord,
   EmployeeCategory,
   FormSectionInput,
-  FormSubsectionInput,
   FormTemplateInput,
   FormTemplateRecord,
   QuestionInput,
@@ -249,29 +248,6 @@ function ModernFormDesignStep({
               ...s.questions,
               createEmptyQuestion(s.questions.length),
             ],
-          };
-        }
-        return s;
-      }),
-      questions,
-    );
-  };
-
-  const addSubsection = (sectionClientId: string) => {
-    commitStructure(
-      sections.map(s => {
-        if (s.clientId === sectionClientId) {
-          return {
-            ...s,
-            subsections: [
-              ...s.subsections,
-              {
-                clientId: createClientId(),
-                title: "",
-                sortOrder: s.subsections.length,
-                questions: [],
-              }
-            ]
           };
         }
         return s;
@@ -584,7 +560,6 @@ function ModernFormDesignStep({
                           onUpdate={(updates) => updateSection(section.clientId, updates)}
                           onRemove={() => removeSection(section.clientId)}
                           onAddQuestion={() => addQuestionToSection(section.clientId)}
-                          onAddSubsection={() => addSubsection(section.clientId)}
                           onRemoveQuestion={(qId) => removeQuestion(section.clientId, qId)}
                           onMoveQuestion={moveQuestion}
                           onUpdateQuestion={(qId, updates) => {
@@ -661,8 +636,8 @@ function ModernFormDesignStep({
                   className={cn(
                     "rounded-xl border-2 border-dashed py-4 text-center text-xs transition-all",
                     dragOverTarget === "root"
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                      ? "border-indigo-400 bg-indigo-50 text-indigo-600 dark:border-indigo-400 dark:bg-indigo-950/40 dark:text-indigo-300"
+                      : "border-indigo-200 text-indigo-400 dark:border-indigo-600/30 dark:text-indigo-500"
                   )}
                 >
                   Drop here to move question to root level
@@ -768,7 +743,6 @@ function SectionCard({
   onUpdate,
   onRemove,
   onAddQuestion,
-  onAddSubsection,
   onRemoveQuestion,
   onMoveQuestion,
   onUpdateQuestion,
@@ -781,7 +755,6 @@ function SectionCard({
   onUpdate: (updates: Partial<FormSectionInput>) => void;
   onRemove: () => void;
   onAddQuestion: () => void;
-  onAddSubsection: () => void;
   onRemoveQuestion: (qId: string) => void;
   onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
   onUpdateQuestion: (qId: string, updates: Partial<QuestionInput>) => void;
@@ -792,21 +765,21 @@ function SectionCard({
 
   return (
     <div className={cn(
-      "group rounded-xl border bg-white transition-all dark:bg-slate-900",
-      hasAnyError 
-        ? "border-red-200 shadow-sm shadow-red-100 dark:border-red-900/50 dark:shadow-red-900/10"
-        : "border-slate-200 shadow-sm hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700"
+      "group rounded-xl border transition-all shadow-sm",
+      hasAnyError
+        ? "border-red-400 bg-red-50 shadow-red-200/40 dark:border-red-600/50 dark:bg-red-950/30 dark:shadow-red-900/20"
+        : "border-indigo-200 bg-indigo-50/80 shadow-indigo-100/60 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/40 dark:border-indigo-500/30 dark:bg-indigo-950/40 dark:shadow-indigo-900/10 dark:hover:border-indigo-400/40"
     )}>
       {/* Section Header */}
       <div 
-        className="flex items-center gap-3 p-4 cursor-pointer"
+        className="flex items-center gap-3 p-4 cursor-pointer rounded-t-xl"
         onClick={onToggle}
       >
         <div className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-colors",
           hasAnyError
-            ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
-            : "bg-primary/10 text-primary dark:bg-primary/20"
+            ? "bg-red-200 text-red-700 dark:bg-red-800/40 dark:text-red-300"
+            : "bg-indigo-200 text-indigo-700 dark:bg-indigo-800/50 dark:text-indigo-300"
         )}>
           {index + 1}
         </div>
@@ -820,41 +793,40 @@ function SectionCard({
               onClick={(e) => e.stopPropagation()}
               placeholder="Section Title"
               className={cn(
-                "w-full bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400",
-                hasTitleError ? "text-red-600 placeholder:text-red-300" : "text-slate-900 dark:text-slate-100"
+                "w-full bg-transparent text-sm font-semibold outline-none",
+                hasTitleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-indigo-900 placeholder:text-indigo-400 dark:text-indigo-100 dark:placeholder:text-indigo-400"
               )}
             />
           ) : (
             <h4 className={cn(
               "truncate text-sm font-semibold",
-              hasTitleError ? "text-red-600" : "text-slate-900 dark:text-slate-100"
+              hasTitleError ? "text-red-700 dark:text-red-400" : "text-indigo-900 dark:text-indigo-100"
             )}>
               {section.title || `Section ${index + 1}`}
             </h4>
           )}
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-indigo-600/70 dark:text-indigo-300/70">
             {section.questions.length} question{section.questions.length !== 1 ? "s" : ""}
-            {section.subsections.length > 0 && ` · ${section.subsections.length} subsection${section.subsections.length !== 1 ? "s" : ""}`}
           </p>
         </div>
 
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             onClick={(e) => { e.stopPropagation(); onAddQuestion(); }}
-            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-800"
+            className="rounded p-1.5 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-800/40 dark:hover:text-indigo-200"
             title="Add question"
           >
             <Plus className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+            className="rounded p-1.5 text-indigo-400 hover:bg-red-100 hover:text-red-600 dark:text-indigo-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
             title="Delete section"
           >
             <Trash2 className="h-4 w-4" />
           </button>
           <ChevronDown className={cn(
-            "h-4 w-4 text-slate-400 transition-transform",
+            "h-4 w-4 text-indigo-400 dark:text-indigo-400 transition-transform",
             isExpanded && "rotate-180"
           )} />
         </div>
@@ -862,7 +834,7 @@ function SectionCard({
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+        <div className="border-t border-indigo-100 bg-white/60 p-4 dark:border-indigo-500/20 dark:bg-slate-900/40">
           {hasTitleError && (
             <p className="mb-3 flex items-center gap-1 text-xs text-red-500">
               <AlertCircle className="h-3 w-3" /> {hasTitleError}
@@ -905,46 +877,20 @@ function SectionCard({
             ))}
             
             {section.questions.length === 0 && (
-              <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center dark:border-slate-800">
-                <p className="text-xs text-slate-400 dark:text-slate-500">No questions yet — drag here or click Add Question</p>
+              <div className="rounded-lg border border-dashed border-indigo-200 py-6 text-center dark:border-indigo-500/30">
+                <p className="text-xs text-indigo-400 dark:text-indigo-400/70">No questions yet — drag here or click Add Question</p>
               </div>
             )}
           </div>
-
-          {/* Subsections */}
-          {section.subsections.length > 0 && (
-            <div className="mt-4 space-y-3">
-              {section.subsections.map((subsection, subIdx) => (
-                <SubsectionCard
-                  key={subsection.clientId}
-                  subsection={subsection}
-                  sectionIndex={index}
-                  subsectionIndex={subIdx}
-                  sectionClientId={section.clientId}
-                  errors={errors}
-                  onUpdate={(updates) => onUpdate({ subsections: section.subsections.map(sub => sub.clientId === subsection.clientId ? { ...sub, ...updates } : sub) })}
-                  onRemove={() => onUpdate({ subsections: section.subsections.filter(sub => sub.clientId !== subsection.clientId).map((sub, i) => ({ ...sub, sortOrder: i })) })}
-                  onMoveQuestion={onMoveQuestion}
-                />
-              ))}
-            </div>
-          )}
 
           {/* Action Bar */}
           <div className="mt-4 flex gap-2">
             <button
               onClick={onAddQuestion}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary"
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-indigo-300 px-3 py-2 text-xs font-medium text-indigo-600 transition-all hover:border-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:border-indigo-400 dark:hover:bg-indigo-900/30"
             >
               <Plus className="h-3.5 w-3.5" />
               Add Question
-            </button>
-            <button
-              onClick={onAddSubsection}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary"
-            >
-              <Layers className="h-3.5 w-3.5" />
-              Add Subsection
             </button>
           </div>
         </div>
@@ -987,10 +933,10 @@ function QuestionCard({
 
   return (
     <div className={cn(
-      "group relative rounded-lg border bg-slate-50/50 p-3 transition-all dark:bg-slate-800/50",
+      "group relative rounded-lg border p-3 transition-all shadow-sm",
       hasError
-        ? "border-red-200 dark:border-red-800"
-        : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
+        ? "border-red-300 bg-red-50/60 dark:border-red-700/50 dark:bg-red-950/20"
+        : "border-teal-200 bg-teal-50/50 hover:border-teal-300 hover:shadow-md hover:shadow-teal-100/40 dark:border-teal-500/25 dark:bg-teal-950/30 dark:hover:border-teal-400/35"
     )}>
       <div className="flex items-start gap-2">
         <div
@@ -1002,12 +948,12 @@ function QuestionCard({
             }));
             e.dataTransfer.effectAllowed = "move";
           }}
-          className="mt-1 flex cursor-grab items-center text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
+          className="mt-1 flex cursor-grab items-center text-teal-300 hover:text-teal-600 active:cursor-grabbing dark:text-teal-600 dark:hover:text-teal-300"
           title="Drag to move question"
         >
           <GripVertical className="h-4 w-4" />
         </div>
-        <div className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+        <div className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-teal-200 text-[10px] font-bold text-teal-800 dark:bg-teal-800/50 dark:text-teal-200">
           {index + 1}
         </div>
         
@@ -1019,8 +965,8 @@ function QuestionCard({
               onChange={(e) => onChange({ questionText: e.target.value })}
               placeholder="Enter question text..."
               className={cn(
-                "flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400",
-                textError ? "text-red-600 placeholder:text-red-300" : "text-slate-900 dark:text-slate-100"
+                "flex-1 bg-transparent text-sm outline-none",
+                textError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-teal-900 placeholder:text-teal-400 dark:text-teal-50 dark:placeholder:text-teal-500"
               )}
             />
             {!question.noMarks && (
@@ -1031,10 +977,10 @@ function QuestionCard({
                 onChange={(e) => onChange({ totalMarks: Number(e.target.value) })}
                 placeholder="Marks"
                 className={cn(
-                  "w-20 rounded border bg-white px-2 py-1 text-right text-xs outline-none dark:bg-slate-900",
+                  "w-20 rounded border px-2 py-1 text-right text-xs outline-none bg-white/70 dark:bg-slate-900/50",
                   marksError
-                    ? "border-red-300 text-red-600 dark:border-red-800"
-                    : "border-slate-200 dark:border-slate-700"
+                    ? "border-red-400 text-red-700 dark:border-red-700 dark:text-red-400"
+                    : "border-teal-200 text-teal-800 dark:border-teal-600/40 dark:text-teal-100"
                 )}
               />
             )}
@@ -1045,7 +991,7 @@ function QuestionCard({
             compact ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
           )}>
             <div>
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
                 Question Type
               </label>
               <select
@@ -1054,10 +1000,10 @@ function QuestionCard({
                   onChange(applyQuestionInputTypeChange(question, e.target.value as QuestionInput["inputType"]))
                 }
                 className={cn(
-                  "h-8 w-full rounded border bg-white px-2 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 dark:bg-slate-900",
+                  "h-8 w-full rounded border px-2 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-200/40 bg-white/70 dark:bg-slate-900/50 dark:focus:ring-teal-700/30",
                   typeError
-                    ? "border-red-300 dark:border-red-800"
-                    : "border-slate-200 dark:border-slate-700"
+                    ? "border-red-400 dark:border-red-700"
+                    : "border-teal-200 dark:border-teal-600/40"
                 )}
               >
                 {FIELD_TYPES.map((type) => (
@@ -1069,39 +1015,39 @@ function QuestionCard({
             </div>
 
             <div className="flex flex-wrap items-end gap-3 sm:col-span-2">
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
                 <input
                   type="checkbox"
                   checked={question.isRequired}
                   onChange={(e) => onChange({ isRequired: e.target.checked })}
-                  className="size-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
                 />
                 Required
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
                 <input
                   type="checkbox"
                   checked={question.selfAssessmentEnabled}
                   onChange={(e) => onChange({ selfAssessmentEnabled: e.target.checked })}
-                  className="size-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
                 />
                 Self Assessment
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
                 <input
                   type="checkbox"
                   checked={question.hodAssessmentEnabled}
                   onChange={(e) => onChange({ hodAssessmentEnabled: e.target.checked })}
-                  className="size-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
                 />
                 HOD Assessment
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
                 <input
                   type="checkbox"
                   checked={question.noMarks}
                   onChange={(e) => handleNoMarksChange(e.target.checked)}
-                  className="size-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
                 />
                 No Marks
               </label>
@@ -1131,7 +1077,7 @@ function QuestionCard({
                   <div className={cn(
                     "h-3.5 w-3.5 border",
                     question.inputType === "CHECKBOX" ? "rounded-sm" : "rounded-full",
-                    "border-slate-300 dark:border-slate-600"
+                    "border-teal-300 dark:border-teal-600"
                   )} />
                   <input
                     type="text"
@@ -1142,7 +1088,7 @@ function QuestionCard({
                       onChange({ options: newOptions });
                     }}
                     placeholder={`Option ${oIdx + 1}`}
-                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-slate-400 dark:text-slate-300"
+                    className="flex-1 bg-transparent text-xs outline-none text-teal-900 placeholder:text-teal-400 dark:text-teal-100 dark:placeholder:text-teal-500"
                   />
                   <input
                     type="number"
@@ -1157,7 +1103,7 @@ function QuestionCard({
                       onChange({ options: newOptions });
                     }}
                     placeholder="Pts"
-                    className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs outline-none dark:border-slate-700 dark:bg-slate-900"
+                    className="w-14 rounded border border-teal-200 bg-white/70 px-1.5 py-0.5 text-right text-xs outline-none dark:border-teal-600/40 dark:bg-slate-900/50"
                   />
                   <button
                     type="button"
@@ -1165,7 +1111,7 @@ function QuestionCard({
                       const newOptions = question.options.filter((_, i) => i !== oIdx);
                       onChange({ options: newOptions });
                     }}
-                    className="text-slate-400 hover:text-red-500"
+                    className="text-teal-400 hover:text-red-600 dark:text-teal-500 dark:hover:text-red-400"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -1185,139 +1131,11 @@ function QuestionCard({
         <button
           type="button"
           onClick={onRemove}
-          className="mt-1 opacity-0 transition-opacity group-hover:opacity-100 text-slate-400 hover:text-red-500"
+          className="mt-1 opacity-0 transition-opacity group-hover:opacity-100 text-teal-400 hover:text-red-600 dark:text-teal-500 dark:hover:text-red-400"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
-    </div>
-  );
-}
-
-function SubsectionCard({
-  subsection,
-  sectionIndex,
-  subsectionIndex,
-  sectionClientId,
-  errors,
-  onUpdate,
-  onRemove,
-  onMoveQuestion,
-}: {
-  subsection: FormSubsectionInput;
-  sectionIndex: number;
-  subsectionIndex: number;
-  sectionClientId: string;
-  errors: Record<string, string>;
-  onUpdate: (updates: Partial<FormSubsectionInput>) => void;
-  onRemove: () => void;
-  onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
-}) {
-  const [subDragOver, setSubDragOver] = useState(false);
-  const titleErrorKey = `section-${sectionIndex}-sub-${subsectionIndex}-title`;
-  const hasTitleError = errors[titleErrorKey];
-
-  const addQuestion = () => {
-    onUpdate({
-      questions: [...subsection.questions, createEmptyQuestion(subsection.questions.length)],
-    });
-  };
-
-  const removeQuestion = (qClientId: string) => {
-    onUpdate({
-      questions: subsection.questions
-        .filter(q => q.clientId !== qClientId)
-        .map((q, i) => ({ ...q, sortOrder: i })),
-    });
-  };
-
-  const updateQuestion = (qClientId: string, updates: Partial<QuestionInput>) => {
-    onUpdate({
-      questions: subsection.questions.map(q =>
-        q.clientId === qClientId ? { ...q, ...updates } : q
-      ),
-    });
-  };
-
-  return (
-    <div className={cn(
-      "rounded-lg border bg-slate-50/30 p-3 dark:bg-slate-800/30",
-      hasTitleError ? "border-red-200 dark:border-red-800" : "border-slate-200 dark:border-slate-700"
-    )}>
-      <div className="mb-3 flex items-center gap-2">
-        <Layers className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-        <input
-          type="text"
-          value={subsection.title}
-          onChange={(e) => onUpdate({ title: e.target.value })}
-          placeholder="Subsection Title"
-          className={cn(
-            "flex-1 bg-transparent text-xs font-semibold outline-none placeholder:text-slate-400",
-            hasTitleError ? "text-red-600 placeholder:text-red-300" : "text-slate-700 dark:text-slate-300"
-          )}
-        />
-        <button
-          onClick={onRemove}
-          className="text-slate-400 hover:text-red-500"
-          title="Remove subsection"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      {hasTitleError && (
-        <p className="mb-2 flex items-center gap-1 text-xs text-red-500">
-          <AlertCircle className="h-3 w-3" /> {hasTitleError}
-        </p>
-      )}
-
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-          setSubDragOver(true);
-        }}
-        onDragLeave={() => setSubDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setSubDragOver(false);
-          try {
-            const data = JSON.parse(e.dataTransfer.getData("application/json"));
-            onMoveQuestion(data.questionClientId, data.source, { sectionClientId: sectionClientId, subsectionClientId: subsection.clientId });
-          } catch { /* ignore */ }
-        }}
-        className={cn(
-          "space-y-2 rounded-lg transition-all",
-          subDragOver && "ring-2 ring-primary/40 bg-primary/5"
-        )}
-      >
-        {subsection.questions.map((question, qIdx) => (
-          <QuestionCard
-            key={question.clientId}
-            question={question}
-            index={qIdx}
-            errorPrefix={`section-${sectionIndex}-sub-${subsectionIndex}-question-${qIdx}`}
-            errors={errors}
-            sourceLocation={{ sectionClientId: sectionClientId, subsectionClientId: subsection.clientId }}
-            onRemove={() => removeQuestion(question.clientId)}
-            onChange={(updates) => updateQuestion(question.clientId, updates)}
-            compact
-          />
-        ))}
-
-        {subsection.questions.length === 0 && (
-          <div className="rounded-lg border border-dashed border-slate-200 py-4 text-center dark:border-slate-800">
-            <p className="text-xs text-slate-400 dark:text-slate-500">No questions — drag here or click Add Question</p>
-          </div>
-        )}
-      </div>
-
-      <button
-        onClick={addQuestion}
-        className="mt-2 flex items-center gap-1 rounded-md border border-dashed border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-slate-500 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary"
-      >
-        <Plus className="h-3 w-3" />
-        Add Question
-      </button>
     </div>
   );
 }
@@ -1474,21 +1292,6 @@ export default function FormBuilderWizard({
           `section-${sectionIndex}-question-${questionIndex}`,
           nextErrors,
         );
-      });
-
-      section.subsections.forEach((subsection, subsectionIndex) => {
-        if (!subsection.title.trim()) {
-          nextErrors[`section-${sectionIndex}-sub-${subsectionIndex}-title`] =
-            "Subsection title is required.";
-        }
-
-        subsection.questions.forEach((question, questionIndex) => {
-          validateQuestionFields(
-            question,
-            `section-${sectionIndex}-sub-${subsectionIndex}-question-${questionIndex}`,
-            nextErrors,
-          );
-        });
       });
     });
 

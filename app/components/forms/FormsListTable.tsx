@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Eye, FileText, Pencil, Trash2 } from "lucide-react";
+import { FileText } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -13,6 +13,7 @@ import {
   CATEGORY_LABELS,
   SUB_CATEGORY_LABELS,
 } from "@/types/forms";
+import FormActionsDropdown from "./FormActionsDropdown";
 
 interface FormsListTableProps {
   templates: FormTemplateListItem[];
@@ -63,7 +64,7 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
 
   if (isLoading && !data) {
     return (
-      <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-400">
         Loading forms...
       </div>
     );
@@ -71,7 +72,7 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         Failed to load forms.
       </div>
     );
@@ -79,12 +80,12 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
 
   if (!data || data.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
-        <FileText className="mx-auto size-8 text-foreground/50" />
-        <p className="mt-3 text-sm font-medium text-text-primary">
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center shadow-sm dark:border-white/10 dark:bg-slate-900">
+        <FileText className="mx-auto size-8 text-slate-300 dark:text-slate-600" />
+        <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">
           No form templates yet
         </p>
-        <p className="mt-1 text-sm text-foreground/70">
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Create your first appraisal form to get started.
         </p>
         <Link
@@ -103,26 +104,26 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
         <p className="text-sm text-red-600">{deleteError}</p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900">
         <table className="min-w-full text-sm">
-          <thead className="bg-primary/5">
+          <thead className="bg-slate-50 dark:bg-slate-900">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold text-text-primary">
+              <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Title
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-text-primary">
+              <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Category
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-text-primary">
+              <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Cycle
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-text-primary">
+              <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Questions
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-text-primary">
+              <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Appraisals
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-text-primary">
+              <th className="border-b border-slate-200 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Actions
               </th>
             </tr>
@@ -131,70 +132,39 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
             {data.map((template) => (
               <tr
                 key={template.id}
-                className="border-t border-slate-300/80 dark:border-white/15"
+                className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]"
               >
-                <td className="px-4 py-3">
-                  <p className="font-medium text-text-primary">{template.title}</p>
+                <td className="border-b border-slate-100 px-4 py-3 dark:border-white/[0.03]">
+                  <p className="font-semibold text-slate-900 dark:text-white">{template.title}</p>
                   {template.description ? (
-                    <p className="mt-0.5 text-xs text-foreground/70">
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                       {template.description}
                     </p>
                   ) : null}
                 </td>
-                <td className="px-4 py-3 text-text-primary">
+                <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
                   {CATEGORY_LABELS[template.targetCategory]}
-                  <span className="block text-xs text-foreground/70">
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
                     {SUB_CATEGORY_LABELS[template.targetSubCategory]}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-text-primary">
+                <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
                   FY {template.fiscalYear}
                 </td>
-                <td className="px-4 py-3 text-text-primary">
+                <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
                   {template.questionCount}
                 </td>
-                <td className="px-4 py-3 text-text-primary">
+                <td className="border-b border-slate-100 px-4 py-3 text-slate-700 dark:border-white/[0.03] dark:text-slate-300">
                   {template.appraisalCount}
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-2">
-                    <Link
-                      href={`/dashboard/forms/${template.id}/view`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-                    >
-                      <Eye className="size-3.5" />
-                      View
-                    </Link>
-                    <Link
-                      href={`/dashboard/forms/${template.id}`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-                    >
-                      <Pencil className="size-3.5" />
-                      Edit
-                    </Link>
-                    <Link
-                      href={`/dashboard/forms/${template.id}/copy`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-                    >
-                      <Copy className="size-3.5" />
-                      Copy
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleDelete(
-                          template.id,
-                          template.title,
-                          template.appraisalCount,
-                        )
-                      }
-                      disabled={deleteMutation.isPending}
-                      className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
-                    >
-                      <Trash2 className="size-3.5" />
-                      Delete
-                    </button>
-                  </div>
+                <td className="border-b border-slate-100 px-4 py-3 text-right dark:border-white/[0.03]">
+                  <FormActionsDropdown
+                    templateId={template.id}
+                    templateTitle={template.title}
+                    appraisalCount={template.appraisalCount}
+                    onDelete={handleDelete}
+                    deletePending={deleteMutation.isPending}
+                  />
                 </td>
               </tr>
             ))}

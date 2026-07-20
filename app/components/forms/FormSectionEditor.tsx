@@ -1,10 +1,9 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import FormSubsectionEditor from "./FormSubsectionEditor";
 import QuestionEditor from "./QuestionEditor";
 import type { FormSectionInput, QuestionInput } from "@/types/forms";
-import { createEmptyQuestion, createEmptySubsection } from "@/types/forms";
+import { createEmptyQuestion } from "@/types/forms";
 
 interface FormSectionEditorProps {
   section: FormSectionInput;
@@ -66,37 +65,6 @@ export default function FormSectionEditor({
     });
   };
 
-  const addSubsection = () => {
-    onChange({
-      ...section,
-      subsections: [
-        ...section.subsections,
-        createEmptySubsection(section.subsections.length),
-      ],
-    });
-  };
-
-  const updateSubsection = (
-    subsectionIndex: number,
-    subsection: FormSectionInput["subsections"][number],
-  ) => {
-    onChange({
-      ...section,
-      subsections: section.subsections.map((current, currentIndex) =>
-        currentIndex === subsectionIndex ? subsection : current,
-      ),
-    });
-  };
-
-  const removeSubsection = (subsectionIndex: number) => {
-    onChange({
-      ...section,
-      subsections: section.subsections
-        .filter((_, currentIndex) => currentIndex !== subsectionIndex)
-        .map((subsection, sortOrder) => ({ ...subsection, sortOrder })),
-    });
-  };
-
   return (
     <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -130,14 +98,6 @@ export default function FormSectionEditor({
       <div className="mb-4 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={addSubsection}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-text-primary hover:bg-primary/10 dark:border-white/15"
-        >
-          <Plus className="size-3.5" />
-          Add Subsection
-        </button>
-        <button
-          type="button"
           onClick={addQuestion}
           className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90"
         >
@@ -145,22 +105,6 @@ export default function FormSectionEditor({
           Add Question
         </button>
       </div>
-
-      {section.subsections.length > 0 ? (
-        <div className="mb-4 space-y-3">
-          {section.subsections.map((subsection, subsectionIndex) => (
-            <FormSubsectionEditor
-              key={subsection.clientId}
-              subsection={subsection}
-              sectionIndex={sectionIndex}
-              subsectionIndex={subsectionIndex}
-              errors={errors}
-              onChange={(value) => updateSubsection(subsectionIndex, value)}
-              onRemove={() => removeSubsection(subsectionIndex)}
-            />
-          ))}
-        </div>
-      ) : null}
 
       {section.questions.length > 0 ? (
         <div className="space-y-3">
@@ -186,9 +130,9 @@ export default function FormSectionEditor({
         </div>
       ) : null}
 
-      {section.subsections.length === 0 && section.questions.length === 0 ? (
+      {section.questions.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300/80 px-4 py-6 text-center text-sm text-foreground/70 dark:border-white/15">
-          Add a subsection or question to this section.
+          Add a question to this section.
         </div>
       ) : null}
     </div>
