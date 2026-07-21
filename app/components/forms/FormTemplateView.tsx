@@ -3,6 +3,7 @@
 import type { FormTemplateRecord, QuestionRecord, FormSectionRecord, FormSubsectionRecord, FieldType } from "@/types/forms";
 import {
   CATEGORY_LABELS,
+  FIELD_TYPE_LABELS,
   buildRootLayoutOrderFromRecord,
   flattenAllQuestions,
   SUB_CATEGORY_LABELS,
@@ -122,9 +123,9 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
       </div>
 
       <div className="my-6">
-        <div className="rounded-lg border border-indigo-200 dark:border-indigo-500/30 overflow-hidden shadow-sm shadow-indigo-100/40 dark:shadow-indigo-900/10">
+        <div className="rounded-lg border border-indigo-200 dark:border-indigo-500/30 overflow-auto max-h-[70vh] shadow-sm shadow-indigo-100/40 dark:shadow-indigo-900/10">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="bg-indigo-600 dark:bg-indigo-800/80">
                 <th className=" border-r border-indigo-500/30  text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Sr
@@ -138,13 +139,25 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                 <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Weight
                 </th>
+                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Field Type
+                </th>
+                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Required
+                </th>
+                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Self Assessment
+                </th>
+                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  HOD Assessment
+                </th>
                 
               </tr>
             </thead>
             <tbody className="text-sm">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-indigo-400 dark:text-indigo-400/70 bg-indigo-50/50 dark:bg-indigo-950/20">
+                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-indigo-400 dark:text-indigo-400/70 bg-indigo-50/50 dark:bg-indigo-950/20">
                     No questions defined.
                   </td>
                 </tr>
@@ -196,6 +209,42 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                       <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-right tabular-nums font-semibold text-teal-700 dark:border-indigo-500/15 dark:text-teal-300">
                         {question.totalMarks}
                       </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-xs text-slate-700 dark:border-indigo-500/15 dark:text-slate-300">
+                        {FIELD_TYPE_LABELS[question.inputType]}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
+                        {question.isRequired ? (
+                          <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                            Yes
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/40 dark:text-slate-400">
+                            No
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
+                        {question.selfAssessmentEnabled ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                            Enabled
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/40 dark:text-slate-400">
+                            Disabled
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
+                        {question.hodAssessmentEnabled ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                            Enabled
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/40 dark:text-slate-400">
+                            Disabled
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })
@@ -204,7 +253,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
             {rows.length > 0 ? (
               <tfoot>
                 <tr className="bg-indigo-600 dark:bg-indigo-800/80">
-                  <td colSpan={3} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-indigo-50 dark:text-indigo-100">
+                  <td colSpan={7} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-indigo-50 dark:text-indigo-100">
                     Total
                   </td>
                   <td className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">

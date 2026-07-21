@@ -13,12 +13,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   SquareUserRound,
-  UserRound,
   Users,
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { useSidebar } from "@/app/components/layout/sidebar-context";
 import { isEmployeeRole } from "@/lib/auth/home-path";
+import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
 
 const Sidebar = () => {
@@ -34,6 +34,19 @@ const Sidebar = () => {
   const isUsers = pathname.startsWith("/dashboard/users");
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   const isMatricesAndCycles = pathname.startsWith("/dashboard/matrices-and-cycles");
+
+  const roleLabel = user?.role
+    ? (USER_ROLE_LABELS as Record<string, string>)[user.role] ?? user.role
+    : null;
+  const initials = user?.name
+    ? user.name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((p) => p[0])
+        .join("")
+        .toUpperCase()
+    : "?";
 
   const navLinkClass = (active: boolean) =>
     cn(
@@ -182,28 +195,53 @@ const Sidebar = () => {
         </ul>
       </nav>
 
-      <button
-        type="button"
-        onClick={() => void signOutAndRedirect()}
-        title={collapsed ? "Sign out" : undefined}
+      {/* User profile block */}
+      <div
         className={cn(
-          "mt-6 flex cursor-pointer items-center border-t border-slate-300/80 pt-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-white/15",
-          collapsed ? "justify-center px-2" : "justify-between px-4",
+          "mt-6 border-t border-slate-300/80 pt-4 dark:border-white/15",
+          collapsed ? "px-2" : "px-4",
         )}
       >
-        <UserRound className="size-4 shrink-0" />
-        {!collapsed ? (
-          <>
-            <div className="min-w-0 flex-1 px-2 text-left">
-              <p className="truncate text-xs font-medium text-text-primary">{user?.name}</p>
-              <p className="mt-0.5 truncate text-xs text-foreground/70">{user?.email}</p>
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+              {initials}
             </div>
-            <LogOut className="size-4 shrink-0 text-red-500" />
-          </>
+            <button
+              type="button"
+              onClick={() => void signOutAndRedirect()}
+              title="Sign out"
+              className="flex size-9 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              <LogOut className="size-4" />
+            </button>
+          </div>
         ) : (
-          <span className="sr-only">Sign out</span>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                {initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-text-primary">
+                  {user?.name ?? "User"}
+                </p>
+                <p className="truncate text-xs text-foreground/60">
+                  {roleLabel ?? "—"}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOutAndRedirect()}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300/80 py-2 text-xs font-medium text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-white/15"
+            >
+              <LogOut className="size-3.5" />
+              Sign out
+            </button>
+          </div>
         )}
-      </button>
+      </div>
     </aside>
   );
 };
