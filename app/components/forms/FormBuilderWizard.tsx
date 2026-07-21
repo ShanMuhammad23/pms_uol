@@ -376,7 +376,7 @@ function ModernFormDesignStep({
   );
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+    <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
       {/* Left Sidebar - Sticky Tools */}
       <div className="flex w-72 flex-col border-r border-slate-200 bg-slate-50/80 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/50">
         <div className="border-b border-slate-200 p-4 dark:border-slate-800">
@@ -426,7 +426,7 @@ function ModernFormDesignStep({
           </div>
 
           {/* Stats Card */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500 dark:text-slate-400">Total Questions</span>
               <span className="text-lg font-bold text-primary">{totalQuestions}</span>
@@ -509,7 +509,7 @@ function ModernFormDesignStep({
             <div className=" space-y-4">
               {/* Empty State */}
               {sections.length === 0 && questions.length === 0 && (
-                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-16 text-center dark:border-slate-800">
+                <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-16 text-center dark:border-slate-800">
                   <div className="mb-4 rounded-full bg-slate-100 p-4 dark:bg-slate-800">
                     <FileText className="h-8 w-8 text-slate-400" />
                   </div>
@@ -634,7 +634,7 @@ function ModernFormDesignStep({
                     } catch { /* ignore */ }
                   }}
                   className={cn(
-                    "rounded-xl border-2 border-dashed py-4 text-center text-xs transition-all",
+                    "rounded-md border-2 border-dashed py-4 text-center text-xs transition-all",
                     dragOverTarget === "root"
                       ? "border-indigo-400 bg-indigo-50 text-indigo-600 dark:border-indigo-400 dark:bg-indigo-950/40 dark:text-indigo-300"
                       : "border-indigo-200 text-indigo-400 dark:border-indigo-600/30 dark:text-indigo-500"
@@ -647,7 +647,7 @@ function ModernFormDesignStep({
           ) : (
             <div className="mx-auto max-w-2xl">
               {/* Simple Preview */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                   {title || "Untitled Form"}
                 </h1>
@@ -765,7 +765,7 @@ function SectionCard({
 
   return (
     <div className={cn(
-      "group rounded-xl border transition-all shadow-sm",
+      "group rounded-md border transition-all shadow-sm",
       hasAnyError
         ? "border-red-400 bg-red-50 shadow-red-200/40 dark:border-red-600/50 dark:bg-red-950/30 dark:shadow-red-900/20"
         : "border-indigo-200 bg-indigo-50/80 shadow-indigo-100/60 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/40 dark:border-indigo-500/30 dark:bg-indigo-950/40 dark:shadow-indigo-900/10 dark:hover:border-indigo-400/40"
@@ -1471,7 +1471,7 @@ export default function FormBuilderWizard({
             onStructureChange={handleStructureChange}
           />
         ) : (
-          <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto rounded-2xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
             <div className={templateId ? "w-full max-w-5xl" : "w-full max-w-2xl"}>
               <CategoryAssignmentStep
                 appraisalCycles={appraisalCycles}
@@ -1492,7 +1492,7 @@ export default function FormBuilderWizard({
 
       {/* Global Error Toast */}
       {submitError && (
-        <div className="absolute bottom-6 right-6 z-50 max-w-sm rounded-xl border border-red-200 bg-white px-4 py-3 shadow-lg dark:border-red-900 dark:bg-slate-900">
+        <div className="absolute bottom-6 right-6 z-50 max-w-sm rounded-md border border-red-200 bg-white px-4 py-3 shadow-lg dark:border-red-900 dark:bg-slate-900">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
             <div className="min-w-0 flex-1">

@@ -26,6 +26,7 @@ interface FormTemplateListRow {
   target_sub_category: SubCategory;
   question_count: string;
   appraisal_count: string;
+  assigned_employee_count: string;
   created_at: string;
   updated_at: string;
 }
@@ -641,17 +642,9 @@ export async function getFormTemplateAppraisalCount(
   templateId: number,
 ): Promise<number> {
   const result = await db.query<{ count: string }>(
-    `SELECT COUNT(DISTINCT ap_linked.appraisal_id)::text AS count
-     FROM form_templates ft
-     LEFT JOIN (
-       SELECT ap.id AS appraisal_id, ft_match.id AS template_id
-       FROM appraisals ap
-       INNER JOIN users u ON u.id = ap.employee_id
-       INNER JOIN form_templates ft_match ON ft_match.cycle_id = ap.cycle_id
-         AND ft_match.target_category = u.emp_category
-         AND ft_match.target_sub_category = u.emp_sub_category
-     ) ap_linked ON ap_linked.template_id = ft.id
-     WHERE ft.id = $1`,
+    `SELECT COUNT(*)::text AS count
+     FROM appraisals
+     WHERE template_id = $1`,
     [templateId],
   );
 
@@ -669,20 +662,15 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        ft.target_category,
        ft.target_sub_category,
        COUNT(DISTINCT fq.id)::text AS question_count,
-       COUNT(DISTINCT ap_linked.appraisal_id)::text AS appraisal_count,
+       COUNT(DISTINCT ap.id)::text AS appraisal_count,
+       COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
        ft.created_at::text,
        ft.updated_at::text
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
-     LEFT JOIN (
-       SELECT ap.id AS appraisal_id, ft_match.id AS template_id
-       FROM appraisals ap
-       INNER JOIN users u ON u.id = ap.employee_id
-       INNER JOIN form_templates ft_match ON ft_match.cycle_id = ap.cycle_id
-         AND ft_match.target_category = u.emp_category
-         AND ft_match.target_sub_category = u.emp_sub_category
-     ) ap_linked ON ap_linked.template_id = ft.id
+     LEFT JOIN appraisals ap ON ap.template_id = ft.id
+     LEFT JOIN employee_form_assignments efa ON efa.template_id = ft.id
      GROUP BY ft.id, ac.fiscal_year
      ORDER BY ft.updated_at DESC`,
   );
@@ -697,6 +685,7 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
     targetSubCategory: row.target_sub_category,
     questionCount: Number(row.question_count),
     appraisalCount: Number(row.appraisal_count),
+    assignedEmployeeCount: Number(row.assigned_employee_count),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));

@@ -66,7 +66,7 @@ export default function FormSectionEditor({
   };
 
   return (
-    <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
+    <div className="rounded-md border border-slate-300/80 bg-surface p-4 dark:border-white/15">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <label className="mb-1.5 block text-xs font-medium text-foreground/70">

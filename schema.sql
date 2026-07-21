@@ -72,13 +72,15 @@ CREATE TABLE appraisal_cycles (
 -- =========================================================================
 
 -- Form Layout Definition Map
+-- Forms are assigned to employees via employee_form_assignments (not by category).
+-- target_category / target_sub_category remain for legacy compatibility.
 CREATE TABLE form_templates (
     id BIGSERIAL PRIMARY KEY,
     title VARCHAR(150) NOT NULL, -- e.g., 'Annual Faculty Evaluation Form'
     description TEXT,
     cycle_id INT NOT NULL REFERENCES appraisal_cycles(id) ON DELETE CASCADE,
     
-    -- Routing Matrix Filters (Ensures right form displays for the selected tiers)
+    -- Legacy fields (forms are no longer routed by category)
     target_category employee_category NOT NULL, -- Academic | Supportive | Blue Collar
     target_sub_category sub_category NOT NULL,  -- General | Skilled | Professional
     
@@ -122,6 +124,22 @@ CREATE TABLE question_options (
     points_assigned INT NOT NULL DEFAULT 0, -- The point engine score weight
     sort_order INT NOT NULL DEFAULT 0
 );
+
+-- Employee-level form assignment (many templates can be assigned per employee).
+CREATE TABLE employee_form_assignments (
+    id BIGSERIAL PRIMARY KEY,
+    employee_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_employee_template_assignment UNIQUE (employee_id, template_id)
+);
+
+CREATE INDEX idx_employee_form_assignments_employee
+    ON employee_form_assignments(employee_id);
+
+CREATE INDEX idx_employee_form_assignments_template
+    ON employee_form_assignments(template_id);
 
 -- =========================================================================
 -- CORE PROCESS ENGINE & RUNTIME DATA WORKSPACE

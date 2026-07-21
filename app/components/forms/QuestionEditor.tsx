@@ -93,7 +93,7 @@ export default function QuestionEditor({
   };
 
   return (
-    <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
+    <div className="rounded-md border border-slate-300/80 bg-surface p-4 dark:border-white/15">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-text-primary">

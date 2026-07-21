@@ -244,6 +244,7 @@ export interface FormTemplateListItem {
   targetSubCategory: SubCategory;
   questionCount: number;
   appraisalCount: number;
+  assignedEmployeeCount: number;
   createdAt: string;
   updatedAt: string;
 }

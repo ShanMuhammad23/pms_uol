@@ -31,7 +31,7 @@ export function EntityListFilterBar({
   hasActiveFilters,
 }: EntityListFilterBarProps) {
   return (
-    <div className="space-y-3 rounded-xl border border-slate-300/80 p-4 dark:border-white/15">
+    <div className="space-y-3 rounded-md border border-slate-300/80 p-4 dark:border-white/15">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-foreground/70">
           Showing {filteredCount} of {totalCount} entities

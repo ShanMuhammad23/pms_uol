@@ -320,7 +320,7 @@ export function UsersListingTable({
       initial="hidden"
       animate="visible"
       transition={{ delay: 0.2 }}
-      className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
+      className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
     >
       <UsersMasterFilter
         users={users}

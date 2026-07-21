@@ -2,13 +2,18 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  Briefcase,
+  Building2,
   CheckCircle2,
   ClipboardList,
-  Clock,
   Eye,
-  FilePen,
+  Hash,
   Inbox,
   Layers,
+  Network,
+  Send,
+  UserRound,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
@@ -17,10 +22,29 @@ import type { AppraisalStatus } from "@/types/forms";
 import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
 
+export interface MyFormsUserInfo {
+  employeeId: string;
+  email: string;
+  designation: string | null;
+  roleCategory: string | null;
+  gradeGroup: string | null;
+  orgLevel1: string;
+  orgLevel2: string;
+  systemRole: string;
+  empCategory: string;
+  headName: string | null;
+}
+
 interface MyFormsListProps {
   userName: string | null;
   userRole: string | null;
   userEmail: string | null;
+  userInfo?: MyFormsUserInfo | null;
+}
+
+function displayValue(value: string | null | undefined): string {
+  if (value == null || value === "" || value === "—") return "—";
+  return value;
 }
 
 const STATUS_ACCENT: Record<AppraisalStatus, string> = {
@@ -74,87 +98,150 @@ function formatRelativeDate(dateStr: string | null): string | null {
   });
 }
 
-interface StatCardProps {
-  icon: typeof ClipboardList;
-  label: string;
-  value: number;
-  accentClass: string;
-}
-
-function StatCard({ icon: Icon, label, value, accentClass }: StatCardProps) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-surface p-4 shadow-sm dark:border-white/10">
-      <div
-        className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-lg",
-          accentClass,
-        )}
-      >
-        <Icon className="size-5" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-2xl font-bold tabular-nums text-text-primary">{value}</p>
-        <p className="truncate text-xs font-medium text-foreground/60">{label}</p>
-      </div>
-    </div>
-  );
-}
-
 export default function MyFormsList({
   userName,
   userRole,
   userEmail,
+  userInfo = null,
 }: MyFormsListProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["my-forms"],
     queryFn: fetchAssignedForms,
   });
 
-  const roleLabel = userRole
-    ? (USER_ROLE_LABELS as Record<string, string>)[userRole] ?? userRole
-    : null;
+  const roleLabel = userInfo?.systemRole
+    ? userInfo.systemRole
+    : userRole
+      ? (USER_ROLE_LABELS as Record<string, string>)[userRole] ?? userRole
+      : null;
   const initials = userName ? getInitials(userName) : "?";
+  const subtitleParts = [
+    userInfo?.designation,
+    roleLabel,
+    userEmail ?? userInfo?.email,
+  ].filter(Boolean);
+
+  const infoFields = userInfo
+    ? [
+        {
+          icon: Hash,
+          label: "Employee ID",
+          value: displayValue(userInfo.employeeId),
+        },
+        {
+          icon: Briefcase,
+          label: "Designation",
+          value: displayValue(userInfo.designation),
+        },
+        {
+          icon: Building2,
+          label: "ORG Level 1",
+          value: displayValue(userInfo.orgLevel1),
+        },
+        {
+          icon: Network,
+          label: "ORG Level 2",
+          value: displayValue(userInfo.orgLevel2),
+        },
+        {
+          icon: Layers,
+          label: "Role Category",
+          value: displayValue(userInfo.roleCategory),
+        },
+        {
+          icon: ClipboardList,
+          label: "Grade Group",
+          value: displayValue(userInfo.gradeGroup),
+        },
+        {
+          icon: Layers,
+          label: "Employee Category",
+          value: displayValue(userInfo.empCategory),
+        },
+        {
+          icon: UserRound,
+          label: "Reporting Head",
+          value: displayValue(userInfo.headName),
+        },
+      ]
+    : [];
 
   const stats = {
     total: data?.length ?? 0,
-    completed:
-      data?.filter(
-        (f) => f.status === "COMPLETED" || f.status === "APPROVED",
-      ).length ?? 0,
-    pendingReview:
+    submitted:
       data?.filter(
         (f) =>
-          f.status === "PENDING_HEAD_REVIEW" ||
-          f.status === "PENDING_HR_CALIBRATION" ||
-          f.status === "PENDING_BOARD_APPROVAL",
+          f.status !== "PENDING_SELF_ASSESSMENT" || Boolean(f.submittedAt),
       ).length ?? 0,
-    inProgress:
-      data?.filter((f) => f.status === "PENDING_SELF_ASSESSMENT").length ?? 0,
+    managerReview:
+      data?.filter((f) => f.status === "PENDING_HEAD_REVIEW").length ?? 0,
+    approved:
+      data?.filter(
+        (f) => f.status === "APPROVED" || f.status === "COMPLETED",
+      ).length ?? 0,
   };
+
+  const statusStats = [
+    {
+      id: "total",
+      value: stats.total,
+      label: "Total Forms",
+      icon: ClipboardList,
+    },
+    {
+      id: "submitted",
+      value: stats.submitted,
+      label: "Submitted",
+      icon: Send,
+    },
+    {
+      id: "manager-review",
+      value: stats.managerReview,
+      label: "Manager Review",
+      icon: Users,
+    },
+    {
+      id: "approved",
+      value: stats.approved,
+      label: "Approved",
+      icon: CheckCircle2,
+    },
+  ];
 
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-surface p-6 shadow-sm dark:border-white/10">
-          <div className="size-14 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
-          <div className="space-y-2">
-            <div className="h-5 w-48 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
-            <div className="h-3 w-32 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+        <div className="rounded-xl border border-slate-200 bg-surface p-6 shadow-sm dark:border-white/10">
+          <div className="flex items-center gap-4">
+            <div className="size-14 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
+            <div className="space-y-2">
+              <div className="h-5 w-48 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="h-3 w-64 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+            </div>
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-20 animate-pulse rounded-xl border border-slate-200 bg-surface dark:border-white/10"
-            />
-          ))}
+          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-5 sm:grid-cols-4 dark:border-white/6">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <div key={i} className="space-y-2">
+                <div className="h-3 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                <div className="h-4 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-10 border-t border-slate-100 pt-6 sm:grid-cols-4 dark:border-white/6">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex flex-col items-center gap-3">
+                <div className="size-8 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
+                <div className="h-7 w-10 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                <div className="h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+              </div>
+            ))}
+          </div>
         </div>
         <div className="space-y-3">
           {[0, 1].map((i) => (
             <div
               key={i}
-              className="h-32 animate-pulse rounded-xl border border-slate-200 bg-surface dark:border-white/10"
+              className="h-32 animate-pulse rounded-md border border-slate-200 bg-surface dark:border-white/10"
             />
           ))}
         </div>
@@ -164,7 +251,7 @@ export default function MyFormsList({
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         Failed to load assigned forms.
       </div>
     );
@@ -172,50 +259,62 @@ export default function MyFormsList({
 
   return (
     <div className="space-y-6">
-      {/* Welcome Header */}
-      <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-surface p-6 shadow-sm dark:border-white/10">
-        <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-bold text-white shadow-sm">
-          {initials}
+      {/* Profile Hero + Basic Info + Form Status Stats */}
+      <div className="rounded-xl border border-slate-200 bg-surface p-6 shadow-sm dark:border-white/10">
+        <div className="flex items-center gap-4">
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-bold text-white shadow-sm">
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold text-text-primary sm:text-2xl">
+              Welcome back, {userName ?? "User"}
+            </h1>
+            <p className="mt-0.5 truncate text-sm text-foreground/60">
+              {subtitleParts.length > 0 ? subtitleParts.join(" · ") : "—"}
+            </p>
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-bold text-text-primary sm:text-2xl">
-            Welcome back, {userName ?? "User"}
-          </h1>
-          <p className="mt-0.5 text-sm text-foreground/60">
-            {roleLabel ?? "—"}
-            {userEmail ? (
-              <span className="hidden sm:inline"> · {userEmail}</span>
-            ) : null}
-          </p>
-        </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard
-          icon={ClipboardList}
-          label="Total Forms"
-          value={stats.total}
-          accentClass="bg-primary/10 text-primary"
-        />
-        <StatCard
-          icon={FilePen}
-          label="In Progress"
-          value={stats.inProgress}
-          accentClass="bg-slate-100 text-slate-600 dark:bg-slate-700/40 dark:text-slate-300"
-        />
-        <StatCard
-          icon={Clock}
-          label="Pending Review"
-          value={stats.pendingReview}
-          accentClass="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300"
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Completed"
-          value={stats.completed}
-          accentClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300"
-        />
+        {infoFields.length > 0 ? (
+          <div className="mt-5 grid grid-cols-1 gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-4 dark:border-white/6">
+            {infoFields.map(({ icon: Icon, label, value }) => (
+              <div key={label} className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
+                  <Icon className="size-3.5 shrink-0" />
+                  {label}
+                </p>
+                <p
+                  className="mt-1 truncate text-sm font-medium text-text-primary"
+                  title={value}
+                >
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <ul className="mt-6 grid grid-cols-2 gap-x-6 gap-y-10 border-t border-slate-100 pt-6 sm:grid-cols-4 sm:divide-x sm:divide-slate-200 dark:border-white/6 dark:sm:divide-neutral-700">
+          {statusStats.map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <li key={stat.id} className="text-center">
+                <Icon
+                  className="inline-block size-8 text-secondary"
+                  aria-hidden="true"
+                />
+                <dl className="flex flex-col">
+                  <dt className="order-1 mt-2 text-sm font-medium text-slate-600 dark:text-slate-400">
+                    {stat.label}
+                  </dt>
+                  <dd className="mt-4 text-3xl font-bold tabular-nums text-secondary">
+                    {stat.value}
+                  </dd>
+                </dl>
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
       {/* Section Title */}
@@ -230,7 +329,7 @@ export default function MyFormsList({
 
       {/* Empty State */}
       {!data || data.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-surface px-6 py-16 text-center dark:border-white/10">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-surface px-6 py-16 text-center dark:border-white/10">
           <div className="flex size-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
             <Inbox className="size-8 text-slate-400 dark:text-slate-500" />
           </div>
@@ -259,7 +358,7 @@ export default function MyFormsList({
               <div
                 key={form.templateId}
                 className={cn(
-                  "group flex flex-col rounded-xl border border-slate-200 border-l-4 bg-surface p-5 shadow-sm transition-all hover:shadow-md dark:border-white/10",
+                  "group flex flex-col rounded-md border border-slate-200 border-l-4 bg-surface p-5 shadow-sm transition-all hover:shadow-md dark:border-white/10",
                   STATUS_ACCENT[form.status],
                 )}
               >
@@ -290,15 +389,6 @@ export default function MyFormsList({
 
                 {/* Meta row */}
                 <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-foreground/60">
-                  {form.staffCategoryName ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Layers className="size-3.5" />
-                      {form.staffCategoryName}
-                      {form.staffSubCategoryName
-                        ? ` · ${form.staffSubCategoryName}`
-                        : ""}
-                    </span>
-                  ) : null}
                   <span className="inline-flex items-center gap-1">
                     <ClipboardList className="size-3.5" />
                     {form.questionCount} questions

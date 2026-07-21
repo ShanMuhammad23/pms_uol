@@ -370,7 +370,7 @@ export default function EntitiesManager() {
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
-          className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
+          className={`mt-4 overflow-hidden rounded-md border px-4 py-3 text-sm font-medium ${
             formMessage.tone === "success"
               ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
               : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
@@ -383,7 +383,7 @@ export default function EntitiesManager() {
   );
 
   const renderAddFormCard = () => (
-    <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
+    <div className="rounded-md border border-slate-300/80 p-6 dark:border-white/15">
       <div>
         <h2 className="text-lg font-semibold text-text-primary">Add Entity</h2>
         <p className="mt-1 text-sm text-foreground/70">
@@ -426,7 +426,7 @@ export default function EntitiesManager() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-            className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
+            className="relative w-full max-w-lg overflow-hidden rounded-xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -496,19 +496,19 @@ export default function EntitiesManager() {
       {renderEditModal()}
 
       {isLoading ? (
-        <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+        <div className="rounded-md border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
           Loading entities...
         </div>
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+        <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           Failed to load entities.
         </div>
       ) : null}
 
       {!isLoading && !error && (!entities || entities.length === 0) ? (
-        <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
+        <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
           <Building2 className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">
             No entities yet
@@ -535,7 +535,7 @@ export default function EntitiesManager() {
           />
 
           {filteredEntities.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
+            <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
               <Building2 className="mx-auto size-8 text-foreground/50" />
               <p className="mt-3 text-sm font-medium text-text-primary">
                 No entities match the current filters
@@ -549,7 +549,7 @@ export default function EntitiesManager() {
               </button>
             </div>
           ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
+        <div className="overflow-x-auto rounded-md border border-slate-300/80 dark:border-white/15">
           <table className="min-w-full text-sm">
             <thead className="bg-primary/5">
               <tr>

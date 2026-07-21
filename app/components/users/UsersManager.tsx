@@ -233,7 +233,7 @@ export default function UsersManager() {
   };
 
   const renderFormCard = () => (
-    <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
+    <div className="rounded-md border border-slate-300/80 p-6 dark:border-white/15">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-text-primary">Add User</h2>
@@ -249,7 +249,7 @@ export default function UsersManager() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
+            className={`mt-4 overflow-hidden rounded-md border px-4 py-3 text-sm font-medium ${
               formMessage.tone === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
                 : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
@@ -475,25 +475,25 @@ export default function UsersManager() {
       {activeTab === "add" ? renderFormCard() : null}
 
       {activeTab === "list" && formMessage?.tone === "success" ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300">
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300">
           {formMessage.text}
         </div>
       ) : null}
 
       {activeTab === "list" && isLoading ? (
-        <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+        <div className="rounded-md border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
           Loading users...
         </div>
       ) : null}
 
       {activeTab === "list" && error ? (
-        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+        <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           Failed to load users.
         </div>
       ) : null}
 
       {activeTab === "list" && !isLoading && !error && users.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
+        <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
           <Users className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">No users yet</p>
           <p className="mt-1 text-sm text-foreground/70">

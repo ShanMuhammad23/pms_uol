@@ -94,7 +94,7 @@ export function StatCard({
       whileTap={onClick ? { scale: 0.98 } : undefined}
       onClick={onClick}
       className={cn(
-        "group flex-1 relative cursor-pointer overflow-hidden rounded-2xl border p-5 shadow-sm transition-all duration-300",
+        "group flex-1 relative cursor-pointer overflow-hidden rounded-xl border p-5 shadow-sm transition-all duration-300",
         active ? "shadow-md ring-1 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950" : "hover:shadow-md",
         "border border-slate-200 dark:border-slate-700 bg-primary text-white",
     

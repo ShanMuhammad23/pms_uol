@@ -155,7 +155,7 @@ export default function InstitutionalQuotaManager() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-300/80 bg-surface p-6 dark:border-white/15">
+      <div className="rounded-xl border border-slate-300/80 bg-surface p-6 dark:border-white/15">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 text-primary">
@@ -224,7 +224,7 @@ export default function InstitutionalQuotaManager() {
       ) : (
         <form
           onSubmit={handleSubmit}
-          className="overflow-hidden rounded-2xl border border-slate-300/80 bg-surface dark:border-white/15"
+          className="overflow-hidden rounded-xl border border-slate-300/80 bg-surface dark:border-white/15"
         >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-sm">

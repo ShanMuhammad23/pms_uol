@@ -294,7 +294,7 @@ export default function IncrementMatrixManager() {
       {/* ═══════ Top Control Bar (never scrolls) ═══════ */}
       <div className="shrink-0 space-y-4">
         {/* Header Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
+        <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -418,7 +418,7 @@ export default function IncrementMatrixManager() {
             ) : null}
           </AnimatePresence>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
+          <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Layers className="size-4 text-primary" />
@@ -685,7 +685,7 @@ export default function IncrementMatrixManager() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
+          <div className="flex-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
             {entriesLoading ? (
               <div className="flex h-full items-center justify-center">
                 <p className="text-sm text-foreground/60">

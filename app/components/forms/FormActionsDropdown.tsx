@@ -214,7 +214,7 @@ export default function FormActionsDropdown({
               width: position.width,
               zIndex: 1000,
             }}
-            className="rounded-xl border border-slate-200 bg-white shadow-lg shadow-slate-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-slate-900/40"
+            className="rounded-md border border-slate-200 bg-white shadow-lg shadow-slate-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-slate-900/40"
           >
             <div className="max-h-80 overflow-y-auto py-1.5">
               {sections.map((section, sectionIdx) => (

@@ -39,11 +39,11 @@ export function CalibrationDistributionMatrix({
       ) : null}
 
       {isLoading ? (
-        <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-12 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+        <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-slate-200 px-4 py-12 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
           Loading performance matrix…
         </div>
       ) : rows.length === 0 || columns.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-12 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+        <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-slate-200 px-4 py-12 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
           No performance levels or quartiles configured yet.
         </div>
       ) : (

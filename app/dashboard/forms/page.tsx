@@ -14,7 +14,7 @@ export default async function FormsPage() {
         <div>
           <h1 className="text-2xl font-bold">Forms</h1>
           <p className="mt-1 text-sm text-foreground/70">
-            Design and manage appraisal form templates for employee categories.
+            Design and manage appraisal form templates and assign them to employees.
           </p>
         </div>
 

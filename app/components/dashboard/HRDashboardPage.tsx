@@ -4,13 +4,16 @@ import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBa
 import { DashboardPrimaryCharts } from "@/app/components/dashboard/DashboardPrimaryCharts";
 import { DashboardSubmissionsTable } from "@/app/components/dashboard/DashboardSubmissionsTable";
 import { DashboardWorkflowStatsRow } from "@/app/components/dashboard/DashboardWorkflowStatsRow";
+import { HeadDashboardOverview } from "@/app/components/dashboard/HeadDashboardOverview";
 import { useDashboardPage } from "@/app/queries/dashboard";
+import { isHeadRole } from "@/lib/auth/home-path";
 
 interface HRDashboardPageProps {
   role?: string | null;
 }
 
 export default function HRDashboardPage({ role }: HRDashboardPageProps) {
+  const isHead = isHeadRole(role);
   const {
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
@@ -53,8 +56,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   } = useDashboardPage();
 
   return (
-    <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 dark:bg-slate-950 p-2">
-      <div className="mx-auto w-full max-w-full min-w-0 ">
+    <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
+      <div className="mx-auto w-full max-w-full min-w-0">
         <DashboardFilterBar
           selectedCategory0EntityIds={selectedCategory0EntityIds}
           onCategory0EntityChange={handleCategory0EntityChange}
@@ -82,23 +85,36 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           onClearAllFilters={clearAllFilters}
         />
 
-        <DashboardWorkflowStatsRow
-          eligibilityData={eligibilityData}
-          selfAssessmentStats={selfAssessmentStats}
-          managerReviewStats={managerReviewStats}
-          hrAlignmentStats={hrAlignmentStats}
-          boardApprovalStats={boardApprovalStats}
-          selectedFormStates={selectedFormStates}
-          onFilterByFormState={filterByFormState}
-        />
+        {isHead ? (
+          <HeadDashboardOverview
+            eligibilityData={eligibilityData}
+            selfAssessmentStats={selfAssessmentStats}
+            managerReviewStats={managerReviewStats}
+            selectedFormStates={selectedFormStates}
+            onFilterByFormState={filterByFormState}
+            calibrationData={filteredCalibrationData}
+          />
+        ) : (
+          <>
+            <DashboardWorkflowStatsRow
+              eligibilityData={eligibilityData}
+              selfAssessmentStats={selfAssessmentStats}
+              managerReviewStats={managerReviewStats}
+              hrAlignmentStats={hrAlignmentStats}
+              boardApprovalStats={boardApprovalStats}
+              selectedFormStates={selectedFormStates}
+              onFilterByFormState={filterByFormState}
+            />
 
-        <DashboardPrimaryCharts
-          calibrationData={filteredCalibrationData}
-          ratingQuartileMatrix={ratingQuartileMatrix}
-          employeeCount={chartSubmissions.length}
-          performanceMatrixLoading={performanceMatrixLoading}
-          role={role}
-        />
+            <DashboardPrimaryCharts
+              calibrationData={filteredCalibrationData}
+              ratingQuartileMatrix={ratingQuartileMatrix}
+              employeeCount={chartSubmissions.length}
+              performanceMatrixLoading={performanceMatrixLoading}
+              role={role}
+            />
+          </>
+        )}
 
         <DashboardSubmissionsTable
           submissions={filteredSubmissions}

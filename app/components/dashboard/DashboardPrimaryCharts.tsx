@@ -40,7 +40,7 @@ export function DashboardPrimaryCharts({
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-12"
+      className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-12"
     >
       <ChartCard
         title="Performance Rating Curve"

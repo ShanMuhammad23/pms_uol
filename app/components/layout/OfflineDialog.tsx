@@ -77,7 +77,7 @@ export default function OfflineDialog() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-            className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-300/80 bg-surface shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
+            className="relative w-full max-w-md overflow-hidden rounded-xl border border-slate-300/80 bg-surface shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
           >
             <div
               className={`h-1 w-full ${
@@ -93,7 +93,7 @@ export default function OfflineDialog() {
                   initial={{ scale: 0.8 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 320, damping: 22 }}
-                  className={`mb-5 flex size-16 items-center justify-center rounded-2xl ${
+                  className={`mb-5 flex size-16 items-center justify-center rounded-xl ${
                     showReconnected
                       ? "bg-success/15 text-success"
                       : "bg-warning/15 text-warning"
@@ -129,7 +129,7 @@ export default function OfflineDialog() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => window.location.reload()}
-                      className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:text-slate-950"
+                      className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:text-slate-950"
                     >
                       <RefreshCw className="size-4" />
                       Try again

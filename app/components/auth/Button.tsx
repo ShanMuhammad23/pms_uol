@@ -42,7 +42,7 @@ export function Button({
       disabled={isDisabled}
       whileHover={!isDisabled ? { scale: 1.02, y: -1 } : undefined}
       whileTap={!isDisabled ? { scale: 0.98 } : undefined}
-      className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${fullWidth ? "w-full" : "w-auto"} ${variantClasses[variant]} ${className}`}
+      className={`inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${fullWidth ? "w-full" : "w-auto"} ${variantClasses[variant]} ${className}`}
       {...props}
     >
       {isLoading ? (

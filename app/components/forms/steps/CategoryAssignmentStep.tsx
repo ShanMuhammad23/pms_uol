@@ -102,7 +102,7 @@ export default function CategoryAssignmentStep({
       {templateId ? (
         <FormEmployeeAssignment templateId={templateId} templateTitle={templateTitle} />
       ) : (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-text-primary">
+        <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm text-text-primary">
           Employee assignment will be available after you publish this form.
         </div>
       )}

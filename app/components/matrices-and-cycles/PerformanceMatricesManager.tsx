@@ -503,7 +503,7 @@ export default function PerformanceMatricesManager() {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             className={cn(
-              "overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium",
+              "overflow-hidden rounded-md border px-4 py-3 text-sm font-medium",
               formMessage.tone === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
                 : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300",
@@ -514,7 +514,7 @@ export default function PerformanceMatricesManager() {
         ) : null}
       </AnimatePresence>
 
-      <div className="rounded-xl border border-slate-300/80 dark:border-white/15">
+      <div className="rounded-md border border-slate-300/80 dark:border-white/15">
         <div className="flex flex-wrap gap-1 border-b border-slate-300/80 p-2 dark:border-white/15">
           {panels.map((panel) => {
             const Icon = panel.icon;
@@ -549,7 +549,7 @@ export default function PerformanceMatricesManager() {
           {activePanel === "overview" ? (
             <div className="space-y-5">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-xl border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
+                <div className="rounded-md border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
                   <label
                     htmlFor="matrix-financial-year"
                     className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
@@ -583,7 +583,7 @@ export default function PerformanceMatricesManager() {
                   </select>
                 </div>
 
-                <div className="rounded-xl border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
+                <div className="rounded-md border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
                   <label
                     htmlFor="overview-matrix-label"
                     className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
@@ -610,7 +610,7 @@ export default function PerformanceMatricesManager() {
                   </select>
                 </div>
 
-                <div className="rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-950/20">
+                <div className="rounded-md border border-violet-200 bg-violet-50/70 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-950/20">
                   <p className="text-xs font-medium uppercase tracking-wide text-violet-700 dark:text-violet-300">
                     Levels
                   </p>
@@ -619,7 +619,7 @@ export default function PerformanceMatricesManager() {
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/20">
+                <div className="rounded-md border border-emerald-200 bg-emerald-50/70 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/20">
                   <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                     Quartiles
                   </p>
@@ -681,7 +681,7 @@ export default function PerformanceMatricesManager() {
               {selectedLevel ? (
                 <div
                   className={cn(
-                    "rounded-xl border p-4",
+                    "rounded-md border p-4",
                     getPerformanceLevelTint(
                       selectedLevel.name,
                       Math.max(selectedLevelIndex, 0),
@@ -793,7 +793,7 @@ export default function PerformanceMatricesManager() {
                 </p>
               </div>
 
-              <div className="rounded-xl border border-sky-200 bg-sky-50/50 px-4 py-3 dark:border-sky-500/30 dark:bg-sky-950/20">
+              <div className="rounded-md border border-sky-200 bg-sky-50/50 px-4 py-3 dark:border-sky-500/30 dark:bg-sky-950/20">
                 <p className="text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
                   Assigning
                 </p>
@@ -874,7 +874,7 @@ export default function PerformanceMatricesManager() {
                 </p>
               </div>
 
-              <div className="rounded-xl border border-slate-300/80 bg-slate-50/50 p-5 dark:border-white/15 dark:bg-white/5">
+              <div className="rounded-md border border-slate-300/80 bg-slate-50/50 p-5 dark:border-white/15 dark:bg-white/5">
                 <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50/70 px-3 py-2 dark:border-sky-500/30 dark:bg-sky-950/20">
                   <p className="text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
                     Financial year
@@ -978,7 +978,7 @@ export default function PerformanceMatricesManager() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
               transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-              className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
+              className="relative w-full max-w-lg overflow-hidden rounded-xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -1127,7 +1127,7 @@ export default function PerformanceMatricesManager() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
               transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-              className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
+              className="relative w-full max-w-lg overflow-hidden rounded-xl border border-slate-300/80 bg-surface p-6 shadow-2xl shadow-slate-900/10 dark:border-white/15 dark:shadow-black/40"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>

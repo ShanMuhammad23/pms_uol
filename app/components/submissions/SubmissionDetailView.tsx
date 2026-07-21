@@ -169,7 +169,7 @@ export default function SubmissionDetailView({
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
+      <div className="rounded-md border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
         Loading submission...
       </div>
     );
@@ -177,7 +177,7 @@ export default function SubmissionDetailView({
 
   if (error || !data) {
     return (
-      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         Failed to load submission.
       </div>
     );
@@ -289,7 +289,7 @@ export default function SubmissionDetailView({
   };
 
   return (
-    <div className="min-w-0 max-w-full overflow-x-hidden rounded-xl border border-slate-300 bg-white shadow-md shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-900/30">
+    <div className="min-w-0 max-w-full overflow-x-hidden rounded-md border border-slate-300 bg-white shadow-md shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-900/30">
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-bold text-slate-800 dark:text-slate-100">

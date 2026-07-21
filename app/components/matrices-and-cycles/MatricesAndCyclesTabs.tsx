@@ -32,7 +32,7 @@ export default function MatricesAndCyclesTabs() {
     <div className="space-y-6">
       <nav
         aria-label="Matrices and cycles tabs"
-        className="flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm dark:border-white/10 dark:bg-white/5"
+        className="flex gap-1.5 overflow-x-auto rounded-md border border-slate-200 bg-white p-1.5 shadow-sm dark:border-white/10 dark:bg-white/5"
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -74,7 +74,7 @@ export default function MatricesAndCyclesTabs() {
         })}
       </nav>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
         <div className="h-1 w-full bg-secondary" />
         <div className="p-5 sm:p-6">
           {activeTab === "financial-year" ? <FinancialYearsManager /> : null}

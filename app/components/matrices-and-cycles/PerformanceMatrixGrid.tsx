@@ -57,7 +57,7 @@ export default function PerformanceMatrixGrid({
 
   if (sortedLevels.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300/80 bg-slate-50/50 px-6 py-12 text-center dark:border-white/15 dark:bg-white/5">
+      <div className="rounded-md border border-dashed border-slate-300/80 bg-slate-50/50 px-6 py-12 text-center dark:border-white/15 dark:bg-white/5">
         <p className="text-sm font-medium text-text-primary">
           No performance levels configured
         </p>
@@ -72,7 +72,7 @@ export default function PerformanceMatrixGrid({
     columnHeaders.length > 0 ? columnHeaders : ["Quartiles"];
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm dark:border-neutral-700">
+    <div className="overflow-x-auto rounded-md border border-slate-200 shadow-sm dark:border-neutral-700">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="divide-x divide-white/20 bg-primary text-white">

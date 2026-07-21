@@ -63,7 +63,7 @@ export function InputField({
           aria-invalid={hasError}
           aria-describedby={hasError ? errorId : undefined}
           className={cn(
-            "h-11 w-full rounded-xl border bg-white text-sm text-slate-900 outline-none transition-all duration-200 placeholder:text-slate-400",
+            "h-11 w-full rounded-md border bg-white text-sm text-slate-900 outline-none transition-all duration-200 placeholder:text-slate-400",
             "focus-visible:ring-2 focus-visible:ring-amber-500/20 focus-visible:border-amber-500/50",
             "hover:border-slate-400",
             icon ? "pl-10" : "pl-4",

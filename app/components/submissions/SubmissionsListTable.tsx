@@ -14,7 +14,7 @@ export default function SubmissionsListTable() {
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+      <div className="rounded-md border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
         Loading submissions...
       </div>
     );
@@ -22,7 +22,7 @@ export default function SubmissionsListTable() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         Failed to load submissions.
       </div>
     );
@@ -30,7 +30,7 @@ export default function SubmissionsListTable() {
 
   if (!data || data.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
+      <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
         <ClipboardCheck className="mx-auto size-8 text-foreground/50" />
         <p className="mt-3 text-sm font-medium text-text-primary">
           No submitted forms yet
@@ -43,7 +43,7 @@ export default function SubmissionsListTable() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
+    <div className="overflow-x-auto rounded-md border border-slate-300/80 dark:border-white/15">
       <table className="min-w-full text-sm">
         <thead className="bg-primary/5">
           <tr>

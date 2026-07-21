@@ -67,7 +67,7 @@ function ProfileField({
       variants={itemVariants}
       transition={{ delay }}
       className={cn(
-        "group relative overflow-hidden rounded-xl border p-5 transition-all duration-300",
+        "group relative overflow-hidden rounded-md border p-5 transition-all duration-300",
         "border-slate-200 bg-white hover:shadow-md hover:border-slate-300",
         "dark:border-white/10 dark:bg-white/[0.02] dark:hover:border-white/20 dark:hover:bg-white/[0.04]"
       )}
@@ -133,12 +133,12 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.1, ease: [0.23, 1, 0.32, 1] as const }}
-        className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/[0.02]"
+        className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/[0.02]"
       >
         <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600" />
 
         <div className="flex items-center gap-6">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/5">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/5">
             <User className="h-10 w-10 text-slate-400 dark:text-slate-500" />
           </div>
 

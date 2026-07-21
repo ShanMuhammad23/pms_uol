@@ -104,7 +104,7 @@ export function DashboardFilterBar({
       transition={{ delay: 0.55 }}
       className="mb-6 space-y-4"
     >
-      <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
+      <div className="rounded-md border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
         <div className="flex items-center gap-3 px-4 py-2">
           <Category0DistributionBar
             options={category0DistributionOptions}

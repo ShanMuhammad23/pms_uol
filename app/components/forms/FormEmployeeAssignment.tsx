@@ -307,7 +307,7 @@ export default function FormEmployeeAssignment({
   const STICKY_SHADOW_LEFT = "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.5)]";
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
+    <div className="flex flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
       <div className="shrink-0 px-5 pt-4">
         <h2 className="text-base font-semibold text-text-primary">Assign Employees</h2>
         <p className="mt-0.5 text-sm text-foreground/70">

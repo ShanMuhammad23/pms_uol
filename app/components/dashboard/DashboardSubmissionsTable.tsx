@@ -413,7 +413,7 @@ export function DashboardSubmissionsTable({
       initial="hidden"
       animate="visible"
       transition={{ delay: 0.6 }}
-      className="min-w-0 min-h-screen max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
+      className="min-w-0 min-h-screen max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
     >
          <StaffListingMasterFilter
         submissions={submissions}

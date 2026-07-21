@@ -68,7 +68,7 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
       variants={itemVariants}
       transition={{ delay }}
       whileHover={{ y: -3, transition: { duration: 0.2 } }}
-      className="group flex-1 relative overflow-hidden rounded-2xl border border-slate-200 bg-primary text-white p-5 shadow-sm transition-all duration-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+      className="group flex-1 relative overflow-hidden rounded-xl border border-slate-200 bg-primary text-white p-5 shadow-sm transition-all duration-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wider ">
