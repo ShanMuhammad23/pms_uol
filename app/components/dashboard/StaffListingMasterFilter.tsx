@@ -8,14 +8,15 @@ import {
   type MultiSelectOption,
 } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import {
-  MASTER_FILTER_MULTI_COLUMNS,
-  MASTER_FILTER_TEXT_COLUMNS,
+  MASTER_FILTER_SECTIONS,
   buildMasterFilterOptions,
   countActiveMasterFilters,
+  isMasterFilterTextColumn,
   type MasterFilterMultiSelection,
   type MasterFilterState,
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
+import type { DashboardTableColumnId } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +26,7 @@ interface StaffListingMasterFilterProps {
   filters: MasterFilterState;
   onTextChange: (columnId: MasterFilterTextColumnId, next: string) => void;
   onMultiChange: (
-    columnId: (typeof MASTER_FILTER_MULTI_COLUMNS)[number]["id"],
+    columnId: DashboardTableColumnId,
     next: MasterFilterMultiSelection,
   ) => void;
   onClearAll: () => void;
@@ -75,17 +76,21 @@ export function StaffListingMasterFilter({
   const optionsByColumn = useMemo(() => {
     const map = new Map<string, MultiSelectOption[]>();
 
-    for (const column of MASTER_FILTER_MULTI_COLUMNS) {
-      map.set(
-        column.id,
-        buildMasterFilterOptions(
-          submissions,
-          column,
-          filters,
-          filters.multi[column.id] ?? null,
-          allSubmissions,
-        ),
-      );
+    for (const section of MASTER_FILTER_SECTIONS) {
+      for (const column of section.columns) {
+        if (isMasterFilterTextColumn(column.id)) continue;
+
+        map.set(
+          column.id,
+          buildMasterFilterOptions(
+            submissions,
+            column,
+            filters,
+            filters.multi[column.id] ?? null,
+            allSubmissions,
+          ),
+        );
+      }
     }
 
     return map;
@@ -137,39 +142,58 @@ export function StaffListingMasterFilter({
             transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
             className="overflow-hidden"
           >
-            <div className="space-y-5 border-t border-slate-200/70 px-5 pb-5 pt-4 dark:border-white/5">
-              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {MASTER_FILTER_TEXT_COLUMNS.map((column) => (
-                  <TextFilterField
-                    key={column.id}
-                    label={column.label}
-                    value={filters.text[column.id as MasterFilterTextColumnId] ?? ""}
-                    placeholder={`Search ${column.label.toLowerCase()}...`}
-                    onChange={(next) =>
-                      onTextChange(column.id as MasterFilterTextColumnId, next)
-                    }
-                  />
+            <div className="border-t border-slate-200/70 px-5 pb-5 pt-4 dark:border-white/5">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
+                {MASTER_FILTER_SECTIONS.map((section) => (
+                  <section
+                    key={section.id}
+                    className="min-w-0 rounded-lg border border-slate-200/80 bg-white/70 p-3 dark:border-white/10 dark:bg-slate-900/50"
+                  >
+                    <h3 className="mb-3 border-b border-slate-200/80 pb-2 text-xs font-semibold uppercase tracking-wider text-primary dark:border-white/10">
+                      {section.label}
+                    </h3>
+                    <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                      {section.columns.map((column) => {
+                        if (isMasterFilterTextColumn(column.id)) {
+                          return (
+                            <TextFilterField
+                              key={column.id}
+                              label={column.label}
+                              value={
+                                filters.text[
+                                  column.id as MasterFilterTextColumnId
+                                ] ?? ""
+                              }
+                              placeholder={`Search ${column.label.toLowerCase()}...`}
+                              onChange={(next) =>
+                                onTextChange(
+                                  column.id as MasterFilterTextColumnId,
+                                  next,
+                                )
+                              }
+                            />
+                          );
+                        }
+
+                        const options = optionsByColumn.get(column.id) ?? [];
+
+                        return (
+                          <MultiSelectFilterDropdown
+                            key={column.id}
+                            label={column.label}
+                            options={options}
+                            selectedValues={filters.multi[column.id] ?? null}
+                            onChange={(next) => onMultiChange(column.id, next)}
+                            placeholder="All"
+                            searchable={options.length > 8}
+                            quiet
+                            className="min-w-0 flex-none"
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
                 ))}
-              </div>
-
-              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {MASTER_FILTER_MULTI_COLUMNS.map((column) => {
-                  const options = optionsByColumn.get(column.id) ?? [];
-
-                  return (
-                    <MultiSelectFilterDropdown
-                      key={column.id}
-                      label={column.label}
-                      options={options}
-                      selectedValues={filters.multi[column.id] ?? null}
-                      onChange={(next) => onMultiChange(column.id, next)}
-                      placeholder="All"
-                      searchable={options.length > 8}
-                      quiet
-                      className="min-w-0 flex-none"
-                    />
-                  );
-                })}
               </div>
             </div>
           </motion.div>

@@ -1,16 +1,14 @@
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import {
+  DASHBOARD_COLUMN_SECTIONS,
   DASHBOARD_TABLE_COLUMNS,
+  getSectionColumns,
+  type DashboardColumnSection,
+  type DashboardColumnSectionId,
   type DashboardTableColumnId,
   type DashboardTableColumnDef,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
-
-/** Columns excluded from the master filter entirely. */
-const MASTER_FILTER_EXCLUDED_IDS = new Set<DashboardTableColumnId>([
-  "dateOfJoining",
-  "hodReviewComments",
-]);
 
 /**
  * Free-text / high-cardinality fields use a search box instead of multi-select.
@@ -22,8 +20,10 @@ export const MASTER_FILTER_TEXT_COLUMN_IDS = [
   "gradeGroup",
   "remarksEvaluation",
   "remarksCompensation",
+  "qualification",
   "qualificationSubject",
   "qualificationInstitute",
+  "hodReviewComments",
 ] as const satisfies readonly DashboardTableColumnId[];
 
 /** Multi-select options list every distinct value from the full dataset (Excel-style). */
@@ -57,10 +57,21 @@ export const MASTER_FILTER_TEXT_COLUMNS: DashboardTableColumnDef[] =
 
 export const MASTER_FILTER_MULTI_COLUMNS: DashboardTableColumnDef[] =
   DASHBOARD_TABLE_COLUMNS.filter(
-    (column) =>
-      !MASTER_FILTER_EXCLUDED_IDS.has(column.id) &&
-      !MASTER_FILTER_TEXT_ID_SET.has(column.id),
+    (column) => !MASTER_FILTER_TEXT_ID_SET.has(column.id),
   );
+
+export type MasterFilterSection = {
+  id: DashboardColumnSectionId;
+  label: string;
+  columns: DashboardTableColumnDef[];
+};
+
+export const MASTER_FILTER_SECTIONS: MasterFilterSection[] =
+  DASHBOARD_COLUMN_SECTIONS.map((section: DashboardColumnSection) => ({
+    id: section.id,
+    label: section.label,
+    columns: getSectionColumns(section.id),
+  }));
 
 export function isMasterFilterTextColumn(
   columnId: DashboardTableColumnId,
@@ -69,7 +80,7 @@ export function isMasterFilterTextColumn(
 }
 
 export function isMasterFilterableColumn(columnId: DashboardTableColumnId): boolean {
-  return !MASTER_FILTER_EXCLUDED_IDS.has(columnId);
+  return DASHBOARD_TABLE_COLUMNS.some((column) => column.id === columnId);
 }
 
 function matchesTextQuery(cellValue: string, query: string): boolean {

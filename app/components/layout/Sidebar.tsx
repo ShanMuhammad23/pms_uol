@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
 import { signOutAndRedirect } from "@/lib/queries/auth-client";
 import {
+  Building2,
+  ChevronDown,
   ClipboardList,
   FileText,
   Grid3X3,
@@ -12,6 +15,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings2,
   SquareUserRound,
   Users,
 } from "lucide-react";
@@ -20,6 +24,35 @@ import { useSidebar } from "@/app/components/layout/sidebar-context";
 import { isEmployeeRole } from "@/lib/auth/home-path";
 import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
+
+const ADMIN_LINKS = [
+  {
+    href: "/dashboard/forms",
+    label: "Forms",
+    icon: FileText,
+    match: (pathname: string) => pathname.startsWith("/dashboard/forms"),
+  },
+  {
+    href: "/dashboard/users",
+    label: "Users",
+    icon: Users,
+    match: (pathname: string) => pathname.startsWith("/dashboard/users"),
+  },
+  {
+    href: "/dashboard/matrices-and-cycles",
+    label: "Matrices and Cycles",
+    icon: Grid3X3,
+    match: (pathname: string) =>
+      pathname.startsWith("/dashboard/matrices-and-cycles"),
+  },
+  {
+    href: "/dashboard/entities-and-categories",
+    label: "Entities and Categories",
+    icon: Building2,
+    match: (pathname: string) =>
+      pathname.startsWith("/dashboard/entities-and-categories"),
+  },
+] as const;
 
 const Sidebar = () => {
   const pathname = usePathname();
@@ -30,10 +63,16 @@ const Sidebar = () => {
   const isDashboard = pathname === "/dashboard";
   const isProfile = pathname === "/dashboard/profile";
   const isMyForms = pathname.startsWith("/dashboard/my-forms");
-  const isForms = pathname.startsWith("/dashboard/forms");
-  const isUsers = pathname.startsWith("/dashboard/users");
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
-  const isMatricesAndCycles = pathname.startsWith("/dashboard/matrices-and-cycles");
+  const isAdminRouteActive = ADMIN_LINKS.some((link) => link.match(pathname));
+
+  const [adminOpen, setAdminOpen] = useState(isAdminRouteActive);
+
+  useEffect(() => {
+    if (isAdminRouteActive) {
+      setAdminOpen(true);
+    }
+  }, [isAdminRouteActive]);
 
   const roleLabel = user?.role
     ? (USER_ROLE_LABELS as Record<string, string>)[user.role] ?? user.role
@@ -60,7 +99,7 @@ const Sidebar = () => {
   return (
     <aside
       className={cn(
-        "no-print fixed top-0 left-0 z-40 flex h-full flex-col  overflow-auto border border-r border-slate-300/80  py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
+        "no-print fixed top-0 left-0 z-40 flex h-full flex-col overflow-auto border border-r border-slate-300/80 py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
         collapsed ? "w-[72px]" : "w-[264px]",
       )}
     >
@@ -138,64 +177,85 @@ const Sidebar = () => {
               </li>
 
               {isSuperAdmin ? (
-                <li>
-                  <Link
-                    href="/dashboard/forms"
-                    aria-current={isForms ? "page" : undefined}
-                    title="Forms"
-                    className={navLinkClass(isForms)}
-                  >
-                    <FileText className="size-4 shrink-0" />
-                    {!collapsed ? "Forms" : null}
-                  </Link>
+                <li className="pt-2">
+                  {collapsed ? (
+                    <div className="space-y-0.5 transition-all duration-300 hover:text-primary">
+                      <div
+                        className="flex justify-center py-2 text-secondary"
+                        title="Administration"
+                      >
+                        <Settings2 className="size-4" />
+                      </div>
+                      {ADMIN_LINKS.map((link) => {
+                        const Icon = link.icon;
+                        const active = link.match(pathname);
+                        return (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            aria-current={active ? "page" : undefined}
+                            title={link.label}
+                            className={navLinkClass(active)}
+                          >
+                            <Icon className="size-4 shrink-0" />
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setAdminOpen((open) => !open)}
+                        aria-expanded={adminOpen}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/50 transition hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                          isAdminRouteActive && "text-primary",
+                        )}
+                      >
+                        <Settings2 className="size-4 shrink-0" />
+                        <span className="flex-1">Administration</span>
+                        <ChevronDown
+                          className={cn(
+                            "size-4 shrink-0 transition-transform duration-200",
+                            adminOpen && "rotate-180",
+                          )}
+                        />
+                      </button>
+
+                      {adminOpen ? (
+                        <ul className="mt-0.5 space-y-0.5 border-l border-slate-300/60 ml-6 dark:border-white/10">
+                          {ADMIN_LINKS.map((link) => {
+                            const Icon = link.icon;
+                            const active = link.match(pathname);
+                            return (
+                              <li key={link.href}>
+                                <Link
+                                  href={link.href}
+                                  aria-current={active ? "page" : undefined}
+                                  title={link.label}
+                                  className={cn(
+                                    navLinkClass(active),
+                                    "pl-4",
+                                  )}
+                                >
+                                  <Icon className="size-4 shrink-0" />
+                                  {link.label}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : null}
+                    </div>
+                  )}
                 </li>
               ) : null}
-
-              {isSuperAdmin ? (
-                <li>
-                  <Link
-                    href="/dashboard/users"
-                    aria-current={isUsers ? "page" : undefined}
-                    title="Users"
-                    className={navLinkClass(isUsers)}
-                  >
-                    <Users className="size-4 shrink-0" />
-                    {!collapsed ? "Users" : null}
-                  </Link>
-                </li>
-              ) : null}
-
-              {isSuperAdmin ? (
-                <li>
-                  <Link
-                    href="/dashboard/matrices-and-cycles"
-                    aria-current={isMatricesAndCycles ? "page" : undefined}
-                    title="Matrices and Cycles"
-                    className={navLinkClass(isMatricesAndCycles)}
-                  >
-                    <Grid3X3 className="size-4 shrink-0" />
-                    {!collapsed ? "Matrices and Cycles" : null}
-                  </Link>
-                </li>
-              ) : null}
-
-              <li>
-                <Link
-                  href="/dashboard/profile"
-                  aria-current={isProfile ? "page" : undefined}
-                  title="Profile"
-                  className={navLinkClass(isProfile)}
-                >
-                  <SquareUserRound className="size-4 shrink-0" />
-                  {!collapsed ? "Profile" : null}
-                </Link>
-              </li>
             </>
           )}
         </ul>
       </nav>
 
-      {/* User profile block */}
       <div
         className={cn(
           "mt-6 border-t border-slate-300/80 pt-4 dark:border-white/15",
@@ -223,9 +283,13 @@ const Sidebar = () => {
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
                 <p className="truncate text-sm font-semibold text-text-primary">
                   {user?.name ?? "User"}
                 </p>
+                <Link href="/dashboard/profile" className="text-xs text-white bg-secondary rounded-md px-2 py-1">Profile</Link>
+                </div>
+               
                 <p className="truncate text-xs text-foreground/60">
                   {roleLabel ?? "—"}
                 </p>

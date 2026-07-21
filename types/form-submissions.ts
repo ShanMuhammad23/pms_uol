@@ -19,6 +19,8 @@ export interface FormSubmissionListItem {
   empSubCategory: string | null;
   templateId: number | null;
   templateTitle: string | null;
+  /** True when this employee has an individual row in employee_form_assignments for the cycle. */
+  formAssigned: boolean;
   entityId: number | null;
   entityName: string | null;
   parentEntityName: string | null;

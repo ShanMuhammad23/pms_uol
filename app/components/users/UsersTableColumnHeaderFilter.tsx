@@ -398,11 +398,9 @@ export function UsersTableColumnHeaderFilter({
         className={cn(
           "inline-flex h-5 w-5 items-center justify-center rounded transition-colors",
           active
-            ? "bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900"
-            : "text-slate-400 hover:bg-slate-200/80 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-white/10 dark:hover:text-slate-300",
-          open &&
-            !active &&
-            "bg-slate-200/80 text-slate-600 dark:bg-white/10 dark:text-slate-300",
+            ? "bg-white text-primary"
+            : "text-white/70 hover:bg-white/15 hover:text-white",
+          open && !active && "bg-white/15 text-white",
         )}
       >
         <Filter className="h-3 w-3" />

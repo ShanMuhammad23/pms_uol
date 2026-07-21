@@ -60,7 +60,7 @@ const STICKY_EDGE_SHADOW_LEFT =
 
 function stickySelectHeaderClassName() {
   return cn(
-    "sticky left-0 top-0 z-40 border-b border-slate-200 bg-slate-50 px-3 py-3 dark:border-white/10 dark:bg-slate-900",
+    "sticky left-0 top-0 z-40 border-b border-primary/80 bg-primary px-3 py-3",
     STICKY_EDGE_SHADOW_LEFT,
   );
 }
@@ -76,7 +76,7 @@ function stickySelectCellClassName(isSelected: boolean) {
 }
 
 function stickyHeaderClassName() {
-  return "sticky top-0 z-30 border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900";
+  return "sticky top-0 z-30 border-b border-primary/80 bg-primary";
 }
 
 function renderCell(
@@ -361,7 +361,7 @@ export function UsersListingTable({
       <div className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain">
         <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
-            <tr>
+            <tr className="bg-primary text-white">
               <th className={stickySelectHeaderClassName()}>
                 <input
                   type="checkbox"
@@ -374,7 +374,7 @@ export function UsersListingTable({
                   onChange={toggleSelectAllFiltered}
                   disabled={filteredEmployeeIds.length === 0}
                   aria-label="Select all filtered users"
-                  className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
+                  className="h-4 w-4 rounded border-white/40 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40"
                 />
               </th>
               {USERS_TABLE_COLUMNS.map((column) => (
@@ -384,7 +384,7 @@ export function UsersListingTable({
                     column,
                     cn(
                       stickyHeaderClassName(),
-                      "text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400",
+                      "text-xs font-semibold uppercase tracking-wider text-white",
                     ),
                   )}
                 >

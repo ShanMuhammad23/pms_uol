@@ -106,19 +106,19 @@ export function CalibrationDistributionMatrix({
                       )}
                     </td>
                   ))}
-                  <td className={cn("px-2 py-2.5 text-center text-white font-bold text-base tabular-nums", getPerformanceLevelColor(row.rating))}>
+                  <td className={cn("px-2 py-2.5 text-center text-white font-bold text-base tabular-nums bg-primary text-white")}>
                     {row.rowTotal}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-slate-200 bg-slate-50/80 dark:border-white/10 dark:bg-slate-800/40">
-                <td className="px-3 py-2.5 font-semibold text-slate-600 dark:text-slate-300">Total</td>
+              <tr className="border-t border-slate-200 bg-primary text-white dark:border-white/10 dark:bg-slate-800/40">
+                <td className="px-3 py-2.5 font-semibold  dark:text-slate-300">Total</td>
                 {columnTotals.map((total, index) => (
                   <td
                     key={`${columns[index]?.label}-${index}`}
-                    className="px-2 py-2.5 text-center font-semibold tabular-nums text-slate-700 dark:text-slate-200"
+                    className="px-2 py-2.5 text-center font-semibold tabular-nums  dark:text-slate-200"
                   >
                     {total}
                   </td>

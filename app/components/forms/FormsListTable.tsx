@@ -102,26 +102,13 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
 
       <div className=" border border-slate-200 dark:border-neutral-700 rounded-md overflow-x-auto bg-white dark:bg-slate-900">
         <table className="min-w-full">
-          <thead className="text-slate-900 dark:text-slate-50 text-left text-sm font-semibold border-b border-slate-300 dark:border-neutral-600 whitespace-nowrap">
-            <tr className="divide-x divide-slate-300 dark:divide-neutral-600">
-              <th className="px-4 py-3.5">
-                Title
-              </th>
-              <th className="px-4 py-3.5">
-                Assigned Employees
-              </th>
-              <th className="px-4 py-3.5">
-                Cycle
-              </th>
-              <th className="px-4 py-3.5">
-                Questions
-              </th>
-              <th className="px-4 py-3.5">
-                Appraisals
-              </th>
-              <th className="px-4 py-3.5">
-                Actions
-              </th>
+          <thead className="bg-primary text-left text-sm font-semibold whitespace-nowrap text-white">
+            <tr className="divide-x divide-white/15">
+              <th className="px-4 py-3.5">Title</th>
+              <th className="px-4 py-3.5">Assigned Employees</th>
+              <th className="px-4 py-3.5">Cycle</th>
+              <th className="px-4 py-3.5">Questions</th>
+              <th className="px-4 py-3.5">Actions</th>
             </tr>
           </thead>
           <tbody className="text-sm divide-y divide-slate-200 dark:divide-neutral-700">
@@ -146,9 +133,6 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
                 </td>
                 <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
                   {template.questionCount}
-                </td>
-                <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
-                  {template.appraisalCount}
                 </td>
                 <td className="px-4 py-4 text-right whitespace-nowrap">
                   <FormActionsDropdown

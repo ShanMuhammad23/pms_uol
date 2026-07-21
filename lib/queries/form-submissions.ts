@@ -85,6 +85,7 @@ interface SubmissionListRow {
   qualification_institute: string | null;
   qualification_country: string | null;
   submitted_at: string | null;
+  form_assigned: boolean;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -211,6 +212,7 @@ function mapSubmissionRow(
     empSubCategory: row.emp_sub_category,
     templateId: row.template_id,
     templateTitle: row.template_title,
+    formAssigned: Boolean(row.form_assigned),
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: row.entity_name,
     parentEntityName: row.parent_entity_name,
@@ -431,6 +433,18 @@ export async function listFormSubmissions(options?: {
        ${qualSelect}
        ap.template_id,
        ft.title AS template_title,
+       (
+         EXISTS (
+           SELECT 1
+           FROM employee_form_assignments efa
+           INNER JOIN form_templates efa_ft ON efa_ft.id = efa.template_id
+           WHERE efa.employee_id = u.id
+             AND (
+               $1::int IS NULL
+               OR efa_ft.cycle_id = $1
+             )
+         )
+       ) AS form_assigned,
        u.entity_id,
        ent.name AS entity_name,
        p1.name AS parent_entity_name,

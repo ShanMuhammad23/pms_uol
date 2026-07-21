@@ -866,12 +866,8 @@ export async function deleteFormTemplate(id: number): Promise<{
 }> {
   const appraisalResult = await db.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
-     FROM appraisals ap
-     INNER JOIN users u ON u.id = ap.employee_id
-     INNER JOIN form_templates ft ON ft.id = $1
-     WHERE ap.cycle_id = ft.cycle_id
-       AND u.emp_category = ft.target_category
-       AND u.emp_sub_category = ft.target_sub_category`,
+     FROM appraisals
+     WHERE template_id = $1`,
     [id],
   );
 

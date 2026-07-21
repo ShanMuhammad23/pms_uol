@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type StoredColumnPrefs = {
-  version: 2;
+  version: number;
   order: DashboardTableColumnId[];
   visible: DashboardTableColumnId[];
 };
@@ -24,7 +24,8 @@ function normalizeOrder(order: DashboardTableColumnId[]): DashboardTableColumnId
   const seen = new Set<DashboardTableColumnId>();
   const next: DashboardTableColumnId[] = [];
 
-  for (const id of [...order, ...defaults]) {
+  // Prefer canonical default section order; append any extras from saved prefs.
+  for (const id of [...defaults, ...order]) {
     if (!allowed.has(id) || seen.has(id)) continue;
     seen.add(id);
     next.push(id);
@@ -71,9 +72,17 @@ function readStoredPrefs(): {
       parsed &&
       typeof parsed === "object" &&
       "version" in parsed &&
-      (parsed as StoredColumnPrefs).version === 2
+      typeof (parsed as StoredColumnPrefs).version === "number"
     ) {
       const prefs = parsed as StoredColumnPrefs;
+      // v3 introduced section-based column order; reset to canonical defaults.
+      if (prefs.version < 3) {
+        return {
+          order: getDefaultColumnOrder(),
+          visible: getDefaultVisibleColumnIds(),
+        };
+      }
+
       return {
         order: normalizeOrder(
           Array.isArray(prefs.order)
@@ -137,7 +146,7 @@ export function useDashboardColumnVisibility() {
   useEffect(() => {
     if (!hydrated) return;
     const payload: StoredColumnPrefs = {
-      version: 2,
+      version: 3,
       order: columnOrder,
       visible: visibleIds,
     };
