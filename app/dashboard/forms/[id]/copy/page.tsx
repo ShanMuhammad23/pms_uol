@@ -4,6 +4,8 @@ import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
 import { listAppraisalCycles } from "@/lib/queries/appraisal-cycles";
 import { getFormTemplateById } from "@/lib/queries/forms";
 
+export const dynamic = "force-dynamic";
+
 interface CopyFormPageProps {
   params: Promise<{ id: string }>;
 }

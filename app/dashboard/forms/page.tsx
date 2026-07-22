@@ -4,6 +4,8 @@ import FormsListTable from "@/app/components/forms/FormsListTable";
 import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
 import { listFormTemplates } from "@/lib/queries/forms";
 
+export const dynamic = "force-dynamic";
+
 export default async function FormsPage() {
   await requireSuperAdminSession();
   const templates = await listFormTemplates();

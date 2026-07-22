@@ -5,6 +5,8 @@ import FormEmployeeAssignment from "@/app/components/forms/FormEmployeeAssignmen
 import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
 import { getFormTemplateById } from "@/lib/queries/forms";
 
+export const dynamic = "force-dynamic";
+
 interface AssignFormPageProps {
   params: Promise<{ id: string }>;
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
 import {
   deleteFormTemplate,
@@ -87,6 +88,9 @@ export async function PUT(request: Request, context: RouteContext) {
     }
 
     const template = await updateFormTemplate(templateId, body);
+    revalidatePath(`/dashboard/forms/${templateId}/view`);
+    revalidatePath(`/dashboard/forms/${templateId}`);
+    revalidatePath("/dashboard/forms");
     return NextResponse.json(template);
   } catch (error) {
     if (error instanceof FormTemplateError) {
@@ -124,6 +128,9 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   try {
     const result = await deleteFormTemplate(templateId);
+    revalidatePath("/dashboard/forms");
+    revalidatePath(`/dashboard/forms/${templateId}/view`);
+    revalidatePath(`/dashboard/forms/${templateId}`);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof FormTemplateError) {
