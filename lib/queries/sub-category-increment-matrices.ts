@@ -1,19 +1,17 @@
 import "server-only";
 
 import { db } from "../db";
-import type { EmployeeCategory, SubCategory } from "@/types/forms";
 import type {
   CreateSubCategoryIncrementMatrixInput,
   SubCategoryIncrementMatrixRecord,
   UpdateSubCategoryIncrementMatrixInput,
+  IncrementMatrixAssignmentRecord,
 } from "@/types/sub-category-increment-matrices";
 
 interface IncrementMatrixRow {
   id: string;
   financial_year_id: number;
   matrix_label: string;
-  target_category: EmployeeCategory;
-  target_sub_category: SubCategory;
   performance_level_id: string;
   performance_level_name: string;
   performance_level_sort_order: number;
@@ -49,8 +47,6 @@ function mapRow(row: IncrementMatrixRow): SubCategoryIncrementMatrixRecord {
     id: Number(row.id),
     financialYearId: row.financial_year_id,
     matrixLabel: row.matrix_label,
-    targetCategory: row.target_category,
-    targetSubCategory: row.target_sub_category,
     performanceLevelId: Number(row.performance_level_id),
     performanceLevelName: row.performance_level_name,
     performanceQuartileId: Number(row.performance_quartile_id),
@@ -66,8 +62,6 @@ const LIST_QUERY = `
     sim.id,
     sim.financial_year_id,
     sim.matrix_label,
-    sim.target_category,
-    sim.target_sub_category,
     pl.id AS performance_level_id,
     pl.name AS performance_level_name,
     pl.sort_order AS performance_level_sort_order,
@@ -129,8 +123,6 @@ export async function listSubCategoryIncrementMatrices(
      WHERE sim.financial_year_id = $1
      ORDER BY
        sim.matrix_label,
-       sim.target_category,
-       sim.target_sub_category,
        pl.sort_order,
        pq.sort_order`,
     [financialYearId],
@@ -153,17 +145,13 @@ export async function createSubCategoryIncrementMatrix(
       `INSERT INTO sub_category_increment_matrices (
          financial_year_id,
          matrix_label,
-         target_category,
-         target_sub_category,
          performance_quartile_id,
          increment_percentage
-       ) VALUES ($1, $2, $3, $4, $5, $6)
+       ) VALUES ($1, $2, $3, $4)
        RETURNING id`,
       [
         input.financialYearId,
         input.matrixLabel.trim(),
-        input.targetCategory,
-        input.targetSubCategory,
         input.performanceQuartileId,
         input.incrementPercentage,
       ],
@@ -181,7 +169,7 @@ export async function createSubCategoryIncrementMatrix(
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new SubCategoryIncrementMatrixError(
-        "An increment matrix entry already exists for this category, sub-category, and quartile combination.",
+        "An increment matrix entry already exists for this matrix label and quartile combination.",
         409,
       );
     }
@@ -221,16 +209,12 @@ export async function updateSubCategoryIncrementMatrix(
     const result = await db.query(
       `UPDATE sub_category_increment_matrices
        SET matrix_label = $1,
-           target_category = $2,
-           target_sub_category = $3,
-           performance_quartile_id = $4,
-           increment_percentage = $5,
+           performance_quartile_id = $2,
+           increment_percentage = $3,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6`,
+       WHERE id = $4`,
       [
         input.matrixLabel.trim(),
-        input.targetCategory,
-        input.targetSubCategory,
         input.performanceQuartileId,
         input.incrementPercentage,
         id,
@@ -260,7 +244,7 @@ export async function updateSubCategoryIncrementMatrix(
 
     if (isUniqueViolation(error)) {
       throw new SubCategoryIncrementMatrixError(
-        "An increment matrix entry already exists for this category, sub-category, and quartile combination.",
+        "An increment matrix entry already exists for this matrix label and quartile combination.",
         409,
       );
     }
@@ -281,4 +265,160 @@ export async function deleteSubCategoryIncrementMatrix(id: number): Promise<void
       404,
     );
   }
+}
+
+export async function listIncrementMatrixLabels(
+  financialYearId: number,
+): Promise<string[]> {
+  const result = await db.query<{ matrix_label: string }>(
+    `SELECT DISTINCT matrix_label
+     FROM sub_category_increment_matrices
+     WHERE financial_year_id = $1
+     ORDER BY matrix_label ASC`,
+    [financialYearId],
+  );
+  return result.rows.map((row) => row.matrix_label);
+}
+
+export async function listEmployeeIncrementMatrixAssignments(
+  financialYearId: number,
+): Promise<IncrementMatrixAssignmentRecord[]> {
+  const result = await db.query<{
+    employee_id: string;
+    employee_code: string;
+    first_name: string;
+    last_name: string;
+    matrix_label: string;
+  }>(
+    `SELECT
+       eima.employee_id::text,
+       u.employee_id AS employee_code,
+       u.first_name,
+       u.last_name,
+       eima.matrix_label
+     FROM employee_increment_matrix_assignments eima
+     INNER JOIN users u ON u.id = eima.employee_id
+     WHERE eima.financial_year_id = $1
+     ORDER BY u.employee_id ASC`,
+    [financialYearId],
+  );
+
+  return result.rows.map((row) => ({
+    employeeId: row.employee_id,
+    employeeCode: row.employee_code,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    matrixLabel: row.matrix_label,
+    financialYearId,
+  }));
+}
+
+export async function assignIncrementMatrixToEmployees(
+  financialYearId: number,
+  matrixLabel: string,
+  employeeCodes: string[],
+): Promise<{ assignedCount: number; financialYearId: number; matrixLabel: string }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((c) => c.trim()).filter(Boolean))];
+  const trimmedLabel = matrixLabel.trim();
+
+  if (!trimmedLabel) {
+    throw new SubCategoryIncrementMatrixError("Matrix label is required.", 400);
+  }
+  if (normalizedCodes.length === 0) {
+    throw new SubCategoryIncrementMatrixError("At least one employee is required.", 400);
+  }
+
+  const matrixExists = await db.query<{ id: string }>(
+    `SELECT id
+     FROM sub_category_increment_matrices
+     WHERE financial_year_id = $1 AND matrix_label = $2
+     LIMIT 1`,
+    [financialYearId, trimmedLabel],
+  );
+  if (!matrixExists.rows[0]) {
+    throw new SubCategoryIncrementMatrixError(
+      "Selected increment matrix does not exist.",
+      404,
+    );
+  }
+
+  // Check if any selected employees are already assigned to a DIFFERENT matrix
+  const conflicts = await db.query<{
+    employee_code: string;
+    first_name: string;
+    last_name: string;
+    matrix_label: string;
+  }>(
+    `SELECT u.employee_id AS employee_code, u.first_name, u.last_name, eima.matrix_label
+     FROM employee_increment_matrix_assignments eima
+     INNER JOIN users u ON u.id = eima.employee_id
+     WHERE eima.financial_year_id = $1
+       AND u.employee_id = ANY($2::text[])
+       AND eima.matrix_label <> $3`,
+    [financialYearId, normalizedCodes, trimmedLabel],
+  );
+
+  if (conflicts.rows.length > 0) {
+    const names = conflicts.rows.map(
+      (r) => `${r.employee_code} (${r.first_name} ${r.last_name}) — assigned to "${r.matrix_label}"`,
+    );
+    throw new SubCategoryIncrementMatrixError(
+      `Cannot assign: the following employee(s) are already assigned to a different increment matrix. Unassign them first:\n${names.join("\n")}`,
+      409,
+    );
+  }
+
+  // Insert new assignments (or update if same matrix — idempotent re-assignment)
+  const result = await db.query<{ employee_id: string }>(
+    `WITH selected_users AS (
+       SELECT id
+       FROM users
+       WHERE employee_id = ANY($1::text[])
+         AND is_active = TRUE
+     ),
+     upserted AS (
+       INSERT INTO employee_increment_matrix_assignments (
+         employee_id, financial_year_id, matrix_label
+       )
+       SELECT id, $2, $3
+       FROM selected_users
+       ON CONFLICT (employee_id, financial_year_id) DO UPDATE
+         SET matrix_label = EXCLUDED.matrix_label,
+             updated_at = CURRENT_TIMESTAMP
+       RETURNING employee_id
+     )
+     SELECT employee_id FROM upserted`,
+    [normalizedCodes, financialYearId, trimmedLabel],
+  );
+
+  return {
+    assignedCount: result.rows.length,
+    financialYearId,
+    matrixLabel: trimmedLabel,
+  };
+}
+
+export async function unassignIncrementMatrixFromEmployees(
+  financialYearId: number,
+  employeeCodes: string[],
+): Promise<{ unassignedCount: number; financialYearId: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((c) => c.trim()).filter(Boolean))];
+
+  if (normalizedCodes.length === 0) {
+    throw new SubCategoryIncrementMatrixError("At least one employee is required.", 400);
+  }
+
+  const result = await db.query(
+    `DELETE FROM employee_increment_matrix_assignments
+     WHERE financial_year_id = $1
+       AND employee_id IN (
+         SELECT id FROM users WHERE employee_id = ANY($2::text[])
+       )`,
+    [financialYearId, normalizedCodes],
+  );
+
+  return {
+    unassignedCount: result.rowCount ?? 0,
+    financialYearId,
+  };
 }
