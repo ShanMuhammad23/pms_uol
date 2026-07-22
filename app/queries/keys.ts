@@ -9,5 +9,9 @@ export const queryKeys = {
   entities: ["entities"] as const,
   designations: ["designations"] as const,
   formSubmissions: ["form-submissions"] as const,
+  dashboardOverview: ["dashboard-overview"] as const,
   users: ["users"] as const,
+  usersOverview: ["users", "overview"] as const,
+  usersByEmployeeIds: (employeeIds: string[]) =>
+    ["users", "by-ids", employeeIds] as const,
 };

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { DASHBOARD_QUERY_CACHE } from "@/app/queries/query-cache";
 import { queryKeys } from "@/app/queries/keys";
 import { MOCK_PERFORMANCE_MATRIX } from "@/app/helpers/dashboard-performance-matrix";
 import { fetchDashboardFinancialYears } from "@/lib/queries/financial-years-client";
@@ -15,6 +16,7 @@ export function useFinancialYearsQuery() {
   return useQuery({
     queryKey: queryKeys.financialYears,
     queryFn: fetchDashboardFinancialYears,
+    ...DASHBOARD_QUERY_CACHE,
   });
 }
 
@@ -35,6 +37,7 @@ export function usePerformanceMatrixQuery(activeFinancialYearId: number | null) 
     queryKey: queryKeys.performanceMatrix(activeFinancialYearId),
     queryFn: () => fetchDashboardPerformanceMatrix(activeFinancialYearId!),
     enabled: activeFinancialYearId !== null,
+    ...DASHBOARD_QUERY_CACHE,
   });
 }
 
@@ -47,6 +50,7 @@ export function useInstitutionalQuotaChartQuery(
     queryFn: (): Promise<InstitutionalQuotaChartRow[]> =>
       fetchInstitutionalQuotaChartRows(activeFinancialYearId),
     enabled: activeFinancialYearId !== null,
+    ...DASHBOARD_QUERY_CACHE,
   });
 }
 

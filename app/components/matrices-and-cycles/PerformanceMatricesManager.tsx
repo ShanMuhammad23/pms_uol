@@ -8,6 +8,8 @@ import {
   getPerformanceLevelColor,
   getPerformanceLevelTint,
 } from "@/app/helpers/dashboard-helpers";
+import { DASHBOARD_QUERY_CACHE } from "@/app/queries/query-cache";
+import { queryKeys } from "@/app/queries/keys";
 import { fetchFinancialYears } from "@/lib/queries/financial-years-client";
 import {
   assignPerformanceMatrixToEmployees,
@@ -111,8 +113,9 @@ export default function PerformanceMatricesManager() {
   });
 
   const { data: users } = useQuery({
-    queryKey: ["users-for-performance-assignment"],
+    queryKey: queryKeys.users,
     queryFn: fetchUsers,
+    ...DASHBOARD_QUERY_CACHE,
   });
 
   const invalidateMatrix = () => {

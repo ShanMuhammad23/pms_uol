@@ -1,16 +1,33 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
-import { createUser, listUsers, UserError } from "@/lib/queries/users";
+import { createUser, listUsers, listUsersByEmployeeIds, UserError } from "@/lib/queries/users";
 import { validateCreateUserInput } from "@/lib/validation/users";
 import type { CreateUserInput } from "@/types/users";
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+const MAX_EMPLOYEE_IDS = 200;
+
+export async function GET(request: NextRequest) {
   const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
   }
 
   try {
+    const employeeIdsParam = request.nextUrl.searchParams.get("employeeIds");
+
+    if (employeeIdsParam != null && employeeIdsParam.length > 0) {
+      const employeeIds = employeeIdsParam
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .slice(0, MAX_EMPLOYEE_IDS);
+
+      const users = await listUsersByEmployeeIds(employeeIds);
+      return NextResponse.json(users);
+    }
+
     const users = await listUsers();
     return NextResponse.json(users);
   } catch (error) {

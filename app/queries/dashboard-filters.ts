@@ -488,6 +488,7 @@ export function useDashboardFilters({
     designationOptions,
     formStateOptions,
     filteredSubmissions,
+    filterState: baseFilterState,
     activeFilters,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,

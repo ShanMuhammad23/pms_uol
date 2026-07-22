@@ -7,6 +7,7 @@ import {
   approveManagerReview,
   saveManagerReview,
 } from "@/lib/queries/form-submissions-client";
+import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   APPRAISAL_STATUS_LABELS,
@@ -155,7 +156,7 @@ export default function SubmissionDetailView({
           canEditManagerReview: false,
         };
       });
-      queryClient.invalidateQueries({ queryKey: ["form-submissions"] });
+      invalidateStaffListingQueries(queryClient);
     },
     onError: (mutationError: Error) => {
       setSaveMessage(mutationError.message);

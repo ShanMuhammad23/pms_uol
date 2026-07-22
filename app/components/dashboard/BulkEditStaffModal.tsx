@@ -4,9 +4,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Pencil, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  cancelStaffListingQueries,
+  getStaffListingSnapshots,
+  invalidateStaffListingQueries,
+  patchStaffListingCaches,
+  restoreStaffListingSnapshots,
+} from "@/app/helpers/dashboard-listing-cache";
 import { queryKeys } from "@/app/queries/keys";
 import { bulkUpdateEmployeeListingFields } from "@/lib/queries/form-submissions-client";
-import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { UserRecord } from "@/types/users";
 import { cn } from "@/lib/utils";
 
@@ -62,54 +68,63 @@ export function BulkEditStaffModal({
     onMutate: async () => {
       setError(null);
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: queryKeys.formSubmissions }),
+        cancelStaffListingQueries(queryClient),
         queryClient.cancelQueries({ queryKey: queryKeys.users }),
       ]);
 
-      const previousSubmissions = queryClient.getQueryData<FormSubmissionListItem[]>(
-        queryKeys.formSubmissions,
-      );
+      const listingSnapshots = getStaffListingSnapshots(queryClient);
       const previousUsers = queryClient.getQueryData<UserRecord[]>(queryKeys.users);
+      const previousUsersOverview = queryClient.getQueryData<UserRecord[]>(
+        queryKeys.usersOverview,
+      );
 
       const selected = new Set(selectedEmployeeIds);
       const roleValue = roleCategory.trim() || null;
       const gradeValue = gradeGroup.trim() || null;
 
-      queryClient.setQueryData<FormSubmissionListItem[]>(
-        queryKeys.formSubmissions,
-        (current) =>
-          current?.map((row) => {
-            if (!selected.has(row.employeeId)) return row;
-            return {
-              ...row,
-              ...(roleValue ? { roleCategory: roleValue } : {}),
-              ...(gradeValue ? { gradeGroup: gradeValue } : {}),
-            };
-          }),
-      );
+      patchStaffListingCaches(queryClient, (row) => {
+        if (!selected.has(row.employeeId)) return row;
+        return {
+          ...row,
+          ...(roleValue ? { roleCategory: roleValue } : {}),
+          ...(gradeValue ? { gradeGroup: gradeValue } : {}),
+        };
+      });
+
+      const patchUser = (row: UserRecord) => {
+        if (!selected.has(row.employeeId)) return row;
+        return {
+          ...row,
+          ...(roleValue ? { roleCategory: roleValue } : {}),
+          ...(gradeValue ? { gradeGroup: gradeValue } : {}),
+        };
+      };
 
       queryClient.setQueryData<UserRecord[]>(queryKeys.users, (current) =>
-        current?.map((row) => {
-          if (!selected.has(row.employeeId)) return row;
-          return {
-            ...row,
-            ...(roleValue ? { roleCategory: roleValue } : {}),
-            ...(gradeValue ? { gradeGroup: gradeValue } : {}),
-          };
-        }),
+        current?.map(patchUser),
+      );
+      queryClient.setQueryData<UserRecord[]>(queryKeys.usersOverview, (current) =>
+        current?.map(patchUser),
+      );
+      queryClient.setQueriesData<UserRecord[]>(
+        { queryKey: ["users", "by-ids"] },
+        (current) => current?.map(patchUser),
       );
 
-      return { previousSubmissions, previousUsers };
+      return { ...listingSnapshots, previousUsers, previousUsersOverview };
     },
     onError: (mutationError, _vars, context) => {
-      if (context?.previousSubmissions) {
-        queryClient.setQueryData(
-          queryKeys.formSubmissions,
-          context.previousSubmissions,
-        );
+      if (context) {
+        restoreStaffListingSnapshots(queryClient, context);
       }
       if (context?.previousUsers) {
         queryClient.setQueryData(queryKeys.users, context.previousUsers);
+      }
+      if (context?.previousUsersOverview) {
+        queryClient.setQueryData(
+          queryKeys.usersOverview,
+          context.previousUsersOverview,
+        );
       }
       setError(
         mutationError instanceof Error
@@ -118,7 +133,7 @@ export function BulkEditStaffModal({
       );
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.formSubmissions });
+      invalidateStaffListingQueries(queryClient);
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
       onSuccess();
       onClose();

@@ -28,12 +28,14 @@ import {
   type UsersTableColumnDef,
   type UsersTableColumnId,
 } from "@/app/helpers/users-table-columns";
+import { useUsersByEmployeeIdsQuery } from "@/app/queries/users";
 import type { UserRecord } from "@/types/users";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 
 interface UsersListingTableProps {
+  /** Filter-bar-filtered overview rows (drives facets + page ID selection). */
   users: UserRecord[];
   allUsers?: UserRecord[];
   onEdit: (user: UserRecord) => void;
@@ -41,6 +43,7 @@ interface UsersListingTableProps {
   deletePending?: boolean;
   onClearAllFilters: () => void;
 }
+
 
 function columnCellClassName(
   column: UsersTableColumnDef,
@@ -205,6 +208,39 @@ export function UsersListingTable({
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
+  const pageEmployeeIds = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return masterFilteredUsers
+      .slice(start, start + PAGE_SIZE)
+      .map((user) => user.employeeId);
+  }, [masterFilteredUsers, page]);
+
+  const pageOverviewUsers = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return masterFilteredUsers.slice(start, start + PAGE_SIZE);
+  }, [masterFilteredUsers, page]);
+
+  const {
+    data: pageUsersFromApi,
+    isLoading: pageUsersLoading,
+    isFetching: pageUsersFetching,
+  } = useUsersByEmployeeIdsQuery(pageEmployeeIds);
+
+  const paginatedUsers = useMemo(() => {
+    if (!pageUsersFromApi || pageUsersFromApi.length === 0) {
+      return pageOverviewUsers;
+    }
+
+    const byEmployeeId = new Map(
+      pageUsersFromApi.map((user) => [user.employeeId, user]),
+    );
+
+    return pageEmployeeIds.map(
+      (employeeId, index) =>
+        byEmployeeId.get(employeeId) ?? pageOverviewUsers[index],
+    );
+  }, [pageUsersFromApi, pageEmployeeIds, pageOverviewUsers]);
+
   useEffect(() => {
     const available = new Set(masterFilteredUsers.map((row) => row.employeeId));
     setSelectedEmployeeIds((current) => {
@@ -220,11 +256,6 @@ export function UsersListingTable({
       return changed ? next : current;
     });
   }, [masterFilteredUsers]);
-
-  const paginatedUsers = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return masterFilteredUsers.slice(start, start + PAGE_SIZE);
-  }, [page, masterFilteredUsers]);
 
   const filteredEmployeeIds = useMemo(() => {
     const ids: string[] = [];
@@ -246,6 +277,8 @@ export function UsersListingTable({
   const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
   const showPagination = totalCount > 0;
+  const pageBusy = pageEmployeeIds.length > 0 && (pageUsersLoading || pageUsersFetching);
+
 
   const toggleEmployeeSelection = (employeeId: string) => {
     setSelectedEmployeeIds((current) => {
@@ -336,6 +369,11 @@ export function UsersListingTable({
           <p className="text-lg font-semibold text-slate-900 dark:text-white">
             Users listing ( Total: {totalCount}
             {totalCount !== users.length ? ` of ${users.length}` : ""} )
+            {pageBusy ? (
+              <span className="ml-2 text-xs font-normal text-slate-400">
+                Loading page…
+              </span>
+            ) : null}
           </p>
           {selectedCount > 0 ? (
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">

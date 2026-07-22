@@ -18,6 +18,12 @@ export async function fetchFormSubmissions(): Promise<FormSubmissionListItem[]> 
   return parseResponse<FormSubmissionListItem[]>(response);
 }
 
+/** Slim rows for filters, stats cards, and charts — not the staff listing. */
+export async function fetchDashboardOverview(): Promise<FormSubmissionListItem[]> {
+  const response = await fetch("/api/submissions/overview", { cache: "no-store" });
+  return parseResponse<FormSubmissionListItem[]>(response);
+}
+
 export async function fetchFormSubmission(
   id: number,
 ): Promise<FormSubmissionDetail> {

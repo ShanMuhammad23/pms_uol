@@ -51,26 +51,34 @@ export function InlineGradeGroupCell({
         queryKeys.formSubmissions,
       );
       const previousUsers = queryClient.getQueryData<UserRecord[]>(queryKeys.users);
+      const previousUsersOverview = queryClient.getQueryData<UserRecord[]>(
+        queryKeys.usersOverview,
+      );
+
+      const patchSubmission = (row: FormSubmissionListItem) =>
+        row.employeeId === employeeId ? { ...row, gradeGroup: nextValue } : row;
+      const patchUser = (row: UserRecord) =>
+        row.employeeId === employeeId ? { ...row, gradeGroup: nextValue } : row;
 
       queryClient.setQueryData<FormSubmissionListItem[]>(
         queryKeys.formSubmissions,
-        (current) =>
-          current?.map((row) =>
-            row.employeeId === employeeId
-              ? { ...row, gradeGroup: nextValue }
-              : row,
-          ),
+        (current) => current?.map(patchSubmission),
       );
-
+      queryClient.setQueryData(queryKeys.dashboardOverview, (current) =>
+        (current as FormSubmissionListItem[] | undefined)?.map(patchSubmission),
+      );
       queryClient.setQueryData<UserRecord[]>(queryKeys.users, (current) =>
-        current?.map((row) =>
-          row.employeeId === employeeId
-            ? { ...row, gradeGroup: nextValue }
-            : row,
-        ),
+        current?.map(patchUser),
+      );
+      queryClient.setQueryData<UserRecord[]>(queryKeys.usersOverview, (current) =>
+        current?.map(patchUser),
+      );
+      queryClient.setQueriesData<UserRecord[]>(
+        { queryKey: ["users", "by-ids"] },
+        (current) => current?.map(patchUser),
       );
 
-      return { previousSubmissions, previousUsers };
+      return { previousSubmissions, previousUsers, previousUsersOverview };
     },
     onError: (mutationError, _nextValue, context) => {
       if (context?.previousSubmissions) {
@@ -82,6 +90,12 @@ export function InlineGradeGroupCell({
       if (context?.previousUsers) {
         queryClient.setQueryData(queryKeys.users, context.previousUsers);
       }
+      if (context?.previousUsersOverview) {
+        queryClient.setQueryData(
+          queryKeys.usersOverview,
+          context.previousUsersOverview,
+        );
+      }
       setError(
         mutationError instanceof Error
           ? mutationError.message
@@ -90,21 +104,31 @@ export function InlineGradeGroupCell({
       setEditing(true);
     },
     onSuccess: (result) => {
+      const patchSubmission = (row: FormSubmissionListItem) =>
+        row.employeeId === result.employeeId
+          ? { ...row, gradeGroup: result.gradeGroup }
+          : row;
+      const patchUser = (row: UserRecord) =>
+        row.employeeId === result.employeeId
+          ? { ...row, gradeGroup: result.gradeGroup }
+          : row;
+
       queryClient.setQueryData<FormSubmissionListItem[]>(
         queryKeys.formSubmissions,
-        (current) =>
-          current?.map((row) =>
-            row.employeeId === result.employeeId
-              ? { ...row, gradeGroup: result.gradeGroup }
-              : row,
-          ),
+        (current) => current?.map(patchSubmission),
+      );
+      queryClient.setQueryData(queryKeys.dashboardOverview, (current) =>
+        (current as FormSubmissionListItem[] | undefined)?.map(patchSubmission),
       );
       queryClient.setQueryData<UserRecord[]>(queryKeys.users, (current) =>
-        current?.map((row) =>
-          row.employeeId === result.employeeId
-            ? { ...row, gradeGroup: result.gradeGroup }
-            : row,
-        ),
+        current?.map(patchUser),
+      );
+      queryClient.setQueryData<UserRecord[]>(queryKeys.usersOverview, (current) =>
+        current?.map(patchUser),
+      );
+      queryClient.setQueriesData<UserRecord[]>(
+        { queryKey: ["users", "by-ids"] },
+        (current) => current?.map(patchUser),
       );
       setEditing(false);
     },

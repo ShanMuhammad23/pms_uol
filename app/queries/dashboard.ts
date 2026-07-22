@@ -4,7 +4,10 @@ import { useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useDashboardChartMetrics } from "@/app/queries/charts";
 import { useDashboardFilters } from "@/app/queries/dashboard-filters";
-import { useFormSubmissionsQuery } from "@/app/queries/forms";
+import {
+  useDashboardOverviewQuery,
+  useFormSubmissionsQuery,
+} from "@/app/queries/forms";
 import {
   useDashboardEntitiesQuery,
   useUniqueDesignationsQuery,
@@ -16,9 +19,25 @@ import {
   useMatrixForDistribution,
   usePerformanceMatrixQuery,
 } from "@/app/queries/performance";
+import { matchesSubmissionFilters } from "@/app/helpers/dashboard-filters";
 import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
 import { submissionVisibleToHead } from "@/app/helpers/manager-review";
 import { isHeadRole } from "@/lib/auth/home-path";
+import type { FormSubmissionListItem } from "@/types/form-submissions";
+
+function scopeSubmissionsForHead(
+  submissions: FormSubmissionListItem[],
+  headEntityId: number | null,
+  entities: Parameters<typeof submissionVisibleToHead>[2],
+) {
+  if (headEntityId == null || !Number.isFinite(headEntityId)) {
+    return submissions;
+  }
+
+  return submissions.filter((submission) =>
+    submissionVisibleToHead(headEntityId, submission, entities),
+  );
+}
 
 export function useDashboardPage() {
   const isDarkMode = useIsDarkMode();
@@ -45,20 +64,25 @@ export function useDashboardPage() {
     useUniqueDesignationsQuery();
 
   const {
+    data: overview = [],
+    isLoading: overviewLoading,
+  } = useDashboardOverviewQuery();
+
+  const {
     data: submissions = [],
     isLoading: submissionsLoading,
     error: submissionsError,
   } = useFormSubmissionsQuery();
 
-  const scopedSubmissions = useMemo(() => {
-    if (headEntityId == null || !Number.isFinite(headEntityId)) {
-      return submissions;
-    }
+  const scopedOverview = useMemo(
+    () => scopeSubmissionsForHead(overview, headEntityId, entities),
+    [overview, headEntityId, entities],
+  );
 
-    return submissions.filter((submission) =>
-      submissionVisibleToHead(headEntityId, submission, entities),
-    );
-  }, [submissions, headEntityId, entities]);
+  const scopedSubmissions = useMemo(
+    () => scopeSubmissionsForHead(submissions, headEntityId, entities),
+    [submissions, headEntityId, entities],
+  );
 
   const matrixForDistribution = useMatrixForDistribution(performanceMatrix);
 
@@ -78,7 +102,8 @@ export function useDashboardPage() {
     roleCategoryOptions,
     designationOptions,
     formStateOptions,
-    filteredSubmissions,
+    filteredSubmissions: filteredOverview,
+    filterState,
     activeFilters,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,
@@ -90,13 +115,23 @@ export function useDashboardPage() {
     clearAllFilters,
     filterByFormState,
   } = useDashboardFilters({
-    submissions: scopedSubmissions,
+    submissions: scopedOverview,
     entities,
     designations,
   });
 
+  const filteredSubmissions = useMemo(() => {
+    if (scopedSubmissions.length === 0) {
+      return [];
+    }
+
+    return scopedSubmissions.filter((submission) =>
+      matchesSubmissionFilters(submission, filterState),
+    );
+  }, [scopedSubmissions, filterState]);
+
   const chartMetrics = useDashboardChartMetrics({
-    filteredSubmissions,
+    filteredSubmissions: filteredOverview,
     isDarkMode,
     matrixForDistribution,
     institutionalQuotaRows,
@@ -121,6 +156,7 @@ export function useDashboardPage() {
     formStateOptions,
     entitiesLoading,
     designationsLoading,
+    overviewLoading,
     submissionsLoading,
     submissionsError,
     submissions: scopedSubmissions,

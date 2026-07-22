@@ -296,6 +296,56 @@ export async function listUsers(): Promise<UserRecord[]> {
   return result.rows.map(mapUserRow);
 }
 
+/**
+ * Slim user rows for filter facets / head pickers (no qualifications join).
+ */
+export async function listUsersOverview(): Promise<UserRecord[]> {
+  const [mode, excelReady] = await Promise.all([
+    getUserOrgMode(),
+    hasExcelSheetColumns(),
+  ]);
+  const result = await db.query<UserRow>(
+    `${buildUserSelect(mode, excelReady, false)}
+     ORDER BY u.last_name ASC, u.first_name ASC`,
+  );
+
+  return result.rows.map(mapUserRow);
+}
+
+/** Full user rows for a page of employee IDs (preserves request order). */
+export async function listUsersByEmployeeIds(
+  employeeIds: string[],
+): Promise<UserRecord[]> {
+  if (employeeIds.length === 0) {
+    return [];
+  }
+
+  const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  const [mode, excelReady, qualsReady] = await Promise.all([
+    getUserOrgMode(),
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
+  ]);
+  const result = await db.query<UserRow>(
+    `${buildUserSelect(mode, excelReady, qualsReady)}
+     WHERE u.employee_id = ANY($1::text[])`,
+    [uniqueIds],
+  );
+
+  const byEmployeeId = new Map(
+    result.rows.map((row) => [row.employee_id, mapUserRow(row)]),
+  );
+
+  return uniqueIds
+    .map((employeeId) => byEmployeeId.get(employeeId))
+    .filter((user): user is UserRecord => user != null);
+}
+
+
 export async function getUserById(id: number): Promise<UserRecord | null> {
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),

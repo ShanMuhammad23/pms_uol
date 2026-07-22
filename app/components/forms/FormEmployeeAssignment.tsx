@@ -5,16 +5,18 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Filter, RotateCcw, Search } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  MultiSelectFilterDropdown,
+  type MultiSelectOption,
+} from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import { DASHBOARD_QUERY_CACHE } from "@/app/queries/query-cache";
+import { queryKeys } from "@/app/queries/keys";
+import {
   assignFormTemplateToEmployees,
   fetchFormTemplateAssignments,
   unassignFormTemplateFromEmployees,
 } from "@/lib/queries/forms-client";
 import { fetchUsers } from "@/lib/queries/users-client";
 import type { UserRecord } from "@/types/users";
-import {
-  MultiSelectFilterDropdown,
-  type MultiSelectOption,
-} from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -126,8 +128,9 @@ export default function FormEmployeeAssignment({
   const [page, setPage] = useState(1);
 
   const { data: users } = useQuery({
-    queryKey: ["users-for-form-assignment"],
+    queryKey: queryKeys.users,
     queryFn: fetchUsers,
+    ...DASHBOARD_QUERY_CACHE,
   });
 
   const { data: assignedEmployees, refetch } = useQuery({

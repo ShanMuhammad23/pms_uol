@@ -1,5 +1,6 @@
 import {
-  getEntityDescendantIds,
+  getEntitySelfAndAncestorIds,
+  isEntityInCachedSubtree,
   type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
 import {
@@ -35,25 +36,13 @@ function matchesUserEntityFilter(
     return true;
   }
 
-  const selectedEntity = entities.find((entity) => entity.id === selectedEntityId);
-
-  if (!selectedEntity) {
-    return false;
+  if (isEntityInCachedSubtree(user.entityId, selectedEntityId, entities)) {
+    return true;
   }
 
-  const userEntityId =
-    user.entityId == null ? null : Number(user.entityId);
-
-  if (userEntityId != null && !Number.isNaN(userEntityId)) {
-    if (userEntityId === selectedEntityId) {
-      return true;
-    }
-
-    const descendantIds = getEntityDescendantIds(selectedEntityId, entities);
-
-    if (descendantIds.has(userEntityId)) {
-      return true;
-    }
+  const selectedEntity = entities.find((entity) => entity.id === selectedEntityId);
+  if (!selectedEntity) {
+    return false;
   }
 
   return (
@@ -80,52 +69,71 @@ export function matchesUserEntityMultiFilter(
   );
 }
 
+function matchesSearch(user: UserRecord, searchQuery: string): boolean {
+  if (!searchQuery) {
+    return true;
+  }
+
+  const query = searchQuery.toLowerCase();
+  const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+  return (
+    fullName.includes(query) ||
+    user.employeeId.toLowerCase().includes(query) ||
+    user.email.toLowerCase().includes(query)
+  );
+}
+
 export function matchesUserPageFilters(
   user: UserRecord,
   filters: UserPageFilterState,
 ): boolean {
-  const query = filters.searchQuery.toLowerCase();
-  const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
-  const matchesSearch =
-    !filters.searchQuery ||
-    fullName.includes(query) ||
-    user.employeeId.toLowerCase().includes(query) ||
-    user.email.toLowerCase().includes(query);
+  if (!matchesSearch(user, filters.searchQuery)) {
+    return false;
+  }
 
-  const matchesEntity0 = matchesUserEntityMultiFilter(
-    user,
-    filters.selectedCategory0EntityIds,
-    filters.entities,
-  );
-  const matchesEntity1 = matchesUserEntityMultiFilter(
-    user,
-    filters.selectedCategory1EntityIds,
-    filters.entities,
-  );
-  const matchesEntity2 = matchesUserEntityMultiFilter(
-    user,
-    filters.selectedCategory2EntityIds,
-    filters.entities,
-  );
+  if (
+    !matchesUserEntityMultiFilter(
+      user,
+      filters.selectedCategory0EntityIds,
+      filters.entities,
+    )
+  ) {
+    return false;
+  }
 
-  const matchesRoleCategory = matchesMultiSelection(
-    filters.selectedRoleCategories,
-    formatRoleCategoryValue(user.roleCategory),
-  );
+  if (
+    !matchesUserEntityMultiFilter(
+      user,
+      filters.selectedCategory1EntityIds,
+      filters.entities,
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    !matchesUserEntityMultiFilter(
+      user,
+      filters.selectedCategory2EntityIds,
+      filters.entities,
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    !matchesMultiSelection(
+      filters.selectedRoleCategories,
+      formatRoleCategoryValue(user.roleCategory),
+    )
+  ) {
+    return false;
+  }
 
   const designation = user.designation?.trim() ?? "";
-  const matchesDesignation = matchesMultiSelection(
+  return matchesMultiSelection(
     filters.selectedDesignations,
     designation || null,
-  );
-
-  return (
-    matchesSearch &&
-    matchesEntity0 &&
-    matchesEntity1 &&
-    matchesEntity2 &&
-    matchesRoleCategory &&
-    matchesDesignation
   );
 }
 
@@ -147,4 +155,23 @@ export function matchesUserPageFiltersExcluding(
     selectedDesignations:
       exclude === "designation" ? null : filters.selectedDesignations,
   });
+}
+
+/** Increment facet counts for entity options that contain this user's entity. */
+export function addUserToEntityFacetCounts(
+  user: UserRecord,
+  optionEntityIds: Set<number>,
+  counts: Map<number, number>,
+  entities: EntityRecord[],
+) {
+  if (user.entityId == null) {
+    return;
+  }
+
+  const chain = getEntitySelfAndAncestorIds(user.entityId, entities);
+  for (const ancestorId of chain) {
+    if (optionEntityIds.has(ancestorId)) {
+      counts.set(ancestorId, (counts.get(ancestorId) ?? 0) + 1);
+    }
+  }
 }

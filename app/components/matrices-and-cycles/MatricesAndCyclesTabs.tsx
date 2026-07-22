@@ -20,7 +20,7 @@ const tabs: Array<{
   icon: typeof CalendarRange;
 }> = [
   { id: "financial-year", label: "Financial Year", description: "Cycle dates", icon: CalendarRange },
-  { id: "matrices", label: "Matrices", description: "Levels & quartiles", icon: Grid3X3 },
+  { id: "matrices", label: "Performance Matrix", description: "Levels & quartiles", icon: Grid3X3 },
   { id: "increment-matrix", label: "Increment Matrix", description: "Sub-category %", icon: TrendingUp },
   { id: "institutional-quota", label: "Institutional Quota", description: "Allocation caps", icon: Percent },
 ];

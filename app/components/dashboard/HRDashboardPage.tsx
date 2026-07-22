@@ -30,6 +30,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     formStateOptions,
     entitiesLoading,
     designationsLoading,
+    overviewLoading,
     submissionsLoading,
     submissionsError,
     performanceMatrixLoading,
@@ -76,11 +77,11 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           selectedDesignations={selectedDesignations}
           onDesignationChange={handleDesignationChange}
           designationOptions={designationOptions}
-          designationsLoading={designationsLoading}
+          designationsLoading={designationsLoading || overviewLoading}
           selectedFormStates={selectedFormStates}
           onFormStateChange={handleFormStateChange}
           formStateOptions={formStateOptions}
-          entitiesLoading={entitiesLoading}
+          entitiesLoading={entitiesLoading || overviewLoading}
           activeFilters={activeFilters}
           onClearAllFilters={clearAllFilters}
         />

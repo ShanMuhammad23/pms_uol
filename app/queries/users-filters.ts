@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useState,
@@ -18,10 +19,9 @@ import {
 } from "@/app/helpers/dashboard-entity-filters";
 import { formatRoleCategoryValue } from "@/app/helpers/dashboard-filters";
 import {
-  matchesUserEntityMultiFilter,
+  addUserToEntityFacetCounts,
   matchesUserPageFilters,
   matchesUserPageFiltersExcluding,
-  type UserFilterDimension,
   type UserPageFilterState,
 } from "@/app/helpers/users-page-filters";
 import type { EntityRecord } from "@/types/entities";
@@ -82,6 +82,18 @@ function setPrunedSelection<T extends string | number>(
   setter((current) => {
     const next = pruneMultiSelection(current, availableValues);
     return selectionsEqual(current, next) ? current : next;
+  });
+}
+
+function sortRoleOptions(
+  left: MultiSelectOption,
+  right: MultiSelectOption,
+): number {
+  if (left.value === "—") return 1;
+  if (right.value === "—") return -1;
+  return left.label.localeCompare(right.label, undefined, {
+    numeric: true,
+    sensitivity: "base",
   });
 }
 
@@ -150,94 +162,183 @@ export function useUsersPageFilters({
     ],
   );
 
+  // Keep dropdown selection snappy; defer the expensive facet/list work.
+  const deferredFilterState = useDeferredValue(baseFilterState);
+  const deferredUsers = useDeferredValue(users);
+
+  const category0OptionIds = useMemo(
+    () => new Set(category0Entities.map((entity) => entity.id)),
+    [category0Entities],
+  );
+  const category1OptionIds = useMemo(
+    () => new Set(category1Entities.map((entity) => entity.id)),
+    [category1Entities],
+  );
+  const category2OptionIds = useMemo(
+    () => new Set(category2Entities.map((entity) => entity.id)),
+    [category2Entities],
+  );
+
   const filteredUsers = useMemo(
-    () => users.filter((user) => matchesUserPageFilters(user, baseFilterState)),
-    [users, baseFilterState],
-  );
-
-  const countForDimension = useCallback(
-    (dimension: UserFilterDimension, predicate: (user: UserRecord) => boolean) => {
-      let count = 0;
-      for (const user of users) {
-        if (
-          matchesUserPageFiltersExcluding(user, baseFilterState, dimension) &&
-          predicate(user)
-        ) {
-          count += 1;
-        }
-      }
-      return count;
-    },
-    [users, baseFilterState],
-  );
-
-  const category0Options = useMemo<MultiSelectOption[]>(
     () =>
-      category0Entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: countForDimension("category0", (user) =>
-          matchesUserEntityMultiFilter(user, [entity.id], entities),
-        ),
-      })),
-    [category0Entities, countForDimension, entities],
+      deferredUsers.filter((user) =>
+        matchesUserPageFilters(user, deferredFilterState),
+      ),
+    [deferredUsers, deferredFilterState],
   );
+
+  const category0Options = useMemo<MultiSelectOption[]>(() => {
+    const counts = new Map<number, number>();
+    for (const entity of category0Entities) {
+      counts.set(entity.id, 0);
+    }
+
+    for (const user of deferredUsers) {
+      if (
+        !matchesUserPageFiltersExcluding(
+          user,
+          deferredFilterState,
+          "category0",
+        )
+      ) {
+        continue;
+      }
+      addUserToEntityFacetCounts(
+        user,
+        category0OptionIds,
+        counts,
+        deferredFilterState.entities,
+      );
+    }
+
+    return category0Entities.map((entity) => ({
+      value: String(entity.id),
+      label: entity.name,
+      count: counts.get(entity.id) ?? 0,
+    }));
+  }, [
+    category0Entities,
+    category0OptionIds,
+    deferredUsers,
+    deferredFilterState,
+  ]);
 
   const category0DistributionOptions = useMemo<MultiSelectOption[]>(() => {
     const visibleEntities =
-      selectedCategory0EntityIds !== null && selectedCategory0EntityIds.length > 0
+      deferredFilterState.selectedCategory0EntityIds !== null &&
+      deferredFilterState.selectedCategory0EntityIds.length > 0
         ? category0Entities.filter((entity) =>
-            selectedCategory0EntityIds.includes(entity.id),
+            deferredFilterState.selectedCategory0EntityIds!.includes(entity.id),
           )
         : category0Entities;
+
+    const visibleIds = new Set(visibleEntities.map((entity) => entity.id));
+    const counts = new Map<number, number>();
+    for (const entity of visibleEntities) {
+      counts.set(entity.id, 0);
+    }
+
+    for (const user of filteredUsers) {
+      addUserToEntityFacetCounts(
+        user,
+        visibleIds,
+        counts,
+        deferredFilterState.entities,
+      );
+    }
 
     return visibleEntities
       .map((entity) => ({
         value: String(entity.id),
         label: entity.name,
-        count: filteredUsers.filter((user) =>
-          matchesUserEntityMultiFilter(user, [entity.id], entities),
-        ).length,
+        count: counts.get(entity.id) ?? 0,
       }))
       .filter((option) => option.count > 0);
+  }, [category0Entities, deferredFilterState, filteredUsers]);
+
+  const category1Options = useMemo<MultiSelectOption[]>(() => {
+    const counts = new Map<number, number>();
+    for (const entity of category1Entities) {
+      counts.set(entity.id, 0);
+    }
+
+    for (const user of deferredUsers) {
+      if (
+        !matchesUserPageFiltersExcluding(
+          user,
+          deferredFilterState,
+          "category1",
+        )
+      ) {
+        continue;
+      }
+      addUserToEntityFacetCounts(
+        user,
+        category1OptionIds,
+        counts,
+        deferredFilterState.entities,
+      );
+    }
+
+    return category1Entities.map((entity) => ({
+      value: String(entity.id),
+      label: entity.name,
+      count: counts.get(entity.id) ?? 0,
+    }));
   }, [
-    category0Entities,
-    selectedCategory0EntityIds,
-    filteredUsers,
-    entities,
+    category1Entities,
+    category1OptionIds,
+    deferredUsers,
+    deferredFilterState,
   ]);
 
-  const category1Options = useMemo<MultiSelectOption[]>(
-    () =>
-      category1Entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: countForDimension("category1", (user) =>
-          matchesUserEntityMultiFilter(user, [entity.id], entities),
-        ),
-      })),
-    [category1Entities, countForDimension, entities],
-  );
+  const category2Options = useMemo<MultiSelectOption[]>(() => {
+    const counts = new Map<number, number>();
+    for (const entity of category2Entities) {
+      counts.set(entity.id, 0);
+    }
 
-  const category2Options = useMemo<MultiSelectOption[]>(
-    () =>
-      category2Entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: countForDimension("category2", (user) =>
-          matchesUserEntityMultiFilter(user, [entity.id], entities),
-        ),
-      })),
-    [category2Entities, countForDimension, entities],
-  );
+    for (const user of deferredUsers) {
+      if (
+        !matchesUserPageFiltersExcluding(
+          user,
+          deferredFilterState,
+          "category2",
+        )
+      ) {
+        continue;
+      }
+      addUserToEntityFacetCounts(
+        user,
+        category2OptionIds,
+        counts,
+        deferredFilterState.entities,
+      );
+    }
+
+    return category2Entities.map((entity) => ({
+      value: String(entity.id),
+      label: entity.name,
+      count: counts.get(entity.id) ?? 0,
+    }));
+  }, [
+    category2Entities,
+    category2OptionIds,
+    deferredUsers,
+    deferredFilterState,
+  ]);
 
   const roleCategoryOptions = useMemo<MultiSelectOption[]>(() => {
     const counts = new Map<string, number>();
 
-    for (const user of users) {
+    for (const user of deferredUsers) {
       const value = formatRoleCategoryValue(user.roleCategory);
       if (
-        matchesUserPageFiltersExcluding(user, baseFilterState, "roleCategory")
+        matchesUserPageFiltersExcluding(
+          user,
+          deferredFilterState,
+          "roleCategory",
+        )
       ) {
         counts.set(value, (counts.get(value) ?? 0) + 1);
       } else if (!counts.has(value)) {
@@ -259,30 +360,39 @@ export function useUsersPageFilters({
         label: value,
         count,
       }))
-      .sort((left, right) => {
-        if (left.value === "—") return 1;
-        if (right.value === "—") return -1;
-        return left.label.localeCompare(right.label, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        });
-      });
-  }, [users, baseFilterState, selectedRoleCategories]);
+      .sort(sortRoleOptions);
+  }, [deferredUsers, deferredFilterState, selectedRoleCategories]);
 
-  const designationOptions = useMemo<MultiSelectOption[]>(
-    () =>
-      designations
-        .map((designation) => ({
-          value: designation,
-          label: designation,
-          count: countForDimension(
-            "designation",
-            (user) => (user.designation?.trim() ?? "") === designation,
-          ),
-        }))
-        .filter((option) => option.count > 0),
-    [designations, countForDimension],
-  );
+  const designationOptions = useMemo<MultiSelectOption[]>(() => {
+    const counts = new Map<string, number>();
+
+    for (const user of deferredUsers) {
+      if (
+        !matchesUserPageFiltersExcluding(
+          user,
+          deferredFilterState,
+          "designation",
+        )
+      ) {
+        continue;
+      }
+
+      const designation = user.designation?.trim() ?? "";
+      if (!designation) {
+        continue;
+      }
+
+      counts.set(designation, (counts.get(designation) ?? 0) + 1);
+    }
+
+    return designations
+      .map((designation) => ({
+        value: designation,
+        label: designation,
+        count: counts.get(designation) ?? 0,
+      }))
+      .filter((option) => option.count > 0);
+  }, [designations, deferredUsers, deferredFilterState]);
 
   const handleCategory0EntityChange = useCallback((values: string[] | null) => {
     setSelectedCategory0EntityIds(fromStringIds(values));

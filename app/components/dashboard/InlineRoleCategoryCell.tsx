@@ -2,9 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  cancelStaffListingQueries,
+  getStaffListingSnapshots,
+  patchStaffListingCaches,
+  restoreStaffListingSnapshots,
+} from "@/app/helpers/dashboard-listing-cache";
 import { queryKeys } from "@/app/queries/keys";
 import { updateEmployeeRoleCategory } from "@/lib/queries/form-submissions-client";
-import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { UserRecord } from "@/types/users";
 import { cn } from "@/lib/utils";
 
@@ -43,44 +48,56 @@ export function InlineRoleCategoryCell({
     onMutate: async (nextValue) => {
       setError(null);
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: queryKeys.formSubmissions }),
+        cancelStaffListingQueries(queryClient),
         queryClient.cancelQueries({ queryKey: queryKeys.users }),
       ]);
 
-      const previousSubmissions = queryClient.getQueryData<FormSubmissionListItem[]>(
-        queryKeys.formSubmissions,
-      );
+      const listingSnapshots = getStaffListingSnapshots(queryClient);
       const previousUsers = queryClient.getQueryData<UserRecord[]>(queryKeys.users);
-
-      queryClient.setQueryData<FormSubmissionListItem[]>(
-        queryKeys.formSubmissions,
-        (current) =>
-          current?.map((row) =>
-            row.employeeId === employeeId
-              ? { ...row, roleCategory: nextValue }
-              : row,
-          ),
+      const previousUsersOverview = queryClient.getQueryData<UserRecord[]>(
+        queryKeys.usersOverview,
       );
+
+      patchStaffListingCaches(queryClient, (row) =>
+        row.employeeId === employeeId
+          ? { ...row, roleCategory: nextValue }
+          : row,
+      );
+
+      const patchUser = (row: UserRecord) =>
+        row.employeeId === employeeId
+          ? { ...row, roleCategory: nextValue }
+          : row;
 
       queryClient.setQueryData<UserRecord[]>(queryKeys.users, (current) =>
-        current?.map((row) =>
-          row.employeeId === employeeId
-            ? { ...row, roleCategory: nextValue }
-            : row,
-        ),
+        current?.map(patchUser),
+      );
+      queryClient.setQueryData<UserRecord[]>(queryKeys.usersOverview, (current) =>
+        current?.map(patchUser),
+      );
+      queryClient.setQueriesData<UserRecord[]>(
+        { queryKey: ["users", "by-ids"] },
+        (current) => current?.map(patchUser),
       );
 
-      return { previousSubmissions, previousUsers };
+      return {
+        ...listingSnapshots,
+        previousUsers,
+        previousUsersOverview,
+      };
     },
     onError: (mutationError, _nextValue, context) => {
-      if (context?.previousSubmissions) {
-        queryClient.setQueryData(
-          queryKeys.formSubmissions,
-          context.previousSubmissions,
-        );
+      if (context) {
+        restoreStaffListingSnapshots(queryClient, context);
       }
       if (context?.previousUsers) {
         queryClient.setQueryData(queryKeys.users, context.previousUsers);
+      }
+      if (context?.previousUsersOverview) {
+        queryClient.setQueryData(
+          queryKeys.usersOverview,
+          context.previousUsersOverview,
+        );
       }
       setError(
         mutationError instanceof Error
@@ -90,21 +107,25 @@ export function InlineRoleCategoryCell({
       setEditing(true);
     },
     onSuccess: (result) => {
-      queryClient.setQueryData<FormSubmissionListItem[]>(
-        queryKeys.formSubmissions,
-        (current) =>
-          current?.map((row) =>
-            row.employeeId === result.employeeId
-              ? { ...row, roleCategory: result.roleCategory }
-              : row,
-          ),
+      patchStaffListingCaches(queryClient, (row) =>
+        row.employeeId === result.employeeId
+          ? { ...row, roleCategory: result.roleCategory }
+          : row,
       );
+      const patchUser = (row: UserRecord) =>
+        row.employeeId === result.employeeId
+          ? { ...row, roleCategory: result.roleCategory }
+          : row;
+
       queryClient.setQueryData<UserRecord[]>(queryKeys.users, (current) =>
-        current?.map((row) =>
-          row.employeeId === result.employeeId
-            ? { ...row, roleCategory: result.roleCategory }
-            : row,
-        ),
+        current?.map(patchUser),
+      );
+      queryClient.setQueryData<UserRecord[]>(queryKeys.usersOverview, (current) =>
+        current?.map(patchUser),
+      );
+      queryClient.setQueriesData<UserRecord[]>(
+        { queryKey: ["users", "by-ids"] },
+        (current) => current?.map(patchUser),
       );
       setEditing(false);
     },

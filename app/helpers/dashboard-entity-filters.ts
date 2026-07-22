@@ -109,32 +109,112 @@ export function getEffectiveEntityFilterId(
   return "ALL";
 }
 
-export function getEntityDescendantIds(
-  rootId: number,
-  entities: EntityRecord[],
-): Set<number> {
-  const descendants = new Set<number>();
-  const childrenByParent = new Map<number, number[]>();
+type EntityTreeCache = {
+  childrenByParent: Map<number, number[]>;
+  descendantsByRoot: Map<number, Set<number>>;
+  /** entityId → self + all ancestors (for O(1) subtree membership checks). */
+  selfAndAncestorsById: Map<number, Set<number>>;
+  entitiesById: Map<number, EntityRecord>;
+};
 
-  entities.forEach((entity) => {
+const entityTreeCache = new WeakMap<EntityRecord[], EntityTreeCache>();
+
+function getEntityTreeCache(entities: EntityRecord[]): EntityTreeCache {
+  const cached = entityTreeCache.get(entities);
+  if (cached) {
+    return cached;
+  }
+
+  const childrenByParent = new Map<number, number[]>();
+  const entitiesById = new Map<number, EntityRecord>();
+
+  for (const entity of entities) {
+    entitiesById.set(entity.id, entity);
     if (entity.parentEntityId !== null) {
       const siblings = childrenByParent.get(entity.parentEntityId) ?? [];
       siblings.push(entity.id);
       childrenByParent.set(entity.parentEntityId, siblings);
     }
-  });
+  }
 
+  const selfAndAncestorsById = new Map<number, Set<number>>();
+  for (const entity of entities) {
+    const chain = new Set<number>();
+    let current: EntityRecord | undefined = entity;
+    while (current) {
+      chain.add(current.id);
+      current =
+        current.parentEntityId != null
+          ? entitiesById.get(current.parentEntityId)
+          : undefined;
+    }
+    selfAndAncestorsById.set(entity.id, chain);
+  }
+
+  const next: EntityTreeCache = {
+    childrenByParent,
+    descendantsByRoot: new Map(),
+    selfAndAncestorsById,
+    entitiesById,
+  };
+  entityTreeCache.set(entities, next);
+  return next;
+}
+
+/** Self + ancestors for an entity (empty if unknown). */
+export function getEntitySelfAndAncestorIds(
+  entityId: number,
+  entities: EntityRecord[],
+): Set<number> {
+  return (
+    getEntityTreeCache(entities).selfAndAncestorsById.get(entityId) ??
+    new Set()
+  );
+}
+
+/**
+ * True when `entityId` is `rootId` or a descendant of `rootId`.
+ * Uses a cached ancestor index — O(1) after first build for the entities array.
+ */
+export function isEntityInCachedSubtree(
+  entityId: number | null | undefined,
+  rootId: number,
+  entities: EntityRecord[],
+): boolean {
+  if (entityId == null) {
+    return false;
+  }
+
+  if (entityId === rootId) {
+    return true;
+  }
+
+  return getEntitySelfAndAncestorIds(entityId, entities).has(rootId);
+}
+
+export function getEntityDescendantIds(
+  rootId: number,
+  entities: EntityRecord[],
+): Set<number> {
+  const cache = getEntityTreeCache(entities);
+  const cached = cache.descendantsByRoot.get(rootId);
+  if (cached) {
+    return cached;
+  }
+
+  const descendants = new Set<number>();
   const stack = [rootId];
 
   while (stack.length > 0) {
     const current = stack.pop()!;
 
-    for (const childId of childrenByParent.get(current) ?? []) {
+    for (const childId of cache.childrenByParent.get(current) ?? []) {
       descendants.add(childId);
       stack.push(childId);
     }
   }
 
+  cache.descendantsByRoot.set(rootId, descendants);
   return descendants;
 }
 

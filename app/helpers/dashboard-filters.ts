@@ -1,6 +1,7 @@
 import type { FormState } from "@/app/helpers/dashboard-types";
 import {
   getEntityDescendantIds,
+  isEntityInCachedSubtree,
   type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
 import type { EntityRecord } from "@/types/entities";
@@ -56,20 +57,14 @@ export function matchesSubmissionEntityFilter(
     return true;
   }
 
+  if (isEntityInCachedSubtree(submission.entityId, selectedEntityId, entities)) {
+    return true;
+  }
+
   const selectedEntity = entities.find((entity) => entity.id === selectedEntityId);
 
   if (!selectedEntity) {
     return false;
-  }
-
-  if (submission.entityId === selectedEntityId) {
-    return true;
-  }
-
-  const descendantIds = getEntityDescendantIds(selectedEntityId, entities);
-
-  if (submission.entityId != null && descendantIds.has(submission.entityId)) {
-    return true;
   }
 
   return (

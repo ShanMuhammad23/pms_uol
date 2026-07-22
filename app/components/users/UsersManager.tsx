@@ -1,22 +1,23 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Table2, Users } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { EditUserModal } from "@/app/components/users/EditUserModal";
 import { UsersListingTable } from "@/app/components/users/UsersListingTable";
+import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { queryKeys } from "@/app/queries/keys";
 import {
   useEntitiesQuery,
   useUniqueDesignationsQuery,
 } from "@/app/queries/organization";
+import { useUsersOverviewQuery } from "@/app/queries/users";
 import { useUsersPageFilters } from "@/app/queries/users-filters";
 import {
   createUser,
   deleteUser,
-  fetchUsers,
   updateUser,
 } from "@/lib/queries/users-client";
 import {
@@ -76,12 +77,9 @@ export default function UsersManager() {
 
   const {
     data: users = [],
-    isLoading: usersLoading,
+    isLoading: overviewLoading,
     error,
-  } = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: fetchUsers,
-  });
+  } = useUsersOverviewQuery();
 
   const {
     selectedCategory0EntityIds,
@@ -152,7 +150,7 @@ export default function UsersManager() {
       });
       setEditingUser(null);
       invalidateList();
-      void queryClient.invalidateQueries({ queryKey: queryKeys.formSubmissions });
+      invalidateStaffListingQueries(queryClient);
     },
     onError: (mutationError: Error) => {
       setFormMessage({ tone: "error", text: mutationError.message });
@@ -177,7 +175,7 @@ export default function UsersManager() {
   });
 
   const isSubmitting = createMutation.isPending;
-  const isLoading = entitiesLoading || usersLoading;
+  const filtersReady = !entitiesLoading && !overviewLoading;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -480,7 +478,7 @@ export default function UsersManager() {
         </div>
       ) : null}
 
-      {activeTab === "list" && isLoading ? (
+      {activeTab === "list" && !filtersReady ? (
         <div className="rounded-md border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
           Loading users...
         </div>
@@ -492,7 +490,7 @@ export default function UsersManager() {
         </div>
       ) : null}
 
-      {activeTab === "list" && !isLoading && !error && users.length === 0 ? (
+      {activeTab === "list" && filtersReady && !error && users.length === 0 ? (
         <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
           <Users className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">No users yet</p>
@@ -502,7 +500,7 @@ export default function UsersManager() {
         </div>
       ) : null}
 
-      {activeTab === "list" && !isLoading && !error && users.length > 0 ? (
+      {activeTab === "list" && filtersReady && !error && users.length > 0 ? (
         <div className="space-y-4">
           <DashboardFilterBar
             selectedCategory0EntityIds={selectedCategory0EntityIds}
@@ -522,8 +520,8 @@ export default function UsersManager() {
             selectedDesignations={selectedDesignations}
             onDesignationChange={handleDesignationChange}
             designationOptions={designationOptions}
-            designationsLoading={designationsLoading}
-            entitiesLoading={entitiesLoading}
+            designationsLoading={designationsLoading || overviewLoading}
+            entitiesLoading={entitiesLoading || overviewLoading}
             activeFilters={activeFilters}
             onClearAllFilters={clearAllFilters}
             showFormStatus={false}
