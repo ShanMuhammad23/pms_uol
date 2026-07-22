@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
 import {
   createFormTemplate,
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
       : undefined;
 
     const template = await createFormTemplate(body, createdById);
+    revalidatePath("/dashboard/forms");
     return NextResponse.json(template, { status: 201 });
   } catch (error) {
     if (error instanceof FormTemplateError) {

@@ -106,7 +106,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
           <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-900/30 dark:text-indigo-100">
             <span className="text-indigo-600 dark:text-indigo-300">Category</span>
             <span className="font-medium text-text-primary">
-              {CATEGORY_LABELS[template.targetCategory]}
+              {template.targetCategory ? CATEGORY_LABELS[template.targetCategory] : "Unassigned"}
               {template.targetSubCategory ? ` · ${SUB_CATEGORY_LABELS[template.targetSubCategory]}` : ""}
             </span>
           </span>

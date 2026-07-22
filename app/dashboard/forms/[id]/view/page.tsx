@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
 import { getFormTemplateById } from "@/lib/queries/forms";
 
+export const dynamic = "force-dynamic";
+
 interface ViewFormPageProps {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ print?: string; download?: string }>;

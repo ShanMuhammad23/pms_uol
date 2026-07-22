@@ -22,8 +22,8 @@ interface FormTemplateListRow {
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
-  target_category: EmployeeCategory;
-  target_sub_category: SubCategory;
+  target_category: EmployeeCategory | null;
+  target_sub_category: SubCategory | null;
   question_count: string;
   appraisal_count: string;
   assigned_employee_count: string;
@@ -37,8 +37,8 @@ interface FormTemplateRow {
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
-  target_category: EmployeeCategory;
-  target_sub_category: SubCategory;
+  target_category: EmployeeCategory | null;
+  target_sub_category: SubCategory | null;
   created_at: string;
   updated_at: string;
 }
@@ -101,11 +101,15 @@ async function resolveCycleId(cycleId?: number): Promise<number> {
 
 async function checkDuplicateTarget(
   cycleId: number,
-  targetCategory: EmployeeCategory,
-  targetSubCategory: SubCategory,
+  targetCategory: EmployeeCategory | undefined,
+  targetSubCategory: SubCategory | undefined,
   excludeId?: number,
   client?: PoolClient,
 ): Promise<void> {
+  if (!targetCategory || !targetSubCategory) {
+    return;
+  }
+
   const executor = client ?? db;
   const params: Array<number | EmployeeCategory | SubCategory> = [
     cycleId,
@@ -408,9 +412,11 @@ async function syncFormStructure(
 
   for (const section of input.sections) {
     const sectionId = await upsertSection(templateId, section, null, client);
+    sectionIds.add(sectionId);
 
     for (const question of section.questions) {
-      await syncQuestion(templateId, question, sectionId, client);
+      const qId = await syncQuestion(templateId, question, sectionId, client);
+      questionIds.add(qId);
     }
 
     for (const subsection of section.subsections) {
@@ -420,15 +426,23 @@ async function syncFormStructure(
         sectionId,
         client,
       );
+      sectionIds.add(subsectionId);
 
       for (const question of subsection.questions) {
-        await syncQuestion(templateId, question, subsectionId, client);
+        const qId = await syncQuestion(
+          templateId,
+          question,
+          subsectionId,
+          client,
+        );
+        questionIds.add(qId);
       }
     }
   }
 
   for (const question of input.questions) {
-    await syncQuestion(templateId, question, null, client);
+    const qId = await syncQuestion(templateId, question, null, client);
+    questionIds.add(qId);
   }
 
   const existingSections = await client.query<{
@@ -760,8 +774,8 @@ export async function createFormTemplate(
         input.title,
         input.description || null,
         cycleId,
-        input.targetCategory,
-        input.targetSubCategory,
+        input.targetCategory ?? null,
+        input.targetSubCategory ?? null,
         createdById ?? null,
       ],
     );
@@ -833,8 +847,8 @@ export async function updateFormTemplate(
         input.title,
         input.description || null,
         cycleId,
-        input.targetCategory,
-        input.targetSubCategory,
+        input.targetCategory ?? null,
+        input.targetSubCategory ?? null,
         id,
       ],
     );

@@ -70,17 +70,18 @@ export function validateFormTemplateInput(
   }
 
   if (
-    !input.targetCategory ||
+    input.targetCategory &&
     !EMPLOYEE_CATEGORIES.includes(input.targetCategory)
   ) {
-    return "Target category is required.";
+    return "Invalid target category.";
   }
 
   if (
-    !input.targetSubCategory ||
+    input.targetCategory &&
+    input.targetSubCategory &&
     !CATEGORY_SUB_MAP[input.targetCategory].includes(input.targetSubCategory)
   ) {
-    return "Target sub-category is required.";
+    return "Invalid target sub-category.";
   }
 
   const sections = input.sections ?? [];

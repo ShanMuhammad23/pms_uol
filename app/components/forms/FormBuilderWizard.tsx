@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/app/components/auth/Button";
-import CategoryAssignmentStep from "./steps/CategoryAssignmentStep";
+import FormEmployeeAssignment from "./FormEmployeeAssignment";
 import {
   createFormTemplate,
   FormTemplateRequestError,
@@ -13,19 +13,15 @@ import {
 } from "@/lib/queries/forms-client";
 import type {
   AppraisalCycleRecord,
-  EmployeeCategory,
   FormSectionInput,
   FormTemplateInput,
   FormTemplateRecord,
   QuestionInput,
-  SubCategory,
 } from "@/types/forms";
 import {
-  CATEGORY_SUB_MAP,
   countAllQuestions,
   createClientId,
   createEmptyQuestion,
-  EMPLOYEE_CATEGORIES,
   FIELD_TYPES,
   FIELD_TYPE_LABELS,
   applyQuestionInputTypeChange,
@@ -50,7 +46,6 @@ import {
   ChevronDown,
   Settings2,
   Eye,
-  Save,
   ArrowLeft,
   FileText,
   Layers,
@@ -65,7 +60,7 @@ interface QuestionLocation {
 
 const STEPS = [
   { id: "design" as const, label: "Design", icon: LayoutTemplate, description: "Build your form structure" },
-  { id: "category" as const, label: "Assign", icon: Users, description: "Set target audience" },
+  { id: "assign" as const, label: "Assign", icon: Users, description: "Assign form to employees" },
 ] as const;
 
 interface FormBuilderWizardProps {
@@ -97,8 +92,6 @@ function mapRecordToState(record: FormTemplateRecord) {
   return {
     title: record.title,
     description: record.description ?? "",
-    targetCategory: record.targetCategory,
-    targetSubCategory: record.targetSubCategory,
     cycleId: record.cycleId,
     sections: normalized.sections,
     questions: normalized.questions,
@@ -1201,32 +1194,17 @@ export default function FormBuilderWizard({
       ? pickDefaultAppraisalCycleId(appraisalCycles)
       : initialState?.cycleId ?? pickDefaultAppraisalCycleId(appraisalCycles),
   );
-  const [targetCategory, setTargetCategory] = useState<EmployeeCategory | "">(
-    copyMode
-      ? initialState?.targetCategory ?? ""
-      : initialState?.targetCategory ?? EMPLOYEE_CATEGORIES[0],
-  );
-  const [targetSubCategory, setTargetSubCategory] = useState<SubCategory | "">(
-    copyMode
-      ? initialState?.targetSubCategory ?? ""
-      : initialState?.targetSubCategory ?? CATEGORY_SUB_MAP[EMPLOYEE_CATEGORIES[0]][0],
-  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [duplicateFormId, setDuplicateFormId] = useState<number | null>(null);
+  const [savedTemplateId, setSavedTemplateId] = useState<number | null>(templateId ?? null);
 
   const payload = useMemo<FormTemplateInput | null>(() => {
-    if (!targetCategory || !targetSubCategory) {
-      return null;
-    }
-
     const normalized = normalizeRootFormStructure(sections, questions);
 
     return {
       title: title.trim(),
       description: description.trim(),
-      targetCategory,
-      targetSubCategory,
       sections: normalized.sections,
       questions: normalized.questions,
       ...(cycleId ? { cycleId } : {}),
@@ -1234,8 +1212,6 @@ export default function FormBuilderWizard({
   }, [
     title,
     description,
-    targetCategory,
-    targetSubCategory,
     sections,
     questions,
     cycleId,
@@ -1251,12 +1227,8 @@ export default function FormBuilderWizard({
     onSuccess: async (template: FormTemplateRecord) => {
       await queryClient.invalidateQueries({ queryKey: ["form-templates"] });
       const nextId = templateId ?? template.id;
-      if (templateId) {
-        router.push(`/dashboard/forms/${nextId}/view`);
-      } else {
-        router.push(`/dashboard/forms/${nextId}/assign`);
-      }
-      router.refresh();
+      setSavedTemplateId(nextId);
+      setStep(1);
     },
     onError: (error: Error) => {
       if (error instanceof FormTemplateRequestError) {
@@ -1303,24 +1275,14 @@ export default function FormBuilderWizard({
     return Object.keys(nextErrors).length === 0;
   };
 
-  const validateCategoryStep = () => {
-    const nextErrors: Record<string, string> = {};
-
-    if (
-      appraisalCycles.length > 0 &&
-      !cycleId
-    ) {
-      nextErrors.cycleId = "Appraisal cycle is required.";
-    }
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
   const goNext = () => {
     setSubmitError(null);
     setDuplicateFormId(null);
     if (step === 0 && !validateDesignStep()) {
+      return;
+    }
+    if (step === 0 && payload) {
+      saveMutation.mutate(payload);
       return;
     }
     setStep((current) => Math.min(current + 1, STEPS.length - 1));
@@ -1333,18 +1295,12 @@ export default function FormBuilderWizard({
     setStep((current) => Math.max(current - 1, 0));
   };
 
-  const handleSubmit = () => {
-    setSubmitError(null);
-    setDuplicateFormId(null);
-    if (!validateCategoryStep() || !payload) {
-      return;
+  const handleFinish = () => {
+    if (savedTemplateId) {
+      window.location.href = `/dashboard/forms/${savedTemplateId}/view?t=${Date.now()}`;
+    } else {
+      window.location.href = "/dashboard/forms";
     }
-    saveMutation.mutate(payload);
-  };
-
-  const handleCategoryChange = (category: EmployeeCategory) => {
-    setTargetCategory(category);
-    setTargetSubCategory("");
   };
 
   const handleStructureChange = (
@@ -1428,7 +1384,7 @@ export default function FormBuilderWizard({
           )}
           
           {step < STEPS.length - 1 ? (
-            <Button type="button" fullWidth={false} onClick={goNext} className="h-9 px-4">
+            <Button type="button" fullWidth={false} onClick={goNext} isLoading={saveMutation.isPending} className="h-9 px-4">
               Continue
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -1436,12 +1392,11 @@ export default function FormBuilderWizard({
             <Button
               type="button"
               fullWidth={false}
-              isLoading={saveMutation.isPending}
-              onClick={handleSubmit}
+              onClick={handleFinish}
               className="h-9 px-4"
             >
-              <Save className="h-4 w-4" />
-              {templateId ? "Update Form" : "Publish Form"}
+              <CheckCircle2 className="h-4 w-4" />
+              Finish
             </Button>
           )}
         </div>
@@ -1471,21 +1426,14 @@ export default function FormBuilderWizard({
             onStructureChange={handleStructureChange}
           />
         ) : (
-          <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
-            <div className={templateId ? "w-full max-w-5xl" : "w-full max-w-2xl"}>
-              <CategoryAssignmentStep
-                appraisalCycles={appraisalCycles}
-                cycleId={cycleId}
-                targetCategory={targetCategory}
-                targetSubCategory={targetSubCategory}
-                errors={errors}
-                onCycleChange={setCycleId}
-                onCategoryChange={handleCategoryChange}
-                onSubCategoryChange={setTargetSubCategory}
-                templateId={templateId}
-                templateTitle={title}
-              />
-            </div>
+          <div className="flex h-full min-h-0 flex-col overflow-hidden">
+            {savedTemplateId ? (
+              <FormEmployeeAssignment templateId={savedTemplateId} templateTitle={title} />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                Saving form...
+              </div>
+            )}
           </div>
         )}
       </div>

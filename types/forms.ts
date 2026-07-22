@@ -207,8 +207,8 @@ export interface FormTemplateInput {
   title: string;
   description: string;
   cycleId?: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  targetCategory?: EmployeeCategory;
+  targetSubCategory?: SubCategory;
   sections: FormSectionInput[];
   questions: QuestionInput[];
   incrementMatrices?: IncrementMatrixInput[];
@@ -240,8 +240,8 @@ export interface FormTemplateListItem {
   description: string | null;
   cycleId: number;
   fiscalYear: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  targetCategory: EmployeeCategory | null;
+  targetSubCategory: SubCategory | null;
   questionCount: number;
   appraisalCount: number;
   assignedEmployeeCount: number;
@@ -255,8 +255,8 @@ export interface FormTemplateRecord {
   description: string | null;
   cycleId: number;
   fiscalYear: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  targetCategory: EmployeeCategory | null;
+  targetSubCategory: SubCategory | null;
   sections: FormSectionRecord[];
   questions: QuestionRecord[];
   incrementMatrices: IncrementMatrixInput[];
