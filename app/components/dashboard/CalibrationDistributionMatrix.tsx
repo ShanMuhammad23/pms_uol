@@ -33,7 +33,8 @@ export function CalibrationDistributionMatrix({
         <div className="mb-3">
           <p className="text-sm font-semibold text-slate-900 dark:text-white">Rating × Quartile Matrix</p>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            Employee headcount by performance level and quartile (sorted by configured order)
+            Employee headcount by performance level and quartile (based on
+            normalized score)
           </p>
         </div>
       ) : null}
@@ -48,7 +49,7 @@ export function CalibrationDistributionMatrix({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-neutral-700">
-          <table className="min-w-full text-xs">
+          <table className="min-w-full text-xs border-primary">
             <thead className="whitespace-nowrap border-b border-slate-300 text-left text-sm font-semibold text-slate-900 dark:border-neutral-600 dark:text-slate-50">
               <tr className="divide-x divide-slate-300 dark:divide-neutral-600">
                 <th className="px-3 bg-primary py-2.5 text-left font-semibold text-white dark:text-slate-300">
@@ -106,28 +107,13 @@ export function CalibrationDistributionMatrix({
                       )}
                     </td>
                   ))}
-                  <td className={cn("px-2 py-2.5 text-center text-white font-bold text-base tabular-nums bg-primary text-white")}>
+                  <td className={cn("px-2 py-2.5 text-center font-bold text-base tabular-nums bg-primary text-white")}>
                     {row.rowTotal}
                   </td>
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr className="border-t border-slate-200 bg-primary text-white dark:border-white/10 dark:bg-slate-800/40">
-                <td className="px-3 py-2.5 font-semibold  dark:text-slate-300">Total</td>
-                {columnTotals.map((total, index) => (
-                  <td
-                    key={`${columns[index]?.label}-${index}`}
-                    className="px-2 py-2.5 text-center font-semibold tabular-nums  dark:text-slate-200"
-                  >
-                    {total}
-                  </td>
-                ))}
-                <td className="px-2 py-2.5 text-center font-semibold tabular-nums text-amber-700 dark:text-amber-400">
-                  {}
-                </td>
-              </tr>
-            </tfoot>
+        
           </table>
         </div>
       )}

@@ -12,6 +12,7 @@ import {
 import { InlineGradeGroupCell } from "@/app/components/dashboard/InlineGradeGroupCell";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
+import { FormAssignmentCell } from "@/app/components/dashboard/FormAssignmentCell";
 import { StaffListingMasterFilter } from "@/app/components/dashboard/StaffListingMasterFilter";
 import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
@@ -190,6 +191,16 @@ function renderCell(
       >
         {value}
       </span>
+    );
+  }
+
+  if (columnId === "formAssignment") {
+    return (
+      <FormAssignmentCell
+        employeeId={submission.employeeId}
+        employeeName={submission.employeeName}
+        formAssigned={submission.formAssigned}
+      />
     );
   }
 

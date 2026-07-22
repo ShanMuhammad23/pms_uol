@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import type { WorkflowStageStats } from "@/app/helpers/dashboard-workflow-stats";
@@ -29,63 +28,56 @@ export function ManagerReviewStatCard({
       whileTap={onClick ? { scale: 0.98 } : undefined}
       onClick={onClick}
       className={cn(
-        "group relative flex-1 cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-primary p-5 text-white shadow-sm transition-all duration-300 dark:border-slate-700",
+        "group relative flex-1 cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-primary p-4 text-white shadow-sm transition-all duration-300 dark:border-slate-700",
         active
           ? "shadow-md ring-1 ring-amber-500 ring-offset-2 ring-offset-slate-50 dark:ring-amber-400 dark:ring-offset-slate-950"
           : "hover:shadow-md",
       )}
     >
-      
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-base font-semibold uppercase tracking-wider text-white">
+      <div className="grid grid-cols-[minmax(0,6.5rem)_1fr_1fr] items-center gap-x-2 gap-y-2">
+        {/* Row 1: title + manager labels */}
+        <p className="text-sm font-semibold uppercase tracking-wider text-white">
           Review
-        </p> 
-        <div className="flex items-center gap-2 ">
-      <span
-            className="mt-0.5 inline-block rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-            title="Completion percentage"
-          >
-            {manager1.percentageLabel}
-          </span>
-          <span
-            className="mt-0.5 inline-block rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-            title="Completion percentage"
-          >
-            {manager2.percentageLabel}
-          </span>
-      </div>
-      </div>
+        </p>
+        <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-white/90">
+          Manager 1
+        </p>
+        <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-white/90">
+          Manager 2
+        </p>
 
-      <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1.5 items-center">
-        <span />
-        <div className="text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/90">
-            Manager 1
-          </p>
-        
-        </div>
-        <div className="text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/90">
-            Manager 2
-          </p>
-          
-        </div>
+        {/* Row 2: percentages under managers */}
+        <span aria-hidden className="block" />
+        <p
+          className="text-center text-xs font-semibold tabular-nums text-amber-200"
+          title="Completion percentage"
+        >
+          {manager1.percentageLabel}
+        </p>
+        <p
+          className="text-center text-xs font-semibold tabular-nums text-amber-200"
+          title="Completion percentage"
+        >
+          {manager2.percentageLabel}
+        </p>
 
-        <span className="text-xs text-white">Submitted</span>
-        <span className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
+        {/* Row 3: Submitted counts */}
+        <p className="text-xs text-white/90">Submitted</p>
+        <p className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
           {manager1.awaiting}
-        </span>
-        <span className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
+        </p>
+        <p className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
           {manager2.awaiting}
-        </span>
+        </p>
 
-        <span className="text-xs text-white">Reviewed</span>
-        <span className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
+        {/* Row 4: Reviewed counts */}
+        <p className="text-xs text-white/90">Reviewed</p>
+        <p className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
           {manager1.completed}
-        </span>
-        <span className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
+        </p>
+        <p className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
           {manager2.completed}
-        </span>
+        </p>
       </div>
     </motion.div>
   );
