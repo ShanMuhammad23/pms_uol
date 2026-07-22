@@ -15,6 +15,9 @@
     "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs",
     "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
     "db:update:emails-from-excel": "node scripts/update-emails-from-excel.mjs",
+    "db:seed:qualifications": "node scripts/seed-qualifications-from-excel.mjs",
+    "db:seed:nonacademic-employees": "node scripts/seed-nonacademic-employees-from-excel.mjs",
+    "db:seed:centres-blue-collar": "node scripts/seed-centres-blue-collar-from-excel.mjs",
     "db:recompute:eligibility": "node scripts/recompute-appraisal-eligibility.mjs",
     "db:normalize:entity-names": "node scripts/normalize-entity-names.mjs"
   },

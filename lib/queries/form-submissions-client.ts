@@ -135,3 +135,21 @@ export async function bulkUpdateEmployeeListingFields(
     gradeGroup?: string | null;
   }>(response);
 }
+
+export type EmployeeAssignedForm = {
+  templateId: number;
+  title: string;
+};
+
+export async function fetchEmployeeAssignedForms(
+  employeeId: string,
+): Promise<{ employeeId: string; forms: EmployeeAssignedForm[] }> {
+  const params = new URLSearchParams({ employeeId });
+  const response = await fetch(
+    `/api/submissions/assigned-forms?${params.toString()}`,
+    { cache: "no-store" },
+  );
+  return parseResponse<{ employeeId: string; forms: EmployeeAssignedForm[] }>(
+    response,
+  );
+}

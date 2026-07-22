@@ -46,11 +46,11 @@ const ADMIN_LINKS = [
       pathname.startsWith("/dashboard/matrices-and-cycles"),
   },
   {
-    href: "/dashboard/entities-and-categories",
+    href: "/dashboard/entity-categories",
     label: "Entities and Categories",
     icon: Building2,
     match: (pathname: string) =>
-      pathname.startsWith("/dashboard/entities-and-categories"),
+      pathname.startsWith("/dashboard/entity-categories"),
   },
 ] as const;
 

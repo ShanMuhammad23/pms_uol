@@ -191,9 +191,9 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   formAssignment: {
     id: "formAssignment",
-    label: "Form Assignment",
-    width: 130,
-    getValue: (row) => (isFormAssigned(row) ? "Assigned" : "Not Assigned"),
+    label: "Form",
+    width: 80,
+    getValue: (row) => (isFormAssigned(row) ? "✔" : "✖"),
   },
   designation: {
     id: "designation",

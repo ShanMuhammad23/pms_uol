@@ -98,6 +98,22 @@ export function EditUserModal({
     return users.filter((candidate) => candidate.id !== user.id);
   }, [users, user]);
 
+  const manager1User = useMemo(() => {
+    if (!form?.headId) return null;
+    return users.find((candidate) => String(candidate.id) === form.headId) ?? null;
+  }, [users, form?.headId]);
+
+  const manager2Label = useMemo(() => {
+    if (!manager1User?.headId) return "—";
+
+    const manager2 = users.find((candidate) => candidate.id === manager1User.headId);
+    if (!manager2) {
+      return manager1User.headName?.trim() || "—";
+    }
+
+    return `${manager2.firstName} ${manager2.lastName} (${manager2.employeeId})`;
+  }, [manager1User, users]);
+
   const selectedEntity = useMemo(
     () => entities.find((entity) => String(entity.id) === form?.entityId) ?? null,
     [entities, form?.entityId],
@@ -426,7 +442,7 @@ export function EditUserModal({
                     </select>
                   </Field>
 
-                  <Field label="Reporting Head" htmlFor="edit-user-head">
+                  <Field label="Manager 1" htmlFor="edit-user-head">
                     <select
                       id="edit-user-head"
                       value={form.headId}
@@ -448,6 +464,17 @@ export function EditUserModal({
                         </option>
                       ))}
                     </select>
+                  </Field>
+
+                  <Field label="Manager 2" htmlFor="edit-user-manager-2">
+                    <input
+                      id="edit-user-manager-2"
+                      type="text"
+                      readOnly
+                      value={manager2Label}
+                      title="Reporting head of Manager 1"
+                      className={cn(inputClassName, "bg-slate-50 dark:bg-slate-900")}
+                    />
                   </Field>
 
                   <Field label="Qualification" htmlFor="edit-user-qualification">

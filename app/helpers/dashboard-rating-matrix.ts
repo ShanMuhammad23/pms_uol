@@ -26,7 +26,14 @@ export function buildRatingQuartileMatrix(
   });
 
   chartSubmissions.forEach((submission) => {
-    const resolved = resolvePerformanceQuartile(submission.scorePercent, bands);
+    if (submission.normalizedScore == null) {
+      return;
+    }
+
+    const resolved = resolvePerformanceQuartile(
+      submission.normalizedScore,
+      bands,
+    );
 
     if (resolved) {
       const key = `${resolved.performanceLevelId}-${resolved.quartileId}`;
