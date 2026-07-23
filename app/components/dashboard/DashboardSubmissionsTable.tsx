@@ -48,6 +48,8 @@ interface DashboardSubmissionsTableProps {
   isLoading: boolean;
   error: unknown;
   onClearAllFilters: () => void;
+  /** When set (HEAD role), only these columns are shown / toggleable. */
+  allowedColumnIds?: readonly DashboardTableColumnId[];
 }
 
 function columnCellClassName(
@@ -267,6 +269,7 @@ export function DashboardSubmissionsTable({
   isLoading,
   error,
   onClearAllFilters,
+  allowedColumnIds,
 }: DashboardSubmissionsTableProps) {
   const {
     visibleIds,
@@ -275,7 +278,9 @@ export function DashboardSubmissionsTable({
     showAll,
     hideAll,
     setColumnPosition,
-  } = useDashboardColumnVisibility();
+  } = useDashboardColumnVisibility(
+    allowedColumnIds ? { allowedColumnIds } : undefined,
+  );
   const [page, setPage] = useState(1);
   const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
     EMPTY_MASTER_FILTER_STATE,
@@ -288,8 +293,8 @@ export function DashboardSubmissionsTable({
   const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
 
   const visibleColumns = useMemo(
-    () => resolveOrderedColumns(columnOrder, visibleIds),
-    [columnOrder, visibleIds],
+    () => resolveOrderedColumns(columnOrder, visibleIds, allowedColumnIds),
+    [columnOrder, visibleIds, allowedColumnIds],
   );
   const colSpan = Math.max(visibleColumns.length, 1) + 1;
 
@@ -479,6 +484,7 @@ export function DashboardSubmissionsTable({
         onShowAllColumns={showAll}
         onHideAllColumns={hideAll}
         onSetColumnPosition={setColumnPosition}
+        allowedColumnIds={allowedColumnIds}
       />
 
       <div className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain">

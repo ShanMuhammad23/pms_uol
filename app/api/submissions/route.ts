@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { submissionVisibleToHead } from "@/app/helpers/manager-review";
+import { toHeadStaffListingItem } from "@/app/helpers/head-staff-listing";
 import { resolveEntitySubtreeIds } from "@/lib/queries/entity-scope";
 import { listEntities } from "@/lib/queries/entities";
 import { listFormSubmissions } from "@/lib/queries/form-submissions";
@@ -36,9 +37,11 @@ export async function GET() {
 
       const entities = await listEntities();
       return NextResponse.json(
-        submissions.filter((submission) =>
-          submissionVisibleToHead(headEntityId, submission, entities),
-        ),
+        submissions
+          .filter((submission) =>
+            submissionVisibleToHead(headEntityId, submission, entities),
+          )
+          .map(toHeadStaffListingItem),
       );
     }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { User } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -16,6 +17,7 @@ import {
 import { ChartCard } from "@/app/components/dashboard/ChartCard";
 import { CustomTooltip } from "@/app/components/dashboard/CustomTooltip";
 import { EligibilityStatCard } from "@/app/components/dashboard/EligibilityStatCard";
+import { FormStatusStatCard } from "@/app/components/dashboard/FormStatusStatCard";
 import { ManagerReviewStatCard } from "@/app/components/dashboard/ManagerReviewStatCard";
 import { StatCard } from "@/app/components/dashboard/StatCard";
 import { containerVariants } from "@/app/helpers/dashboard-animations";
@@ -63,6 +65,41 @@ export function HeadDashboardOverview({
   statsVisible = true,
   chartsVisible = true,
 }: HeadDashboardOverviewProps) {
+  const [chartsKey, setChartsKey] = useState(0);
+  const [chartReady, setChartReady] = useState(chartsVisible);
+  const wasChartsVisibleRef = useRef(chartsVisible);
+
+  useEffect(() => {
+    if (!chartsVisible) {
+      setChartReady(false);
+      wasChartsVisibleRef.current = false;
+      return;
+    }
+
+    const becameVisible = !wasChartsVisibleRef.current;
+    wasChartsVisibleRef.current = true;
+
+    // First paint with charts already open — no delay.
+    if (!becameVisible) {
+      setChartReady(true);
+      // Layout can change when stats toggle; nudge Recharts to remeasure.
+      const frame = window.requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    // Remount after the height animation so ResponsiveContainer can measure.
+    setChartReady(false);
+    const showTimer = window.setTimeout(() => {
+      setChartsKey((key) => key + 1);
+      setChartReady(true);
+      window.dispatchEvent(new Event("resize"));
+    }, 380);
+
+    return () => window.clearTimeout(showTimer);
+  }, [chartsVisible, statsVisible]);
+
   if (!statsVisible && !chartsVisible) {
     return null;
   }
@@ -85,11 +122,12 @@ export function HeadDashboardOverview({
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={panelTransition}
-            className="grid grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2 lg:items-stretch"
+            className="grid grid-cols-1 gap-4 overflow-hidden sm:grid-cols-2 lg:items-stretch"
           >
             <EligibilityStatCard data={eligibilityData} delay={0} />
+            <FormStatusStatCard delay={0.05} />
             <StatCard
-              title="Self Assessment"
+              title="Staff Assessment"
               awaiting={selfAssessmentStats.awaiting}
               completed={selfAssessmentStats.completed}
               percentageLabel={selfAssessmentStats.percentageLabel}
@@ -131,64 +169,82 @@ export function HeadDashboardOverview({
               className="h-full min-h-80"
             >
               <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={calibrationData}
-                    margin={{ top: 20, right: 10, left: -10, bottom: 0 }}
+                {chartReady ? (
+                  <ResponsiveContainer
+                    key={chartsKey}
+                    width="100%"
+                    height="100%"
                   >
-                    <defs>
-                      <linearGradient
-                        id="headQuotaGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
-                        <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#e2e8f0"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="rating"
-                      tick={{ fontSize: 11, fill: "#64748b" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: "#64748b" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend
-                      wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }}
-                      iconType="circle"
-                      iconSize={8}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="quota"
-                      name="Institutional Quota"
-                      stroke="#64748b"
-                      strokeWidth={2}
-                      fill="url(#headQuotaGrad)"
-                      dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}
+                    <AreaChart
+                      data={calibrationData}
+                      margin={{ top: 20, right: 10, left: -10, bottom: 0 }}
                     >
-                      <LabelList
-                        dataKey="quota"
-                        position="top"
-                        offset={8}
-                        style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }}
+                      <defs>
+                        <linearGradient
+                          id={`headQuotaGrad-${chartsKey}`}
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="5%"
+                            stopColor="#64748b"
+                            stopOpacity={0.1}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor="#64748b"
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#e2e8f0"
+                        vertical={false}
                       />
-                    </Area>
-                  </AreaChart>
-                </ResponsiveContainer>
+                      <XAxis
+                        dataKey="rating"
+                        tick={{ fontSize: 11, fill: "#64748b" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        tick={{ fontSize: 11, fill: "#64748b" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend
+                        wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }}
+                        iconType="circle"
+                        iconSize={8}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="quota"
+                        name="Institutional Quota"
+                        stroke="#64748b"
+                        strokeWidth={2}
+                        fill={`url(#headQuotaGrad-${chartsKey})`}
+                        dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}
+                      >
+                        <LabelList
+                          dataKey="quota"
+                          position="top"
+                          offset={8}
+                          style={{
+                            fontSize: 11,
+                            fill: "#64748b",
+                            fontWeight: 600,
+                          }}
+                        />
+                      </Area>
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : null}
               </div>
             </ChartCard>
           </motion.div>

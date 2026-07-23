@@ -442,6 +442,52 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] =
     section.columnIds.map((id) => COLUMN_BY_ID[id]),
   );
 
+/**
+ * Staff listing columns available to HEAD role (display + API payload).
+ * Order matches the Head dashboard listing contract.
+ */
+export const HEAD_DASHBOARD_TABLE_COLUMN_IDS = [
+  "sapCode",
+  "employeeName",
+  "formAssignment",
+  "designation",
+  "roleCategory",
+  "facultyName",
+  "deptGroupName",
+  "dateOfJoining",
+  "uolExperience",
+  "qualification",
+  "qualificationSubject",
+  "qualificationYear",
+  "qualificationInstitute",
+  "qualificationCountry",
+  "status",
+  "eligible",
+  "applicableDuration",
+  "scoreO",
+  "adjustedScore",
+] as const satisfies readonly DashboardTableColumnId[];
+
+export const HEAD_DASHBOARD_TABLE_COLUMN_ID_SET = new Set<DashboardTableColumnId>(
+  HEAD_DASHBOARD_TABLE_COLUMN_IDS,
+);
+
+export const HEAD_DASHBOARD_TABLE_COLUMN_STORAGE_KEY =
+  "pms-dashboard-table-columns-head";
+
+export function isHeadDashboardColumn(
+  id: DashboardTableColumnId,
+): boolean {
+  return HEAD_DASHBOARD_TABLE_COLUMN_ID_SET.has(id);
+}
+
+export function getHeadDashboardColumnSections(): DashboardColumnSection[] {
+  return DASHBOARD_COLUMN_SECTIONS.map((section) => ({
+    ...section,
+    columnIds: section.columnIds.filter((id) => isHeadDashboardColumn(id)),
+  })).filter((section) => section.columnIds.length > 0);
+}
+
 export const DASHBOARD_TABLE_COLUMN_STORAGE_KEY = "pms-dashboard-table-columns";
 
 export const TOGGLEABLE_DASHBOARD_TABLE_COLUMNS = DASHBOARD_TABLE_COLUMNS.filter(
@@ -452,12 +498,29 @@ export const PINNED_DASHBOARD_TABLE_COLUMNS = DASHBOARD_TABLE_COLUMNS.filter(
   (column) => column.pinned,
 );
 
-export function getDefaultVisibleColumnIds(): DashboardTableColumnId[] {
-  return DASHBOARD_TABLE_COLUMNS.map((column) => column.id);
+export function getDefaultVisibleColumnIds(
+  allowedIds?: readonly DashboardTableColumnId[],
+): DashboardTableColumnId[] {
+  if (!allowedIds) {
+    return DASHBOARD_TABLE_COLUMNS.map((column) => column.id);
+  }
+  const allowed = new Set(allowedIds);
+  return DASHBOARD_TABLE_COLUMNS.map((column) => column.id).filter((id) =>
+    allowed.has(id),
+  );
 }
 
-export function getDefaultColumnOrder(): DashboardTableColumnId[] {
-  return TOGGLEABLE_DASHBOARD_TABLE_COLUMNS.map((column) => column.id);
+export function getDefaultColumnOrder(
+  allowedIds?: readonly DashboardTableColumnId[],
+): DashboardTableColumnId[] {
+  const toggleable = TOGGLEABLE_DASHBOARD_TABLE_COLUMNS.map(
+    (column) => column.id,
+  );
+  if (!allowedIds) {
+    return toggleable;
+  }
+  const allowed = new Set(allowedIds);
+  return toggleable.filter((id) => allowed.has(id));
 }
 
 export function getColumnById(
@@ -478,25 +541,31 @@ export function getSectionColumns(
 export function resolveOrderedColumns(
   columnOrder: DashboardTableColumnId[],
   visibleIds: DashboardTableColumnId[],
+  allowedIds?: readonly DashboardTableColumnId[],
 ): DashboardTableColumnDef[] {
-  const visible = new Set(visibleIds);
+  const allowed = allowedIds ? new Set(allowedIds) : null;
+  const visible = new Set(
+    visibleIds.filter((id) => (allowed ? allowed.has(id) : true)),
+  );
   const byId = new Map(
     DASHBOARD_TABLE_COLUMNS.map((column) => [column.id, column] as const),
   );
-  const defaults = getDefaultColumnOrder();
+  const defaults = getDefaultColumnOrder(allowedIds);
   const seen = new Set<DashboardTableColumnId>();
   const orderedToggleable: DashboardTableColumnDef[] = [];
 
   for (const id of [...defaults, ...columnOrder]) {
     if (seen.has(id)) continue;
+    if (allowed && !allowed.has(id)) continue;
     seen.add(id);
     const column = byId.get(id);
     if (!column || column.pinned || !visible.has(id)) continue;
     orderedToggleable.push(column);
   }
 
-  const pinnedVisible = PINNED_DASHBOARD_TABLE_COLUMNS.filter((column) =>
-    visible.has(column.id),
+  const pinnedVisible = PINNED_DASHBOARD_TABLE_COLUMNS.filter(
+    (column) =>
+      visible.has(column.id) && (allowed ? allowed.has(column.id) : true),
   );
 
   return [...orderedToggleable, ...pinnedVisible];

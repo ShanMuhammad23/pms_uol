@@ -41,6 +41,7 @@ interface StaffListingMasterFilterProps {
   onShowAllColumns: () => void;
   onHideAllColumns: () => void;
   onSetColumnPosition: (id: DashboardTableColumnId, position: number) => void;
+  allowedColumnIds?: readonly DashboardTableColumnId[];
 }
 
 function TextFilterControl({
@@ -204,9 +205,22 @@ export function StaffListingMasterFilter({
   onShowAllColumns,
   onHideAllColumns,
   onSetColumnPosition,
+  allowedColumnIds,
 }: StaffListingMasterFilterProps) {
   const activeCount = countActiveMasterFilters(filters);
   const [draftOrders, setDraftOrders] = useState<Record<string, string>>({});
+
+  const filterSections = useMemo(() => {
+    if (!allowedColumnIds) {
+      return MASTER_FILTER_SECTIONS;
+    }
+
+    const allowed = new Set(allowedColumnIds);
+    return MASTER_FILTER_SECTIONS.map((section) => ({
+      ...section,
+      columns: section.columns.filter((column) => allowed.has(column.id)),
+    })).filter((section) => section.columns.length > 0);
+  }, [allowedColumnIds]);
 
   const orderIndexById = useMemo(() => {
     const map = new Map<DashboardTableColumnId, number>();
@@ -229,7 +243,7 @@ export function StaffListingMasterFilter({
   const optionsByColumn = useMemo(() => {
     const map = new Map<string, MultiSelectOption[]>();
 
-    for (const section of MASTER_FILTER_SECTIONS) {
+    for (const section of filterSections) {
       for (const column of section.columns) {
         if (isMasterFilterTextColumn(column.id)) continue;
 
@@ -247,7 +261,7 @@ export function StaffListingMasterFilter({
     }
 
     return map;
-  }, [allSubmissions, filters, submissions]);
+  }, [allSubmissions, filterSections, filters, submissions]);
 
   const visibleToggleableCount = useMemo(
     () =>
@@ -327,7 +341,7 @@ export function StaffListingMasterFilter({
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
-              {MASTER_FILTER_SECTIONS.map((section) => (
+              {filterSections.map((section) => (
                 <section
                   key={section.id}
                   className="min-w-0 rounded-lg border border-slate-200/80 bg-white/70 p-3 dark:border-white/10 dark:bg-slate-900/50"

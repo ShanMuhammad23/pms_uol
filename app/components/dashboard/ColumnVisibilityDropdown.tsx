@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Columns3 } from "lucide-react";
 import {
   DASHBOARD_TABLE_COLUMN_STORAGE_KEY,
+  HEAD_DASHBOARD_TABLE_COLUMN_STORAGE_KEY,
   PINNED_DASHBOARD_TABLE_COLUMNS,
   TOGGLEABLE_DASHBOARD_TABLE_COLUMNS,
   getDefaultColumnOrder,
@@ -18,13 +19,15 @@ type StoredColumnPrefs = {
   visible: DashboardTableColumnId[];
 };
 
-function normalizeOrder(order: DashboardTableColumnId[]): DashboardTableColumnId[] {
-  const defaults = getDefaultColumnOrder();
+function normalizeOrder(
+  order: DashboardTableColumnId[],
+  allowedIds?: readonly DashboardTableColumnId[],
+): DashboardTableColumnId[] {
+  const defaults = getDefaultColumnOrder(allowedIds);
   const allowed = new Set(defaults);
   const seen = new Set<DashboardTableColumnId>();
   const next: DashboardTableColumnId[] = [];
 
-  // Prefer canonical default section order; append any extras from saved prefs.
   for (const id of [...defaults, ...order]) {
     if (!allowed.has(id) || seen.has(id)) continue;
     seen.add(id);
@@ -36,10 +39,13 @@ function normalizeOrder(order: DashboardTableColumnId[]): DashboardTableColumnId
 
 function normalizeVisible(
   visible: DashboardTableColumnId[],
+  allowedIds?: readonly DashboardTableColumnId[],
 ): DashboardTableColumnId[] {
-  const defaults = getDefaultVisibleColumnIds();
+  const defaults = getDefaultVisibleColumnIds(allowedIds);
   const allowed = new Set(defaults);
-  const pinned = PINNED_DASHBOARD_TABLE_COLUMNS.map((column) => column.id);
+  const pinned = PINNED_DASHBOARD_TABLE_COLUMNS.map((column) => column.id).filter(
+    (id) => allowed.has(id),
+  );
   const toggleable = visible.filter(
     (id) =>
       allowed.has(id) &&
@@ -49,12 +55,15 @@ function normalizeVisible(
   return Array.from(new Set([...pinned, ...toggleable]));
 }
 
-function readStoredPrefs(): {
+function readStoredPrefs(
+  storageKey: string,
+  allowedIds?: readonly DashboardTableColumnId[],
+): {
   order: DashboardTableColumnId[];
   visible: DashboardTableColumnId[];
 } | null {
   try {
-    const raw = localStorage.getItem(DASHBOARD_TABLE_COLUMN_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
 
@@ -63,8 +72,8 @@ function readStoredPrefs(): {
         (value): value is DashboardTableColumnId => typeof value === "string",
       );
       return {
-        order: getDefaultColumnOrder(),
-        visible: normalizeVisible(visible),
+        order: getDefaultColumnOrder(allowedIds),
+        visible: normalizeVisible(visible, allowedIds),
       };
     }
 
@@ -75,11 +84,10 @@ function readStoredPrefs(): {
       typeof (parsed as StoredColumnPrefs).version === "number"
     ) {
       const prefs = parsed as StoredColumnPrefs;
-      // v3 introduced section-based column order; reset to canonical defaults.
       if (prefs.version < 3) {
         return {
-          order: getDefaultColumnOrder(),
-          visible: getDefaultVisibleColumnIds(),
+          order: getDefaultColumnOrder(allowedIds),
+          visible: getDefaultVisibleColumnIds(allowedIds),
         };
       }
 
@@ -91,6 +99,7 @@ function readStoredPrefs(): {
                   typeof value === "string",
               )
             : [],
+          allowedIds,
         ),
         visible: normalizeVisible(
           Array.isArray(prefs.visible)
@@ -99,6 +108,7 @@ function readStoredPrefs(): {
                   typeof value === "string",
               )
             : [],
+          allowedIds,
         ),
       };
     }
@@ -121,27 +131,38 @@ function moveIdToPosition(
   return without;
 }
 
-export function useDashboardColumnVisibility() {
-  const [visibleIds, setVisibleIds] = useState<DashboardTableColumnId[]>(
-    getDefaultVisibleColumnIds,
+export function useDashboardColumnVisibility(options?: {
+  allowedColumnIds?: readonly DashboardTableColumnId[];
+}) {
+  const allowedColumnIds = options?.allowedColumnIds;
+  const storageKey = allowedColumnIds
+    ? HEAD_DASHBOARD_TABLE_COLUMN_STORAGE_KEY
+    : DASHBOARD_TABLE_COLUMN_STORAGE_KEY;
+
+  const [visibleIds, setVisibleIds] = useState<DashboardTableColumnId[]>(() =>
+    getDefaultVisibleColumnIds(allowedColumnIds),
   );
-  const [columnOrder, setColumnOrder] = useState<DashboardTableColumnId[]>(
-    getDefaultColumnOrder,
+  const [columnOrder, setColumnOrder] = useState<DashboardTableColumnId[]>(() =>
+    getDefaultColumnOrder(allowedColumnIds),
   );
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const stored = readStoredPrefs();
+    setHydrated(false);
+    const stored = readStoredPrefs(storageKey, allowedColumnIds);
     if (stored) {
       setVisibleIds(
         stored.visible.length > 0
           ? stored.visible
-          : getDefaultVisibleColumnIds(),
+          : getDefaultVisibleColumnIds(allowedColumnIds),
       );
       setColumnOrder(stored.order);
+    } else {
+      setVisibleIds(getDefaultVisibleColumnIds(allowedColumnIds));
+      setColumnOrder(getDefaultColumnOrder(allowedColumnIds));
     }
     setHydrated(true);
-  }, []);
+  }, [storageKey, allowedColumnIds]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -150,13 +171,13 @@ export function useDashboardColumnVisibility() {
       order: columnOrder,
       visible: visibleIds,
     };
-    localStorage.setItem(
-      DASHBOARD_TABLE_COLUMN_STORAGE_KEY,
-      JSON.stringify(payload),
-    );
-  }, [visibleIds, columnOrder, hydrated]);
+    localStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [visibleIds, columnOrder, hydrated, storageKey]);
 
   const toggleColumn = (id: DashboardTableColumnId) => {
+    if (allowedColumnIds && !allowedColumnIds.includes(id)) {
+      return;
+    }
     if (PINNED_DASHBOARD_TABLE_COLUMNS.some((column) => column.id === id)) {
       return;
     }
@@ -169,17 +190,24 @@ export function useDashboardColumnVisibility() {
     });
   };
 
-  const showAll = () => setVisibleIds(getDefaultVisibleColumnIds());
+  const showAll = () => setVisibleIds(getDefaultVisibleColumnIds(allowedColumnIds));
 
   const hideAll = () =>
-    setVisibleIds(PINNED_DASHBOARD_TABLE_COLUMNS.map((column) => column.id));
+    setVisibleIds(
+      PINNED_DASHBOARD_TABLE_COLUMNS.map((column) => column.id).filter((id) =>
+        allowedColumnIds ? allowedColumnIds.includes(id) : true,
+      ),
+    );
 
   const setColumnPosition = (
     id: DashboardTableColumnId,
     position: number,
   ) => {
+    if (allowedColumnIds && !allowedColumnIds.includes(id)) {
+      return;
+    }
     setColumnOrder((current) =>
-      normalizeOrder(moveIdToPosition(current, id, position)),
+      normalizeOrder(moveIdToPosition(current, id, position), allowedColumnIds),
     );
   };
 
@@ -194,6 +222,7 @@ export function useDashboardColumnVisibility() {
     setColumnPosition,
     isVisible,
     hydrated,
+    allowedColumnIds,
   };
 }
 

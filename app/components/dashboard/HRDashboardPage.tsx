@@ -9,6 +9,7 @@ import { DashboardSubmissionsTable } from "@/app/components/dashboard/DashboardS
 import { DashboardWorkflowStatsRow } from "@/app/components/dashboard/DashboardWorkflowStatsRow";
 import { HeadDashboardOverview } from "@/app/components/dashboard/HeadDashboardOverview";
 import { useDashboardPage } from "@/app/queries/dashboard";
+import { HEAD_DASHBOARD_TABLE_COLUMN_IDS } from "@/app/helpers/dashboard-table-columns";
 import { isHeadRole } from "@/lib/auth/home-path";
 
 interface HRDashboardPageProps {
@@ -168,6 +169,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           isLoading={submissionsLoading}
           error={submissionsError}
           onClearAllFilters={clearAllFilters}
+          allowedColumnIds={isHead ? HEAD_DASHBOARD_TABLE_COLUMN_IDS : undefined}
         />
       </div>
     </div>
