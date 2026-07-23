@@ -15,9 +15,9 @@ export function getSubmissionEligibilityStatus(
     return submission.eligibilityStatus;
   }
 
+  // Fallback only when appraisal row has no stored FY eligibility yet.
   const computed = computeAppraisalEligibility(submission.dateOfJoining, {
     financialYear: submission.eligibilityReferenceYear ?? undefined,
-    cycleEndDate: submission.eligibilityReferenceEndDate ?? undefined,
   });
 
   return computed.status;
@@ -44,7 +44,6 @@ export function getSubmissionApplicableDurationFactor(
 
   const computed = computeAppraisalEligibility(submission.dateOfJoining, {
     financialYear: submission.eligibilityReferenceYear ?? undefined,
-    cycleEndDate: submission.eligibilityReferenceEndDate ?? undefined,
   });
 
   return computed.applicableDurationFactor;

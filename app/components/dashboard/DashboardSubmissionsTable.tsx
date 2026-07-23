@@ -5,15 +5,16 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Eye, Pencil, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
-import {
-  ColumnVisibilityDropdown,
-  useDashboardColumnVisibility,
-} from "@/app/components/dashboard/ColumnVisibilityDropdown";
+import { useDashboardColumnVisibility } from "@/app/components/dashboard/ColumnVisibilityDropdown";
 import { InlineGradeGroupCell } from "@/app/components/dashboard/InlineGradeGroupCell";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { FormAssignmentCell } from "@/app/components/dashboard/FormAssignmentCell";
-import { StaffListingMasterFilter } from "@/app/components/dashboard/StaffListingMasterFilter";
+import {
+  StaffListingMasterFilter,
+  StaffListingMasterFilterTrigger,
+  getMasterFilterActiveCount,
+} from "@/app/components/dashboard/StaffListingMasterFilter";
 import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
@@ -283,6 +284,8 @@ export function DashboardSubmissionsTable({
     () => new Set(),
   );
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [masterFilterOpen, setMasterFilterOpen] = useState(false);
+  const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
 
   const visibleColumns = useMemo(
     () => resolveOrderedColumns(columnOrder, visibleIds),
@@ -426,14 +429,6 @@ export function DashboardSubmissionsTable({
       transition={{ delay: 0.6 }}
       className="min-w-0 min-h-screen max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"
     >
-         <StaffListingMasterFilter
-        submissions={submissions}
-        allSubmissions={allSubmissions}
-        filters={masterFilters}
-        onTextChange={handleMasterTextChange}
-        onMultiChange={handleMasterMultiChange}
-        onClearAll={clearMasterFilters}
-      />
       <div className="relative z-50 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
         <div className="min-w-0">
           <p className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -451,6 +446,11 @@ export function DashboardSubmissionsTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <StaffListingMasterFilterTrigger
+            open={masterFilterOpen}
+            onOpenChange={setMasterFilterOpen}
+            activeCount={masterFilterActiveCount}
+          />
           <button
             type="button"
             onClick={() => setBulkEditOpen(true)}
@@ -461,16 +461,25 @@ export function DashboardSubmissionsTable({
             Bulk edit
             {selectedCount > 0 ? ` (${selectedCount})` : ""}
           </button>
-          <ColumnVisibilityDropdown
-            visibleIds={visibleIds}
-            columnOrder={columnOrder}
-            onToggle={toggleColumn}
-            onShowAll={showAll}
-            onHideAll={hideAll}
-            onSetColumnPosition={setColumnPosition}
-          />
         </div>
       </div>
+
+      <StaffListingMasterFilter
+        open={masterFilterOpen}
+        onOpenChange={setMasterFilterOpen}
+        submissions={submissions}
+        allSubmissions={allSubmissions}
+        filters={masterFilters}
+        onTextChange={handleMasterTextChange}
+        onMultiChange={handleMasterMultiChange}
+        onClearAll={clearMasterFilters}
+        visibleIds={visibleIds}
+        columnOrder={columnOrder}
+        onToggleColumn={toggleColumn}
+        onShowAllColumns={showAll}
+        onHideAllColumns={hideAll}
+        onSetColumnPosition={setColumnPosition}
+      />
 
       <div className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain">
         <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">

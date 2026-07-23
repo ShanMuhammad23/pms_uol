@@ -6,6 +6,8 @@ import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
 
+type EligibilityStatus = "Fully Eligible" | "Partially Eligible" | "Not Eligible";
+
 interface OverviewRow {
   id: string | null;
   employee_id: string;
@@ -21,6 +23,11 @@ interface OverviewRow {
   initial_rating: PerformanceRating | null;
   calibrated_rating: PerformanceRating | null;
   normalized_score: string | null;
+  uol_experience_years: string | null;
+  is_eligible: boolean | null;
+  eligibility_status: EligibilityStatus | null;
+  applicable_duration: string | null;
+  applicable_duration_factor: string | null;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -58,6 +65,14 @@ async function ensureManagerLevelColumn(): Promise<void> {
   );
 }
 
+async function ensureEligibilityColumns(): Promise<void> {
+  await db.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS eligibility_status VARCHAR(30),
+     ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(3, 1)`,
+  );
+}
+
 function toNumber(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
@@ -87,12 +102,10 @@ async function getEligibilityContext(): Promise<{
     ),
   ]);
 
+  // Eligibility is FY-scoped only (30 Jun of active financial year).
   const financialYear =
     financialYearResult.rows[0]?.year ?? cycleResult?.fiscalYear ?? null;
-  const referenceEndDate = resolveReferenceEndDate({
-    financialYear,
-    cycleEndDate: cycleResult?.endDate ?? null,
-  });
+  const referenceEndDate = resolveReferenceEndDate({ financialYear });
 
   return {
     cycleId: cycleResult?.id ?? null,
@@ -108,10 +121,10 @@ function mapOverviewRow(
     cycleEndDate: string | null;
   },
 ): FormSubmissionListItem {
-  const eligibility = computeAppraisalEligibility(row.date_of_joining, {
+  const computed = computeAppraisalEligibility(row.date_of_joining, {
     financialYear: eligibilityContext.financialYear,
-    cycleEndDate: eligibilityContext.cycleEndDate,
   });
+  const storedFactor = toNumber(row.applicable_duration_factor);
 
   return {
     id: row.id ? Number(row.id) : 0,
@@ -148,11 +161,12 @@ function mapOverviewRow(
     quartileName: null,
     initialRating: row.initial_rating,
     calibratedRating: row.calibrated_rating,
-    uolExperienceYears: eligibility.uolExperienceYears,
-    isEligible: eligibility.isEligible,
-    applicableDuration: eligibility.applicableDuration,
-    applicableDurationFactor: eligibility.applicableDurationFactor,
-    eligibilityStatus: eligibility.status,
+    uolExperienceYears:
+      toNumber(row.uol_experience_years) ?? computed.uolExperienceYears,
+    isEligible: row.is_eligible ?? computed.isEligible,
+    applicableDuration: row.applicable_duration ?? computed.applicableDuration,
+    applicableDurationFactor: storedFactor ?? computed.applicableDurationFactor,
+    eligibilityStatus: row.eligibility_status ?? computed.status,
     eligibilityReferenceYear: eligibilityContext.financialYear,
     eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
     remarksEvaluation: null,
@@ -188,6 +202,7 @@ export async function listDashboardOverview(options?: {
     hasRoleCategoryColumn(),
     getEligibilityContext(),
     ensureManagerLevelColumn(),
+    ensureEligibilityColumns(),
   ]);
 
   const designationSelect = excelReady
@@ -200,8 +215,19 @@ export async function listDashboardOverview(options?: {
     ? `u.date_of_joining::text,`
     : `NULL::text AS date_of_joining,`;
   const normalizedScoreSelect = excelReady
-    ? `ap.normalized_score::text`
-    : `NULL::text AS normalized_score`;
+    ? `ap.normalized_score::text,`
+    : `NULL::text AS normalized_score,`;
+  const eligibilitySelect = excelReady
+    ? `ap.uol_experience_years::text,
+       ap.is_eligible,
+       ap.eligibility_status,
+       ap.applicable_duration,
+       ap.applicable_duration_factor::text`
+    : `NULL::text AS uol_experience_years,
+       NULL::boolean AS is_eligible,
+       NULL::text AS eligibility_status,
+       NULL::text AS applicable_duration,
+       NULL::text AS applicable_duration_factor`;
 
   const scopedEntityIds = options?.scopedEntityIds ?? null;
   const entityScopeClause =
@@ -227,6 +253,7 @@ export async function listDashboardOverview(options?: {
        ap.initial_rating,
        ap.calibrated_rating,
        ${normalizedScoreSelect}
+       ${eligibilitySelect}
      FROM users u
      LEFT JOIN LATERAL (
        SELECT ap_inner.*

@@ -66,7 +66,9 @@ interface SubmissionListRow {
   stored_quartile_name: string | null;
   uol_experience_years: string | null;
   is_eligible: boolean | null;
+  eligibility_status: "Fully Eligible" | "Partially Eligible" | "Not Eligible" | null;
   applicable_duration: string | null;
+  applicable_duration_factor: string | null;
   remarks_evaluation: string | null;
   current_salary: string | null;
   previous_salary: string | null;
@@ -194,10 +196,11 @@ function mapSubmissionRow(
   const scoreO = toNumber(row.initial_score_numeric) ?? rawScore;
   const normalizedScore =
     toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric);
-  const eligibility = computeAppraisalEligibility(row.date_of_joining, {
+  // Prefer FY-scoped values stored on the appraisal; compute only as fallback.
+  const computed = computeAppraisalEligibility(row.date_of_joining, {
     financialYear: eligibilityContext.financialYear,
-    cycleEndDate: eligibilityContext.cycleEndDate,
   });
+  const storedFactor = toNumber(row.applicable_duration_factor);
 
   return {
     id: row.id ? Number(row.id) : 0,
@@ -235,11 +238,11 @@ function mapSubmissionRow(
     initialRating: row.initial_rating,
     calibratedRating: row.calibrated_rating,
     uolExperienceYears:
-      toNumber(row.uol_experience_years) ?? eligibility.uolExperienceYears,
-    isEligible: row.is_eligible ?? eligibility.isEligible,
-    applicableDuration: row.applicable_duration ?? eligibility.applicableDuration,
-    applicableDurationFactor: eligibility.applicableDurationFactor,
-    eligibilityStatus: eligibility.status,
+      toNumber(row.uol_experience_years) ?? computed.uolExperienceYears,
+    isEligible: row.is_eligible ?? computed.isEligible,
+    applicableDuration: row.applicable_duration ?? computed.applicableDuration,
+    applicableDurationFactor: storedFactor ?? computed.applicableDurationFactor,
+    eligibilityStatus: row.eligibility_status ?? computed.status,
     eligibilityReferenceYear: eligibilityContext.financialYear,
     eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
     remarksEvaluation: row.remarks_evaluation,
@@ -279,17 +282,23 @@ async function getEligibilityContext(): Promise<{
     ),
   ]);
 
+  // Eligibility is FY-scoped only (30 Jun of active financial year).
   const financialYear = financialYearResult.rows[0]?.year ?? cycleResult?.fiscalYear ?? null;
-  const referenceEndDate = resolveReferenceEndDate({
-    financialYear,
-    cycleEndDate: cycleResult?.endDate ?? null,
-  });
+  const referenceEndDate = resolveReferenceEndDate({ financialYear });
 
   return {
     cycleId: cycleResult?.id ?? null,
     financialYear,
     cycleEndDate: formatReferenceDate(referenceEndDate),
   };
+}
+
+async function ensureEligibilityColumns(): Promise<void> {
+  await db.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS eligibility_status VARCHAR(30),
+     ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(3, 1)`,
+  );
 }
 
 function formatReferenceDate(date: Date): string {
@@ -315,6 +324,7 @@ export async function listFormSubmissions(options?: {
     getActiveFinancialYearQuartileBands(),
     getEligibilityContext(),
     ensureManagerLevelColumn(),
+    ensureEligibilityColumns(),
   ]);
 
   const roleCategorySelect = roleCategoryReady
@@ -338,7 +348,9 @@ export async function listFormSubmissions(options?: {
          pq.name AS stored_quartile_name,
          ap.uol_experience_years::text,
          ap.is_eligible,
+         ap.eligibility_status,
          ap.applicable_duration,
+         ap.applicable_duration_factor::text,
          ap.remarks_evaluation,
          ap.current_salary::text,
          ap.previous_salary::text,
@@ -368,7 +380,9 @@ export async function listFormSubmissions(options?: {
          NULL::text AS stored_quartile_name,
          NULL::text AS uol_experience_years,
          NULL::boolean AS is_eligible,
+         NULL::text AS eligibility_status,
          NULL::text AS applicable_duration,
+         NULL::text AS applicable_duration_factor,
          NULL::text AS remarks_evaluation,
          NULL::text AS current_salary,
          NULL::text AS previous_salary,

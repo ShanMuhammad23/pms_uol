@@ -9,6 +9,7 @@ import {
 
 const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const BATCH_SIZE = 200;
 
 function loadEnvFile() {
   const envPath = join(__dirname, "..", ".env");
@@ -37,11 +38,28 @@ function formatLocalDate(date) {
 }
 
 function createPool() {
+  const connectionString = process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL is not set. Add it to .env or the environment.",
+    );
+  }
+
   return new Pool({
-    connectionString:
-      process.env.DATABASE_URL ??
-      "postgresql://postgres:uzair1321@127.0.0.1:5432/pms_uol",
+    connectionString,
+    connectionTimeoutMillis: 10_000,
+    statement_timeout: 120_000,
   });
+}
+
+async function ensureEligibilityColumns(client) {
+  console.log("Ensuring eligibility columns exist...");
+  await client.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS eligibility_status VARCHAR(30),
+     ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(3, 1)`,
+  );
 }
 
 async function getActiveCycle(client) {
@@ -67,140 +85,102 @@ async function getActiveFinancialYear(client) {
   return result.rows[0]?.year ?? null;
 }
 
-async function resolveTemplateId(client, user) {
+/**
+ * Map staff_category_id + staff_sub_category_id → template id (in memory).
+ * Faculty sub-categories 4/5 fall back to sub-category 3.
+ */
+async function loadTemplateMap(client) {
+  const result = await client.query(
+    `SELECT DISTINCT ON (staff_category_id, staff_sub_category_id)
+       staff_category_id,
+       staff_sub_category_id,
+       id
+     FROM form_templates
+     WHERE staff_category_id IS NOT NULL
+     ORDER BY staff_category_id, staff_sub_category_id, id`,
+  );
+
+  const map = new Map();
+
+  for (const row of result.rows) {
+    map.set(`${row.staff_category_id}:${row.staff_sub_category_id}`, row.id);
+  }
+
+  return map;
+}
+
+function resolveTemplateId(user, templateMap) {
   if (!user.staff_category_id) {
     return null;
   }
 
-  const exact = await client.query(
-    `SELECT id
-     FROM form_templates
-     WHERE staff_category_id = $1
-       AND staff_sub_category_id = $2
-     ORDER BY id
-     LIMIT 1`,
-    [user.staff_category_id, user.staff_sub_category_id],
+  const exact = templateMap.get(
+    `${user.staff_category_id}:${user.staff_sub_category_id}`,
   );
 
-  if (exact.rows[0]) {
-    return exact.rows[0].id;
+  if (exact) {
+    return exact;
   }
 
   if (user.staff_sub_category_id === 4 || user.staff_sub_category_id === 5) {
-    const facultyTemplate = await client.query(
-      `SELECT id
-       FROM form_templates
-       WHERE staff_category_id = $1
-         AND staff_sub_category_id = 3
-       ORDER BY id
-       LIMIT 1`,
-      [user.staff_category_id],
-    );
-
-    if (facultyTemplate.rows[0]) {
-      return facultyTemplate.rows[0].id;
-    }
+    return templateMap.get(`${user.staff_category_id}:3`) ?? null;
   }
 
   return null;
 }
 
-async function upsertAppraisal(client, user, cycleId, templateId, eligibility) {
-  const byCycle = await client.query(
-    `SELECT id
-     FROM appraisals
-     WHERE employee_id = $1
-       AND cycle_id = $2
-     LIMIT 1`,
-    [user.id, cycleId],
+async function updateExistingAppraisals(client, rows) {
+  if (rows.length === 0) {
+    return 0;
+  }
+
+  await client.query(
+    `UPDATE appraisals AS a
+     SET template_id = COALESCE(v.template_id, a.template_id),
+         uol_experience_years = v.uol_experience_years,
+         is_eligible = v.is_eligible,
+         eligibility_status = v.eligibility_status,
+         applicable_duration = v.applicable_duration,
+         applicable_duration_factor = v.applicable_duration_factor,
+         updated_at = CURRENT_TIMESTAMP
+     FROM UNNEST(
+       $1::bigint[],
+       $2::bigint[],
+       $3::numeric[],
+       $4::boolean[],
+       $5::text[],
+       $6::text[],
+       $7::numeric[]
+     ) AS v(
+       appraisal_id,
+       template_id,
+       uol_experience_years,
+       is_eligible,
+       eligibility_status,
+       applicable_duration,
+       applicable_duration_factor
+     )
+     WHERE a.id = v.appraisal_id`,
+    [
+      rows.map((r) => r.appraisalId),
+      rows.map((r) => r.templateId),
+      rows.map((r) => r.uolExperienceYears),
+      rows.map((r) => r.isEligible),
+      rows.map((r) => r.eligibilityStatus),
+      rows.map((r) => r.applicableDuration),
+      rows.map((r) => r.applicableDurationFactor),
+    ],
   );
 
-  if (byCycle.rows[0]) {
-    await client.query(
-      `UPDATE appraisals
-       SET template_id = COALESCE($2, template_id),
-           uol_experience_years = $3,
-           is_eligible = $4,
-           applicable_duration = $5,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
-      [
-        byCycle.rows[0].id,
-        templateId,
-        eligibility.uolExperienceYears,
-        eligibility.isEligible,
-        eligibility.applicableDuration,
-      ],
-    );
+  return rows.length;
+}
 
-    return { id: byCycle.rows[0].id, created: false };
+async function insertMissingAppraisals(client, cycleId, rows) {
+  if (rows.length === 0) {
+    return 0;
   }
 
-  if (templateId) {
-    const byTemplate = await client.query(
-      `SELECT id
-       FROM appraisals
-       WHERE employee_id = $1
-         AND template_id = $2
-       LIMIT 1`,
-      [user.id, templateId],
-    );
-
-    if (byTemplate.rows[0]) {
-      await client.query(
-        `UPDATE appraisals
-         SET cycle_id = $2,
-             uol_experience_years = $3,
-             is_eligible = $4,
-             applicable_duration = $5,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
-        [
-          byTemplate.rows[0].id,
-          cycleId,
-          eligibility.uolExperienceYears,
-          eligibility.isEligible,
-          eligibility.applicableDuration,
-        ],
-      );
-
-      return { id: byTemplate.rows[0].id, created: false };
-    }
-  }
-
-  const existingAny = await client.query(
-    `SELECT id
-     FROM appraisals
-     WHERE employee_id = $1
-     ORDER BY updated_at DESC NULLS LAST, id DESC
-     LIMIT 1`,
-    [user.id],
-  );
-
-  if (existingAny.rows[0]) {
-    await client.query(
-      `UPDATE appraisals
-       SET cycle_id = $2,
-           template_id = COALESCE($3, template_id),
-           uol_experience_years = $4,
-           is_eligible = $5,
-           applicable_duration = $6,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
-      [
-        existingAny.rows[0].id,
-        cycleId,
-        templateId,
-        eligibility.uolExperienceYears,
-        eligibility.isEligible,
-        eligibility.applicableDuration,
-      ],
-    );
-
-    return { id: existingAny.rows[0].id, created: false };
-  }
-
-  const inserted = await client.query(
+  await client.query(
     `INSERT INTO appraisals (
        employee_id,
        cycle_id,
@@ -208,106 +188,195 @@ async function upsertAppraisal(client, user, cycleId, templateId, eligibility) {
        status,
        uol_experience_years,
        is_eligible,
-       applicable_duration
+       eligibility_status,
+       applicable_duration,
+       applicable_duration_factor
      )
-     VALUES ($1, $2, $3, 'PENDING_SELF_ASSESSMENT', $4, $5, $6)
-     RETURNING id`,
+     SELECT
+       v.employee_id,
+       v.cycle_id,
+       v.template_id,
+       v.status::appraisal_status,
+       v.uol_experience_years,
+       v.is_eligible,
+       v.eligibility_status,
+       v.applicable_duration,
+       v.applicable_duration_factor
+     FROM UNNEST(
+       $1::bigint[],
+       $2::int[],
+       $3::bigint[],
+       $4::text[],
+       $5::numeric[],
+       $6::boolean[],
+       $7::text[],
+       $8::text[],
+       $9::numeric[]
+     ) AS v(
+       employee_id,
+       cycle_id,
+       template_id,
+       status,
+       uol_experience_years,
+       is_eligible,
+       eligibility_status,
+       applicable_duration,
+       applicable_duration_factor
+     )
+     ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
+       SET template_id = COALESCE(EXCLUDED.template_id, appraisals.template_id),
+           uol_experience_years = EXCLUDED.uol_experience_years,
+           is_eligible = EXCLUDED.is_eligible,
+           eligibility_status = EXCLUDED.eligibility_status,
+           applicable_duration = EXCLUDED.applicable_duration,
+           applicable_duration_factor = EXCLUDED.applicable_duration_factor,
+           updated_at = CURRENT_TIMESTAMP`,
     [
-      user.id,
-      cycleId,
-      templateId,
-      eligibility.uolExperienceYears,
-      eligibility.isEligible,
-      eligibility.applicableDuration,
+      rows.map((r) => r.userId),
+      rows.map(() => cycleId),
+      rows.map((r) => r.templateId),
+      rows.map(() => "PENDING_SELF_ASSESSMENT"),
+      rows.map((r) => r.uolExperienceYears),
+      rows.map((r) => r.isEligible),
+      rows.map((r) => r.eligibilityStatus),
+      rows.map((r) => r.applicableDuration),
+      rows.map((r) => r.applicableDurationFactor),
     ],
   );
 
-  return { id: inserted.rows[0].id, created: true };
+  return rows.length;
 }
 
 async function main() {
   loadEnvFile();
+  console.log("Starting appraisal eligibility recompute...");
+
   const pool = createPool();
+  console.log("Connecting to database...");
+
   const client = await pool.connect();
+  console.log("Connected.");
 
   try {
+    await ensureEligibilityColumns(client);
+
+    console.log("Loading active cycle and financial year...");
     const cycle = await getActiveCycle(client);
 
     if (!cycle) {
       throw new Error("No appraisal cycle found. Create an active cycle first.");
     }
 
-    const financialYear = await getActiveFinancialYear(client);
-    const referenceEndDate = resolveReferenceEndDate({
-      financialYear,
-      cycleEndDate: cycle.end_date,
-    });
+    const financialYear =
+      (await getActiveFinancialYear(client)) ?? cycle.fiscal_year ?? null;
+    const referenceEndDate = resolveReferenceEndDate({ financialYear });
 
-    const users = await client.query(
+    console.log(`Cycle id: ${cycle.id}`);
+    console.log(`Financial year: ${financialYear}`);
+    console.log(`Reference end date: ${formatLocalDate(referenceEndDate)}`);
+
+    console.log("Loading form templates...");
+    const templateMap = await loadTemplateMap(client);
+    console.log(`Template mappings: ${templateMap.size}`);
+
+    console.log("Loading active employees...");
+    const usersResult = await client.query(
       `SELECT
-         id,
-         employee_id,
-         date_of_joining::text,
-         staff_category_id,
-         staff_sub_category_id
-       FROM users
-       WHERE is_active = TRUE
-         AND employee_id <> 'EMP-0001'
-       ORDER BY id`,
+         u.id,
+         u.employee_id,
+         u.date_of_joining::text,
+         u.staff_category_id,
+         u.staff_sub_category_id,
+         ap.id AS appraisal_id
+       FROM users u
+       LEFT JOIN appraisals ap
+         ON ap.employee_id = u.id
+        AND ap.cycle_id = $1
+       WHERE u.is_active = TRUE
+         AND u.employee_id <> 'EMP-0001'
+       ORDER BY u.id`,
+      [cycle.id],
     );
 
-    let created = 0;
-    let updated = 0;
-    let skippedNoDoj = 0;
+    const users = usersResult.rows;
+    console.log(`Employees to process: ${users.length}`);
+
     const statusCounts = {
       "Fully Eligible": 0,
       "Partially Eligible": 0,
       "Not Eligible": 0,
     };
+    let skippedNoDoj = 0;
+    let updated = 0;
+    let created = 0;
 
-    await client.query("BEGIN");
+    const toUpdate = [];
+    const toInsert = [];
 
-    for (const user of users.rows) {
+    for (const user of users) {
       if (!user.date_of_joining) {
         skippedNoDoj += 1;
       }
 
       const eligibility = computeAppraisalEligibility(user.date_of_joining, {
         financialYear,
-        cycleEndDate: formatLocalDate(referenceEndDate),
       });
-
       statusCounts[eligibility.status] += 1;
 
-      const templateId = await resolveTemplateId(client, user);
-      const result = await upsertAppraisal(
-        client,
-        user,
-        cycle.id,
-        templateId,
-        eligibility,
-      );
+      const row = {
+        userId: user.id,
+        appraisalId: user.appraisal_id ? Number(user.appraisal_id) : null,
+        templateId: resolveTemplateId(user, templateMap),
+        uolExperienceYears: eligibility.uolExperienceYears,
+        isEligible: eligibility.isEligible,
+        eligibilityStatus: eligibility.status,
+        applicableDuration: eligibility.applicableDuration,
+        applicableDurationFactor: eligibility.applicableDurationFactor,
+      };
 
-      if (result.created) {
-        created += 1;
+      if (row.appraisalId) {
+        toUpdate.push(row);
       } else {
-        updated += 1;
+        toInsert.push(row);
       }
     }
 
-    await client.query("COMMIT");
+    console.log(
+      `Prepared ${toUpdate.length} updates and ${toInsert.length} inserts. Writing in batches of ${BATCH_SIZE}...`,
+    );
 
+    await client.query("BEGIN");
+
+    try {
+      for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+        const batch = toUpdate.slice(i, i + BATCH_SIZE);
+        updated += await updateExistingAppraisals(client, batch);
+        console.log(
+          `  Updated ${Math.min(i + BATCH_SIZE, toUpdate.length)} / ${toUpdate.length}`,
+        );
+      }
+
+      for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+        const batch = toInsert.slice(i, i + BATCH_SIZE);
+        created += await insertMissingAppraisals(client, cycle.id, batch);
+        console.log(
+          `  Inserted ${Math.min(i + BATCH_SIZE, toInsert.length)} / ${toInsert.length}`,
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+
+    console.log("");
     console.log("Appraisal eligibility recompute completed.");
-    console.log(`Cycle id: ${cycle.id}`);
-    console.log(`Reference end date: ${formatLocalDate(referenceEndDate)}`);
-    console.log(`Employees scanned: ${users.rows.length}`);
-    console.log(`Appraisals created: ${created}`);
+    console.log(`Employees scanned: ${users.length}`);
     console.log(`Appraisals updated: ${updated}`);
+    console.log(`Appraisals created: ${created}`);
     console.log(`Employees without DOJ: ${skippedNoDoj}`);
     console.log("Eligibility breakdown:", statusCounts);
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
   } finally {
     client.release();
     await pool.end();

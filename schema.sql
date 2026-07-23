@@ -168,10 +168,12 @@ CREATE TABLE appraisals (
     calibrated_rating performance_rating, -- Rating (N)
     performance_quartile_id BIGINT, -- FK added after performance_quartiles exists
 
-    -- Eligibility / evaluation remarks
+    -- Eligibility / evaluation remarks (scoped to appraisal cycle financial year)
     uol_experience_years NUMERIC(6, 2),
     is_eligible BOOLEAN,
+    eligibility_status VARCHAR(30), -- Fully Eligible | Partially Eligible | Not Eligible
     applicable_duration VARCHAR(100),
+    applicable_duration_factor NUMERIC(3, 1), -- 1 = full, 0 = none, else months/12
     remarks_evaluation TEXT,
 
     -- Compensation worksheet

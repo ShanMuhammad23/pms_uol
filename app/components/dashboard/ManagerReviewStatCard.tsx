@@ -28,54 +28,50 @@ export function ManagerReviewStatCard({
       whileTap={onClick ? { scale: 0.98 } : undefined}
       onClick={onClick}
       className={cn(
-        "group relative flex-1 cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-primary p-4 text-white shadow-sm transition-all duration-300 dark:border-slate-700",
+        "group relative min-w-0 cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-primary p-3 text-white shadow-sm transition-all duration-300 sm:p-4 dark:border-slate-700",
         active
           ? "shadow-md ring-1 ring-amber-500 ring-offset-2 ring-offset-slate-50 dark:ring-amber-400 dark:ring-offset-slate-950"
           : "hover:shadow-md",
       )}
     >
-      <div className="grid grid-cols-[minmax(0,6.5rem)_1fr_1fr] items-center gap-x-2 gap-y-2">
-        {/* Row 1: title + manager labels */}
-        <p className="text-sm font-semibold uppercase tracking-wider text-white">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1.5 sm:gap-x-2 sm:gap-y-2">
+        <p className="min-w-0 text-[10px] font-semibold uppercase leading-tight tracking-wider text-white sm:text-xs lg:text-sm">
           Review
         </p>
-        <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-white/90">
+        <p className="truncate text-center text-[9px] font-semibold uppercase tracking-wider text-white/90 sm:text-[10px]">
           Manager 1
         </p>
-        <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-white/90">
+        <p className="truncate text-center text-[9px] font-semibold uppercase tracking-wider text-white/90 sm:text-[10px]">
           Manager 2
         </p>
 
-        {/* Row 2: percentages under managers */}
         <span aria-hidden className="block" />
         <p
-          className="text-center text-xs font-semibold tabular-nums text-amber-200"
+          className="text-center text-[10px] font-semibold tabular-nums text-amber-200 sm:text-xs"
           title="Completion percentage"
         >
           {manager1.percentageLabel}
         </p>
         <p
-          className="text-center text-xs font-semibold tabular-nums text-amber-200"
+          className="text-center text-[10px] font-semibold tabular-nums text-amber-200 sm:text-xs"
           title="Completion percentage"
         >
           {manager2.percentageLabel}
         </p>
 
-        {/* Row 3: Submitted counts */}
-        <p className="text-xs text-white/90">Submitted</p>
-        <p className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
+        <p className="truncate text-[10px] text-white/90 sm:text-xs">Submitted</p>
+        <p className="text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg lg:text-xl">
           {manager1.awaiting}
         </p>
-        <p className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
+        <p className="text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg lg:text-xl">
           {manager2.awaiting}
         </p>
 
-        {/* Row 4: Reviewed counts */}
-        <p className="text-xs text-white/90">Reviewed</p>
-        <p className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
+        <p className="truncate text-[10px] text-white/90 sm:text-xs">Reviewed</p>
+        <p className="text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg lg:text-xl">
           {manager1.completed}
         </p>
-        <p className="text-center text-xl font-bold tracking-tight tabular-nums text-white">
+        <p className="text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg lg:text-xl">
           {manager2.completed}
         </p>
       </div>

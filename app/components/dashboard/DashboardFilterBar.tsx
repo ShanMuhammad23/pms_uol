@@ -139,7 +139,7 @@ export function DashboardFilterBar({
               className="overflow-hidden"
             >
               <div className="border-t border-slate-200 px-4 pb-4 pt-3 dark:border-white/10">
-                <div className="flex flex-wrap gap-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
                   {ENTITY_FILTER_LEVELS.map((level, index) => (
                     <MultiSelectFilterDropdown
                       key={level.label}
