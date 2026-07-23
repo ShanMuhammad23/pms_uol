@@ -3,12 +3,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  ChevronDown,
+  ChevronRight,
   Layers,
   Pencil,
   Percent,
   Plus,
   Trash2,
   TrendingUp,
+  UserCheck,
+  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -16,20 +20,17 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { fetchFinancialYears } from "@/lib/queries/financial-years-client";
 import { fetchPerformanceMatrix } from "@/lib/queries/performance-matrices-client";
 import {
+  assignIncrementMatrixToEmployees,
   createSubCategoryIncrementMatrix,
   deleteSubCategoryIncrementMatrix,
+  fetchIncrementMatrixAssignments,
   fetchSubCategoryIncrementMatrices,
+  unassignIncrementMatrixFromEmployees,
   updateSubCategoryIncrementMatrix,
 } from "@/lib/queries/sub-category-increment-matrices-client";
-import {
-  CATEGORY_LABELS,
-  CATEGORY_SUB_MAP,
-  EMPLOYEE_CATEGORIES,
-  SUB_CATEGORY_LABELS,
-  type EmployeeCategory,
-  type SubCategory,
-} from "@/types/forms";
+import { fetchUsers } from "@/lib/queries/users-client";
 import type { SubCategoryIncrementMatrixRecord } from "@/types/sub-category-increment-matrices";
+import type { UserRecord } from "@/types/users";
 
 type MessageTone = "success" | "error";
 
@@ -38,6 +39,8 @@ interface FormMessage {
   text: string;
 }
 
+type RightPanel = "entries" | "assign";
+
 export default function IncrementMatrixManager() {
   const queryClient = useQueryClient();
 
@@ -45,13 +48,7 @@ export default function IncrementMatrixManager() {
   const [selectedFinancialYearId, setSelectedFinancialYearId] = useState<
     number | null
   >(null);
-  const [targetCategory, setTargetCategory] = useState<EmployeeCategory | "">(
-    "",
-  );
   const [matrixLabel, setMatrixLabel] = useState("Default");
-  const [targetSubCategory, setTargetSubCategory] = useState<SubCategory | "">(
-    "",
-  );
   const [performanceLevelId, setPerformanceLevelId] = useState<number | "">(
     "",
   );
@@ -59,12 +56,20 @@ export default function IncrementMatrixManager() {
     number | ""
   >("");
   const [incrementPercentage, setIncrementPercentage] = useState(10);
-  const [categoryFilter, setCategoryFilter] = useState<EmployeeCategory | "ALL">(
-    "ALL",
-  );
   const [editingEntry, setEditingEntry] =
     useState<SubCategoryIncrementMatrixRecord | null>(null);
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+
+  const [rightPanel, setRightPanel] = useState<RightPanel>("entries");
+
+  // Assignment state
+  const [selectedMatrixLabel, setSelectedMatrixLabel] = useState<string>("");
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+
+  // Collapsed matrix groups in entries table
+  const [collapsedMatrices, setCollapsedMatrices] = useState<Set<string>>(
+    new Set(),
+  );
 
   /* ─── Data ─── */
   const { data: financialYears, isLoading: yearsLoading } = useQuery({
@@ -96,47 +101,86 @@ export default function IncrementMatrixManager() {
     enabled: selectedFinancialYearId !== null,
   });
 
+  const { data: assignments } = useQuery({
+    queryKey: ["increment-matrix-assignments", selectedFinancialYearId],
+    queryFn: () => fetchIncrementMatrixAssignments(selectedFinancialYearId!),
+    enabled: selectedFinancialYearId !== null,
+  });
+
+  const { data: users } = useQuery({
+    queryKey: ["users"],
+    queryFn: fetchUsers,
+  });
+
   /* ─── Derived ─── */
-  const subCategories = targetCategory ? CATEGORY_SUB_MAP[targetCategory] : [];
   const selectedLevel = performanceMatrix?.find(
     (level) => Number(level.id) === Number(performanceLevelId),
   );
   const quartileOptions = selectedLevel?.quartiles ?? [];
 
-  const filteredEntries = useMemo(() => {
+  const matrixLabels = useMemo(() => {
     if (!entries) return [];
-    if (categoryFilter === "ALL") return entries;
-    return entries.filter((entry) => entry.targetCategory === categoryFilter);
-  }, [entries, categoryFilter]);
+    return [...new Set(entries.map((e) => e.matrixLabel))].sort();
+  }, [entries]);
 
-  const categoryCounts = useMemo(() => {
-    const map: Record<string, number> = { ALL: entries?.length ?? 0 };
-    EMPLOYEE_CATEGORIES.forEach((cat) => {
-      map[cat] =
-        entries?.filter((e) => e.targetCategory === cat).length ?? 0;
-    });
+  // Entries grouped by matrix label
+  const entriesByLabel = useMemo(() => {
+    const map = new Map<string, SubCategoryIncrementMatrixRecord[]>();
+    if (!entries) return map;
+    for (const entry of entries) {
+      const list = map.get(entry.matrixLabel) ?? [];
+      list.push(entry);
+      map.set(entry.matrixLabel, list);
+    }
     return map;
   }, [entries]);
 
+  useEffect(() => {
+    if (!selectedMatrixLabel && matrixLabels.length > 0) {
+      setSelectedMatrixLabel(matrixLabels[0]);
+    }
+  }, [matrixLabels, selectedMatrixLabel]);
+
+  const assignedEmployeeIds = useMemo(() => {
+    if (!assignments || !selectedMatrixLabel) return new Set<string>();
+    return new Set(
+      assignments
+        .filter((a) => a.matrixLabel === selectedMatrixLabel)
+        .map((a) => a.employeeCode),
+    );
+  }, [assignments, selectedMatrixLabel]);
+
+  // Map of employeeCode -> matrixLabel for ALL assignments (not just selected matrix)
+  const employeeToMatrixMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!assignments) return map;
+    for (const a of assignments) {
+      map.set(a.employeeCode, a.matrixLabel);
+    }
+    return map;
+  }, [assignments]);
+
+  // Selected employees who are already assigned to a DIFFERENT matrix
+  const conflictingEmployees = useMemo(() => {
+    if (!selectedMatrixLabel || selectedEmployeeIds.length === 0) return [];
+    return selectedEmployeeIds.filter(
+      (code) =>
+        employeeToMatrixMap.has(code) &&
+        employeeToMatrixMap.get(code) !== selectedMatrixLabel,
+    );
+  }, [selectedMatrixLabel, selectedEmployeeIds, employeeToMatrixMap]);
+
   const previewLabel = useMemo(() => {
-    if (
-      !targetCategory ||
-      !targetSubCategory ||
-      !selectedLevel ||
-      !performanceQuartileId
-    )
-      return null;
+    if (!selectedLevel || !performanceQuartileId) return null;
 
     const quartile = quartileOptions.find(
       (item) => Number(item.id) === Number(performanceQuartileId),
     );
     if (!quartile) return null;
 
-    return `${matrixLabel} · ${CATEGORY_LABELS[targetCategory]} · ${SUB_CATEGORY_LABELS[targetSubCategory]} · ${selectedLevel.name} · ${quartile.name} → ${incrementPercentage}%`;
+    return `${matrixLabel} · ${selectedLevel.name} · ${quartile.name} → ${incrementPercentage}%`;
   }, [
     matrixLabel,
-    targetCategory,
-    targetSubCategory,
     selectedLevel,
     performanceQuartileId,
     quartileOptions,
@@ -146,17 +190,30 @@ export default function IncrementMatrixManager() {
   /* ─── Handlers ─── */
   const resetForm = () => {
     setMatrixLabel("Default");
-    setTargetCategory("");
-    setTargetSubCategory("");
     setPerformanceLevelId("");
     setPerformanceQuartileId("");
     setIncrementPercentage(10);
     setEditingEntry(null);
   };
 
+  const handleNewMatrix = () => {
+    setMatrixLabel("");
+    setPerformanceLevelId("");
+    setPerformanceQuartileId("");
+    setIncrementPercentage(10);
+    setEditingEntry(null);
+    setFormMessage(null);
+  };
+
   const invalidateEntries = () => {
     queryClient.invalidateQueries({
       queryKey: ["sub-category-increment-matrices", selectedFinancialYearId],
+    });
+  };
+
+  const invalidateAssignments = () => {
+    queryClient.invalidateQueries({
+      queryKey: ["increment-matrix-assignments", selectedFinancialYearId],
     });
   };
 
@@ -211,10 +268,35 @@ export default function IncrementMatrixManager() {
     },
   });
 
-  const handleCategoryChange = (category: EmployeeCategory) => {
-    setTargetCategory(category);
-    setTargetSubCategory("");
-  };
+  const assignMutation = useMutation({
+    mutationFn: assignIncrementMatrixToEmployees,
+    onSuccess: (data) => {
+      setFormMessage({
+        tone: "success",
+        text: `Assigned increment matrix to ${data.assignedCount} employee(s).`,
+      });
+      setSelectedEmployeeIds([]);
+      invalidateAssignments();
+    },
+    onError: (error: Error) => {
+      setFormMessage({ tone: "error", text: error.message });
+    },
+  });
+
+  const unassignMutation = useMutation({
+    mutationFn: unassignIncrementMatrixFromEmployees,
+    onSuccess: (data) => {
+      setFormMessage({
+        tone: "success",
+        text: `Unassigned increment matrix from ${data.unassignedCount} employee(s).`,
+      });
+      setSelectedEmployeeIds([]);
+      invalidateAssignments();
+    },
+    onError: (error: Error) => {
+      setFormMessage({ tone: "error", text: error.message });
+    },
+  });
 
   const handleLevelChange = (levelId: number) => {
     setPerformanceLevelId(levelId);
@@ -230,23 +312,16 @@ export default function IncrementMatrixManager() {
       return;
     }
 
-    if (
-      !targetCategory ||
-      !targetSubCategory ||
-      !performanceLevelId ||
-      !performanceQuartileId
-    ) {
+    if (!performanceLevelId || !performanceQuartileId) {
       setFormMessage({
         tone: "error",
-        text: "Complete all category, level, and quartile selections.",
+        text: "Complete all level and quartile selections.",
       });
       return;
     }
 
     const payload = {
       matrixLabel: matrixLabel.trim(),
-      targetCategory,
-      targetSubCategory,
       performanceLevelId,
       performanceQuartileId,
       incrementPercentage,
@@ -269,8 +344,6 @@ export default function IncrementMatrixManager() {
   const handleEdit = (entry: SubCategoryIncrementMatrixRecord) => {
     setEditingEntry(entry);
     setMatrixLabel(entry.matrixLabel);
-    setTargetCategory(entry.targetCategory);
-    setTargetSubCategory(entry.targetSubCategory);
     setPerformanceLevelId(entry.performanceLevelId);
     setPerformanceQuartileId(entry.performanceQuartileId);
     setIncrementPercentage(entry.incrementPercentage);
@@ -279,7 +352,7 @@ export default function IncrementMatrixManager() {
 
   const handleDelete = (entry: SubCategoryIncrementMatrixRecord) => {
     const confirmed = window.confirm(
-      `Delete increment entry for ${CATEGORY_LABELS[entry.targetCategory]} / ${SUB_CATEGORY_LABELS[entry.targetSubCategory]} (${entry.performanceLevelName} · ${entry.performanceQuartileName})?`,
+      `Delete increment entry for ${entry.performanceLevelName} · ${entry.performanceQuartileName} (${entry.incrementPercentage}%)?`,
     );
     if (!confirmed) return;
     setFormMessage(null);
@@ -305,9 +378,9 @@ export default function IncrementMatrixManager() {
                   Increment Matrix Configuration
                 </h2>
                 <p className="mt-0.5 max-w-2xl text-sm text-foreground/60">
-                  Define recommended increment percentages for each employee
-                  category, sub-category, performance level, and quartile within
-                  a financial year.
+                  Define recommended increment percentages for each performance
+                  level and quartile within a financial year, then assign them
+                  to individual employees.
                 </p>
               </div>
             </div>
@@ -326,6 +399,7 @@ export default function IncrementMatrixManager() {
                   setSelectedFinancialYearId(Number(e.target.value));
                   resetForm();
                   setFormMessage(null);
+                  setSelectedMatrixLabel("");
                 }}
                 disabled={yearsLoading || !financialYears?.length}
                 className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
@@ -343,56 +417,6 @@ export default function IncrementMatrixManager() {
               </select>
             </div>
           </div>
-        </div>
-
-        {/* Category Filter Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-foreground/40">
-            Filter
-          </span>
-          <button
-            type="button"
-            onClick={() => setCategoryFilter("ALL")}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              categoryFilter === "ALL"
-                ? "bg-primary text-white shadow-sm"
-                : "border border-slate-300 text-text-primary hover:bg-primary/10 dark:border-white/15"
-            }`}
-          >
-            All
-            <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                categoryFilter === "ALL"
-                  ? "bg-white/20 text-white"
-                  : "bg-slate-100 text-foreground/60 dark:bg-slate-800"
-              }`}
-            >
-              {categoryCounts.ALL}
-            </span>
-          </button>
-          {EMPLOYEE_CATEGORIES.map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => setCategoryFilter(category)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                categoryFilter === category
-                  ? "bg-primary text-white shadow-sm"
-                  : "border border-slate-300 text-text-primary hover:bg-primary/10 dark:border-white/15"
-              }`}
-            >
-              {CATEGORY_LABELS[category]}
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                  categoryFilter === category
-                    ? "bg-white/20 text-white"
-                    : "bg-slate-100 text-foreground/60 dark:bg-slate-800"
-                }`}
-              >
-                {categoryCounts[category]}
-              </span>
-            </button>
-          ))}
         </div>
       </div>
 
@@ -426,19 +450,29 @@ export default function IncrementMatrixManager() {
                   {editingEntry ? "Edit Entry" : "New Entry"}
                 </h3>
               </div>
-              {editingEntry ? (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    resetForm();
-                    setFormMessage(null);
-                  }}
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                  onClick={handleNewMatrix}
+                  className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
                 >
-                  <X className="size-3" />
-                  Cancel
+                  <Plus className="size-3" />
+                  New Matrix
                 </button>
-              ) : null}
+                {editingEntry ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setFormMessage(null);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                  >
+                    <X className="size-3" />
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             {!matrixLoading &&
@@ -464,60 +498,17 @@ export default function IncrementMatrixManager() {
                   value={matrixLabel}
                   onChange={(e) => setMatrixLabel(e.target.value)}
                   placeholder="e.g. Matrix A"
+                  list="existing-matrix-labels"
                   className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
                 />
-              </div>
-
-              {/* Category */}
-              <div>
-                <label
-                  htmlFor="increment-category"
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-foreground/60"
-                >
-                  Employee Category
-                </label>
-                <select
-                  id="increment-category"
-                  value={targetCategory}
-                  onChange={(e) =>
-                    handleCategoryChange(e.target.value as EmployeeCategory)
-                  }
-                  disabled={!selectedFinancialYearId}
-                  className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-                >
-                  <option value="">Select category</option>
-                  {EMPLOYEE_CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {CATEGORY_LABELS[category]}
-                    </option>
+                <datalist id="existing-matrix-labels">
+                  {matrixLabels.map((label) => (
+                    <option key={label} value={label} />
                   ))}
-                </select>
-              </div>
-
-              {/* Sub-Category */}
-              <div>
-                <label
-                  htmlFor="increment-sub-category"
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-foreground/60"
-                >
-                  Sub-Category
-                </label>
-                <select
-                  id="increment-sub-category"
-                  value={targetSubCategory}
-                  onChange={(e) =>
-                    setTargetSubCategory(e.target.value as SubCategory)
-                  }
-                  disabled={!targetCategory}
-                  className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
-                >
-                  <option value="">Select sub-category</option>
-                  {subCategories.map((subCategory) => (
-                    <option key={subCategory} value={subCategory}>
-                      {SUB_CATEGORY_LABELS[subCategory]}
-                    </option>
-                  ))}
-                </select>
+                </datalist>
+                <p className="mt-1 text-xs text-foreground/50">
+                  Type a new label to create a new matrix, or pick an existing one to add another entry to it.
+                </p>
               </div>
 
               {/* Performance Level */}
@@ -672,132 +663,393 @@ export default function IncrementMatrixManager() {
           ) : null}
         </div>
 
-        {/* ─── Right: Table (independently scrollable) ─── */}
+        {/* ─── Right: Entries Table + Assignment Panel ─── */}
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-text-primary">
-                Configured Entries
-              </h3>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                {filteredEntries.length}
+          {/* Panel Toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setRightPanel("entries")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                rightPanel === "entries"
+                  ? "bg-primary text-white shadow-sm"
+                  : "border border-slate-300 text-text-primary hover:bg-primary/10 dark:border-white/15"
+              }`}
+            >
+              <Layers className="size-4" />
+              Matrices
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                  rightPanel === "entries"
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-100 text-foreground/60 dark:bg-slate-800"
+                }`}
+              >
+                {matrixLabels.length}
               </span>
-            </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightPanel("assign")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                rightPanel === "assign"
+                  ? "bg-primary text-white shadow-sm"
+                  : "border border-slate-300 text-text-primary hover:bg-primary/10 dark:border-white/15"
+              }`}
+            >
+              <Users className="size-4" />
+              Assign to Employees
+            </button>
           </div>
 
-          <div className="flex-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
-            {entriesLoading ? (
-              <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-foreground/60">
-                  Loading increment entries…
-                </p>
-              </div>
-            ) : null}
-
-            {entriesError ? (
-              <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  Failed to load increment matrix entries.
-                </p>
-              </div>
-            ) : null}
-
-            {!entriesLoading && filteredEntries.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                  <Percent className="size-6 text-foreground/40" />
+          {/* Entries Table */}
+          {rightPanel === "entries" ? (
+            <div className="flex-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
+              {entriesLoading ? (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-sm text-foreground/60">
+                    Loading increment entries…
+                  </p>
                 </div>
-                <p className="mt-3 text-sm font-semibold text-text-primary">
-                  No increment entries yet
-                </p>
-                <p className="mt-1 text-sm text-foreground/60">
-                  Add your first increment rule using the form on the left.
-                </p>
-              </div>
-            ) : null}
+              ) : null}
 
-            {!entriesLoading && filteredEntries.length > 0 ? (
-              <div className="h-full overflow-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm dark:bg-slate-800/95 dark:shadow-white/5">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
-                        Matrix
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
-                        Category
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
-                        Sub-Category
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
-                        Level
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
-                        Quartile
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/70">
-                        Increment
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-foreground/70">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-white/10">
-                    {filteredEntries.map((entry) => (
-                      <tr
-                        key={entry.id}
-                        className="transition-colors hover:bg-slate-50/80 dark:hover:bg-white/5"
-                      >
-                        <td className="px-4 py-3 text-text-primary">
-                          {entry.matrixLabel}
-                        </td>
-                        <td className="px-4 py-3 text-text-primary">
-                          {CATEGORY_LABELS[entry.targetCategory]}
-                        </td>
-                        <td className="px-4 py-3 text-text-primary">
-                          {SUB_CATEGORY_LABELS[entry.targetSubCategory]}
-                        </td>
-                        <td className="px-4 py-3 text-text-primary">
-                          {entry.performanceLevelName}
-                        </td>
-                        <td className="px-4 py-3 text-text-primary">
-                          {entry.performanceQuartileName}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
-                            {entry.incrementPercentage}%
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleEdit(entry)}
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-primary/10 hover:text-primary dark:border-white/15"
-                            >
-                              <Pencil className="size-3" />
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(entry)}
-                              disabled={deleteMutation.isPending}
-                              className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900/40"
-                            >
-                              <Trash2 className="size-3" />
-                              Delete
-                            </button>
+              {entriesError ? (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    Failed to load increment matrix entries.
+                  </p>
+                </div>
+              ) : null}
+
+              {!entriesLoading && (entries?.length ?? 0) === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                    <Percent className="size-6 text-foreground/40" />
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-text-primary">
+                    No increment matrices yet
+                  </p>
+                  <p className="mt-1 text-sm text-foreground/60">
+                    Create your first increment matrix using the form on the left.
+                  </p>
+                </div>
+              ) : null}
+
+              {!entriesLoading && (entries?.length ?? 0) > 0 ? (
+                <div className="h-full overflow-auto">
+                  {matrixLabels.map((label) => {
+                    const labelEntries = entriesByLabel.get(label) ?? [];
+                    const isCollapsed = collapsedMatrices.has(label);
+                    return (
+                      <div key={label} className="border-b border-slate-200 last:border-b-0 dark:border-white/10">
+                        {/* Matrix Header */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCollapsedMatrices((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(label)) {
+                                next.delete(label);
+                              } else {
+                                next.add(label);
+                              }
+                              return next;
+                            });
+                          }}
+                          className="flex w-full items-center justify-between bg-slate-50/80 px-4 py-3 text-left transition-colors hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isCollapsed ? (
+                              <ChevronRight className="size-4 text-foreground/50" />
+                            ) : (
+                              <ChevronDown className="size-4 text-foreground/50" />
+                            )}
+                            <Layers className="size-4 text-primary" />
+                            <span className="text-sm font-bold text-text-primary">
+                              {label}
+                            </span>
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                              {labelEntries.length} entr{labelEntries.length === 1 ? "y" : "ies"}
+                            </span>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <span className="text-xs text-foreground/50">
+                            Click to {isCollapsed ? "expand" : "collapse"}
+                          </span>
+                        </button>
+
+                        {/* Matrix Entries */}
+                        {!isCollapsed ? (
+                          <table className="min-w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-200 dark:border-white/10">
+                                <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-foreground/60">
+                                  Level
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-foreground/60">
+                                  Quartile
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-foreground/60">
+                                  Increment
+                                </th>
+                                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-foreground/60">
+                                  Actions
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                              {labelEntries.map((entry) => (
+                                <tr
+                                  key={entry.id}
+                                  className="transition-colors hover:bg-slate-50/80 dark:hover:bg-white/5"
+                                >
+                                  <td className="px-4 py-2.5 text-text-primary">
+                                    {entry.performanceLevelName}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-text-primary">
+                                    {entry.performanceQuartileName}
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
+                                      {entry.incrementPercentage}%
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEdit(entry)}
+                                        className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-primary/10 hover:text-primary dark:border-white/15"
+                                      >
+                                        <Pencil className="size-3" />
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDelete(entry)}
+                                        disabled={deleteMutation.isPending}
+                                        className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900/40"
+                                      >
+                                        <Trash2 className="size-3" />
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Assignment Panel */}
+          {rightPanel === "assign" ? (
+            <div className="flex-1 overflow-auto rounded-md border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-semibold text-text-primary">
+                    Assign increment matrix to employees
+                  </h3>
+                  <p className="mt-1 text-sm text-foreground/70">
+                    Select a matrix label, then choose employees to assign.
+                    Each employee gets one increment matrix per financial year.
+                  </p>
+                </div>
+
+                {/* Matrix Label Selector */}
+                <div>
+                  <label
+                    htmlFor="assign-matrix-label"
+                    className="mb-1.5 block text-sm font-medium text-text-primary"
+                  >
+                    Increment Matrix Label
+                  </label>
+                  <select
+                    id="assign-matrix-label"
+                    value={selectedMatrixLabel}
+                    onChange={(e) => {
+                      setSelectedMatrixLabel(e.target.value);
+                      setSelectedEmployeeIds([]);
+                    }}
+                    disabled={!matrixLabels.length}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                  >
+                    {!matrixLabels.length ? (
+                      <option value="">No increment matrices configured</option>
+                    ) : (
+                      matrixLabels.map((label) => (
+                        <option key={label} value={label}>
+                          {label}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                {selectedMatrixLabel ? (
+                  <div className="rounded-md border border-sky-200 bg-sky-50/50 px-4 py-3 dark:border-sky-500/30 dark:bg-sky-950/20">
+                    <p className="text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                      Assigning
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-sky-900 dark:text-sky-100">
+                      {selectedMatrixLabel}
+                    </p>
+                    <p className="mt-1 text-xs text-sky-600 dark:text-sky-400">
+                      {assignments?.filter((a) => a.matrixLabel === selectedMatrixLabel).length ?? 0} employee(s) currently assigned
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* Employee Selection */}
+                <div>
+                  <label
+                    htmlFor="assign-employees"
+                    className="mb-1.5 block text-sm font-medium text-text-primary"
+                  >
+                    Employees
+                  </label>
+                  <select
+                    id="assign-employees"
+                    multiple
+                    value={selectedEmployeeIds}
+                    onChange={(event) => {
+                      const selected = Array.from(
+                        event.currentTarget.selectedOptions,
+                      ).map((option) => option.value);
+                      setSelectedEmployeeIds(selected);
+                    }}
+                    className="min-h-48 w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                  >
+                    {(users ?? []).map((user: UserRecord) => {
+                      const currentMatrix = employeeToMatrixMap.get(user.employeeId);
+                      const isAssignedToThis = assignedEmployeeIds.has(user.employeeId);
+                      const isAssignedToOther =
+                        currentMatrix && currentMatrix !== selectedMatrixLabel;
+                      return (
+                        <option
+                          key={user.id}
+                          value={user.employeeId}
+                          className={
+                            isAssignedToThis
+                              ? "font-semibold text-primary"
+                              : isAssignedToOther
+                                ? "text-amber-600"
+                                : ""
+                          }
+                        >
+                          {user.employeeId} -{" "}
+                          {`${user.firstName} ${user.lastName}`.trim()}
+                          {isAssignedToThis
+                            ? " ✓"
+                            : isAssignedToOther
+                              ? ` (assigned to: ${currentMatrix})`
+                              : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="mt-1.5 text-xs text-foreground/60">
+                    Hold Ctrl/Cmd to select multiple employees. ✓ = assigned to this matrix. Amber text = assigned to a different matrix (unassign first).
+                    {selectedEmployeeIds.length > 0
+                      ? ` ${selectedEmployeeIds.length} selected.`
+                      : ""}
+                  </p>
+                </div>
+
+                {/* Conflict Warning */}
+                {conflictingEmployees.length > 0 ? (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    <p className="font-semibold">
+                      {conflictingEmployees.length} employee(s) are already assigned to a different matrix.
+                    </p>
+                    <p className="mt-1">
+                      Unassign them first before assigning to &ldquo;{selectedMatrixLabel}&rdquo;.
+                      The server will reject this assignment otherwise.
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={
+                      !selectedFinancialYearId ||
+                      !selectedMatrixLabel ||
+                      selectedEmployeeIds.length === 0 ||
+                      assignMutation.isPending
+                    }
+                    onClick={() => {
+                      if (!selectedFinancialYearId || !selectedMatrixLabel) return;
+                      setFormMessage(null);
+                      assignMutation.mutate({
+                        financialYearId: selectedFinancialYearId,
+                        matrixLabel: selectedMatrixLabel,
+                        employeeCodes: selectedEmployeeIds,
+                      });
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+                  >
+                    <UserCheck className="size-4" />
+                    Assign selected employees
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      !selectedFinancialYearId ||
+                      selectedEmployeeIds.length === 0 ||
+                      unassignMutation.isPending
+                    }
+                    onClick={() => {
+                      if (!selectedFinancialYearId) return;
+                      setFormMessage(null);
+                      unassignMutation.mutate({
+                        financialYearId: selectedFinancialYearId,
+                        employeeCodes: selectedEmployeeIds,
+                      });
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900/40"
+                  >
+                    <Trash2 className="size-4" />
+                    Unassign selected
+                  </button>
+                </div>
+
+                {/* Currently Assigned List */}
+                {selectedMatrixLabel && assignments ? (
+                  <div className="mt-4">
+                    <h4 className="mb-2 text-sm font-semibold text-text-primary">
+                      Currently Assigned to &ldquo;{selectedMatrixLabel}&rdquo;
+                    </h4>
+                    {assignments.filter((a) => a.matrixLabel === selectedMatrixLabel).length === 0 ? (
+                      <p className="text-sm text-foreground/60">
+                        No employees assigned to this matrix yet.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {assignments
+                          .filter((a) => a.matrixLabel === selectedMatrixLabel)
+                          .map((a) => (
+                            <span
+                              key={a.employeeId}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-text-primary dark:border-white/10 dark:bg-white/5"
+                            >
+                              {a.employeeCode} — {a.firstName} {a.lastName}
+                            </span>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

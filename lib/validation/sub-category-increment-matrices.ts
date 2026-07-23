@@ -1,7 +1,3 @@
-import {
-  CATEGORY_SUB_MAP,
-  EMPLOYEE_CATEGORIES,
-} from "@/types/forms";
 import type {
   CreateSubCategoryIncrementMatrixInput,
   UpdateSubCategoryIncrementMatrixInput,
@@ -25,24 +21,6 @@ function validateIncrementPercentage(value: unknown): string | null {
   return null;
 }
 
-function validateCategoryPair(
-  targetCategory: CreateSubCategoryIncrementMatrixInput["targetCategory"] | undefined,
-  targetSubCategory: CreateSubCategoryIncrementMatrixInput["targetSubCategory"] | undefined,
-): string | null {
-  if (!targetCategory || !EMPLOYEE_CATEGORIES.includes(targetCategory)) {
-    return "Employee category is required.";
-  }
-
-  if (
-    !targetSubCategory ||
-    !CATEGORY_SUB_MAP[targetCategory].includes(targetSubCategory)
-  ) {
-    return "Sub-category is required and must belong to the selected category.";
-  }
-
-  return null;
-}
-
 export function validateCreateSubCategoryIncrementMatrixInput(
   input: Partial<CreateSubCategoryIncrementMatrixInput>,
 ): string | null {
@@ -52,14 +30,6 @@ export function validateCreateSubCategoryIncrementMatrixInput(
 
   if (!input.financialYearId || Number.isNaN(Number(input.financialYearId))) {
     return "Financial year is required.";
-  }
-
-  const categoryError = validateCategoryPair(
-    input.targetCategory,
-    input.targetSubCategory,
-  );
-  if (categoryError) {
-    return categoryError;
   }
 
   if (!input.performanceLevelId || Number.isNaN(Number(input.performanceLevelId))) {
@@ -78,14 +48,6 @@ export function validateUpdateSubCategoryIncrementMatrixInput(
 ): string | null {
   if (!input.matrixLabel?.trim()) {
     return "Matrix label is required.";
-  }
-
-  const categoryError = validateCategoryPair(
-    input.targetCategory,
-    input.targetSubCategory,
-  );
-  if (categoryError) {
-    return categoryError;
   }
 
   if (!input.performanceLevelId || Number.isNaN(Number(input.performanceLevelId))) {
