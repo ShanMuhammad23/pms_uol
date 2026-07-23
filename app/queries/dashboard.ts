@@ -19,9 +19,10 @@ import {
   useMatrixForDistribution,
   usePerformanceMatrixQuery,
 } from "@/app/queries/performance";
-import { matchesSubmissionFilters } from "@/app/helpers/dashboard-filters";
+import { matchesSubmissionFilters, matchesSubmissionFiltersExcluding } from "@/app/helpers/dashboard-filters";
 import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
 import { submissionVisibleToHead } from "@/app/helpers/manager-review";
+import { countEligibleSubmissions } from "@/app/helpers/dashboard-workflow-stats";
 import { isHeadRole } from "@/lib/auth/home-path";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
@@ -130,8 +131,21 @@ export function useDashboardPage() {
     );
   }, [scopedSubmissions, filterState]);
 
+  // Institutional Quota scales from eligible headcount ignoring workflow/form-state
+  // filters so stats-card clicks do not change quota counts on the rating curve.
+  const quotaEligibleCount = useMemo(
+    () =>
+      countEligibleSubmissions(
+        scopedOverview.filter((submission) =>
+          matchesSubmissionFiltersExcluding(submission, filterState, "formState"),
+        ),
+      ),
+    [scopedOverview, filterState],
+  );
+
   const chartMetrics = useDashboardChartMetrics({
     filteredSubmissions: filteredOverview,
+    quotaEligibleCount,
     isDarkMode,
     matrixForDistribution,
     institutionalQuotaRows,

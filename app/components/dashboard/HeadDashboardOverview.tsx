@@ -1,7 +1,7 @@
 "use client";
 
 import { User } from "lucide-react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Area,
   AreaChart,
@@ -24,6 +24,7 @@ import type {
   ManagerReviewDualStats,
   WorkflowStageStats,
 } from "@/app/helpers/dashboard-workflow-stats";
+import { cn } from "@/lib/utils";
 
 interface HeadDashboardOverviewProps {
   eligibilityData: Array<{ name: string; value: number; color: string }>;
@@ -32,6 +33,8 @@ interface HeadDashboardOverviewProps {
   selectedFormStates: string[] | null;
   onFilterByFormState: (state: FormState) => void;
   calibrationData: Array<{ rating: string; quota: number; actual: number }>;
+  statsVisible?: boolean;
+  chartsVisible?: boolean;
 }
 
 function isFormStateActive(
@@ -45,6 +48,11 @@ function isFormStateActive(
   );
 }
 
+const panelTransition = {
+  duration: 0.35,
+  ease: [0.23, 1, 0.32, 1] as const,
+};
+
 export function HeadDashboardOverview({
   eligibilityData,
   selfAssessmentStats,
@@ -52,98 +60,140 @@ export function HeadDashboardOverview({
   selectedFormStates,
   onFilterByFormState,
   calibrationData,
+  statsVisible = true,
+  chartsVisible = true,
 }: HeadDashboardOverviewProps) {
+  if (!statsVisible && !chartsVisible) {
+    return null;
+  }
+
   return (
     <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch"
+      className={cn(
+        "mb-8 grid grid-cols-1 gap-4 lg:items-stretch",
+        statsVisible && chartsVisible ? "lg:grid-cols-2" : "lg:grid-cols-1",
+      )}
     >
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch">
-        <EligibilityStatCard data={eligibilityData} delay={0} />
-        <StatCard
-          title="Self Assessment"
-          awaiting={selfAssessmentStats.awaiting}
-          completed={selfAssessmentStats.completed}
-          percentageLabel={selfAssessmentStats.percentageLabel}
-          awaitingtitle="Eligible"
-          completedtitle="Submitted"
-          tone="slate"
-          icon={User}
-          delay={0.1}
-          onClick={() => onFilterByFormState("PENDING_SELF_ASSESSMENT")}
-          active={isFormStateActive(selectedFormStates, "PENDING_SELF_ASSESSMENT")}
-        />
-        <ManagerReviewStatCard
-          manager1={managerReviewStats.manager1}
-          manager2={managerReviewStats.manager2}
-          delay={0.2}
-          onClick={() => onFilterByFormState("PENDING_HEAD_REVIEW")}
-          active={isFormStateActive(selectedFormStates, "PENDING_HEAD_REVIEW")}
-        />
-      </div>
+      <AnimatePresence initial={false}>
+        {statsVisible ? (
+          <motion.div
+            key="head-stats"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={panelTransition}
+            className="grid grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2 lg:items-stretch"
+          >
+            <EligibilityStatCard data={eligibilityData} delay={0} />
+            <StatCard
+              title="Self Assessment"
+              awaiting={selfAssessmentStats.awaiting}
+              completed={selfAssessmentStats.completed}
+              percentageLabel={selfAssessmentStats.percentageLabel}
+              awaitingtitle="Eligible"
+              completedtitle="Submitted"
+              tone="slate"
+              icon={User}
+              delay={0.1}
+              onClick={() => onFilterByFormState("PENDING_SELF_ASSESSMENT")}
+              active={isFormStateActive(
+                selectedFormStates,
+                "PENDING_SELF_ASSESSMENT",
+              )}
+            />
+            <ManagerReviewStatCard
+              manager1={managerReviewStats.manager1}
+              manager2={managerReviewStats.manager2}
+              delay={0.2}
+              onClick={() => onFilterByFormState("PENDING_HEAD_REVIEW")}
+              active={isFormStateActive(selectedFormStates, "PENDING_HEAD_REVIEW")}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
-      <ChartCard
-        title="Performance Rating Curve"
-        delay={0.35}
-        className="h-full min-h-80"
-      >
-        <div className="h-[320px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={calibrationData}
-              margin={{ top: 20, right: 10, left: -10, bottom: 0 }}
+      <AnimatePresence initial={false}>
+        {chartsVisible ? (
+          <motion.div
+            key="head-charts"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={panelTransition}
+            className="overflow-hidden"
+          >
+            <ChartCard
+              title="Performance Rating Curve"
+              delay={0.35}
+              className="h-full min-h-80"
             >
-              <defs>
-                <linearGradient id="headQuotaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
-                  <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#e2e8f0"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="rating"
-                tick={{ fontSize: 11, fill: "#64748b" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fontSize: 11, fill: "#64748b" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend
-                wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }}
-                iconType="circle"
-                iconSize={8}
-              />
-              <Area
-                type="monotone"
-                dataKey="quota"
-                name="Institutional Quota"
-                stroke="#64748b"
-                strokeWidth={2}
-                fill="url(#headQuotaGrad)"
-                dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}
-              >
-                <LabelList
-                  dataKey="quota"
-                  position="top"
-                  offset={8}
-                  style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }}
-                />
-              </Area>
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </ChartCard>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={calibrationData}
+                    margin={{ top: 20, right: 10, left: -10, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient
+                        id="headQuotaGrad"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop offset="5%" stopColor="#64748b" stopOpacity={0.1} />
+                        <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#e2e8f0"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="rating"
+                      tick={{ fontSize: 11, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 11, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend
+                      wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }}
+                      iconType="circle"
+                      iconSize={8}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="quota"
+                      name="Institutional Quota"
+                      stroke="#64748b"
+                      strokeWidth={2}
+                      fill="url(#headQuotaGrad)"
+                      dot={{ r: 4, fill: "#64748b", strokeWidth: 0 }}
+                    >
+                      <LabelList
+                        dataKey="quota"
+                        position="top"
+                        offset={8}
+                        style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }}
+                      />
+                    </Area>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </ChartCard>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </motion.div>
   );
 }

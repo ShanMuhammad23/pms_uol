@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { DashboardPrimaryCharts } from "@/app/components/dashboard/DashboardPrimaryCharts";
+import { DashboardSectionToggles } from "@/app/components/dashboard/DashboardSectionToggles";
 import { DashboardSubmissionsTable } from "@/app/components/dashboard/DashboardSubmissionsTable";
 import { DashboardWorkflowStatsRow } from "@/app/components/dashboard/DashboardWorkflowStatsRow";
 import { HeadDashboardOverview } from "@/app/components/dashboard/HeadDashboardOverview";
@@ -12,8 +15,15 @@ interface HRDashboardPageProps {
   role?: string | null;
 }
 
+const panelTransition = {
+  duration: 0.35,
+  ease: [0.23, 1, 0.32, 1] as const,
+};
+
 export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   const isHead = isHeadRole(role);
+  const [statsVisible, setStatsVisible] = useState(true);
+  const [chartsVisible, setChartsVisible] = useState(true);
   const {
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
@@ -57,7 +67,14 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   } = useDashboardPage();
 
   return (
-    <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
+    <div className="relative min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
+      <DashboardSectionToggles
+        statsVisible={statsVisible}
+        onToggleStats={() => setStatsVisible((current) => !current)}
+        chartsVisible={chartsVisible}
+        onToggleCharts={() => setChartsVisible((current) => !current)}
+      />
+
       <div className="mx-auto w-full max-w-full min-w-0">
         <DashboardFilterBar
           selectedCategory0EntityIds={selectedCategory0EntityIds}
@@ -94,26 +111,54 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
             selectedFormStates={selectedFormStates}
             onFilterByFormState={filterByFormState}
             calibrationData={filteredCalibrationData}
+            statsVisible={statsVisible}
+            chartsVisible={chartsVisible}
           />
         ) : (
           <>
-            <DashboardWorkflowStatsRow
-              eligibilityData={eligibilityData}
-              selfAssessmentStats={selfAssessmentStats}
-              managerReviewStats={managerReviewStats}
-              hrAlignmentStats={hrAlignmentStats}
-              boardApprovalStats={boardApprovalStats}
-              selectedFormStates={selectedFormStates}
-              onFilterByFormState={filterByFormState}
-            />
+            <AnimatePresence initial={false}>
+              {statsVisible ? (
+                <motion.div
+                  key="workflow-stats"
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 32 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={panelTransition}
+                  className="overflow-hidden"
+                >
+                  <DashboardWorkflowStatsRow
+                    eligibilityData={eligibilityData}
+                    selfAssessmentStats={selfAssessmentStats}
+                    managerReviewStats={managerReviewStats}
+                    hrAlignmentStats={hrAlignmentStats}
+                    boardApprovalStats={boardApprovalStats}
+                    selectedFormStates={selectedFormStates}
+                    onFilterByFormState={filterByFormState}
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
 
-            <DashboardPrimaryCharts
-              calibrationData={filteredCalibrationData}
-              ratingQuartileMatrix={ratingQuartileMatrix}
-              employeeCount={chartSubmissions.length}
-              performanceMatrixLoading={performanceMatrixLoading}
-              role={role}
-            />
+            <AnimatePresence initial={false}>
+              {chartsVisible ? (
+                <motion.div
+                  key="primary-charts"
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 16 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={panelTransition}
+                  className="overflow-hidden"
+                >
+                  <DashboardPrimaryCharts
+                    calibrationData={filteredCalibrationData}
+                    ratingQuartileMatrix={ratingQuartileMatrix}
+                    employeeCount={chartSubmissions.length}
+                    performanceMatrixLoading={performanceMatrixLoading}
+                    role={role}
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </>
         )}
 

@@ -18,6 +18,8 @@ import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices
 
 interface UseDashboardChartMetricsParams {
   filteredSubmissions: FormSubmissionListItem[];
+  /** Eligible headcount for Institutional Quota — ignore form-state/stats filters. */
+  quotaEligibleCount?: number;
   isDarkMode: boolean;
   matrixForDistribution: PerformanceLevelWithQuartiles[];
   institutionalQuotaRows?: Array<{ rating: string; quota: number }>;
@@ -25,6 +27,7 @@ interface UseDashboardChartMetricsParams {
 
 export function useDashboardChartMetrics({
   filteredSubmissions,
+  quotaEligibleCount,
   isDarkMode,
   matrixForDistribution,
   institutionalQuotaRows,
@@ -44,9 +47,14 @@ export function useDashboardChartMetrics({
       buildCalibrationData(
         filteredSubmissions,
         institutionalQuotaRows,
-        filteredEligibleCount,
+        quotaEligibleCount ?? filteredEligibleCount,
       ),
-    [filteredSubmissions, institutionalQuotaRows, filteredEligibleCount],
+    [
+      filteredSubmissions,
+      institutionalQuotaRows,
+      quotaEligibleCount,
+      filteredEligibleCount,
+    ],
   );
 
   const ratingQuartileMatrix = useMemo(

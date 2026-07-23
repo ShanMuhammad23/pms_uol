@@ -35,9 +35,9 @@ export function getSubmissionDisplayRating(submission: FormSubmissionListItem): 
 /**
  * @param submissions Filtered submissions — drives Actual Distribution.
  * @param quotas Chart quota series from DB (`/api/institutional-quotas`).
- * @param quotaEligibleCount Eligible headcount (Fully + Partially) within the
- *               current filter selection. Institutional Quota targets are
- *               calculated from this count so the curve follows dashboard filters.
+ * @param quotaEligibleCount Eligible headcount used to scale Institutional Quota
+ *               targets. Should ignore workflow/form-state filters (stats cards)
+ *               so quota counts stay stable when those filters change.
  */
 export function buildCalibrationData(
   submissions: FormSubmissionListItem[],

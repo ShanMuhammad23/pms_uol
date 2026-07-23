@@ -291,7 +291,7 @@ const Sidebar = () => {
                 </div>
                
                 <p className="truncate text-xs text-foreground/60">
-                  {roleLabel ?? "—"}
+                  {user?.designation ?? "—"}
                 </p>
               </div>
             </div>
