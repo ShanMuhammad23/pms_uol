@@ -308,9 +308,11 @@ export function MultiSelectFilterDropdown({
                           {checked ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                        <span className="shrink-0 tabular-nums text-xs text-slate-400 dark:text-slate-500">
-                          {option.count}
-                        </span>
+                        {option.count > 0 ? (
+                          <span className="shrink-0 tabular-nums text-xs text-slate-400 dark:text-slate-500">
+                            {option.count}
+                          </span>
+                        ) : null}
                       </button>
                     </li>
                   );

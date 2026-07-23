@@ -7,9 +7,11 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react
 import { EntityListFilterBar } from "@/app/components/entity-categories/EntityListFilterBar";
 import {
   filterEntityRecords,
-  getDirectChildEntities,
+  getDirectChildEntitiesOfParents,
   getEntitiesForCategoryCode,
+  type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
+import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { fetchEntityCategories } from "@/lib/queries/entity-categories-client";
 import {
   createEntity,
@@ -51,12 +53,10 @@ export default function EntitiesManager() {
   const [selectedCategoryCode, setSelectedCategoryCode] = useState<
     EntityCategoryCode | "ALL"
   >("ALL");
-  const [selectedEntityId, setSelectedEntityId] = useState<number | "ALL">(
-    "ALL",
-  );
-  const [selectedChildEntityId, setSelectedChildEntityId] = useState<
-    number | "ALL"
-  >("ALL");
+  const [selectedEntityIds, setSelectedEntityIds] =
+    useState<MultiFilterSelection<number>>(null);
+  const [selectedChildEntityIds, setSelectedChildEntityIds] =
+    useState<MultiFilterSelection<number>>(null);
 
   const { data: categories, isLoading: categoriesLoading } = useQuery({
     queryKey: ["entity-categories"],
@@ -141,14 +141,39 @@ export default function EntitiesManager() {
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const isLoading = categoriesLoading || entitiesLoading;
 
-  const categoryEntityOptions = useMemo(
+  const categoryEntities = useMemo(
     () => getEntitiesForCategoryCode(entities ?? [], selectedCategoryCode),
     [entities, selectedCategoryCode],
   );
 
-  const childEntityOptions = useMemo(
-    () => getDirectChildEntities(entities ?? [], selectedEntityId),
-    [entities, selectedEntityId],
+  const entityOptions = useMemo<MultiSelectOption[]>(
+    () =>
+      categoryEntities.map((entity) => ({
+        value: String(entity.id),
+        label: entity.name,
+        count: 0,
+      })),
+    [categoryEntities],
+  );
+
+  const childEntities = useMemo(
+    () =>
+      getDirectChildEntitiesOfParents(
+        entities ?? [],
+        selectedEntityIds,
+        categoryEntities.map((entity) => entity.id),
+      ),
+    [entities, selectedEntityIds, categoryEntities],
+  );
+
+  const childEntityOptions = useMemo<MultiSelectOption[]>(
+    () =>
+      childEntities.map((entity) => ({
+        value: String(entity.id),
+        label: `${entity.name} (${entity.categoryCode})`,
+        count: 0,
+      })),
+    [childEntities],
   );
 
   const filteredEntities = useMemo(
@@ -156,43 +181,51 @@ export default function EntitiesManager() {
       filterEntityRecords(entities ?? [], {
         searchQuery,
         categoryCode: selectedCategoryCode,
-        entityId: selectedEntityId,
-        childEntityId: selectedChildEntityId,
+        entityIds: selectedEntityIds,
+        childEntityIds: selectedChildEntityIds,
       }),
     [
       entities,
       searchQuery,
       selectedCategoryCode,
-      selectedEntityId,
-      selectedChildEntityId,
+      selectedEntityIds,
+      selectedChildEntityIds,
     ],
   );
 
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
     selectedCategoryCode !== "ALL" ||
-    selectedEntityId !== "ALL" ||
-    selectedChildEntityId !== "ALL";
+    selectedEntityIds !== null ||
+    selectedChildEntityIds !== null;
 
   const clearFilters = useCallback(() => {
     setSearchQuery("");
     setSelectedCategoryCode("ALL");
-    setSelectedEntityId("ALL");
-    setSelectedChildEntityId("ALL");
+    setSelectedEntityIds(null);
+    setSelectedChildEntityIds(null);
   }, []);
 
   const handleCategoryCodeChange = useCallback(
     (value: EntityCategoryCode | "ALL") => {
       setSelectedCategoryCode(value);
-      setSelectedEntityId("ALL");
-      setSelectedChildEntityId("ALL");
+      setSelectedEntityIds(null);
+      setSelectedChildEntityIds(null);
     },
     [],
   );
 
-  const handleEntityIdChange = useCallback((value: number | "ALL") => {
-    setSelectedEntityId(value);
-    setSelectedChildEntityId("ALL");
+  const handleEntityIdsChange = useCallback((values: string[] | null) => {
+    setSelectedEntityIds(
+      values === null ? null : values.map((value) => Number(value)),
+    );
+    setSelectedChildEntityIds(null);
+  }, []);
+
+  const handleChildEntityIdsChange = useCallback((values: string[] | null) => {
+    setSelectedChildEntityIds(
+      values === null ? null : values.map((value) => Number(value)),
+    );
   }, []);
 
   const parentOptions = useMemo(() => {
@@ -577,11 +610,19 @@ export default function EntitiesManager() {
             onSearchQueryChange={setSearchQuery}
             selectedCategoryCode={selectedCategoryCode}
             onCategoryCodeChange={handleCategoryCodeChange}
-            selectedEntityId={selectedEntityId}
-            onEntityIdChange={handleEntityIdChange}
-            selectedChildEntityId={selectedChildEntityId}
-            onChildEntityIdChange={setSelectedChildEntityId}
-            categoryEntityOptions={categoryEntityOptions}
+            selectedEntityIds={
+              selectedEntityIds === null
+                ? null
+                : selectedEntityIds.map(String)
+            }
+            onEntityIdsChange={handleEntityIdsChange}
+            selectedChildEntityIds={
+              selectedChildEntityIds === null
+                ? null
+                : selectedChildEntityIds.map(String)
+            }
+            onChildEntityIdsChange={handleChildEntityIdsChange}
+            entityOptions={entityOptions}
             childEntityOptions={childEntityOptions}
             categories={categories ?? []}
             categoriesLoading={categoriesLoading}

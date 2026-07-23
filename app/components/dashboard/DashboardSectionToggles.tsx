@@ -54,15 +54,15 @@ export function DashboardSectionToggles({
   onToggleCharts,
 }: DashboardSectionTogglesProps) {
   return (
-    <div className="fixed top-1/2 right-3 z-40 flex -translate-y-1/2 flex-col gap-2 sm:right-4">
+    <div className="fixed top-6 right-3 z-40 flex flex-col gap-2 sm:right-4">
       <SectionToggleButton
-        label="Stats"
+        label=""
         visible={statsVisible}
         onToggle={onToggleStats}
         icon={LayoutGrid}
       />
       <SectionToggleButton
-        label="Charts"
+        label=""
         visible={chartsVisible}
         onToggle={onToggleCharts}
         icon={BarChart3}

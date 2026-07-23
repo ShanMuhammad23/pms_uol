@@ -1,7 +1,10 @@
 "use client";
 
 import { Building2, ChevronDown, RotateCcw, Search, Tag } from "lucide-react";
-import type { EntityRecord } from "@/types/entities";
+import {
+  MultiSelectFilterDropdown,
+  type MultiSelectOption,
+} from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import type { EntityCategoryRecord } from "@/types/entity-categories";
 import type { EntityCategoryCode } from "@/types/entity-categories";
 import { cn } from "@/lib/utils";
@@ -11,12 +14,12 @@ interface EntityListFilterBarProps {
   onSearchQueryChange: (value: string) => void;
   selectedCategoryCode: EntityCategoryCode | "ALL";
   onCategoryCodeChange: (value: EntityCategoryCode | "ALL") => void;
-  selectedEntityId: number | "ALL";
-  onEntityIdChange: (value: number | "ALL") => void;
-  selectedChildEntityId: number | "ALL";
-  onChildEntityIdChange: (value: number | "ALL") => void;
-  categoryEntityOptions: EntityRecord[];
-  childEntityOptions: EntityRecord[];
+  selectedEntityIds: string[] | null;
+  onEntityIdsChange: (value: string[] | null) => void;
+  selectedChildEntityIds: string[] | null;
+  onChildEntityIdsChange: (value: string[] | null) => void;
+  entityOptions: MultiSelectOption[];
+  childEntityOptions: MultiSelectOption[];
   categories: EntityCategoryRecord[];
   categoriesLoading?: boolean;
   filteredCount: number;
@@ -36,11 +39,11 @@ export function EntityListFilterBar({
   onSearchQueryChange,
   selectedCategoryCode,
   onCategoryCodeChange,
-  selectedEntityId,
-  onEntityIdChange,
-  selectedChildEntityId,
-  onChildEntityIdChange,
-  categoryEntityOptions,
+  selectedEntityIds,
+  onEntityIdsChange,
+  selectedChildEntityIds,
+  onChildEntityIdsChange,
+  entityOptions,
   childEntityOptions,
   categories,
   categoriesLoading = false,
@@ -50,7 +53,8 @@ export function EntityListFilterBar({
   hasActiveFilters,
 }: EntityListFilterBarProps) {
   const categorySelected = selectedCategoryCode !== "ALL";
-  const entitySelected = selectedEntityId !== "ALL";
+  const entitySelectionEmpty =
+    selectedEntityIds !== null && selectedEntityIds.length === 0;
 
   return (
     <div className="space-y-3 rounded-md border border-slate-300/80 p-4 dark:border-white/15">
@@ -127,87 +131,45 @@ export function EntityListFilterBar({
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label
-            htmlFor="entity-list-entity"
-            className="text-xs font-semibold uppercase tracking-wider text-foreground/70"
-          >
-            Entity
-          </label>
-          <div className="relative">
-            <Building2 className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-foreground/50" />
-            <select
-              id="entity-list-entity"
-              value={selectedEntityId === "ALL" ? "ALL" : String(selectedEntityId)}
-              onChange={(event) =>
-                onEntityIdChange(
-                  event.target.value === "ALL"
-                    ? "ALL"
-                    : Number(event.target.value),
-                )
-              }
-              disabled={!categorySelected || categoryEntityOptions.length === 0}
-              className={selectClassName}
-            >
-              <option value="ALL">
-                {!categorySelected
-                  ? "Select a category first"
-                  : categoryEntityOptions.length === 0
-                    ? "No entities in category"
-                    : "All entities in category"}
-              </option>
-              {categoryEntityOptions.map((entity) => (
-                <option key={entity.id} value={entity.id}>
-                  {entity.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-foreground/50" />
-          </div>
-        </div>
+        <MultiSelectFilterDropdown
+          label="Entity"
+          icon={Building2}
+          options={entityOptions}
+          selectedValues={selectedEntityIds}
+          onChange={onEntityIdsChange}
+          disabled={!categorySelected || entityOptions.length === 0}
+          placeholder={
+            !categorySelected
+              ? "Select a category first"
+              : entityOptions.length === 0
+                ? "No entities in category"
+                : "All"
+          }
+          searchable={entityOptions.length > 8}
+        />
 
-        <div className="space-y-1.5">
-          <label
-            htmlFor="entity-list-child-entity"
-            className="text-xs font-semibold uppercase tracking-wider text-foreground/70"
-          >
-            Child entity
-          </label>
-          <div className="relative">
-            <Building2 className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-foreground/50" />
-            <select
-              id="entity-list-child-entity"
-              value={
-                selectedChildEntityId === "ALL"
-                  ? "ALL"
-                  : String(selectedChildEntityId)
-              }
-              onChange={(event) =>
-                onChildEntityIdChange(
-                  event.target.value === "ALL"
-                    ? "ALL"
-                    : Number(event.target.value),
-                )
-              }
-              disabled={!entitySelected || childEntityOptions.length === 0}
-              className={selectClassName}
-            >
-              <option value="ALL">
-                {!entitySelected
-                  ? "Select an entity first"
-                  : childEntityOptions.length === 0
-                    ? "No child entities"
-                    : "All child entities"}
-              </option>
-              {childEntityOptions.map((entity) => (
-                <option key={entity.id} value={entity.id}>
-                  {entity.name} ({entity.categoryCode})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-foreground/50" />
-          </div>
-        </div>
+        <MultiSelectFilterDropdown
+          label="Child entity"
+          icon={Building2}
+          options={childEntityOptions}
+          selectedValues={selectedChildEntityIds}
+          onChange={onChildEntityIdsChange}
+          disabled={
+            !categorySelected ||
+            entitySelectionEmpty ||
+            childEntityOptions.length === 0
+          }
+          placeholder={
+            !categorySelected
+              ? "Select a category first"
+              : entitySelectionEmpty
+                ? "Select an entity first"
+                : childEntityOptions.length === 0
+                  ? "No child entities"
+                  : "All"
+          }
+          searchable={childEntityOptions.length > 8}
+        />
       </div>
     </div>
   );
