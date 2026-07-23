@@ -218,15 +218,60 @@ export function getEntityDescendantIds(
   return descendants;
 }
 
-export function filterEntityRecords(
+export type EntityListFilterState = {
+  searchQuery: string;
+  categoryCode: EntityCategoryCode | "ALL";
+  /** Entity belonging to the selected category. */
+  entityId: number | "ALL";
+  /** Direct child of the selected entity. */
+  childEntityId: number | "ALL";
+};
+
+/** Entities that belong to a category code (for cascading filter dropdowns). */
+export function getEntitiesForCategoryCode(
   entities: EntityRecord[],
-  searchQuery: string,
   categoryCode: EntityCategoryCode | "ALL",
 ): EntityRecord[] {
-  const query = searchQuery.trim().toLowerCase();
+  if (categoryCode === "ALL") {
+    return [];
+  }
+
+  return sortEntities(
+    entities.filter((entity) => entity.categoryCode === categoryCode),
+  );
+}
+
+/** Direct children of a parent entity (any category). */
+export function getDirectChildEntities(
+  entities: EntityRecord[],
+  parentEntityId: number | "ALL",
+): EntityRecord[] {
+  if (parentEntityId === "ALL") {
+    return [];
+  }
+
+  return sortEntities(
+    entities.filter((entity) => entity.parentEntityId === parentEntityId),
+  );
+}
+
+export function filterEntityRecords(
+  entities: EntityRecord[],
+  filters: EntityListFilterState,
+): EntityRecord[] {
+  const query = filters.searchQuery.trim().toLowerCase();
+  const { categoryCode, entityId, childEntityId } = filters;
 
   return entities.filter((entity) => {
-    if (categoryCode !== "ALL" && entity.categoryCode !== categoryCode) {
+    if (childEntityId !== "ALL") {
+      if (entity.id !== childEntityId) {
+        return false;
+      }
+    } else if (entityId !== "ALL") {
+      if (entity.id !== entityId && entity.parentEntityId !== entityId) {
+        return false;
+      }
+    } else if (categoryCode !== "ALL" && entity.categoryCode !== categoryCode) {
       return false;
     }
 
