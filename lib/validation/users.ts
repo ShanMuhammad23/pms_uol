@@ -124,6 +124,11 @@ function validateSharedFields(body: CreateUserInput | UpdateUserInput): string |
     return "Head id must be a positive integer or null.";
   }
 
+  const manager2Id = parseOptionalId(body.manager2Id);
+  if (manager2Id !== undefined && Number.isNaN(manager2Id)) {
+    return "Manager 2 id must be a positive integer or null.";
+  }
+
   if ("dateOfJoining" in body && body.dateOfJoining != null && body.dateOfJoining !== "") {
     if (typeof body.dateOfJoining !== "string" || Number.isNaN(Date.parse(body.dateOfJoining))) {
       return "Date of joining must be a valid date.";
@@ -204,6 +209,7 @@ export function normalizeUserInput(
   empSubCategory: string;
   entityId: number | null;
   headId: number | null;
+  manager2Id: number | null;
   qualification: string | null | undefined;
   qualificationYear: number | null | undefined;
   qualificationSubject: string | null | undefined;
@@ -213,6 +219,7 @@ export function normalizeUserInput(
 } {
   const entityId = parseOptionalId(body.entityId);
   const headId = parseOptionalId(body.headId);
+  const manager2Id = parseOptionalId(body.manager2Id);
   const updateBody = body as UpdateUserInput;
 
   const dateOfJoining =
@@ -236,6 +243,7 @@ export function normalizeUserInput(
     empSubCategory: body.empSubCategory.trim(),
     entityId: entityId ?? null,
     headId: headId ?? null,
+    manager2Id: manager2Id ?? null,
     qualification: parseOptionalString(updateBody.qualification),
     qualificationYear: parseOptionalYear(updateBody.qualificationYear),
     qualificationSubject: parseOptionalString(updateBody.qualificationSubject),

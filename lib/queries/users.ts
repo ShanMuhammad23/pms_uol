@@ -30,6 +30,8 @@ interface UserRow {
   department_name?: string | null;
   head_id: string | null;
   head_name: string | null;
+  manager_2_id: string | null;
+  manager_2_name: string | null;
   qualification: string | null;
   qualification_year: string | null;
   qualification_subject: string | null;
@@ -44,6 +46,19 @@ type UserOrgMode = "entity" | "department";
 let cachedUserOrgMode: UserOrgMode | null = null;
 let cachedExcelColumns: boolean | null = null;
 let cachedQualificationsTable: boolean | null = null;
+let manager2ColumnEnsured = false;
+
+export async function ensureManager2Column(): Promise<void> {
+  if (manager2ColumnEnsured) {
+    return;
+  }
+
+  await db.query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL`,
+  );
+
+  manager2ColumnEnsured = true;
+}
 
 async function hasExcelSheetColumns(): Promise<boolean> {
   if (cachedExcelColumns !== null) {
@@ -166,6 +181,8 @@ function buildUserSelect(
       ${parentEntitySelect}
       u.head_id,
       CONCAT(h.first_name, ' ', h.last_name) AS head_name,
+      u.manager_2_id,
+      CONCAT(m2.first_name, ' ', m2.last_name) AS manager_2_name,
       ${qualSelect}
       u.is_active,
       u.created_at::text
@@ -173,6 +190,7 @@ function buildUserSelect(
     LEFT JOIN ${orgJoinTable} org ON org.id = ${orgIdColumn}
     ${parentEntityJoin}
     LEFT JOIN users h ON h.id = u.head_id
+    LEFT JOIN users m2 ON m2.id = u.manager_2_id
     ${qualJoin}
   `;
 }
@@ -206,6 +224,8 @@ function mapUserRow(row: UserRow): UserRecord {
     parentEntityName: row.parent_entity_name,
     headId: row.head_id ? Number(row.head_id) : null,
     headName: row.head_name,
+    manager2Id: row.manager_2_id ? Number(row.manager_2_id) : null,
+    manager2Name: row.manager_2_name,
     qualification: row.qualification,
     qualificationYear: row.qualification_year,
     qualificationSubject: row.qualification_subject,
@@ -253,22 +273,36 @@ async function assertEntityExists(entityId: number | null): Promise<void> {
   }
 }
 
-async function assertValidHead(
+async function assertValidManager(
   userId: number | null,
-  headId: number | null,
+  managerId: number | null,
+  label: string,
 ): Promise<void> {
-  if (headId === null) {
+  if (managerId === null) {
     return;
   }
 
-  if (userId !== null && headId === userId) {
-    throw new UserError("A user cannot be their own head.", 400);
+  if (userId !== null && managerId === userId) {
+    throw new UserError(`A user cannot be their own ${label}.`, 400);
   }
 
-  const result = await db.query(`SELECT id FROM users WHERE id = $1`, [headId]);
+  const result = await db.query(`SELECT id FROM users WHERE id = $1`, [managerId]);
 
   if (result.rows.length === 0) {
-    throw new UserError("Head user not found.", 404);
+    throw new UserError(`${label} user not found.`, 404);
+  }
+}
+
+async function assertValidManagers(
+  userId: number | null,
+  headId: number | null,
+  manager2Id: number | null,
+): Promise<void> {
+  await assertValidManager(userId, headId, "Head");
+  await assertValidManager(userId, manager2Id, "Manager 2");
+
+  if (headId !== null && manager2Id !== null && headId === manager2Id) {
+    throw new UserError("Manager 1 and Manager 2 cannot be the same person.", 400);
   }
 }
 
@@ -283,6 +317,8 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
+  await ensureManager2Column();
+
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -300,6 +336,8 @@ export async function listUsers(): Promise<UserRecord[]> {
  * Slim user rows for filter facets / head pickers (no qualifications join).
  */
 export async function listUsersOverview(): Promise<UserRecord[]> {
+  await ensureManager2Column();
+
   const [mode, excelReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -325,6 +363,8 @@ export async function listUsersByEmployeeIds(
     return [];
   }
 
+  await ensureManager2Column();
+
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -347,6 +387,8 @@ export async function listUsersByEmployeeIds(
 
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
+  await ensureManager2Column();
+
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -366,11 +408,13 @@ export async function getUserById(id: number): Promise<UserRecord | null> {
 }
 
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {
+  await ensureManager2Column();
+
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
 
   await assertEntityExists(normalized.entityId);
-  await assertValidHead(null, normalized.headId);
+  await assertValidManagers(null, normalized.headId, normalized.manager2Id);
 
   const passwordHash = await bcrypt.hash(input.password, 10);
 
@@ -387,9 +431,10 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
          emp_sub_category,
          ${mode === "entity" ? "entity_id" : "department_id"},
          head_id,
+         manager_2_id,
          is_active
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id`,
       [
         normalized.employeeId,
@@ -402,6 +447,7 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
         normalized.empSubCategory,
         normalized.entityId,
         normalized.headId,
+        normalized.manager2Id,
         normalized.isActive,
       ],
     );
@@ -425,8 +471,8 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
     if (isForeignKeyViolation(error)) {
       throw new UserError(
         mode === "entity"
-          ? "Invalid entity or head reference."
-          : "Invalid department or head reference.",
+          ? "Invalid entity, head, or Manager 2 reference."
+          : "Invalid department, head, or Manager 2 reference.",
         400,
       );
     }
@@ -439,6 +485,8 @@ export async function updateUser(
   id: number,
   input: UpdateUserInput,
 ): Promise<UserRecord> {
+  await ensureManager2Column();
+
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
   const [excelReady, qualsReady] = await Promise.all([
@@ -447,7 +495,7 @@ export async function updateUser(
   ]);
 
   await assertEntityExists(normalized.entityId);
-  await assertValidHead(id, normalized.headId);
+  await assertValidManagers(id, normalized.headId, normalized.manager2Id);
 
   const passwordHash = input.password
     ? await bcrypt.hash(input.password, 10)
@@ -484,6 +532,9 @@ export async function updateUser(
 
   values.push(normalized.headId);
   setClauses.push(`head_id = $${values.length}`);
+
+  values.push(normalized.manager2Id);
+  setClauses.push(`manager_2_id = $${values.length}`);
 
   values.push(normalized.isActive);
   setClauses.push(`is_active = $${values.length}`);
@@ -559,8 +610,8 @@ export async function updateUser(
     if (isForeignKeyViolation(error)) {
       throw new UserError(
         mode === "entity"
-          ? "Invalid entity or head reference."
-          : "Invalid department or head reference.",
+          ? "Invalid entity, head, or Manager 2 reference."
+          : "Invalid department, head, or Manager 2 reference.",
         400,
       );
     }

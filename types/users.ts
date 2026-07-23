@@ -44,6 +44,9 @@ export interface UserRecord {
   parentEntityName: string | null;
   headId: number | null;
   headName: string | null;
+  /** Manager 2 — second-level appraisal reviewer (editable per user). */
+  manager2Id: number | null;
+  manager2Name: string | null;
   qualification: string | null;
   qualificationYear: string | null;
   qualificationSubject: string | null;
@@ -64,6 +67,7 @@ export interface CreateUserInput {
   empSubCategory: string;
   entityId?: number | null;
   headId?: number | null;
+  manager2Id?: number | null;
   isActive?: boolean;
 }
 
@@ -82,6 +86,7 @@ export interface UpdateUserInput {
   empSubCategory: string;
   entityId?: number | null;
   headId?: number | null;
+  manager2Id?: number | null;
   qualification?: string | null;
   qualificationYear?: number | null;
   qualificationSubject?: string | null;

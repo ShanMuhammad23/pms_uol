@@ -28,15 +28,16 @@ import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 function scopeSubmissionsForHead(
   submissions: FormSubmissionListItem[],
+  viewerUserId: number | null,
   headEntityId: number | null,
-  entities: Parameters<typeof submissionVisibleToHead>[2],
+  entities: Parameters<typeof submissionVisibleToHead>[3],
 ) {
-  if (headEntityId == null || !Number.isFinite(headEntityId)) {
+  if (viewerUserId == null || !Number.isFinite(viewerUserId)) {
     return submissions;
   }
 
   return submissions.filter((submission) =>
-    submissionVisibleToHead(headEntityId, submission, entities),
+    submissionVisibleToHead(viewerUserId, headEntityId, submission, entities),
   );
 }
 
@@ -48,6 +49,8 @@ export function useDashboardPage() {
     isHead && session?.user?.entityId != null
       ? Number(session.user.entityId)
       : null;
+  const viewerUserId =
+    isHead && session?.user?.id != null ? Number(session.user.id) : null;
 
   const { data: financialYears } = useFinancialYearsQuery();
   const activeFinancialYearId = useActiveFinancialYearId(financialYears);
@@ -76,13 +79,20 @@ export function useDashboardPage() {
   } = useFormSubmissionsQuery();
 
   const scopedOverview = useMemo(
-    () => scopeSubmissionsForHead(overview, headEntityId, entities),
-    [overview, headEntityId, entities],
+    () =>
+      scopeSubmissionsForHead(overview, viewerUserId, headEntityId, entities),
+    [overview, viewerUserId, headEntityId, entities],
   );
 
   const scopedSubmissions = useMemo(
-    () => scopeSubmissionsForHead(submissions, headEntityId, entities),
-    [submissions, headEntityId, entities],
+    () =>
+      scopeSubmissionsForHead(
+        submissions,
+        viewerUserId,
+        headEntityId,
+        entities,
+      ),
+    [submissions, viewerUserId, headEntityId, entities],
   );
 
   const matrixForDistribution = useMatrixForDistribution(performanceMatrix);

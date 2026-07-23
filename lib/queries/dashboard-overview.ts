@@ -3,6 +3,9 @@ import "server-only";
 import { computeAppraisalEligibility, resolveReferenceEndDate } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
+import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
+import type { StaffListScope } from "@/lib/queries/staff-list-scope";
+import { ensureManager2Column } from "@/lib/queries/users";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
 
@@ -20,6 +23,8 @@ interface OverviewRow {
   parent_entity_name: string | null;
   status: AppraisalStatus;
   manager_level: number | null;
+  manager_1_user_id: string | null;
+  manager_2_user_id: string | null;
   initial_rating: PerformanceRating | null;
   calibrated_rating: PerformanceRating | null;
   normalized_score: string | null;
@@ -147,6 +152,12 @@ function mapOverviewRow(
     orgLevel2Name: null,
     status: row.status,
     managerLevel: row.manager_level != null ? Number(row.manager_level) : null,
+    manager1UserId: row.manager_1_user_id
+      ? Number(row.manager_1_user_id)
+      : null,
+    manager2UserId: row.manager_2_user_id
+      ? Number(row.manager_2_user_id)
+      : null,
     rawScore: 0,
     maxRawScore: 0,
     scorePercent: 0,
@@ -194,15 +205,16 @@ function mapOverviewRow(
  * Lightweight staff rows for dashboard filters, workflow stats, and charts.
  * Omits salary, qualifications, form-assignment, and score subqueries.
  */
-export async function listDashboardOverview(options?: {
-  scopedEntityIds?: number[];
-}): Promise<FormSubmissionListItem[]> {
+export async function listDashboardOverview(
+  options?: StaffListScope,
+): Promise<FormSubmissionListItem[]> {
   const [excelReady, roleCategoryReady, eligibilityContext] = await Promise.all([
     hasExcelSheetColumns(),
     hasRoleCategoryColumn(),
     getEligibilityContext(),
     ensureManagerLevelColumn(),
     ensureEligibilityColumns(),
+    ensureManager2Column(),
   ]);
 
   const designationSelect = excelReady
@@ -229,13 +241,7 @@ export async function listDashboardOverview(options?: {
        NULL::text AS applicable_duration,
        NULL::text AS applicable_duration_factor`;
 
-  const scopedEntityIds = options?.scopedEntityIds ?? null;
-  const entityScopeClause =
-    scopedEntityIds && scopedEntityIds.length > 0
-      ? `AND u.entity_id = ANY($2::bigint[])`
-      : scopedEntityIds && scopedEntityIds.length === 0
-        ? `AND FALSE`
-        : "";
+  const scoped = appendStaffVisibilityClause(options);
 
   const result = await db.query<OverviewRow>(
     `SELECT
@@ -250,6 +256,8 @@ export async function listDashboardOverview(options?: {
        p1.name AS parent_entity_name,
        COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT') AS status,
        ap.manager_level,
+       u.head_id::text AS manager_1_user_id,
+       u.manager_2_id::text AS manager_2_user_id,
        ap.initial_rating,
        ap.calibrated_rating,
        ${normalizedScoreSelect}
@@ -270,11 +278,9 @@ export async function listDashboardOverview(options?: {
      LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
      WHERE u.is_active = TRUE
        AND u.employee_id <> 'EMP-0001'
-       ${entityScopeClause}
+       ${scoped.clause}
      ORDER BY u.first_name, u.last_name, u.employee_id`,
-    scopedEntityIds && scopedEntityIds.length > 0
-      ? [eligibilityContext.cycleId, scopedEntityIds]
-      : [eligibilityContext.cycleId],
+    [eligibilityContext.cycleId, ...scoped.params],
   );
 
   return result.rows.map((row) =>

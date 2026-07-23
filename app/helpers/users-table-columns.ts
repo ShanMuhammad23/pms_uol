@@ -13,6 +13,7 @@ export type UsersTableColumnId =
   | "dateOfJoining"
   | "systemRole"
   | "reportingHead"
+  | "manager2"
   | "qualification"
   | "qualificationYear"
   | "qualificationSubject"
@@ -102,8 +103,13 @@ export const USERS_TABLE_COLUMNS: UsersTableColumnDef[] = [
   },
   {
     id: "reportingHead",
-    label: "Reporting Head",
+    label: "Manager 1",
     getValue: (row) => formatNullable(row.headName),
+  },
+  {
+    id: "manager2",
+    label: "Manager 2",
+    getValue: (row) => formatNullable(row.manager2Name),
   },
   {
     id: "qualification",

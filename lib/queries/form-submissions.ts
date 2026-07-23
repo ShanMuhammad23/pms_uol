@@ -20,8 +20,11 @@ import type { AppraisalStatus, PerformanceRating, QuestionRecord } from "@/types
 import { flattenAllQuestions } from "@/types/forms";
 import {
   resolveManagerApprovalAdvance,
+  toEmployeeManagers,
 } from "@/app/helpers/manager-review";
-import { listEntities } from "@/lib/queries/entities";
+import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
+import { ensureManager2Column } from "@/lib/queries/users";
+import type { StaffListScope } from "@/lib/queries/staff-list-scope";
 
 export class FormSubmissionError extends Error {
   constructor(
@@ -35,6 +38,7 @@ export class FormSubmissionError extends Error {
 
 interface SubmissionListRow {
   id: string | null;
+  employee_user_id: string;
   employee_id: string;
   employee_name: string;
   employee_email: string;
@@ -53,6 +57,8 @@ interface SubmissionListRow {
   org_level_2_name: string | null;
   status: AppraisalStatus;
   manager_level: number | null;
+  manager_1_user_id: string | null;
+  manager_2_user_id: string | null;
   system_raw_score: number;
   max_raw_score: string;
   initial_score_numeric: string | null;
@@ -223,6 +229,13 @@ function mapSubmissionRow(
     orgLevel2Name: row.org_level_2_name,
     status: row.status,
     managerLevel: row.manager_level != null ? Number(row.manager_level) : null,
+    employeeUserId: row.employee_user_id ? Number(row.employee_user_id) : null,
+    manager1UserId: row.manager_1_user_id
+      ? Number(row.manager_1_user_id)
+      : null,
+    manager2UserId: row.manager_2_user_id
+      ? Number(row.manager_2_user_id)
+      : null,
     rawScore,
     maxRawScore,
     scorePercent,
@@ -308,9 +321,9 @@ function formatReferenceDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export async function listFormSubmissions(options?: {
-  scopedEntityIds?: number[];
-}): Promise<FormSubmissionListItem[]> {
+export async function listFormSubmissions(
+  options?: StaffListScope,
+): Promise<FormSubmissionListItem[]> {
   const [
     excelReady,
     roleCategoryReady,
@@ -325,6 +338,7 @@ export async function listFormSubmissions(options?: {
     getEligibilityContext(),
     ensureManagerLevelColumn(),
     ensureEligibilityColumns(),
+    ensureManager2Column(),
   ]);
 
   const roleCategorySelect = roleCategoryReady
@@ -429,17 +443,12 @@ export async function listFormSubmissions(options?: {
     ? `LEFT JOIN performance_quartiles pq ON pq.id = ap.performance_quartile_id`
     : "";
 
-  const scopedEntityIds = options?.scopedEntityIds ?? null;
-  const entityScopeClause =
-    scopedEntityIds && scopedEntityIds.length > 0
-      ? `AND u.entity_id = ANY($2::bigint[])`
-      : scopedEntityIds && scopedEntityIds.length === 0
-        ? `AND FALSE`
-        : "";
+  const scoped = appendStaffVisibilityClause(options);
 
   const result = await db.query<SubmissionListRow>(
     `SELECT
        ap.id,
+       u.id::text AS employee_user_id,
        u.employee_id,
        CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
        u.email AS employee_email,
@@ -478,6 +487,8 @@ export async function listFormSubmissions(options?: {
        END AS org_level_2_name,
        COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT') AS status,
        ap.manager_level,
+       u.head_id::text AS manager_1_user_id,
+       u.manager_2_id::text AS manager_2_user_id,
        COALESCE(ap.system_raw_score, 0) AS system_raw_score,
        ap.initial_rating,
        ap.calibrated_rating,
@@ -516,11 +527,9 @@ export async function listFormSubmissions(options?: {
      ${qualJoin}
      WHERE u.is_active = TRUE
        AND u.employee_id <> 'EMP-0001'
-       ${entityScopeClause}
+       ${scoped.clause}
      ORDER BY u.first_name, u.last_name, u.employee_id`,
-    scopedEntityIds && scopedEntityIds.length > 0
-      ? [eligibilityContext.cycleId, scopedEntityIds]
-      : [eligibilityContext.cycleId],
+    [eligibilityContext.cycleId, ...scoped.params],
   );
 
   return result.rows.map((row) =>
@@ -536,16 +545,30 @@ export async function getFormSubmissionSummaryById(
 ): Promise<
   Pick<
     FormSubmissionListItem,
-    "id" | "entityId" | "status" | "managerLevel"
+    | "id"
+    | "entityId"
+    | "status"
+    | "managerLevel"
+    | "manager1UserId"
+    | "manager2UserId"
   > | null
 > {
+  await ensureManager2Column();
+
   const result = await db.query<{
     id: string;
     entity_id: string | null;
     status: AppraisalStatus;
     manager_level: number | null;
+    manager_1_user_id: string | null;
+    manager_2_user_id: string | null;
   }>(
-    `SELECT ap.id, u.entity_id, ap.status, ap.manager_level
+    `SELECT ap.id,
+            u.entity_id,
+            ap.status,
+            ap.manager_level,
+            u.head_id::text AS manager_1_user_id,
+            u.manager_2_id::text AS manager_2_user_id
      FROM appraisals ap
      INNER JOIN users u ON u.id = ap.employee_id
      WHERE ap.id = $1
@@ -563,6 +586,12 @@ export async function getFormSubmissionSummaryById(
     entityId: row.entity_id ? Number(row.entity_id) : null,
     status: row.status,
     managerLevel: row.manager_level != null ? Number(row.manager_level) : null,
+    manager1UserId: row.manager_1_user_id
+      ? Number(row.manager_1_user_id)
+      : null,
+    manager2UserId: row.manager_2_user_id
+      ? Number(row.manager_2_user_id)
+      : null,
   };
 }
 
@@ -668,22 +697,25 @@ export async function saveManagerReviewAnswers(
   return getAnswersForSubmission(appraisalId, reviewerUserId);
 }
 
-export async function approveManagerReview(
-  appraisalId: number,
-  reviewerEntityId: number,
-): Promise<{
+export async function approveManagerReview(appraisalId: number): Promise<{
   managerLevel: number;
   status: AppraisalStatus;
 }> {
-  await ensureManagerLevelColumn();
+  await Promise.all([ensureManagerLevelColumn(), ensureManager2Column()]);
 
   const current = await db.query<{
     status: AppraisalStatus;
     manager_level: number;
+    manager_1_user_id: string | null;
+    manager_2_user_id: string | null;
   }>(
-    `SELECT status, manager_level
-     FROM appraisals
-     WHERE id = $1`,
+    `SELECT ap.status,
+            ap.manager_level,
+            u.head_id::text AS manager_1_user_id,
+            u.manager_2_id::text AS manager_2_user_id
+     FROM appraisals ap
+     INNER JOIN users u ON u.id = ap.employee_id
+     WHERE ap.id = $1`,
     [appraisalId],
   );
 
@@ -699,11 +731,16 @@ export async function approveManagerReview(
     );
   }
 
-  const entities = await listEntities();
   const advance = resolveManagerApprovalAdvance(
     row.manager_level ?? 1,
-    reviewerEntityId,
-    entities,
+    toEmployeeManagers({
+      manager1UserId: row.manager_1_user_id
+        ? Number(row.manager_1_user_id)
+        : null,
+      manager2UserId: row.manager_2_user_id
+        ? Number(row.manager_2_user_id)
+        : null,
+    }),
   );
 
   await db.query(
@@ -796,6 +833,8 @@ export async function getFormSubmissionById(
     templateTitle: summary.templateTitle,
     status: summary.status,
     managerLevel: summary.managerLevel,
+    manager1UserId: summary.manager1UserId,
+    manager2UserId: summary.manager2UserId,
     rawScore: summary.rawScore,
     maxRawScore: summary.maxRawScore,
     scorePercent: summary.scorePercent,

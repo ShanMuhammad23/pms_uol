@@ -2,7 +2,10 @@ import "server-only";
 
 import type { Session } from "next-auth";
 import { NextResponse } from "next/server";
-import { headCanReviewSubmission } from "@/app/helpers/manager-review";
+import {
+  managerCanReviewSubmission,
+  toEmployeeManagers,
+} from "@/app/helpers/manager-review";
 import { submissionInEntitySubtree } from "@/app/helpers/entity-scope";
 import { isHeadRole } from "@/lib/auth/home-path";
 import {
@@ -30,7 +33,11 @@ export async function assertSubmissionAccessible(
   session: Session,
   submission: Pick<
     FormSubmissionListItem,
-    "entityId" | "status" | "managerLevel"
+    | "entityId"
+    | "status"
+    | "managerLevel"
+    | "manager1UserId"
+    | "manager2UserId"
   >,
 ): Promise<void> {
   const role = session.user?.role;
@@ -43,19 +50,30 @@ export async function assertSubmissionAccessible(
     throw new SubmissionAccessError("Forbidden", 403);
   }
 
-  const headEntityId = session.user?.entityId;
-  if (headEntityId == null || !Number.isFinite(headEntityId)) {
+  const viewerUserId = session.user?.id ? Number(session.user.id) : null;
+  if (viewerUserId == null || !Number.isFinite(viewerUserId)) {
     throw new SubmissionAccessError("Forbidden", 403);
   }
 
+  const managers = toEmployeeManagers(submission);
+  const isAssignedManager =
+    managers.manager1Id === viewerUserId ||
+    managers.manager2Id === viewerUserId;
+
+  const headEntityId = session.user?.entityId;
   const entities = await listEntities();
-  if (!submissionInEntitySubtree(submission, headEntityId, entities)) {
+  const inOrgSubtree =
+    headEntityId != null &&
+    Number.isFinite(headEntityId) &&
+    submissionInEntitySubtree(submission, headEntityId, entities);
+
+  if (!isAssignedManager && !inOrgSubtree) {
     throw new SubmissionAccessError("Forbidden", 403);
   }
 
   if (
     submission.status === "PENDING_HEAD_REVIEW" &&
-    !headCanReviewSubmission(headEntityId, submission, entities)
+    !managerCanReviewSubmission(viewerUserId, submission)
   ) {
     throw new SubmissionAccessError("Forbidden", 403);
   }

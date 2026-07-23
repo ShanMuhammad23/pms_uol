@@ -16,28 +16,41 @@ export async function GET() {
 
   try {
     let scopedEntityIds: number[] | undefined;
+    let managedByUserId: number | undefined;
 
     if (isHeadRole(auth.user?.role)) {
       const headEntityId = auth.user?.entityId;
-      if (headEntityId == null || !Number.isFinite(headEntityId)) {
+      const viewerUserId = auth.user?.id ? Number(auth.user.id) : null;
+
+      if (viewerUserId == null || !Number.isFinite(viewerUserId)) {
         return NextResponse.json([]);
       }
 
-      scopedEntityIds = await resolveEntitySubtreeIds(headEntityId);
+      managedByUserId = viewerUserId;
+      scopedEntityIds =
+        headEntityId != null && Number.isFinite(headEntityId)
+          ? await resolveEntitySubtreeIds(headEntityId)
+          : [];
     }
 
-    const overview = await listDashboardOverview({ scopedEntityIds });
+    const overview = await listDashboardOverview({
+      scopedEntityIds,
+      managedByUserId,
+    });
 
     if (isHeadRole(auth.user?.role)) {
-      const headEntityId = auth.user?.entityId;
-      if (headEntityId == null || !Number.isFinite(headEntityId)) {
-        return NextResponse.json([]);
-      }
-
+      const headEntityId = auth.user?.entityId ?? null;
+      const viewerUserId = Number(auth.user!.id);
       const entities = await listEntities();
+
       return NextResponse.json(
         overview.filter((submission) =>
-          submissionVisibleToHead(headEntityId, submission, entities),
+          submissionVisibleToHead(
+            viewerUserId,
+            headEntityId,
+            submission,
+            entities,
+          ),
         ),
       );
     }

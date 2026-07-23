@@ -47,6 +47,7 @@ interface UserFormState {
   empSubCategory: string;
   entityId: string;
   headId: string;
+  manager2Id: string;
   isActive: boolean;
 }
 
@@ -61,6 +62,7 @@ const emptyForm: UserFormState = {
   empSubCategory: "SYSTEM_ADMIN",
   entityId: "",
   headId: "",
+  manager2Id: "",
   isActive: true,
 };
 
@@ -111,6 +113,11 @@ export default function UsersManager() {
   const headOptions = useMemo(() => {
     return users;
   }, [users]);
+
+  const manager2Options = useMemo(() => {
+    if (!form.headId) return headOptions;
+    return headOptions.filter((user) => String(user.id) !== form.headId);
+  }, [headOptions, form.headId]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -191,6 +198,7 @@ export default function UsersManager() {
       empSubCategory: "SYSTEM_ADMIN",
       entityId: form.entityId ? Number(form.entityId) : null,
       headId: form.headId ? Number(form.headId) : null,
+      manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
       isActive: form.isActive,
       password: form.password,
     });
@@ -391,18 +399,55 @@ export default function UsersManager() {
 
           <div>
             <label htmlFor="user-head" className="mb-1.5 block text-sm font-medium text-text-primary">
-              Reporting Head
+              Manager 1
             </label>
             <select
               id="user-head"
               value={form.headId}
               onChange={(event) =>
-                setForm((current) => ({ ...current, headId: event.target.value }))
+                setForm((current) => {
+                  const nextHeadId = event.target.value;
+                  return {
+                    ...current,
+                    headId: nextHeadId,
+                    manager2Id:
+                      current.manager2Id === nextHeadId
+                        ? ""
+                        : current.manager2Id,
+                  };
+                })
               }
               className={inputClassName}
             >
               <option value="">None</option>
               {headOptions.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.firstName} {user.lastName} ({user.employeeId})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="user-manager-2"
+              className="mb-1.5 block text-sm font-medium text-text-primary"
+            >
+              Manager 2
+            </label>
+            <select
+              id="user-manager-2"
+              value={form.manager2Id}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  manager2Id: event.target.value,
+                }))
+              }
+              className={inputClassName}
+            >
+              <option value="">None</option>
+              {manager2Options.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.firstName} {user.lastName} ({user.employeeId})
                 </option>

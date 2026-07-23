@@ -29,8 +29,17 @@ export interface FormSubmissionListItem {
   /** Entity with category code C2 on the assignment chain (self or ancestor). */
   orgLevel2Name: string | null;
   status: AppraisalStatus;
-  /** 1 = direct entity head review; 2 = parent entity head review. */
+  /**
+   * Appraisal review stage: 1 = Manager 1 (users.head_id),
+   * 2 = Manager 2 (users.manager_2_id).
+   */
   managerLevel: number | null;
+  /** Internal user id of the employee (for manager assignment joins). */
+  employeeUserId?: number | null;
+  /** Assigned Manager 1 user id (users.head_id). */
+  manager1UserId?: number | null;
+  /** Assigned Manager 2 user id (users.manager_2_id). */
+  manager2UserId?: number | null;
   rawScore: number;
   maxRawScore: number;
   scorePercent: number;
@@ -82,8 +91,10 @@ export interface FormSubmissionDetail {
   templateTitle: string | null;
   templateDescription: string | null;
   status: AppraisalStatus;
-  /** 1 = direct entity head review; 2 = parent entity head review. */
+  /** 1 = Manager 1 review; 2 = Manager 2 review. */
   managerLevel: number | null;
+  manager1UserId?: number | null;
+  manager2UserId?: number | null;
   rawScore: number;
   maxRawScore: number;
   scorePercent: number;

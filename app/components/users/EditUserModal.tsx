@@ -30,6 +30,7 @@ interface EditUserFormState {
   systemRole: UserRole;
   entityId: string;
   headId: string;
+  manager2Id: string;
   qualification: string;
   qualificationYear: string;
   qualificationSubject: string;
@@ -52,6 +53,7 @@ function toFormState(user: UserRecord): EditUserFormState {
     systemRole: user.systemRole,
     entityId: user.entityId ? String(user.entityId) : "",
     headId: user.headId ? String(user.headId) : "",
+    manager2Id: user.manager2Id ? String(user.manager2Id) : "",
     qualification: user.qualification ?? "",
     qualificationYear: user.qualificationYear ?? "",
     qualificationSubject: user.qualificationSubject ?? "",
@@ -98,21 +100,12 @@ export function EditUserModal({
     return users.filter((candidate) => candidate.id !== user.id);
   }, [users, user]);
 
-  const manager1User = useMemo(() => {
-    if (!form?.headId) return null;
-    return users.find((candidate) => String(candidate.id) === form.headId) ?? null;
-  }, [users, form?.headId]);
-
-  const manager2Label = useMemo(() => {
-    if (!manager1User?.headId) return "—";
-
-    const manager2 = users.find((candidate) => candidate.id === manager1User.headId);
-    if (!manager2) {
-      return manager1User.headName?.trim() || "—";
-    }
-
-    return `${manager2.firstName} ${manager2.lastName} (${manager2.employeeId})`;
-  }, [manager1User, users]);
+  const manager2Options = useMemo(() => {
+    if (!user || !form) return headOptions;
+    return headOptions.filter(
+      (candidate) => String(candidate.id) !== form.headId,
+    );
+  }, [headOptions, user, form]);
 
   const selectedEntity = useMemo(
     () => entities.find((entity) => String(entity.id) === form?.entityId) ?? null,
@@ -154,6 +147,7 @@ export function EditUserModal({
       empSubCategory: "SYSTEM_ADMIN",
       entityId: form.entityId ? Number(form.entityId) : null,
       headId: form.headId ? Number(form.headId) : null,
+      manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
       qualification: form.qualification.trim() || null,
       qualificationYear: yearValue ? Number(yearValue) : null,
       qualificationSubject: form.qualificationSubject.trim() || null,
@@ -447,11 +441,19 @@ export function EditUserModal({
                       id="edit-user-head"
                       value={form.headId}
                       onChange={(event) =>
-                        setForm((current) =>
-                          current
-                            ? { ...current, headId: event.target.value }
-                            : current,
-                        )
+                        setForm((current) => {
+                          if (!current) return current;
+                          const nextHeadId = event.target.value;
+                          const nextManager2Id =
+                            current.manager2Id === nextHeadId
+                              ? ""
+                              : current.manager2Id;
+                          return {
+                            ...current,
+                            headId: nextHeadId,
+                            manager2Id: nextManager2Id,
+                          };
+                        })
                       }
                       disabled={isSubmitting}
                       className={inputClassName}
@@ -467,14 +469,27 @@ export function EditUserModal({
                   </Field>
 
                   <Field label="Manager 2" htmlFor="edit-user-manager-2">
-                    <input
+                    <select
                       id="edit-user-manager-2"
-                      type="text"
-                      readOnly
-                      value={manager2Label}
-                      title="Reporting head of Manager 1"
-                      className={cn(inputClassName, "bg-slate-50 dark:bg-slate-900")}
-                    />
+                      value={form.manager2Id}
+                      onChange={(event) =>
+                        setForm((current) =>
+                          current
+                            ? { ...current, manager2Id: event.target.value }
+                            : current,
+                        )
+                      }
+                      disabled={isSubmitting}
+                      className={inputClassName}
+                    >
+                      <option value="">None</option>
+                      {manager2Options.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          {candidate.firstName} {candidate.lastName} (
+                          {candidate.employeeId})
+                        </option>
+                      ))}
+                    </select>
                   </Field>
 
                   <Field label="Qualification" htmlFor="edit-user-qualification">

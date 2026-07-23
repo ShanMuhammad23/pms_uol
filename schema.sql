@@ -53,7 +53,8 @@ CREATE TABLE users (
     emp_category employee_category NOT NULL, -- Legacy enum (forms routing)
     emp_sub_category sub_category NOT NULL,
     department_id INT REFERENCES departments(id) ON DELETE RESTRICT,
-    head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, 
+    head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 1
+    manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 2
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

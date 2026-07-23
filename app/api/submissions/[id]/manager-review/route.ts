@@ -13,8 +13,6 @@ import {
   getFormSubmissionSummaryById,
   saveManagerReviewAnswers,
 } from "@/lib/queries/form-submissions";
-import { getReviewingEntityId } from "@/app/helpers/manager-review";
-import { listEntities } from "@/lib/queries/entities";
 import type { SaveManagerReviewInput } from "@/types/employee-forms";
 
 interface RouteContext {
@@ -112,11 +110,8 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const headEntityId = auth.user?.entityId;
-  if (
-    role !== "SUPER_ADMIN" &&
-    (headEntityId == null || !Number.isFinite(headEntityId))
-  ) {
+  const reviewerUserId = auth.user?.id ? Number(auth.user.id) : null;
+  if (reviewerUserId == null || !Number.isFinite(reviewerUserId)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -143,33 +138,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
     await assertSubmissionAccessible(auth, summary);
 
-    let reviewerEntityId = headEntityId;
-    if (role === "SUPER_ADMIN") {
-      const entities = await listEntities();
-      if (summary.entityId == null) {
-        return NextResponse.json(
-          { error: "Submission has no assigned entity." },
-          { status: 409 },
-        );
-      }
-
-      const resolvedReviewerEntityId = getReviewingEntityId(
-        summary.entityId,
-        summary.managerLevel ?? 1,
-        entities,
-      );
-
-      if (resolvedReviewerEntityId == null) {
-        return NextResponse.json(
-          { error: "No reviewing entity found for this submission." },
-          { status: 409 },
-        );
-      }
-
-      reviewerEntityId = resolvedReviewerEntityId;
-    }
-
-    const result = await approveManagerReview(submissionId, reviewerEntityId!);
+    const result = await approveManagerReview(submissionId);
 
     return NextResponse.json(result);
   } catch (error) {
