@@ -660,6 +660,9 @@ export default function EntitiesManager() {
                 <th className="px-4 py-3 text-left font-semibold text-text-primary">
                   Parent
                 </th>
+                <th className="px-4 py-3 text-right font-semibold text-text-primary">
+                  Staff
+                </th>
                 <th className="px-4 py-3 text-left font-semibold text-text-primary">
                   Updated
                 </th>
@@ -682,6 +685,9 @@ export default function EntitiesManager() {
                   </td>
                   <td className="px-4 py-3 text-text-primary">
                     {entity.parentName ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-text-primary">
+                    {entity.staffCount}
                   </td>
                   <td className="px-4 py-3 text-text-primary">
                     {new Date(entity.updatedAt).toLocaleString()}

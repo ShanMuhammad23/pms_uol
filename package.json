@@ -20,6 +20,8 @@
     "db:seed:nonacademic-employees": "node scripts/seed-nonacademic-employees-from-excel.mjs",
     "db:seed:centres-blue-collar": "node scripts/seed-centres-blue-collar-from-excel.mjs",
     "db:recompute:eligibility": "node scripts/recompute-appraisal-eligibility.mjs",
+    "db:check:duplicate-entities": "node scripts/check-duplicate-entities.mjs",
+    "db:merge:duplicate-entities": "node scripts/merge-duplicate-entities.mjs",
     "db:normalize:entity-names": "node scripts/normalize-entity-names.mjs"
   },
   "dependencies": {

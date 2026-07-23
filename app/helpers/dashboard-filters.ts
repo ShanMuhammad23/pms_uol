@@ -57,19 +57,12 @@ export function matchesSubmissionEntityFilter(
     return true;
   }
 
-  if (isEntityInCachedSubtree(submission.entityId, selectedEntityId, entities)) {
-    return true;
-  }
-
-  const selectedEntity = entities.find((entity) => entity.id === selectedEntityId);
-
-  if (!selectedEntity) {
-    return false;
-  }
-
-  return (
-    submission.entityName === selectedEntity.name ||
-    submission.parentEntityName === selectedEntity.name
+  // Match by entity id / org subtree only — never by display name.
+  // Duplicate entities can share a name; name matching would merge their staff.
+  return isEntityInCachedSubtree(
+    submission.entityId,
+    selectedEntityId,
+    entities,
   );
 }
 

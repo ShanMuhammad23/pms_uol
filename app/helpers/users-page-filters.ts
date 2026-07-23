@@ -36,19 +36,9 @@ function matchesUserEntityFilter(
     return true;
   }
 
-  if (isEntityInCachedSubtree(user.entityId, selectedEntityId, entities)) {
-    return true;
-  }
-
-  const selectedEntity = entities.find((entity) => entity.id === selectedEntityId);
-  if (!selectedEntity) {
-    return false;
-  }
-
-  return (
-    user.entityName === selectedEntity.name ||
-    user.parentEntityName === selectedEntity.name
-  );
+  // Match by entity id / org subtree only — never by display name.
+  // Duplicate entities can share a name; name matching would merge their staff.
+  return isEntityInCachedSubtree(user.entityId, selectedEntityId, entities);
 }
 
 export function matchesUserEntityMultiFilter(
