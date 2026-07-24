@@ -24,6 +24,7 @@ interface FormTemplateListRow {
   fiscal_year: number;
   target_category: EmployeeCategory | null;
   target_sub_category: SubCategory | null;
+  self_assessment_enabled: boolean;
   question_count: string;
   appraisal_count: string;
   assigned_employee_count: string;
@@ -39,6 +40,7 @@ interface FormTemplateRow {
   fiscal_year: number;
   target_category: EmployeeCategory | null;
   target_sub_category: SubCategory | null;
+  self_assessment_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -675,6 +677,7 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        ac.fiscal_year,
        ft.target_category,
        ft.target_sub_category,
+       ft.self_assessment_enabled,
        COUNT(DISTINCT fq.id)::text AS question_count,
        COUNT(DISTINCT ap.id)::text AS appraisal_count,
        COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
@@ -697,6 +700,7 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
     fiscalYear: row.fiscal_year,
     targetCategory: row.target_category,
     targetSubCategory: row.target_sub_category,
+    selfAssessmentEnabled: row.self_assessment_enabled,
     questionCount: Number(row.question_count),
     appraisalCount: Number(row.appraisal_count),
     assignedEmployeeCount: Number(row.assigned_employee_count),
@@ -717,6 +721,7 @@ export async function getFormTemplateById(
        ac.fiscal_year,
        ft.target_category,
        ft.target_sub_category,
+       ft.self_assessment_enabled,
        ft.created_at::text,
        ft.updated_at::text
      FROM form_templates ft
@@ -741,6 +746,7 @@ export async function getFormTemplateById(
     fiscalYear: row.fiscal_year,
     targetCategory: row.target_category,
     targetSubCategory: row.target_sub_category,
+    selfAssessmentEnabled: row.self_assessment_enabled,
     sections: structure.sections,
     questions: structure.questions,
     incrementMatrices: await getIncrementMatricesByCycleId(row.cycle_id),
@@ -767,8 +773,9 @@ export async function createFormTemplate(
          cycle_id,
          target_category,
          target_sub_category,
+         self_assessment_enabled,
          created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [
         input.title,
@@ -776,6 +783,7 @@ export async function createFormTemplate(
         cycleId,
         input.targetCategory ?? null,
         input.targetSubCategory ?? null,
+        input.selfAssessmentEnabled,
         createdById ?? null,
       ],
     );
@@ -841,14 +849,16 @@ export async function updateFormTemplate(
            cycle_id = $3,
            target_category = $4,
            target_sub_category = $5,
+           self_assessment_enabled = $6,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6`,
+       WHERE id = $7`,
       [
         input.title,
         input.description || null,
         cycleId,
         input.targetCategory ?? null,
         input.targetSubCategory ?? null,
+        input.selfAssessmentEnabled,
         id,
       ],
     );
@@ -908,8 +918,8 @@ export async function assignFormTemplateToEmployees(
     throw new FormTemplateError("At least one employee is required.", 400);
   }
 
-  const templateResult = await db.query<{ id: string; cycle_id: number | null }>(
-    `SELECT id, cycle_id
+  const templateResult = await db.query<{ id: string; cycle_id: number | null; self_assessment_enabled: boolean }>(
+    `SELECT id, cycle_id, self_assessment_enabled
      FROM form_templates
      WHERE id = $1`,
     [templateId],
@@ -922,6 +932,8 @@ export async function assignFormTemplateToEmployees(
   const cycleId = templateResult.rows[0].cycle_id
     ? Number(templateResult.rows[0].cycle_id)
     : null;
+
+  const selfAssessmentEnabled = templateResult.rows[0].self_assessment_enabled;
 
   const usersResult = await db.query<{ id: string; employee_id: string }>(
     `SELECT id, employee_id
@@ -967,7 +979,8 @@ export async function assignFormTemplateToEmployees(
          LEFT JOIN form_templates ft ON ft.id = ap.template_id
          WHERE ap.employee_id = ANY($1::bigint[])
            AND ap.cycle_id = $2
-           AND ap.template_id IS DISTINCT FROM $3
+           AND ap.template_id IS NOT NULL
+           AND ap.template_id <> $3
        )
        SELECT employee_id, employee_name, other_title
        FROM conflict_rows
@@ -1001,19 +1014,20 @@ export async function assignFormTemplateToEmployees(
   );
 
   if (cycleId !== null) {
+    const initialStatus = selfAssessmentEnabled ? "PENDING_SELF_ASSESSMENT" : "PENDING_HEAD_REVIEW";
     await db.query(
       `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
-       SELECT u.id, $2, $3, 'PENDING_SELF_ASSESSMENT'
+       SELECT u.id, $2, $3, $4
        FROM unnest($1::bigint[]) AS u(id)
        ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
          SET template_id = EXCLUDED.template_id,
              status = CASE
-               WHEN appraisals.submitted_at IS NULL THEN 'PENDING_SELF_ASSESSMENT'
+               WHEN appraisals.submitted_at IS NULL THEN $4
                ELSE appraisals.status
              END,
              updated_at = CURRENT_TIMESTAMP
        WHERE appraisals.submitted_at IS NULL`,
-      [userIds, cycleId, templateId],
+      [userIds, cycleId, templateId, initialStatus],
     );
   }
 

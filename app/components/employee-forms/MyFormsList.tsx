@@ -67,8 +67,16 @@ const STATUS_PHASE: Record<AppraisalStatus, number> = {
 
 const TOTAL_PHASES = 5;
 
-function isFillable(status: AppraisalStatus, submittedAt: string | null): boolean {
-  return status === "PENDING_SELF_ASSESSMENT" && !submittedAt;
+function isFillable(
+  status: AppraisalStatus,
+  submittedAt: string | null,
+  selfAssessmentEnabled: boolean,
+): boolean {
+  return (
+    selfAssessmentEnabled &&
+    status === "PENDING_SELF_ASSESSMENT" &&
+    !submittedAt
+  );
 }
 
 function getInitials(name: string): string {
@@ -171,7 +179,8 @@ export default function MyFormsList({
     submitted:
       data?.filter(
         (f) =>
-          f.status !== "PENDING_SELF_ASSESSMENT" || Boolean(f.submittedAt),
+          (f.status !== "PENDING_SELF_ASSESSMENT" || Boolean(f.submittedAt)) ||
+          !f.selfAssessmentEnabled,
       ).length ?? 0,
     managerReview:
       data?.filter((f) => f.status === "PENDING_HEAD_REVIEW").length ?? 0,
@@ -181,32 +190,7 @@ export default function MyFormsList({
       ).length ?? 0,
   };
 
-  const statusStats = [
-    {
-      id: "total",
-      value: stats.total,
-      label: "Total Forms",
-      icon: ClipboardList,
-    },
-    {
-      id: "submitted",
-      value: stats.submitted,
-      label: "Submitted",
-      icon: Send,
-    },
-    {
-      id: "manager-review",
-      value: stats.managerReview,
-      label: "Manager Review",
-      icon: Users,
-    },
-    {
-      id: "approved",
-      value: stats.approved,
-      label: "Approved",
-      icon: CheckCircle2,
-    },
-  ];
+
 
   if (isLoading) {
     return (
@@ -294,42 +278,18 @@ export default function MyFormsList({
           </div>
         ) : null}
 
-        <ul className="mt-6 grid grid-cols-2 gap-x-6 gap-y-10 border-t border-slate-100 pt-6 sm:grid-cols-4 sm:divide-x sm:divide-slate-200 dark:border-white/6 dark:sm:divide-neutral-700">
-          {statusStats.map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <li key={stat.id} className="text-center">
-                <Icon
-                  className="inline-block size-8 text-secondary"
-                  aria-hidden="true"
-                />
-                <dl className="flex flex-col">
-                  <dt className="order-1 mt-2 text-sm font-medium text-slate-600 dark:text-slate-400">
-                    {stat.label}
-                  </dt>
-                  <dd className="mt-4 text-3xl font-bold tabular-nums text-secondary">
-                    {stat.value}
-                  </dd>
-                </dl>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
 
       {/* Section Title */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col mt-10 items-start justify-start">
         <h2 className="text-lg font-semibold text-text-primary">Assigned Forms</h2>
         {data && data.length > 0 ? (
           <span className="text-sm text-foreground/50">
             {data.length} form{data.length > 1 ? "s" : ""}
           </span>
         ) : null}
-      </div>
-
-      {/* Empty State */}
+        {/* Empty State */}
       {!data || data.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-surface px-6 py-16 text-center dark:border-white/10">
+        <div className="flex w-full flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-surface px-6 py-16 text-center dark:border-white/10">
           <div className="flex size-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
             <Inbox className="size-8 text-slate-400 dark:text-slate-500" />
           </div>
@@ -347,7 +307,7 @@ export default function MyFormsList({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.map((form) => {
             const statusConfig = APPRAISAL_STATE_CONFIG[form.status];
-            const canFill = isFillable(form.status, form.submittedAt);
+            const canFill = isFillable(form.status, form.submittedAt, form.selfAssessmentEnabled);
             const phase = STATUS_PHASE[form.status];
             const relativeDate = formatRelativeDate(
               form.updatedAt ?? form.submittedAt,
@@ -443,6 +403,13 @@ export default function MyFormsList({
           More forms will appear here as they are assigned to you.
         </p>
       ) : null}
+      </div>
+
+      </div>
+
+
+
+
     </div>
   );
 }

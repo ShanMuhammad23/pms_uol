@@ -1,0 +1,81 @@
+import type { QuestionRecord, FormSectionRecord } from "@/types/forms";
+import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? "Request failed.");
+  }
+  return data as T;
+}
+
+export interface DirectAssessmentEmployee {
+  submissionId: number;
+  employeeId: string;
+  employeeName: string;
+  employeeEmail: string;
+  managerLevel: number | null;
+  status: string;
+  manager1UserId: number | null;
+  manager2UserId: number | null;
+  canEdit: boolean;
+}
+
+export interface DirectAssessmentData {
+  templateId: number;
+  templateTitle: string;
+  selfAssessmentEnabled: boolean;
+  questions: QuestionRecord[];
+  sections: FormSectionRecord[];
+  rootQuestions: QuestionRecord[];
+  employees: DirectAssessmentEmployee[];
+  managerAnswersBySubmission: Record<
+    number,
+    EmployeeFormAnswerRecord[]
+  >;
+  manager1AnswersBySubmission: Record<
+    number,
+    EmployeeFormAnswerRecord[]
+  >;
+}
+
+export async function fetchDirectAssessmentData(
+  templateId: number,
+): Promise<DirectAssessmentData> {
+  const response = await fetch(
+    `/api/templates/${templateId}/direct-assessment`,
+    { cache: "no-store" },
+  );
+  return parseResponse<DirectAssessmentData>(response);
+}
+
+export async function saveDirectAssessmentScores(
+  submissionId: number,
+  answers: Array<{
+    questionId: number;
+    pointsEarned?: number;
+    remarks?: string | null;
+  }>,
+): Promise<{ managerAnswers: EmployeeFormAnswerRecord[] }> {
+  const response = await fetch(
+    `/api/submissions/${submissionId}/manager-review`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers }),
+    },
+  );
+  return parseResponse<{ managerAnswers: EmployeeFormAnswerRecord[] }>(
+    response,
+  );
+}
+
+export async function approveDirectAssessment(
+  submissionId: number,
+): Promise<{ managerLevel: number; status: string }> {
+  const response = await fetch(
+    `/api/submissions/${submissionId}/manager-review`,
+    { method: "POST" },
+  );
+  return parseResponse<{ managerLevel: number; status: string }>(response);
+}

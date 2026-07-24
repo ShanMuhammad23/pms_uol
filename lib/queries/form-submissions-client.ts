@@ -33,6 +33,38 @@ export async function fetchFormSubmission(
 
 export type RemarksField = "remarksEvaluation" | "remarksCompensation";
 
+export type ScoreAdjustmentField =
+  | "creditHrsErpScoreAdj"
+  | "pubOricScoreAdj"
+  | "calibrationFactor"
+  | "calibratedScoreNumeric";
+
+export async function updateSubmissionScoreAdjustments(
+  id: number,
+  field: ScoreAdjustmentField,
+  value: number | null,
+): Promise<{
+  id: number;
+  creditHrsErpScoreAdj: number | null;
+  pubOricScoreAdj: number | null;
+  calibrationFactor: number | null;
+  calibratedScoreNumeric: number | null;
+}> {
+  const response = await fetch(`/api/submissions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ [field]: value }),
+  });
+
+  return parseResponse<{
+    id: number;
+    creditHrsErpScoreAdj: number | null;
+    pubOricScoreAdj: number | null;
+    calibrationFactor: number | null;
+    calibratedScoreNumeric: number | null;
+  }>(response);
+}
+
 export async function approveManagerReview(
   id: number,
 ): Promise<{ managerLevel: number; status: FormSubmissionDetail["status"] }> {

@@ -146,7 +146,9 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     );
   }, [data]);
 
-  const isReadOnly = data?.status === "SUBMITTED";
+  const isReadOnly =
+    data?.status === "SUBMITTED" ||
+    (data != null && !data.template.selfAssessmentEnabled);
   const maxRawScore = useMemo(() => {
     if (!data) {
       return 0;
@@ -236,6 +238,11 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
     for (const question of flattenAllQuestions(data.template)) {
       if (!isScoredQuestion(question)) {
+        continue;
+      }
+
+      // Skip HOD-only questions — employee cannot fill them
+      if (!question.selfAssessmentEnabled) {
         continue;
       }
 
@@ -524,6 +531,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                     attachments: [],
                   };
                   const scored = isScoredQuestion(question);
+                  const isHodOnly = !question.selfAssessmentEnabled || !data.template.selfAssessmentEnabled;
                   const isEvenRow = rowIdx % 2 === 0;
 
                   return (
@@ -582,7 +590,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                         {question.totalMarks}
                       </td>
                       <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
-                        {scored ? (
+                        {scored && !isHodOnly ? (
                           <input
                             type="number"
                             min={0}
@@ -607,6 +615,8 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                             className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums text-teal-700 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
                             placeholder={`0–${question.totalMarks}`}
                           />
+                        ) : scored && isHodOnly ? (
+                          <span className="text-xs text-slate-400" title="To be filled by HOD">N/A</span>
                         ) : (
                           <span className="tabular-nums text-slate-400">—</span>
                         )}
@@ -614,13 +624,13 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                       <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                         <textarea
                           value={answer.remarks}
-                          disabled={isReadOnly}
+                          disabled={isReadOnly || isHodOnly}
                           rows={2}
                           onChange={(e) =>
                             updateAnswer(question.id, "remarks", e.target.value)
                           }
                           className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                          placeholder="Optional remarks"
+                          placeholder={isHodOnly ? "HOD only" : "Optional remarks"}
                         />
                       </td>
                       <td className="px-2 py-2.5">
@@ -743,11 +753,11 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         </div>
       ) : (
         <p className="text-xs text-emerald-700 dark:text-emerald-300">
-          Submitted
-          {data.submittedAt
-            ? ` on ${new Date(data.submittedAt).toLocaleString()}`
-            : ""}
-          · read-only · score {data.rawScore}/{data.maxRawScore}
+          {data && !data.template.selfAssessmentEnabled
+            ? "Self-assessment is not enabled for this form. It will be reviewed directly by your reporting head."
+            : data?.status === "SUBMITTED"
+              ? `Submitted${data.submittedAt ? ` on ${new Date(data.submittedAt).toLocaleString()}` : ""} · read-only · score ${data.rawScore}/${data.maxRawScore}`
+              : "Read-only"}
         </p>
       )}
 

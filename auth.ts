@@ -90,9 +90,12 @@ export const authOptions: NextAuthOptions = {
         token.entityId = user.entityId ?? null;
       }
 
-      if (token.email && token.entityId == null) {
+      // Refresh role/designation/entityId from DB on every token read
+      // so that role changes take effect without requiring re-login.
+      if (token.email) {
         const dbUser = await getUserByEmail(token.email);
         if (dbUser?.isActive) {
+          token.role = dbUser.systemRole;
           token.designation = dbUser.designation ?? null;
           token.entityId = dbUser.entityId ?? null;
         }

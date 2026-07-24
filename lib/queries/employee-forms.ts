@@ -35,7 +35,7 @@ interface AppraisalRow {
   status: string;
   submitted_at: string | null;
   updated_at: string;
-  system_raw_score: number;
+  system_raw_score: string;
 }
 
 let remarksColumnReady: boolean | null = null;
@@ -100,6 +100,7 @@ async function listExplicitlyAssignedTemplatesForUser(
     title: string;
     description: string | null;
     questionCount: number;
+    selfAssessmentEnabled: boolean;
   }>
 > {
   const executor = client ?? db;
@@ -108,11 +109,13 @@ async function listExplicitlyAssignedTemplatesForUser(
     title: string;
     description: string | null;
     question_count: string;
+    self_assessment_enabled: boolean;
   }>(
     `SELECT
        ft.id,
        ft.title,
        ft.description,
+       ft.self_assessment_enabled,
        COUNT(fq.id)::text AS question_count
      FROM employee_form_assignments efa
      INNER JOIN form_templates ft ON ft.id = efa.template_id
@@ -128,6 +131,7 @@ async function listExplicitlyAssignedTemplatesForUser(
     title: row.title,
     description: row.description,
     questionCount: Number(row.question_count),
+    selfAssessmentEnabled: row.self_assessment_enabled,
   }));
 }
 
@@ -165,16 +169,21 @@ function resolveFormStatus(
 
 function resolveAppraisalWorkflowStatus(
   appraisal: AppraisalRow | null,
+  selfAssessmentEnabled = true,
 ): AppraisalStatus {
+  const defaultStatus: AppraisalStatus = selfAssessmentEnabled
+    ? "PENDING_SELF_ASSESSMENT"
+    : "PENDING_HEAD_REVIEW";
+
   if (!appraisal?.status) {
-    return "PENDING_SELF_ASSESSMENT";
+    return defaultStatus;
   }
 
   if ((APPRAISAL_STATUSES as string[]).includes(appraisal.status)) {
     return appraisal.status as AppraisalStatus;
   }
 
-  return "PENDING_SELF_ASSESSMENT";
+  return defaultStatus;
 }
 
 async function getAppraisalForUserTemplate(
@@ -213,7 +222,7 @@ async function getAnswersForAppraisal(
     question_id: string;
     text_response: string | null;
     selected_option_id: string | null;
-    points_earned: number;
+    points_earned: string;
     remarks: string | null;
   }>(
     `SELECT question_id, text_response, selected_option_id, points_earned, remarks
@@ -243,7 +252,7 @@ async function getAnswersForAppraisal(
       selectedOptionId: row.selected_option_id
         ? Number(row.selected_option_id)
         : null,
-      pointsEarned: row.points_earned,
+      pointsEarned: Number(row.points_earned),
       remarks: row.remarks,
       attachments: attachmentsByQuestion.get(questionId) ?? [],
     };
@@ -294,11 +303,20 @@ async function getOrCreateAppraisal(
     return existing;
   }
 
+  const template = await getFormTemplateById(templateId);
+  if (!template) {
+    throw new EmployeeFormError("Form not found.", 404);
+  }
+
+  const initialStatus = template.selfAssessmentEnabled
+    ? "PENDING_SELF_ASSESSMENT"
+    : "PENDING_HEAD_REVIEW";
+
   const result = await client.query<AppraisalRow>(
     `INSERT INTO appraisals (employee_id, template_id, status)
-     VALUES ($1, $2, 'PENDING_SELF_ASSESSMENT')
+     VALUES ($1, $2, $3)
      RETURNING id, status, submitted_at::text, updated_at::text, system_raw_score`,
-    [userId, templateId],
+    [userId, templateId, initialStatus],
   );
 
   return result.rows[0];
@@ -336,7 +354,15 @@ function validateAnswers(
     answers.map((answer) => [answer.questionId, answer]),
   );
 
+  const formSelfAssessmentEnabled = template.selfAssessmentEnabled;
+
   for (const question of getTemplateQuestions(template)) {
+    // Skip HOD-only questions — employee self-assessment should not validate them
+    // Also skip all questions when form-level self-assessment is disabled
+    if (!formSelfAssessmentEnabled || !question.selfAssessmentEnabled) {
+      continue;
+    }
+
     const answer = answerMap.get(question.id);
     const isScored = isScoredQuestion(question);
 
@@ -466,7 +492,8 @@ export async function listAssignedFormsForUser(
         title: assigned.title,
         description: assigned.description,
         questionCount: assigned.questionCount,
-        status: resolveAppraisalWorkflowStatus(appraisal),
+        status: resolveAppraisalWorkflowStatus(appraisal, assigned.selfAssessmentEnabled),
+        selfAssessmentEnabled: assigned.selfAssessmentEnabled,
         submittedAt: appraisal?.submitted_at ?? null,
         updatedAt: appraisal?.updated_at ?? null,
       } satisfies AssignedFormListItem;
@@ -508,7 +535,7 @@ export async function getEmployeeFormDetail(
     submittedAt: appraisal?.submitted_at ?? null,
     answers,
     rawScore: appraisal?.submitted_at
-      ? appraisal.system_raw_score
+      ? Number(appraisal.system_raw_score)
       : rawScore,
     maxRawScore,
   };
@@ -594,7 +621,11 @@ export async function saveEmployeeForm(
         client,
       );
 
-      for (const question of getTemplateQuestions(template).filter(isScoredQuestion)) {
+      const formSelfAssessmentEnabled = template.selfAssessmentEnabled;
+
+      for (const question of getTemplateQuestions(template).filter(
+        (q) => isScoredQuestion(q) && formSelfAssessmentEnabled && q.selfAssessmentEnabled,
+      )) {
         const saved = savedAnswers.find(
           (answer) => answer.questionId === question.id,
         );

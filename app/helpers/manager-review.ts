@@ -117,6 +117,7 @@ export function submissionVisibleToHead(
   }
 
   if (submission.status === "PENDING_HEAD_REVIEW") {
+    if (isAssignedManager) return true;
     return managerCanReviewSubmission(viewerUserId, submission);
   }
 

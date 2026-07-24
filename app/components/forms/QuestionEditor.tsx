@@ -20,6 +20,7 @@ interface QuestionEditorProps {
   onMoveDown: () => void;
   error?: string;
   totalMarksError?: string;
+  formSelfAssessmentEnabled?: boolean;
 }
 
 function needsOptions(inputType: QuestionInput["inputType"]): boolean {
@@ -36,6 +37,7 @@ export default function QuestionEditor({
   onMoveDown,
   error,
   totalMarksError,
+  formSelfAssessmentEnabled = true,
 }: QuestionEditorProps) {
   const showOptions = needsOptions(question.inputType);
 
@@ -199,7 +201,8 @@ export default function QuestionEditor({
                   selfAssessmentEnabled: event.target.checked,
                 })
               }
-              className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+              disabled={!formSelfAssessmentEnabled}
+              className="size-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-40"
             />
             Self Assessment
           </label>

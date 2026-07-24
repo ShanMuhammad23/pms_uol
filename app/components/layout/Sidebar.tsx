@@ -22,6 +22,7 @@ import {
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { useSidebar } from "@/app/components/layout/sidebar-context";
 import { isEmployeeRole } from "@/lib/auth/home-path";
+import { isAdminRole } from "@/lib/auth/submission-review-roles";
 import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +64,7 @@ const Sidebar = () => {
   const isDashboard = pathname === "/dashboard";
   const isProfile = pathname === "/dashboard/profile";
   const isMyForms = pathname.startsWith("/dashboard/my-forms");
-  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const isSuperAdmin = isAdminRole(user?.role);
   const isAdminRouteActive = ADMIN_LINKS.some((link) => link.match(pathname));
 
   const [adminOpen, setAdminOpen] = useState(isAdminRouteActive);

@@ -80,6 +80,7 @@ export interface FormSubmissionListItem {
   eligibilityReferenceYear?: number | null;
   eligibilityReferenceEndDate?: string | null;
   submittedAt: string | null;
+  selfAssessmentEnabled: boolean;
 }
 
 export interface FormSubmissionDetail {
@@ -108,5 +109,13 @@ export interface FormSubmissionDetail {
   questions: QuestionRecord[];
   answers: EmployeeFormAnswerRecord[];
   managerAnswers: EmployeeFormAnswerRecord[];
+  manager1Answers: EmployeeFormAnswerRecord[];
+  manager2Answers: EmployeeFormAnswerRecord[];
   canEditManagerReview: boolean;
+  creditHrsErpScoreAdj: number | null;
+  pubOricScoreAdj: number | null;
+  calibrationFactor: number | null;
+  calibratedScoreNumeric: number | null;
+  canEditScoreAdjustments: boolean;
+  selfAssessmentEnabled: boolean;
 }

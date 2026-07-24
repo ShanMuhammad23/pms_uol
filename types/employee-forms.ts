@@ -9,6 +9,7 @@ export interface AssignedFormListItem {
   questionCount: number;
   /** Workflow status from appraisals.status (dashboard-aligned). */
   status: AppraisalStatus;
+  selfAssessmentEnabled: boolean;
   submittedAt: string | null;
   updatedAt: string | null;
 }

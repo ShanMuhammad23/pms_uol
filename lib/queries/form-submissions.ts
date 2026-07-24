@@ -59,7 +59,7 @@ interface SubmissionListRow {
   manager_level: number | null;
   manager_1_user_id: string | null;
   manager_2_user_id: string | null;
-  system_raw_score: number;
+  system_raw_score: string;
   max_raw_score: string;
   initial_score_numeric: string | null;
   initial_rating: PerformanceRating | null;
@@ -94,6 +94,7 @@ interface SubmissionListRow {
   qualification_country: string | null;
   submitted_at: string | null;
   form_assigned: boolean;
+  self_assessment_enabled: boolean;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -162,7 +163,7 @@ async function getAnswersForSubmission(
     question_id: string;
     text_response: string | null;
     selected_option_id: string | null;
-    points_earned: number;
+    points_earned: string;
     remarks: string | null;
   }>(
     `SELECT question_id, text_response, selected_option_id, points_earned, remarks
@@ -178,7 +179,7 @@ async function getAnswersForSubmission(
     selectedOptionId: row.selected_option_id
       ? Number(row.selected_option_id)
       : null,
-    pointsEarned: row.points_earned,
+    pointsEarned: Number(row.points_earned),
     remarks: row.remarks ?? null,
     attachments: [],
   }));
@@ -192,7 +193,7 @@ function mapSubmissionRow(
     cycleEndDate: string | null;
   },
 ): FormSubmissionListItem {
-  const rawScore = row.system_raw_score ?? 0;
+  const rawScore = toNumber(row.system_raw_score) ?? 0;
   const maxRawScore = Number(row.max_raw_score);
   const scorePercent = calculateScorePercent(rawScore, maxRawScore);
   const hasAppraisal = Boolean(row.id);
@@ -276,6 +277,7 @@ function mapSubmissionRow(
     qualificationInstitute: row.qualification_institute,
     qualificationCountry: row.qualification_country,
     submittedAt: row.submitted_at,
+    selfAssessmentEnabled: row.self_assessment_enabled,
   };
 }
 
@@ -501,7 +503,8 @@ export async function listFormSubmissions(
          ),
          '0'
        ) AS max_raw_score,
-       ap.submitted_at::text
+       ap.submitted_at::text,
+       ft.self_assessment_enabled
      FROM users u
      LEFT JOIN LATERAL (
        SELECT ap_inner.*
@@ -595,22 +598,22 @@ export async function getFormSubmissionSummaryById(
   };
 }
 
-async function seedManagerAnswersFromSelfAssessment(
+async function seedManagerAnswersFromSource(
   appraisalId: number,
   reviewerUserId: number,
-  employeeUserId: number,
+  sourceUserId: number,
 ): Promise<void> {
   const existing = await getAnswersForSubmission(appraisalId, reviewerUserId);
   if (existing.length > 0) {
     return;
   }
 
-  const employeeAnswers = await getAnswersForSubmission(
+  const sourceAnswers = await getAnswersForSubmission(
     appraisalId,
-    employeeUserId,
+    sourceUserId,
   );
 
-  if (employeeAnswers.length === 0) {
+  if (sourceAnswers.length === 0) {
     return;
   }
 
@@ -618,7 +621,7 @@ async function seedManagerAnswersFromSelfAssessment(
     `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
   );
 
-  for (const answer of employeeAnswers) {
+  for (const answer of sourceAnswers) {
     await db.query(
       `INSERT INTO appraisal_answers (
          appraisal_id,
@@ -761,6 +764,7 @@ export async function getFormSubmissionById(
     reviewerUserId?: number | null;
     seedManagerAnswers?: boolean;
     canEditManagerReview?: boolean;
+    canEditScoreAdjustments?: boolean;
   },
 ): Promise<FormSubmissionDetail | null> {
   const submissions = await listFormSubmissions();
@@ -793,10 +797,14 @@ export async function getFormSubmissionById(
     reviewerUserId != null &&
     summary.status === "PENDING_HEAD_REVIEW"
   ) {
-    await seedManagerAnswersFromSelfAssessment(
+    const seedSourceUserId =
+      summary.managerLevel === 2 && summary.manager1UserId != null
+        ? summary.manager1UserId
+        : employeeUserId;
+    await seedManagerAnswersFromSource(
       id,
       reviewerUserId,
-      employeeUserId,
+      seedSourceUserId,
     );
   }
 
@@ -804,6 +812,15 @@ export async function getFormSubmissionById(
   const managerAnswers =
     reviewerUserId != null
       ? await getAnswersForSubmission(id, reviewerUserId)
+      : [];
+
+  const manager1Answers =
+    summary.manager1UserId != null
+      ? await getAnswersForSubmission(id, summary.manager1UserId)
+      : [];
+  const manager2Answers =
+    summary.manager2UserId != null
+      ? await getAnswersForSubmission(id, summary.manager2UserId)
       : [];
 
   let questions: FormSubmissionDetail["questions"] = [];
@@ -849,13 +866,100 @@ export async function getFormSubmissionById(
     questions,
     answers,
     managerAnswers,
+    manager1Answers,
+    manager2Answers,
     canEditManagerReview: Boolean(options?.canEditManagerReview),
+    creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,
+    pubOricScoreAdj: summary.pubOricScoreAdj,
+    calibrationFactor: summary.calibrationFactor,
+    calibratedScoreNumeric: summary.normalizedScore,
+    canEditScoreAdjustments: Boolean(options?.canEditScoreAdjustments),
+    selfAssessmentEnabled: summary.selfAssessmentEnabled,
   };
 }
 
 export type AppraisalRemarksField =
   | "remarksEvaluation"
   | "remarksCompensation";
+
+export type AppraisalScoreAdjustmentField =
+  | "creditHrsErpScoreAdj"
+  | "pubOricScoreAdj"
+  | "calibrationFactor"
+  | "calibratedScoreNumeric";
+
+export async function updateAppraisalScoreAdjustments(
+  appraisalId: number,
+  fields: Partial<
+    Pick<
+      FormSubmissionDetail,
+      AppraisalScoreAdjustmentField
+    >
+  >,
+): Promise<{
+  id: number;
+  creditHrsErpScoreAdj: number | null;
+  pubOricScoreAdj: number | null;
+  calibrationFactor: number | null;
+  calibratedScoreNumeric: number | null;
+}> {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+
+  const fieldMap: Record<
+    AppraisalScoreAdjustmentField,
+    string
+  > = {
+    creditHrsErpScoreAdj: "credit_hrs_erp_score_adj",
+    pubOricScoreAdj: "pub_oric_score_adj",
+    calibrationFactor: "calibration_factor",
+    calibratedScoreNumeric: "calibrated_score_numeric",
+  };
+
+  for (const key of Object.keys(fields) as AppraisalScoreAdjustmentField[]) {
+    const value = fields[key];
+    if (value === undefined) continue;
+    values.push(value);
+    setClauses.push(`${fieldMap[key]} = $${values.length}`);
+  }
+
+  if (setClauses.length === 0) {
+    throw new FormSubmissionError("No score adjustment fields provided.", 400);
+  }
+
+  setClauses.push("updated_at = CURRENT_TIMESTAMP");
+  values.push(appraisalId);
+
+  const result = await db.query<{
+    id: string;
+    credit_hrs_erp_score_adj: string | null;
+    pub_oric_score_adj: string | null;
+    calibration_factor: string | null;
+    calibrated_score_numeric: string | null;
+  }>(
+    `UPDATE appraisals
+     SET ${setClauses.join(",\n         ")}
+     WHERE id = $${values.length}
+     RETURNING id,
+       credit_hrs_erp_score_adj::text,
+       pub_oric_score_adj::text,
+       calibration_factor::text,
+       calibrated_score_numeric::text`,
+    values,
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  return {
+    id: Number(result.rows[0].id),
+    creditHrsErpScoreAdj: toNumber(result.rows[0].credit_hrs_erp_score_adj),
+    pubOricScoreAdj: toNumber(result.rows[0].pub_oric_score_adj),
+    calibrationFactor: toNumber(result.rows[0].calibration_factor),
+    calibratedScoreNumeric: toNumber(result.rows[0].calibrated_score_numeric),
+  };
+}
 
 export async function updateAppraisalRemarks(
   appraisalId: number,

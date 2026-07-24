@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/auth";
+import { isAdminRole } from "@/lib/auth/submission-review-roles";
 
 export async function requireSuperAdminSession() {
   const session = await getServerSession(authOptions);
@@ -12,7 +13,7 @@ export async function requireSuperAdminSession() {
     redirect("/");
   }
 
-  if (session.user?.role !== "SUPER_ADMIN") {
+  if (!isAdminRole(session.user?.role)) {
     redirect("/dashboard");
   }
 
@@ -26,7 +27,7 @@ export async function requireSuperAdminApi() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (session.user?.role !== "SUPER_ADMIN") {
+  if (!isAdminRole(session.user?.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

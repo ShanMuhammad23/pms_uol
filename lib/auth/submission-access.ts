@@ -73,6 +73,7 @@ export async function assertSubmissionAccessible(
 
   if (
     submission.status === "PENDING_HEAD_REVIEW" &&
+    !isAssignedManager &&
     !managerCanReviewSubmission(viewerUserId, submission)
   ) {
     throw new SubmissionAccessError("Forbidden", 403);

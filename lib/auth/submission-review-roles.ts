@@ -19,3 +19,8 @@ export function canReviewSubmissions(role: string | undefined): boolean {
 export function canAccessDashboardSubmissions(role: string | undefined): boolean {
   return DASHBOARD_SUBMISSION_ROLES.includes(role as UserRole);
 }
+
+/** Roles with full system-wide access (Super Admin, HR, Board). */
+export function isAdminRole(role: string | undefined): boolean {
+  return SUBMISSION_REVIEW_ROLES.includes(role as UserRole);
+}

@@ -118,6 +118,21 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
             <span className="text-amber-600 dark:text-amber-300">Questions</span>
             <span className="font-medium text-text-primary">{allQuestions.length}</span>
           </span>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
+              template.selfAssessmentEnabled
+                ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/30 dark:bg-sky-900/30 dark:text-sky-100"
+                : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-300",
+            )}
+          >
+            <span className={template.selfAssessmentEnabled ? "text-sky-600 dark:text-sky-300" : "text-slate-500 dark:text-slate-400"}>
+              Self Assessment
+            </span>
+            <span className="font-medium text-text-primary">
+              {template.selfAssessmentEnabled ? "Enabled" : "Disabled"}
+            </span>
+          </span>
           {headerActions}
         </div>
       </div>
@@ -224,7 +239,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                         )}
                       </td>
                       <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
-                        {question.selfAssessmentEnabled ? (
+                        {question.selfAssessmentEnabled && template.selfAssessmentEnabled ? (
                           <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                             Enabled
                           </span>

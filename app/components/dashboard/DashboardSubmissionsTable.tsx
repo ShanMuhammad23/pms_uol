@@ -9,6 +9,7 @@ import { useDashboardColumnVisibility } from "@/app/components/dashboard/ColumnV
 import { InlineGradeGroupCell } from "@/app/components/dashboard/InlineGradeGroupCell";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
+import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScoreAdjustmentCell";
 import { FormAssignmentCell } from "@/app/components/dashboard/FormAssignmentCell";
 import {
   StaffListingMasterFilter,
@@ -221,6 +222,40 @@ function renderCell(
       <InlineGradeGroupCell
         employeeId={submission.employeeId}
         value={submission.gradeGroup}
+      />
+    );
+  }
+
+  if (columnId === "creditHrsErpAdj") {
+    return (
+      <InlineScoreAdjustmentCell
+        submissionId={submission.id}
+        field="creditHrsErpScoreAdj"
+        value={submission.creditHrsErpScoreAdj}
+        disabled={submission.id <= 0}
+      />
+    );
+  }
+
+  if (columnId === "pubOricScoreAdj") {
+    return (
+      <InlineScoreAdjustmentCell
+        submissionId={submission.id}
+        field="pubOricScoreAdj"
+        value={submission.pubOricScoreAdj}
+        disabled={submission.id <= 0}
+      />
+    );
+  }
+
+  if (columnId === "calibrationFactor") {
+    return (
+      <InlineScoreAdjustmentCell
+        submissionId={submission.id}
+        field="calibrationFactor"
+        value={submission.calibrationFactor}
+        disabled={submission.id <= 0}
+        mode="decimal"
       />
     );
   }

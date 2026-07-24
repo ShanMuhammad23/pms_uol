@@ -5,6 +5,7 @@ import {
   SubmissionAccessError,
 } from "@/lib/auth/submission-access";
 import { isHeadRole } from "@/lib/auth/home-path";
+import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
 import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-reviewer";
 import {
   FormSubmissionError,
@@ -26,7 +27,7 @@ export async function PUT(request: Request, context: RouteContext) {
   }
 
   const role = auth.user?.role;
-  if (!isHeadRole(role) && role !== "SUPER_ADMIN") {
+  if (!isHeadRole(role) && !canReviewSubmissions(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -91,7 +92,7 @@ export async function PUT(request: Request, context: RouteContext) {
       );
     }
 
-    console.error("Failed to save manager review:", error);
+    console.error("[manager-review PUT] Failed to save manager review:", error);
     return NextResponse.json(
       { error: "Failed to save manager review." },
       { status: 500 },
@@ -106,7 +107,7 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const role = auth.user?.role;
-  if (!isHeadRole(role) && role !== "SUPER_ADMIN") {
+  if (!isHeadRole(role) && !canReviewSubmissions(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -153,7 +154,7 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
-    console.error("Failed to approve manager review:", error);
+    console.error("[manager-review POST] Failed to approve manager review:", error);
     return NextResponse.json(
       { error: "Failed to approve manager review." },
       { status: 500 },

@@ -42,12 +42,17 @@ function buildManagerDraftMap(
   questions: QuestionRecord[],
   managerAnswers: EmployeeFormAnswerRecord[],
   employeeAnswers: EmployeeFormAnswerRecord[],
+  manager1Answers?: EmployeeFormAnswerRecord[],
+  managerLevel?: number,
 ): Map<number, ManagerDraft> {
   const employeeMap = new Map(
     employeeAnswers.map((answer) => [answer.questionId, answer]),
   );
   const managerMap = new Map(
     managerAnswers.map((answer) => [answer.questionId, answer]),
+  );
+  const manager1Map = new Map(
+    (manager1Answers ?? []).map((answer) => [answer.questionId, answer]),
   );
   const drafts = new Map<number, ManagerDraft>();
 
@@ -56,9 +61,14 @@ function buildManagerDraftMap(
 
     const manager = managerMap.get(question.id);
     const employee = employeeMap.get(question.id);
+    const manager1 = manager1Map.get(question.id);
+
+    // For Manager 2 review, fall back to Manager 1's answers, then self-assessment
+    const fallbackSource =
+      managerLevel === 2 ? (manager1 ?? employee) : employee;
     const points =
-      manager?.pointsEarned ?? employee?.pointsEarned ?? undefined;
-    const remarks = manager?.remarks ?? employee?.remarks ?? "";
+      manager?.pointsEarned ?? fallbackSource?.pointsEarned ?? undefined;
+    const remarks = manager?.remarks ?? fallbackSource?.remarks ?? "";
 
     drafts.set(question.id, {
       pointsEarned: points === undefined ? "" : String(points),
@@ -87,7 +97,13 @@ export default function SubmissionDetailView({
     if (!data) return;
 
     setManagerDrafts(
-      buildManagerDraftMap(data.questions, data.managerAnswers, data.answers),
+      buildManagerDraftMap(
+        data.questions,
+        data.managerAnswers,
+        data.answers,
+        data.manager1Answers,
+        data.managerLevel ?? undefined,
+      ),
     );
   }, [data]);
 
@@ -167,6 +183,36 @@ export default function SubmissionDetailView({
     () => new Map(data?.answers.map((answer) => [answer.questionId, answer])),
     [data?.answers],
   );
+
+  const manager1AnswerMap = useMemo(
+    () =>
+      new Map(
+        (data?.manager1Answers ?? []).map((answer) => [
+          answer.questionId,
+          answer,
+        ]),
+      ),
+    [data?.manager1Answers],
+  );
+
+  const manager2AnswerMap = useMemo(
+    () =>
+      new Map(
+        (data?.manager2Answers ?? []).map((answer) => [
+          answer.questionId,
+          answer,
+        ]),
+      ),
+    [data?.manager2Answers],
+  );
+
+  const hasManager2 = data?.manager2UserId != null;
+  const currentManagerLevel = data?.managerLevel ?? 1;
+  const selfAssessmentEnabled = data?.selfAssessmentEnabled ?? true;
+  const editingManager1 =
+    data?.canEditManagerReview && currentManagerLevel === 1;
+  const editingManager2 =
+    data?.canEditManagerReview && currentManagerLevel === 2;
 
   if (isLoading) {
     return (
@@ -271,7 +317,25 @@ export default function SubmissionDetailView({
   };
 
   const selfTotal = data.answers.reduce((sum, a) => sum + a.pointsEarned, 0);
-  const managerTotal = [...managerDrafts.values()].reduce((sum, draft) => {
+  const manager1Answers = data.manager1Answers ?? [];
+  const manager2Answers = data.manager2Answers ?? [];
+  const manager1Total = manager1Answers.reduce(
+    (sum, a) => sum + a.pointsEarned,
+    0,
+  );
+  const manager2SavedTotal = manager2Answers.reduce(
+    (sum, a) => sum + a.pointsEarned,
+    0,
+  );
+  // Manager 2 total falls back to Manager 1's total, then self total
+  const manager2Total = hasManager2
+    ? manager2Answers.length > 0
+      ? manager2SavedTotal
+      : manager1Answers.length > 0
+        ? manager1Total
+        : selfTotal
+    : null;
+  const managerDraftTotal = [...managerDrafts.values()].reduce((sum, draft) => {
     const value = Number(draft.pointsEarned);
     return sum + (Number.isNaN(value) ? 0 : value);
   }, 0);
@@ -334,8 +398,9 @@ export default function SubmissionDetailView({
       {data.canEditManagerReview ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-violet-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-violet-950/20">
           <p className="text-violet-800 dark:text-violet-200">
-            Manager scores are pre-filled from self assessment. Edit any value and
-            save your review.
+            {selfAssessmentEnabled
+              ? "Manager scores are pre-filled from self assessment. Edit any value and save your review."
+              : "Enter scores directly for this employee. Edit any value and save your review."}
           </p>
           <button
             type="button"
@@ -382,25 +447,39 @@ export default function SubmissionDetailView({
               <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Weight
               </th>
+              {selfAssessmentEnabled ? (
+                <>
               <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
                 Self Score
               </th>
               <th className="min-w-[180px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
                 Self Remarks
               </th>
+                </>
+              ) : null}
               <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
-                Manager Score
+                Mgr 1 Score
               </th>
-              <th className="min-w-[180px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
-                Manager Remarks
+              <th className="min-w-[180px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
+                Mgr 1 Remarks
               </th>
+              {hasManager2 ? (
+                <>
+                  <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                    Mgr 2 Score
+                  </th>
+                  <th className="min-w-[180px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                    Mgr 2 Remarks
+                  </th>
+                </>
+              ) : null}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={selfAssessmentEnabled ? (hasManager2 ? 10 : 8) : (hasManager2 ? 8 : 6)}
                   className="bg-slate-50 px-3 py-8 text-center text-sm text-slate-500 dark:bg-slate-800/30 dark:text-slate-400"
                 >
                   No questions were found for this submission.
@@ -415,6 +494,8 @@ export default function SubmissionDetailView({
                   pointsEarned: "",
                   remarks: "",
                 };
+                const mgr1Answer = manager1AnswerMap.get(question.id);
+                const mgr2Answer = manager2AnswerMap.get(question.id);
                 const isEvenRow = rowIdx % 2 === 0;
 
                 return (
@@ -460,6 +541,8 @@ export default function SubmissionDetailView({
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
                       {scored ? question.totalMarks : "—"}
                     </td>
+                    {selfAssessmentEnabled ? (
+                      <>
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-bold text-teal-700 dark:border-slate-700/40 dark:text-teal-300">
                       {scored ? (answer?.pointsEarned ?? 0) : "—"}
                     </td>
@@ -476,9 +559,12 @@ export default function SubmissionDetailView({
                         "—"
                       )}
                     </td>
+                      </>
+                    ) : null}
+                    {/* Manager 1 Score */}
                     <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                       {scored ? (
-                        data.canEditManagerReview ? (
+                        editingManager1 ? (
                           <input
                             type="number"
                             min={0}
@@ -497,16 +583,17 @@ export default function SubmissionDetailView({
                           />
                         ) : (
                           <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
-                            {managerDraft.pointsEarned || 0}
+                            {mgr1Answer?.pointsEarned ?? 0}
                           </span>
                         )
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="px-2 py-2.5">
+                    {/* Manager 1 Remarks */}
+                    <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                       {scored ? (
-                        data.canEditManagerReview ? (
+                        editingManager1 ? (
                           <textarea
                             value={managerDraft.remarks}
                             rows={2}
@@ -518,9 +605,9 @@ export default function SubmissionDetailView({
                             className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                             placeholder="Optional remarks"
                           />
-                        ) : managerDraft.remarks.trim() ? (
+                        ) : mgr1Answer?.remarks?.trim() ? (
                           <p className="whitespace-pre-wrap break-words text-xs text-slate-600 dark:text-slate-300">
-                            {managerDraft.remarks}
+                            {mgr1Answer.remarks}
                           </p>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -529,6 +616,67 @@ export default function SubmissionDetailView({
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
+                    {/* Manager 2 Score + Remarks */}
+                    {hasManager2 ? (
+                      <>
+                        <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                          {scored ? (
+                            editingManager2 ? (
+                              <input
+                                type="number"
+                                min={0}
+                                max={question.totalMarks}
+                                step="0.5"
+                                value={managerDraft.pointsEarned}
+                                onChange={(event) =>
+                                  updateManagerDraft(question.id, {
+                                    pointsEarned: clampScore(
+                                      event.target.value,
+                                      question.totalMarks,
+                                    ),
+                                  })
+                                }
+                                className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-indigo-300"
+                              />
+                            ) : (
+                              <span className="font-bold tabular-nums text-indigo-700 dark:text-indigo-300">
+                                {mgr2Answer?.pointsEarned
+                                  ?? mgr1Answer?.pointsEarned
+                                  ?? answer?.pointsEarned
+                                  ?? 0}
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5">
+                          {scored ? (
+                            editingManager2 ? (
+                              <textarea
+                                value={managerDraft.remarks}
+                                rows={2}
+                                onChange={(event) =>
+                                  updateManagerDraft(question.id, {
+                                    remarks: event.target.value,
+                                  })
+                                }
+                                className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                placeholder="Optional remarks"
+                              />
+                            ) : (mgr2Answer?.remarks?.trim() || mgr1Answer?.remarks?.trim() || answer?.remarks?.trim()) ? (
+                              <p className="whitespace-pre-wrap break-words text-xs text-slate-600 dark:text-slate-300">
+                                {mgr2Answer?.remarks?.trim() || mgr1Answer?.remarks?.trim() || answer?.remarks}
+                              </p>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      </>
+                    ) : null}
                   </tr>
                 );
               })
@@ -538,7 +686,7 @@ export default function SubmissionDetailView({
             <tfoot>
               <tr className="bg-slate-800 dark:bg-slate-950/80">
                 <td
-                  colSpan={3}
+                  colSpan={selfAssessmentEnabled ? 3 : 2}
                   className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200"
                 >
                   Total
@@ -546,14 +694,26 @@ export default function SubmissionDetailView({
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-100">
                   {data.maxRawScore}
                 </td>
+                {selfAssessmentEnabled ? (
+                  <>
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-teal-300">
                   {selfTotal}
                 </td>
                 <td className="border-r border-slate-700 px-3 py-2.5" />
+                  </>
+                ) : null}
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-violet-300">
-                  {managerTotal}
+                  {editingManager1 ? managerDraftTotal : manager1Total}
                 </td>
-                <td className="px-3 py-2.5" />
+                <td className="border-r border-slate-700 px-3 py-2.5" />
+                {hasManager2 ? (
+                  <>
+                    <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-indigo-300">
+                      {editingManager2 ? managerDraftTotal : (manager2Total ?? 0)}
+                    </td>
+                    <td className="px-3 py-2.5" />
+                  </>
+                ) : null}
               </tr>
             </tfoot>
           ) : null}

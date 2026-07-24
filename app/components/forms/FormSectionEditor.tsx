@@ -11,6 +11,7 @@ interface FormSectionEditorProps {
   errors: Record<string, string>;
   onChange: (section: FormSectionInput) => void;
   onRemove: () => void;
+  formSelfAssessmentEnabled?: boolean;
 }
 
 export default function FormSectionEditor({
@@ -19,6 +20,7 @@ export default function FormSectionEditor({
   errors,
   onChange,
   onRemove,
+  formSelfAssessmentEnabled = true,
 }: FormSectionEditorProps) {
   const titleErrorKey = `section-${sectionIndex}-title`;
 
@@ -125,6 +127,7 @@ export default function FormSectionEditor({
               totalMarksError={
                 errors[`section-${sectionIndex}-question-${questionIndex}-marks`]
               }
+              formSelfAssessmentEnabled={formSelfAssessmentEnabled}
             />
           ))}
         </div>

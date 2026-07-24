@@ -93,6 +93,7 @@ function mapRecordToState(record: FormTemplateRecord) {
     title: record.title,
     description: record.description ?? "",
     cycleId: record.cycleId,
+    selfAssessmentEnabled: record.selfAssessmentEnabled,
     sections: normalized.sections,
     questions: normalized.questions,
   };
@@ -150,22 +151,26 @@ function validateQuestionFields(
 interface ModernFormDesignStepProps {
   title: string;
   description: string;
+  selfAssessmentEnabled: boolean;
   sections: FormSectionInput[];
   questions: QuestionInput[];
   errors: Record<string, string>;
   onTitleChange: (title: string) => void;
   onDescriptionChange: (description: string) => void;
+  onSelfAssessmentEnabledChange: (enabled: boolean) => void;
   onStructureChange: (sections: FormSectionInput[], questions: QuestionInput[]) => void;
 }
 
 function ModernFormDesignStep({
   title,
   description,
+  selfAssessmentEnabled,
   sections,
   questions,
   errors,
   onTitleChange,
   onDescriptionChange,
+  onSelfAssessmentEnabledChange,
   onStructureChange,
 }: ModernFormDesignStepProps) {
   const [activePanel, setActivePanel] = useState<"builder" | "preview">("builder");
@@ -418,6 +423,27 @@ function ModernFormDesignStep({
             />
           </div>
 
+          {/* Self Assessment Setting */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Assessment Settings
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={selfAssessmentEnabled}
+                onChange={(e) => onSelfAssessmentEnabledChange(e.target.checked)}
+                className="size-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              />
+              Enable Self Assessment
+            </label>
+            {!selfAssessmentEnabled && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Self-assessment is disabled. The form will go directly to the reporting head for review. Question-level self-assessment checkboxes are disabled.
+              </p>
+            )}
+          </div>
+
           {/* Stats Card */}
           <div className="rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between">
@@ -573,6 +599,7 @@ function ModernFormDesignStep({
                               questions,
                             );
                           }}
+                          formSelfAssessmentEnabled={selfAssessmentEnabled}
                         />
                       );
                     }
@@ -604,6 +631,7 @@ function ModernFormDesignStep({
                             ),
                           );
                         }}
+                        formSelfAssessmentEnabled={selfAssessmentEnabled}
                       />
                     );
                   })}
@@ -739,6 +767,7 @@ function SectionCard({
   onRemoveQuestion,
   onMoveQuestion,
   onUpdateQuestion,
+  formSelfAssessmentEnabled = true,
 }: {
   section: FormSectionInput;
   index: number;
@@ -751,6 +780,7 @@ function SectionCard({
   onRemoveQuestion: (qId: string) => void;
   onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
   onUpdateQuestion: (qId: string, updates: Partial<QuestionInput>) => void;
+  formSelfAssessmentEnabled?: boolean;
 }) {
   const [sectionDragOver, setSectionDragOver] = useState(false);
   const hasTitleError = errors[`section-${index}-title`];
@@ -866,6 +896,7 @@ function SectionCard({
                 onRemove={() => onRemoveQuestion(question.clientId)}
                 onChange={(updates) => onUpdateQuestion(question.clientId, updates)}
                 compact
+                formSelfAssessmentEnabled={formSelfAssessmentEnabled}
               />
             ))}
             
@@ -901,6 +932,7 @@ function QuestionCard({
   onRemove,
   onChange,
   compact = false,
+  formSelfAssessmentEnabled = true,
 }: {
   question: QuestionInput;
   index: number;
@@ -910,6 +942,7 @@ function QuestionCard({
   onRemove: () => void;
   onChange: (updates: Partial<QuestionInput>) => void;
   compact?: boolean;
+  formSelfAssessmentEnabled?: boolean;
 }) {
   const textError = errors[errorPrefix];
   const typeError = errors[`${errorPrefix}-type`];
@@ -1022,7 +1055,8 @@ function QuestionCard({
                   type="checkbox"
                   checked={question.selfAssessmentEnabled}
                   onChange={(e) => onChange({ selfAssessmentEnabled: e.target.checked })}
-                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
+                  disabled={!formSelfAssessmentEnabled}
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 disabled:opacity-40 dark:border-teal-500 dark:text-teal-400"
                 />
                 Self Assessment
               </label>
@@ -1153,6 +1187,7 @@ export default function FormBuilderWizard({
       : initialState?.title ?? "",
   );
   const [description, setDescription] = useState(initialState?.description ?? "");
+  const [selfAssessmentEnabled, setSelfAssessmentEnabled] = useState(initialState?.selfAssessmentEnabled ?? true);
   const [sections, setSections] = useState<FormSectionInput[]>(
     initialState?.sections.map((section) => ({
       ...section,
@@ -1205,6 +1240,7 @@ export default function FormBuilderWizard({
     return {
       title: title.trim(),
       description: description.trim(),
+      selfAssessmentEnabled,
       sections: normalized.sections,
       questions: normalized.questions,
       ...(cycleId ? { cycleId } : {}),
@@ -1212,6 +1248,7 @@ export default function FormBuilderWizard({
   }, [
     title,
     description,
+    selfAssessmentEnabled,
     sections,
     questions,
     cycleId,
@@ -1418,11 +1455,13 @@ export default function FormBuilderWizard({
           <ModernFormDesignStep
             title={title}
             description={description}
+            selfAssessmentEnabled={selfAssessmentEnabled}
             sections={sections}
             questions={questions}
             errors={errors}
             onTitleChange={setTitle}
             onDescriptionChange={setDescription}
+            onSelfAssessmentEnabledChange={setSelfAssessmentEnabled}
             onStructureChange={handleStructureChange}
           />
         ) : (

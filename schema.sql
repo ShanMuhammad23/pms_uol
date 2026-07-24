@@ -85,6 +85,9 @@ CREATE TABLE form_templates (
     target_category employee_category NOT NULL, -- Academic | Supportive | Blue Collar
     target_sub_category sub_category NOT NULL,  -- General | Skilled | Professional
     
+    -- When FALSE, the form skips self-assessment and goes directly to manager review
+    self_assessment_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    
     created_by BIGINT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

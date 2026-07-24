@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { ClipboardList, LayoutDashboard } from "lucide-react";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { DashboardPrimaryCharts } from "@/app/components/dashboard/DashboardPrimaryCharts";
 import { DashboardSectionToggles } from "@/app/components/dashboard/DashboardSectionToggles";
 import { DashboardSubmissionsTable } from "@/app/components/dashboard/DashboardSubmissionsTable";
 import { DashboardWorkflowStatsRow } from "@/app/components/dashboard/DashboardWorkflowStatsRow";
+import DirectAssessmentTab from "@/app/components/dashboard/DirectAssessmentTab";
 import { HeadDashboardOverview } from "@/app/components/dashboard/HeadDashboardOverview";
 import { useDashboardPage } from "@/app/queries/dashboard";
 import { HEAD_DASHBOARD_TABLE_COLUMN_IDS } from "@/app/helpers/dashboard-table-columns";
 import { isHeadRole } from "@/lib/auth/home-path";
+import { cn } from "@/lib/utils";
 
 interface HRDashboardPageProps {
   role?: string | null;
@@ -21,10 +24,13 @@ const panelTransition = {
   ease: [0.23, 1, 0.32, 1] as const,
 };
 
+type DashboardTab = "overview" | "direct-assessment";
+
 export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   const isHead = isHeadRole(role);
   const [statsVisible, setStatsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(true);
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const {
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
@@ -69,6 +75,41 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
 
   return (
     <div className="relative min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
+      {isHead ? (
+        <div className="mb-2 flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={cn(
+              "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+              activeTab === "overview"
+                ? "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300"
+                : "border-transparent text-foreground/60 hover:text-text-primary",
+            )}
+          >
+            <LayoutDashboard className="size-3.5" />
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab("direct-assessment")}
+            className={cn(
+              "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+              activeTab === "direct-assessment"
+                ? "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300"
+                : "border-transparent text-foreground/60 hover:text-text-primary",
+            )}
+          >
+            <ClipboardList className="size-3.5" />
+            Direct Assessment
+          </button>
+        </div>
+      ) : null}
+
+      {activeTab === "direct-assessment" && isHead ? (
+        <div className="mx-auto w-full max-w-full min-w-0">
+          <DirectAssessmentTab />
+        </div>
+      ) : (
+        <>
       <DashboardSectionToggles
         statsVisible={statsVisible}
         onToggleStats={() => setStatsVisible((current) => !current)}
@@ -172,6 +213,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           allowedColumnIds={isHead ? HEAD_DASHBOARD_TABLE_COLUMN_IDS : undefined}
         />
       </div>
+        </>
+      )}
     </div>
   );
 }

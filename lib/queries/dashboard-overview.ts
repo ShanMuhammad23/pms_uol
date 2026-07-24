@@ -198,6 +198,7 @@ function mapOverviewRow(
     qualificationInstitute: null,
     qualificationCountry: null,
     submittedAt: null,
+    selfAssessmentEnabled: true,
   };
 }
 

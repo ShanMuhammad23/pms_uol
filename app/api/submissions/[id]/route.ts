@@ -5,6 +5,7 @@ import {
   SubmissionAccessError,
 } from "@/lib/auth/submission-access";
 import { isHeadRole } from "@/lib/auth/home-path";
+import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
 import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-reviewer";
 import { managerCanReviewSubmission } from "@/app/helpers/manager-review";
 import {
@@ -12,7 +13,9 @@ import {
   getFormSubmissionById,
   getFormSubmissionSummaryById,
   updateAppraisalRemarks,
+  updateAppraisalScoreAdjustments,
   type AppraisalRemarksField,
+  type AppraisalScoreAdjustmentField,
 } from "@/lib/queries/form-submissions";
 
 interface RouteContext {
@@ -50,16 +53,19 @@ export async function GET(_request: Request, context: RouteContext) {
     const reviewerUserId = auth.user?.id ? Number(auth.user.id) : null;
     const canEditManagerReview =
       summary.status === "PENDING_HEAD_REVIEW" &&
-      (role === "SUPER_ADMIN" ||
+      (canReviewSubmissions(role) ||
         (isHeadRole(role) &&
           reviewerUserId != null &&
           Number.isFinite(reviewerUserId) &&
           managerCanReviewSubmission(reviewerUserId, summary)));
 
+    const canEditScoreAdjustments = canReviewSubmissions(role);
+
     const submission = await getFormSubmissionById(submissionId, {
       reviewerUserId,
       seedManagerAnswers: canEditManagerReview,
       canEditManagerReview,
+      canEditScoreAdjustments,
     });
 
     if (!submission) {
@@ -110,13 +116,54 @@ export async function PATCH(request: Request, context: RouteContext) {
     await assertSubmissionAccessible(auth, summary);
 
     const body = (await request.json()) as Record<string, unknown>;
+
+    // Handle score adjustment fields (admin-only)
+    const SCORE_ADJ_FIELDS: AppraisalScoreAdjustmentField[] = [
+      "creditHrsErpScoreAdj",
+      "pubOricScoreAdj",
+      "calibrationFactor",
+      "calibratedScoreNumeric",
+    ];
+    const scoreAdjField = SCORE_ADJ_FIELDS.find((f) => f in body);
+
+    if (scoreAdjField) {
+      if (!canReviewSubmissions(auth.user?.role)) {
+        return NextResponse.json(
+          { error: "Forbidden: admin role required to edit score adjustments." },
+          { status: 403 },
+        );
+      }
+
+      const rawValue = body[scoreAdjField];
+      const numValue =
+        rawValue === null || rawValue === undefined || rawValue === ""
+          ? null
+          : typeof rawValue === "number"
+            ? rawValue
+            : Number(rawValue);
+
+      if (numValue !== null && !Number.isFinite(numValue)) {
+        return NextResponse.json(
+          { error: `${scoreAdjField} must be a valid number or null.` },
+          { status: 400 },
+        );
+      }
+
+      const updated = await updateAppraisalScoreAdjustments(submissionId, {
+        [scoreAdjField]: numValue,
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    // Handle remarks fields
     const field = REMARKS_FIELDS.find((candidate) => candidate in body);
 
     if (!field) {
       return NextResponse.json(
         {
           error:
-            "One of remarksEvaluation or remarksCompensation is required.",
+            "One of remarksEvaluation, remarksCompensation, creditHrsErpScoreAdj, pubOricScoreAdj, calibrationFactor, or calibratedScoreNumeric is required.",
         },
         { status: 400 },
       );

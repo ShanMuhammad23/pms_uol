@@ -147,9 +147,11 @@ function formatNullable(value: string | number | boolean | null | undefined): st
   return String(value);
 }
 
-function formatNumber(value: number | null | undefined, digits = 2): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return Number.isInteger(value) ? String(value) : value.toFixed(digits);
+function formatNumber(value: number | string | null | undefined, digits = 2): string {
+  if (value === null || value === undefined) return "—";
+  const num = Number(value);
+  if (Number.isNaN(num)) return "—";
+  return Number.isInteger(num) ? String(num) : num.toFixed(digits);
 }
 
 function getAdjustedScore(row: FormSubmissionListItem): number | null {
@@ -158,11 +160,75 @@ function getAdjustedScore(row: FormSubmissionListItem): number | null {
     return null;
   }
 
-  return (
-    scoreO +
-    (row.creditHrsErpScoreAdj ?? 0) +
-    (row.pubOricScoreAdj ?? 0)
+  const chAdj = row.creditHrsErpScoreAdj ?? 0;
+  const oricAdj = row.pubOricScoreAdj ?? 0;
+
+  return scoreO + chAdj + oricAdj;
+}
+
+function getAdjustedScorePercent(row: FormSubmissionListItem): number | null {
+  const adjusted = getAdjustedScore(row);
+  if (adjusted === null || row.maxRawScore <= 0) return null;
+  return Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
+}
+
+function getAdjustedRating(row: FormSubmissionListItem): string | null {
+  const pct = getAdjustedScorePercent(row);
+  if (pct === null) return null;
+  if (pct >= 85) return "OUT";
+  if (pct >= 70) return "EXC";
+  if (pct >= 55) return "STR";
+  if (pct >= 40) return "IMP";
+  return "UNS";
+}
+
+function getNormalizedScore(row: FormSubmissionListItem): number | null {
+  const adjusted = getAdjustedScore(row);
+  if (adjusted === null) return null;
+  const calFr = row.calibrationFactor ?? 1;
+  return adjusted * calFr;
+}
+
+function getNormalizedScorePercent(row: FormSubmissionListItem): number | null {
+  const normalized = getNormalizedScore(row);
+  if (normalized === null || row.maxRawScore <= 0) return null;
+  return Number(((normalized / row.maxRawScore) * 100).toFixed(2));
+}
+
+function getNormalizedRating(row: FormSubmissionListItem): string | null {
+  const pct = getNormalizedScorePercent(row);
+  if (pct === null) return null;
+  if (pct >= 85) return "OUT";
+  if (pct >= 70) return "EXC";
+  if (pct >= 55) return "STR";
+  if (pct >= 40) return "IMP";
+  return "UNS";
+}
+
+function getNormalizedQuartile(row: FormSubmissionListItem): string | null {
+  const pct = getNormalizedScorePercent(row);
+  if (pct === null) return null;
+
+  const levelDefs = [
+    { name: "UNS", scoreMin: 0, scoreMax: 39 },
+    { name: "IMP", scoreMin: 40, scoreMax: 54 },
+    { name: "STR", scoreMin: 55, scoreMax: 69 },
+    { name: "EXC", scoreMin: 70, scoreMax: 84 },
+    { name: "OUT", scoreMin: 85, scoreMax: 100 },
+  ];
+
+  const level = levelDefs.find(
+    (l) => pct >= l.scoreMin && pct <= l.scoreMax,
   );
+  if (!level) return null;
+
+  const bandSize = (level.scoreMax - level.scoreMin + 1) / 4;
+  const quartileIndex = Math.min(
+    3,
+    Math.floor((pct - level.scoreMin) / bandSize),
+  );
+
+  return `${level.name}-Q${quartileIndex + 1}`;
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -307,7 +373,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
-    getValue: (row) => formatNumber(row.creditHrsErpScoreAdj),
+    getValue: (row) => formatNumber(row.creditHrsErpScoreAdj, 0),
   },
   pubOricScoreAdj: {
     id: "pubOricScoreAdj",
@@ -315,7 +381,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
-    getValue: (row) => formatNumber(row.pubOricScoreAdj),
+    getValue: (row) => formatNumber(row.pubOricScoreAdj, 0),
   },
   adjustedScore: {
     id: "adjustedScore",
@@ -328,7 +394,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   ratingO: {
     id: "ratingO",
     label: "Rating (O)",
-    getValue: (row) => formatNullable(row.ratingO ?? row.initialRating),
+    getValue: (row) => formatNullable(getAdjustedRating(row)),
   },
   calibrationFactor: {
     id: "calibrationFactor",
@@ -336,7 +402,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
-    getValue: (row) => formatNumber(row.calibrationFactor, 4),
+    getValue: (row) => formatNumber(row.calibrationFactor ?? 1, 1),
   },
   normalizedScore: {
     id: "normalizedScore",
@@ -344,18 +410,17 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
-    getValue: (row) => formatNumber(row.normalizedScore),
+    getValue: (row) => formatNumber(getNormalizedScore(row)),
   },
   ratingN: {
     id: "ratingN",
     label: "Rating (N)",
-    getValue: (row) =>
-      formatNullable(row.ratingN ?? row.calibratedRating ?? row.performanceLevelName),
+    getValue: (row) => formatNullable(getNormalizedRating(row)),
   },
   quartile: {
     id: "quartile",
     label: "Quartile",
-    getValue: (row) => formatNullable(row.quartileName),
+    getValue: (row) => formatNullable(getNormalizedQuartile(row)),
   },
   remarksEvaluation: {
     id: "remarksEvaluation",
