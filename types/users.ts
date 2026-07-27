@@ -34,7 +34,6 @@ export interface UserRecord {
   lastName: string;
   designation: string | null;
   roleCategory: string | null;
-  gradeGroup: string | null;
   dateOfJoining: string | null;
   systemRole: UserRole;
   empCategory: string;
@@ -79,7 +78,6 @@ export interface UpdateUserInput {
   lastName: string;
   designation?: string | null;
   roleCategory?: string | null;
-  gradeGroup?: string | null;
   dateOfJoining?: string | null;
   systemRole: UserRole;
   empCategory: string;

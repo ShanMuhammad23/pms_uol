@@ -31,13 +31,11 @@ export function BulkEditStaffModal({
 }: BulkEditStaffModalProps) {
   const queryClient = useQueryClient();
   const [roleCategory, setRoleCategory] = useState("");
-  const [gradeGroup, setGradeGroup] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setRoleCategory("");
-      setGradeGroup("");
       setError(null);
     }
   }, [open]);
@@ -46,21 +44,16 @@ export function BulkEditStaffModal({
     mutationFn: () => {
       const fields: {
         roleCategory?: string | null;
-        gradeGroup?: string | null;
       } = {};
 
       const roleValue = roleCategory.trim();
-      const gradeValue = gradeGroup.trim();
 
       if (roleValue) {
         fields.roleCategory = roleValue;
       }
-      if (gradeValue) {
-        fields.gradeGroup = gradeValue;
-      }
 
-      if (!("roleCategory" in fields) && !("gradeGroup" in fields)) {
-        throw new Error("Enter a value for Role Category and/or Column 1.");
+      if (!("roleCategory" in fields)) {
+        throw new Error("Enter a value for Role Category.");
       }
 
       return bulkUpdateEmployeeListingFields(selectedEmployeeIds, fields);
@@ -80,14 +73,12 @@ export function BulkEditStaffModal({
 
       const selected = new Set(selectedEmployeeIds);
       const roleValue = roleCategory.trim() || null;
-      const gradeValue = gradeGroup.trim() || null;
 
       patchStaffListingCaches(queryClient, (row) => {
         if (!selected.has(row.employeeId)) return row;
         return {
           ...row,
           ...(roleValue ? { roleCategory: roleValue } : {}),
-          ...(gradeValue ? { gradeGroup: gradeValue } : {}),
         };
       });
 
@@ -96,7 +87,6 @@ export function BulkEditStaffModal({
         return {
           ...row,
           ...(roleValue ? { roleCategory: roleValue } : {}),
-          ...(gradeValue ? { gradeGroup: gradeValue } : {}),
         };
       };
 
@@ -208,23 +198,6 @@ export function BulkEditStaffModal({
                   onChange={(event) => setRoleCategory(event.target.value)}
                   disabled={saveMutation.isPending}
                   placeholder="Enter role category"
-                  className={cn(
-                    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 dark:border-white/10 dark:bg-slate-950 dark:text-white",
-                    saveMutation.isPending && "opacity-70",
-                  )}
-                />
-              </label>
-
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Column 1
-                </span>
-                <input
-                  type="text"
-                  value={gradeGroup}
-                  onChange={(event) => setGradeGroup(event.target.value)}
-                  disabled={saveMutation.isPending}
-                  placeholder="Enter value"
                   className={cn(
                     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 dark:border-white/10 dark:bg-slate-950 dark:text-white",
                     saveMutation.isPending && "opacity-70",

@@ -17,7 +17,6 @@ import type { FormSubmissionListItem } from "@/types/form-submissions";
 export const MASTER_FILTER_TEXT_COLUMN_IDS = [
   "sapCode",
   "employeeName",
-  "gradeGroup",
   "remarksEvaluation",
   "remarksCompensation",
   "qualification",

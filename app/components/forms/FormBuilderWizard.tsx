@@ -423,25 +423,14 @@ function ModernFormDesignStep({
             />
           </div>
 
-          {/* Self Assessment Setting */}
+          {/* Self Assessment Setting — now per-employee, not form-level */}
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Assessment Settings
             </label>
-            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={selfAssessmentEnabled}
-                onChange={(e) => onSelfAssessmentEnabledChange(e.target.checked)}
-                className="size-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-              />
-              Enable Self Assessment
-            </label>
-            {!selfAssessmentEnabled && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                Self-assessment is disabled. The form will go directly to the reporting head for review. Question-level self-assessment checkboxes are disabled.
-              </p>
-            )}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              Self-assessment is configured per employee during form assignment. Question-level self-assessment checkboxes control which questions are included.
+            </div>
           </div>
 
           {/* Stats Card */}

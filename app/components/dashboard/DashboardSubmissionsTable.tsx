@@ -7,7 +7,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
 import { useDashboardColumnVisibility } from "@/app/components/dashboard/ColumnVisibilityDropdown";
-import { InlineGradeGroupCell } from "@/app/components/dashboard/InlineGradeGroupCell";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScoreAdjustmentCell";
@@ -245,15 +244,6 @@ function renderCell(
       <InlineRoleCategoryCell
         employeeId={submission.employeeId}
         value={submission.roleCategory}
-      />
-    );
-  }
-
-  if (columnId === "gradeGroup") {
-    return (
-      <InlineGradeGroupCell
-        employeeId={submission.employeeId}
-        value={submission.gradeGroup}
       />
     );
   }

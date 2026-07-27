@@ -25,7 +25,6 @@ interface EditUserFormState {
   lastName: string;
   designation: string;
   roleCategory: string;
-  gradeGroup: string;
   dateOfJoining: string;
   systemRole: UserRole;
   entityId: string;
@@ -48,7 +47,6 @@ function toFormState(user: UserRecord): EditUserFormState {
     lastName: user.lastName,
     designation: user.designation ?? "",
     roleCategory: user.roleCategory ?? "",
-    gradeGroup: user.gradeGroup ?? "",
     dateOfJoining: user.dateOfJoining?.slice(0, 10) ?? "",
     systemRole: user.systemRole,
     entityId: user.entityId ? String(user.entityId) : "",
@@ -140,7 +138,6 @@ export function EditUserModal({
       lastName: form.lastName.trim(),
       designation: form.designation.trim() || null,
       roleCategory: form.roleCategory.trim() || null,
-      gradeGroup: form.gradeGroup.trim() || null,
       dateOfJoining: form.dateOfJoining || null,
       systemRole: form.systemRole,
       empCategory: "ADMINISTRATION",
@@ -374,23 +371,6 @@ export function EditUserModal({
                         orgPreviewUser ? getUserOrgLevel2(orgPreviewUser) : "—"
                       }
                       className={cn(inputClassName, "bg-slate-50 dark:bg-slate-900")}
-                    />
-                  </Field>
-
-                  <Field label="Column 1" htmlFor="edit-user-grade-group">
-                    <input
-                      id="edit-user-grade-group"
-                      type="text"
-                      value={form.gradeGroup}
-                      onChange={(event) =>
-                        setForm((current) =>
-                          current
-                            ? { ...current, gradeGroup: event.target.value }
-                            : current,
-                        )
-                      }
-                      disabled={isSubmitting}
-                      className={inputClassName}
                     />
                   </Field>
 

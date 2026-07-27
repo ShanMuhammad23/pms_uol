@@ -148,7 +148,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
   const isReadOnly =
     data?.status === "SUBMITTED" ||
-    (data != null && !data.template.selfAssessmentEnabled);
+    (data != null && !data.selfAssessmentEnabled);
   const maxRawScore = useMemo(() => {
     if (!data) {
       return 0;
@@ -531,7 +531,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                     attachments: [],
                   };
                   const scored = isScoredQuestion(question);
-                  const isHodOnly = !question.selfAssessmentEnabled || !data.template.selfAssessmentEnabled;
+                  const isHodOnly = !question.selfAssessmentEnabled || !data.selfAssessmentEnabled;
                   const isEvenRow = rowIdx % 2 === 0;
 
                   return (
@@ -753,7 +753,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         </div>
       ) : (
         <p className="text-xs text-emerald-700 dark:text-emerald-300">
-          {data && !data.template.selfAssessmentEnabled
+          {data && !data.selfAssessmentEnabled
             ? "Self-assessment is not enabled for this form. It will be reviewed directly by your reporting head."
             : data?.status === "SUBMITTED"
               ? `Submitted${data.submittedAt ? ` on ${new Date(data.submittedAt).toLocaleString()}` : ""} · read-only · score ${data.rawScore}/${data.maxRawScore}`

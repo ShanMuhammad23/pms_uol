@@ -202,7 +202,6 @@ export function normalizeUserInput(
   lastName: string;
   designation: string | null | undefined;
   roleCategory: string | null | undefined;
-  gradeGroup: string | null | undefined;
   dateOfJoining: string | null | undefined;
   systemRole: UserRole;
   empCategory: string;
@@ -236,7 +235,6 @@ export function normalizeUserInput(
     lastName: body.lastName.trim(),
     designation: parseOptionalString(updateBody.designation),
     roleCategory: parseOptionalString(updateBody.roleCategory),
-    gradeGroup: parseOptionalString(updateBody.gradeGroup),
     dateOfJoining,
     systemRole: body.systemRole,
     empCategory: body.empCategory.trim(),

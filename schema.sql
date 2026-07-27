@@ -134,6 +134,7 @@ CREATE TABLE employee_form_assignments (
     id BIGSERIAL PRIMARY KEY,
     employee_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+    self_assessment_disabled BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_employee_template_assignment UNIQUE (employee_id, template_id)

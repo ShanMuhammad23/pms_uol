@@ -22,7 +22,6 @@ export type DashboardTableColumnId =
   | "qualificationInstitute"
   | "qualificationCountry"
   | "status"
-  | "gradeGroup"
   | "eligible"
   | "applicableDuration"
   | "scoreO"
@@ -90,7 +89,6 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
       "qualificationInstitute",
       "qualificationCountry",
       "status",
-      "gradeGroup",
     ],
   },
   {
@@ -347,11 +345,6 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     width: 160,
     getValue: (row) => APPRAISAL_STATE_CONFIG[row.status]?.label ?? row.status,
   },
-  gradeGroup: {
-    id: "gradeGroup",
-    label: "Column 1",
-    getValue: (row) => formatNullable(row.gradeGroup),
-  },
   eligible: {
     id: "eligible",
     label: "Eligible?",
@@ -405,7 +398,11 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 110,
     wrap: true,
-    getValue: (row) => formatNumber(getAdjustedScore(row)),
+    getValue: (row) => {
+      const pct = getAdjustedScorePercent(row);
+      if (pct === null) return "—";
+      return `${formatNumber(pct)}\u00A0\u002F₁₀₀`;
+    },
   },
   ratingO: {
     id: "ratingO",
@@ -426,7 +423,11 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
-    getValue: (row) => formatNumber(getNormalizedScore(row)),
+    getValue: (row) => {
+      const pct = getNormalizedScorePercent(row);
+      if (pct === null) return "—";
+      return `${formatNumber(pct)}\u00A0\u002F₁₀₀`;
+    },
   },
   ratingN: {
     id: "ratingN",

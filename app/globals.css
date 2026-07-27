@@ -115,7 +115,7 @@ html {
   }
 
   .print-content {
-    padding: 0.6cm !important;
+    padding: 0.1cm !important;
   }
 
   table {
@@ -174,9 +174,83 @@ html {
     color: #475569 !important;
     margin-bottom: 10px !important;
   }
+
+  .form-template-table-wrapper,
+  .print-content .form-template-table-wrapper {
+    display: contents !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .form-template-table,
+  .print-content .form-template-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: auto !important;
+    font-size: 7px !important;
+  }
+
+  .print-content .form-template-table thead {
+    display: table-header-group !important;
+    position: static !important;
+  }
+
+  .print-content .form-template-table th,
+  .print-content .form-template-table td {
+    padding: 2px 3px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Narrow columns: Sr, Weight, Field Type, Required, Self Assessment, HOD Assessment */
+  .print-content .form-template-table thead th:nth-child(1),
+  .print-content .form-template-table thead th:nth-child(4),
+  .print-content .form-template-table thead th:nth-child(5),
+  .print-content .form-template-table thead th:nth-child(6),
+  .print-content .form-template-table thead th:nth-child(7),
+  .print-content .form-template-table thead th:nth-child(8) {
+    width: 10% !important;
+    white-space: nowrap !important;
+  }
+
+  /* Wide columns: Key Task / Function, KPIs */
+  .print-content .form-template-table thead th:nth-child(2) {
+    width: 24% !important;
+  }
+
+  .print-content .form-template-table thead th:nth-child(3) {
+    width: 40% !important;
+  }
+
+  .print-content .form-template-table th {
+    font-size: 6px !important;
+  }
+
+  .print-content .form-template-table td,
+  .print-content .form-template-table p,
+  .print-content .form-template-table li,
+  .print-content .form-template-table span {
+    font-size: inherit !important;
+  }
+
+  .print-content .form-template-table .line-clamp-3 {
+    -webkit-line-clamp: unset !important;
+    line-clamp: unset !important;
+    overflow: visible !important;
+  }
 }
 
 @page {
-  margin: 0;
-  size: auto;
+  margin: 0.15cm;
+  size: landscape;
 }

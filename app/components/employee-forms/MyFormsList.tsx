@@ -27,7 +27,6 @@ export interface MyFormsUserInfo {
   email: string;
   designation: string | null;
   roleCategory: string | null;
-  gradeGroup: string | null;
   orgLevel1: string;
   orgLevel2: string;
   systemRole: string;
@@ -155,11 +154,6 @@ export default function MyFormsList({
           icon: Layers,
           label: "Role Category",
           value: displayValue(userInfo.roleCategory),
-        },
-        {
-          icon: ClipboardList,
-          label: "Grade Group",
-          value: displayValue(userInfo.gradeGroup),
         },
         {
           icon: Layers,

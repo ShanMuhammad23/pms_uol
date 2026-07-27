@@ -109,19 +109,19 @@ async function listExplicitlyAssignedTemplatesForUser(
     title: string;
     description: string | null;
     question_count: string;
-    self_assessment_enabled: boolean;
+    self_assessment_disabled: boolean;
   }>(
     `SELECT
        ft.id,
        ft.title,
        ft.description,
-       ft.self_assessment_enabled,
+       efa.self_assessment_disabled,
        COUNT(fq.id)::text AS question_count
      FROM employee_form_assignments efa
      INNER JOIN form_templates ft ON ft.id = efa.template_id
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
      WHERE efa.employee_id = $1
-     GROUP BY ft.id
+     GROUP BY ft.id, efa.self_assessment_disabled
      ORDER BY ft.id DESC`,
     [userId],
   );
@@ -131,7 +131,7 @@ async function listExplicitlyAssignedTemplatesForUser(
     title: row.title,
     description: row.description,
     questionCount: Number(row.question_count),
-    selfAssessmentEnabled: row.self_assessment_enabled,
+    selfAssessmentEnabled: !row.self_assessment_disabled,
   }));
 }
 
@@ -308,7 +308,11 @@ async function getOrCreateAppraisal(
     throw new EmployeeFormError("Form not found.", 404);
   }
 
-  const initialStatus = template.selfAssessmentEnabled
+  const assignment = await listExplicitlyAssignedTemplatesForUser(userId, client);
+  const matched = assignment.find((a) => a.templateId === templateId);
+  const selfAssessmentEnabled = matched?.selfAssessmentEnabled ?? template.selfAssessmentEnabled;
+
+  const initialStatus = selfAssessmentEnabled
     ? "PENDING_SELF_ASSESSMENT"
     : "PENDING_HEAD_REVIEW";
 
@@ -349,12 +353,13 @@ function validateAnswers(
   template: FormTemplateRecord,
   answers: EmployeeFormAnswerInput[],
   submit: boolean,
+  selfAssessmentEnabled: boolean,
 ): EmployeeFormAnswerInput[] {
   const answerMap = new Map(
     answers.map((answer) => [answer.questionId, answer]),
   );
 
-  const formSelfAssessmentEnabled = template.selfAssessmentEnabled;
+  const formSelfAssessmentEnabled = selfAssessmentEnabled;
 
   for (const question of getTemplateQuestions(template)) {
     // Skip HOD-only questions — employee self-assessment should not validate them
@@ -512,6 +517,10 @@ export async function getEmployeeFormDetail(
     throw new EmployeeFormError("Form not found.", 404);
   }
 
+  const assignments = await listExplicitlyAssignedTemplatesForUser(userId);
+  const matchedAssignment = assignments.find((a) => a.templateId === templateId);
+  const selfAssessmentEnabled = matchedAssignment?.selfAssessmentEnabled ?? template.selfAssessmentEnabled;
+
   const appraisal = await getAppraisalForUserTemplate(userId, templateId);
   const answers = appraisal
     ? await getAnswersForAppraisal(Number(appraisal.id), userId)
@@ -538,6 +547,7 @@ export async function getEmployeeFormDetail(
       ? Number(appraisal.system_raw_score)
       : rawScore,
     maxRawScore,
+    selfAssessmentEnabled,
   };
 }
 
@@ -554,7 +564,10 @@ export async function saveEmployeeForm(
   }
 
   const submit = Boolean(input.submit);
-  const validatedAnswers = validateAnswers(template, input.answers, submit);
+  const assignments = await listExplicitlyAssignedTemplatesForUser(userId);
+  const matchedAssignment = assignments.find((a) => a.templateId === templateId);
+  const selfAssessmentEnabled = matchedAssignment?.selfAssessmentEnabled ?? template.selfAssessmentEnabled;
+  const validatedAnswers = validateAnswers(template, input.answers, submit, selfAssessmentEnabled);
   const client = await db.connect();
 
   try {
@@ -621,7 +634,7 @@ export async function saveEmployeeForm(
         client,
       );
 
-      const formSelfAssessmentEnabled = template.selfAssessmentEnabled;
+      const formSelfAssessmentEnabled = selfAssessmentEnabled;
 
       for (const question of getTemplateQuestions(template).filter(
         (q) => isScoredQuestion(q) && formSelfAssessmentEnabled && q.selfAssessmentEnabled,

@@ -9,7 +9,6 @@ export function toHeadStaffListingItem(
 ): FormSubmissionListItem {
   return {
     ...item,
-    gradeGroup: null,
     ratingO: null,
     ratingN: null,
     initialRating: null,

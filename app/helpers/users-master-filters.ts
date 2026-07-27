@@ -19,7 +19,6 @@ const MASTER_FILTER_EXCLUDED_IDS = new Set<UsersTableColumnId>([
 export const USERS_MASTER_FILTER_TEXT_COLUMN_IDS = [
   "sapCode",
   "employeeName",
-  "gradeGroup",
   "qualificationSubject",
   "qualificationInstitute",
 ] as const satisfies readonly UsersTableColumnId[];

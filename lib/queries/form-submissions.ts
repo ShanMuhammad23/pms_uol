@@ -44,7 +44,6 @@ interface SubmissionListRow {
   employee_email: string;
   designation: string | null;
   role_category: string | null;
-  grade_group: string | null;
   date_of_joining: string | null;
   emp_category: string | null;
   emp_sub_category: string | null;
@@ -95,7 +94,7 @@ interface SubmissionListRow {
   qualification_country: string | null;
   submitted_at: string | null;
   form_assigned: boolean;
-  self_assessment_enabled: boolean;
+  self_assessment_disabled: boolean;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -217,7 +216,6 @@ function mapSubmissionRow(
     employeeEmail: row.employee_email,
     designation: row.designation,
     roleCategory: row.role_category,
-    gradeGroup: row.grade_group,
     dateOfJoining: row.date_of_joining,
     empCategory: row.emp_category,
     empSubCategory: row.emp_sub_category,
@@ -279,7 +277,7 @@ function mapSubmissionRow(
     qualificationInstitute: row.qualification_institute,
     qualificationCountry: row.qualification_country,
     submittedAt: row.submitted_at,
-    selfAssessmentEnabled: row.self_assessment_enabled,
+    selfAssessmentEnabled: !row.self_assessment_disabled,
   };
 }
 
@@ -353,7 +351,6 @@ export async function listFormSubmissions(
     ? `
          u.designation,
          ${roleCategorySelect}
-         u.grade_group,
          u.date_of_joining::text,
          u.emp_category::text AS emp_category,
          u.emp_sub_category::text AS emp_sub_category,
@@ -386,7 +383,6 @@ export async function listFormSubmissions(
     : `
          NULL::text AS designation,
          ${roleCategorySelect}
-         NULL::text AS grade_group,
          NULL::text AS date_of_joining,
          u.emp_category::text AS emp_category,
          u.emp_sub_category::text AS emp_sub_category,
@@ -508,7 +504,7 @@ export async function listFormSubmissions(
          '0'
        ) AS max_raw_score,
        ap.submitted_at::text,
-       ft.self_assessment_enabled
+       COALESCE(efa.self_assessment_disabled, false) AS self_assessment_disabled
      FROM users u
      LEFT JOIN LATERAL (
        SELECT ap_inner.*
@@ -522,6 +518,7 @@ export async function listFormSubmissions(
        LIMIT 1
      ) ap ON TRUE
      LEFT JOIN form_templates ft ON ft.id = ap.template_id
+     LEFT JOIN employee_form_assignments efa ON efa.employee_id = u.id AND efa.template_id = ap.template_id
      LEFT JOIN entities ent ON ent.id = u.entity_id
      LEFT JOIN entity_categories ent_cat ON ent_cat.id = ent.entity_category_id
      LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
@@ -1097,49 +1094,15 @@ export async function updateEmployeeRoleCategory(
   };
 }
 
-export async function updateEmployeeGradeGroup(
-  employeeCode: string,
-  gradeGroup: string | null,
-): Promise<{ employeeId: string; gradeGroup: string | null }> {
-  if (!(await hasExcelSheetColumns())) {
-    throw new FormSubmissionError(
-      "Grade group column is not available. Run the excel-sheet columns migration.",
-      503,
-    );
-  }
-
-  const result = await db.query<{
-    employee_id: string;
-    grade_group: string | null;
-  }>(
-    `UPDATE users
-     SET grade_group = $2
-     WHERE employee_id = $1
-     RETURNING employee_id, grade_group`,
-    [employeeCode, gradeGroup],
-  );
-
-  if (!result.rows[0]) {
-    throw new FormSubmissionError("Employee not found.", 404);
-  }
-
-  return {
-    employeeId: result.rows[0].employee_id,
-    gradeGroup: result.rows[0].grade_group,
-  };
-}
-
 export async function bulkUpdateEmployeeListingFields(
   employeeIds: string[],
   fields: {
     roleCategory?: string | null;
-    gradeGroup?: string | null;
   },
 ): Promise<{
   updatedCount: number;
   employeeIds: string[];
   roleCategory?: string | null;
-  gradeGroup?: string | null;
 }> {
   const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
 
@@ -1148,11 +1111,10 @@ export async function bulkUpdateEmployeeListingFields(
   }
 
   const updatesRole = "roleCategory" in fields;
-  const updatesGrade = "gradeGroup" in fields;
 
-  if (!updatesRole && !updatesGrade) {
+  if (!updatesRole) {
     throw new FormSubmissionError(
-      "Provide roleCategory and/or gradeGroup to update.",
+      "Provide roleCategory to update.",
       400,
     );
   }
@@ -1164,24 +1126,12 @@ export async function bulkUpdateEmployeeListingFields(
     );
   }
 
-  if (updatesGrade && !(await hasExcelSheetColumns())) {
-    throw new FormSubmissionError(
-      "Grade group column is not available. Run the excel-sheet columns migration.",
-      503,
-    );
-  }
-
   const setClauses: string[] = [];
   const values: unknown[] = [uniqueIds];
 
   if (updatesRole) {
     values.push(fields.roleCategory ?? null);
     setClauses.push(`role_category = $${values.length}`);
-  }
-
-  if (updatesGrade) {
-    values.push(fields.gradeGroup ?? null);
-    setClauses.push(`grade_group = $${values.length}`);
   }
 
   const result = await db.query<{ employee_id: string }>(
@@ -1200,6 +1150,5 @@ export async function bulkUpdateEmployeeListingFields(
     updatedCount: result.rows.length,
     employeeIds: result.rows.map((row) => row.employee_id),
     ...(updatesRole ? { roleCategory: fields.roleCategory ?? null } : {}),
-    ...(updatesGrade ? { gradeGroup: fields.gradeGroup ?? null } : {}),
   };
 }

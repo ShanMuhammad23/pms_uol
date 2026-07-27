@@ -165,32 +165,15 @@ export async function updateEmployeeRoleCategory(
   );
 }
 
-export async function updateEmployeeGradeGroup(
-  employeeId: string,
-  gradeGroup: string | null,
-): Promise<{ employeeId: string; gradeGroup: string | null }> {
-  const response = await fetch("/api/submissions/grade-group", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ employeeId, gradeGroup }),
-  });
-
-  return parseResponse<{ employeeId: string; gradeGroup: string | null }>(
-    response,
-  );
-}
-
 export async function bulkUpdateEmployeeListingFields(
   employeeIds: string[],
   fields: {
     roleCategory?: string | null;
-    gradeGroup?: string | null;
   },
 ): Promise<{
   updatedCount: number;
   employeeIds: string[];
   roleCategory?: string | null;
-  gradeGroup?: string | null;
 }> {
   const response = await fetch("/api/submissions/bulk-edit", {
     method: "PATCH",
@@ -202,7 +185,6 @@ export async function bulkUpdateEmployeeListingFields(
     updatedCount: number;
     employeeIds: string[];
     roleCategory?: string | null;
-    gradeGroup?: string | null;
   }>(response);
 }
 

@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
-import { InlineGradeGroupCell } from "@/app/components/dashboard/InlineGradeGroupCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { UsersMasterFilter } from "@/app/components/users/UsersMasterFilter";
 import { UsersTableColumnHeaderFilter } from "@/app/components/users/UsersTableColumnHeaderFilter";
@@ -148,15 +147,6 @@ function renderCell(
       <InlineRoleCategoryCell
         employeeId={user.employeeId}
         value={user.roleCategory}
-      />
-    );
-  }
-
-  if (column.id === "gradeGroup") {
-    return (
-      <InlineGradeGroupCell
-        employeeId={user.employeeId}
-        value={user.gradeGroup}
       />
     );
   }

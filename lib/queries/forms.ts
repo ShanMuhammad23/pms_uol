@@ -912,6 +912,7 @@ export async function deleteFormTemplate(id: number): Promise<{
 export async function assignFormTemplateToEmployees(
   templateId: number,
   employeeCodes: string[],
+  selfAssessmentDisabledMap?: Record<string, boolean>,
 ): Promise<{ assignedCount: number; templateId: number }> {
   const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
   if (normalizedCodes.length === 0) {
@@ -933,7 +934,7 @@ export async function assignFormTemplateToEmployees(
     ? Number(templateResult.rows[0].cycle_id)
     : null;
 
-  const selfAssessmentEnabled = templateResult.rows[0].self_assessment_enabled;
+  const formSelfAssessmentEnabled = templateResult.rows[0].self_assessment_enabled;
 
   const usersResult = await db.query<{ id: string; employee_id: string }>(
     `SELECT id, employee_id
@@ -1004,31 +1005,66 @@ export async function assignFormTemplateToEmployees(
     }
   }
 
+  // Build per-employee self_assessment_disabled values
+  const usersWithFlag = usersResult.rows.map((r) => ({
+    id: r.id,
+    employeeId: r.employee_id,
+    selfAssessmentDisabled: selfAssessmentDisabledMap?.[r.employee_id] ?? false,
+  }));
+
+  // Insert assignments with per-employee self_assessment_disabled
   await db.query(
-    `INSERT INTO employee_form_assignments (employee_id, template_id)
-     SELECT u.id, $2
-     FROM unnest($1::bigint[]) AS u(id)
+    `INSERT INTO employee_form_assignments (employee_id, template_id, self_assessment_disabled)
+     SELECT u.id, $2, COALESCE(d.disabled, false)
+     FROM unnest($1::bigint[]) WITH ORDINALITY AS u(id, ord)
+     LEFT JOIN unnest($3::boolean[]) WITH ORDINALITY AS d(disabled, dord) ON d.dord = u.ord
      ON CONFLICT (employee_id, template_id) DO UPDATE
-       SET updated_at = CURRENT_TIMESTAMP`,
-    [userIds, templateId],
+       SET self_assessment_disabled = EXCLUDED.self_assessment_disabled,
+           updated_at = CURRENT_TIMESTAMP`,
+    [userIds, templateId, usersWithFlag.map((u) => u.selfAssessmentDisabled)],
   );
 
   if (cycleId !== null) {
-    const initialStatus = selfAssessmentEnabled ? "PENDING_SELF_ASSESSMENT" : "PENDING_HEAD_REVIEW";
-    await db.query(
-      `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
-       SELECT u.id, $2, $3, $4
-       FROM unnest($1::bigint[]) AS u(id)
-       ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
-         SET template_id = EXCLUDED.template_id,
-             status = CASE
-               WHEN appraisals.submitted_at IS NULL THEN $4
-               ELSE appraisals.status
-             END,
-             updated_at = CURRENT_TIMESTAMP
-       WHERE appraisals.submitted_at IS NULL`,
-      [userIds, cycleId, templateId, initialStatus],
-    );
+    // For each employee, determine initial status based on their per-employee flag
+    // Employees with self_assessment_disabled=true get PENDING_HEAD_REVIEW, others get PENDING_SELF_ASSESSMENT
+    const selfAssessEmployees = usersWithFlag.filter((u) => !u.selfAssessmentDisabled).map((u) => u.id);
+    const directAssessEmployees = usersWithFlag.filter((u) => u.selfAssessmentDisabled).map((u) => u.id);
+
+    if (selfAssessEmployees.length > 0) {
+      const initialStatus = "PENDING_SELF_ASSESSMENT";
+      await db.query(
+        `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
+         SELECT u.id, $2, $3, $4
+         FROM unnest($1::bigint[]) AS u(id)
+         ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
+           SET template_id = EXCLUDED.template_id,
+               status = CASE
+                 WHEN appraisals.submitted_at IS NULL THEN $4
+                 ELSE appraisals.status
+               END,
+               updated_at = CURRENT_TIMESTAMP
+         WHERE appraisals.submitted_at IS NULL`,
+        [selfAssessEmployees, cycleId, templateId, initialStatus],
+      );
+    }
+
+    if (directAssessEmployees.length > 0) {
+      const directStatus = "PENDING_HEAD_REVIEW";
+      await db.query(
+        `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
+         SELECT u.id, $2, $3, $4
+         FROM unnest($1::bigint[]) AS u(id)
+         ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
+           SET template_id = EXCLUDED.template_id,
+               status = CASE
+                 WHEN appraisals.submitted_at IS NULL THEN $4
+                 ELSE appraisals.status
+               END,
+               updated_at = CURRENT_TIMESTAMP
+         WHERE appraisals.submitted_at IS NULL`,
+        [directAssessEmployees, cycleId, templateId, directStatus],
+      );
+    }
   }
 
   return {
@@ -1155,18 +1191,91 @@ export async function unassignFormTemplateFromEmployees(
   }
 }
 
+export async function updateAssignmentSelfAssessmentDisabled(
+  templateId: number,
+  employeeCode: string,
+  selfAssessmentDisabled: boolean,
+): Promise<{ templateId: number; employeeId: string; selfAssessmentDisabled: boolean }> {
+  const userResult = await db.query<{ id: string }>(
+    `SELECT id FROM users WHERE employee_id = $1 AND is_active = TRUE`,
+    [employeeCode.trim()],
+  );
+
+  if (userResult.rows.length === 0) {
+    throw new FormTemplateError("Employee not found.", 404);
+  }
+
+  const userId = userResult.rows[0].id;
+
+  const result = await db.query<{ employee_id: string }>(
+    `UPDATE employee_form_assignments
+     SET self_assessment_disabled = $3,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE template_id = $1 AND employee_id = $2
+     RETURNING employee_id`,
+    [templateId, userId, selfAssessmentDisabled],
+  );
+
+  if (result.rows.length === 0) {
+    throw new FormTemplateError("Employee is not assigned to this form.", 404);
+  }
+
+  // Update appraisal status if not yet submitted
+  const templateResult = await db.query<{ cycle_id: number | null }>(
+    `SELECT cycle_id FROM form_templates WHERE id = $1`,
+    [templateId],
+  );
+
+  const cycleId = templateResult.rows[0]?.cycle_id
+    ? Number(templateResult.rows[0].cycle_id)
+    : null;
+
+  if (cycleId !== null) {
+    const newStatus = selfAssessmentDisabled ? "PENDING_HEAD_REVIEW" : "PENDING_SELF_ASSESSMENT";
+    await db.query(
+      `UPDATE appraisals
+       SET status = $4,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE employee_id = $1
+         AND template_id = $2
+         AND cycle_id = $3
+         AND submitted_at IS NULL`,
+      [userId, templateId, cycleId, newStatus],
+    );
+  } else {
+    const newStatus = selfAssessmentDisabled ? "PENDING_HEAD_REVIEW" : "PENDING_SELF_ASSESSMENT";
+    await db.query(
+      `UPDATE appraisals
+       SET status = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE employee_id = $1
+         AND template_id = $2
+         AND submitted_at IS NULL`,
+      [userId, templateId, newStatus],
+    );
+  }
+
+  return {
+    templateId,
+    employeeId: employeeCode.trim(),
+    selfAssessmentDisabled,
+  };
+}
+
 export async function listFormTemplateAssignedEmployees(
   templateId: number,
-): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {
+): Promise<Array<{ employeeId: string; employeeName: string; email: string | null; selfAssessmentDisabled: boolean }>> {
   const result = await db.query<{
     employee_id: string;
     employee_name: string;
     email: string | null;
+    self_assessment_disabled: boolean;
   }>(
     `SELECT
        u.employee_id,
        CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
-       u.email
+       u.email,
+       efa.self_assessment_disabled
      FROM employee_form_assignments efa
      INNER JOIN users u ON u.id = efa.employee_id
      WHERE efa.template_id = $1
@@ -1178,5 +1287,6 @@ export async function listFormTemplateAssignedEmployees(
     employeeId: row.employee_id,
     employeeName: row.employee_name,
     email: row.email,
+    selfAssessmentDisabled: row.self_assessment_disabled,
   }));
 }

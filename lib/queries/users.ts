@@ -18,7 +18,6 @@ interface UserRow {
   last_name: string;
   designation: string | null;
   role_category: string | null;
-  grade_group: string | null;
   date_of_joining: string | null;
   system_role: UserRecord["systemRole"];
   emp_category: UserRecord["empCategory"];
@@ -135,11 +134,9 @@ function buildUserSelect(
   const excelSelect = excelReady
     ? `u.designation,
        u.role_category,
-       u.grade_group,
        u.date_of_joining::text AS date_of_joining,`
     : `NULL::text AS designation,
        NULL::text AS role_category,
-       NULL::text AS grade_group,
        NULL::text AS date_of_joining,`;
   const qualSelect = qualsReady
     ? `qual.qualification,
@@ -214,7 +211,6 @@ function mapUserRow(row: UserRow): UserRecord {
     lastName: row.last_name,
     designation: row.designation,
     roleCategory: row.role_category,
-    gradeGroup: row.grade_group,
     dateOfJoining: row.date_of_joining,
     systemRole: row.system_role,
     empCategory: row.emp_category,
@@ -547,10 +543,6 @@ export async function updateUser(
     if (normalized.roleCategory !== undefined) {
       values.push(normalized.roleCategory);
       setClauses.push(`role_category = $${values.length}`);
-    }
-    if (normalized.gradeGroup !== undefined) {
-      values.push(normalized.gradeGroup);
-      setClauses.push(`grade_group = $${values.length}`);
     }
     if (normalized.dateOfJoining !== undefined) {
       values.push(normalized.dateOfJoining);

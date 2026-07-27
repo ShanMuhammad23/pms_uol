@@ -9,7 +9,6 @@ export type UsersTableColumnId =
   | "roleCategory"
   | "orgLevel1"
   | "orgLevel2"
-  | "gradeGroup"
   | "dateOfJoining"
   | "systemRole"
   | "reportingHead"
@@ -85,11 +84,6 @@ export const USERS_TABLE_COLUMNS: UsersTableColumnDef[] = [
     id: "orgLevel2",
     label: "ORG Level 2",
     getValue: (row) => getUserOrgLevel2(row),
-  },
-  {
-    id: "gradeGroup",
-    label: "Column 1",
-    getValue: (row) => formatNullable(row.gradeGroup),
   },
   {
     id: "dateOfJoining",

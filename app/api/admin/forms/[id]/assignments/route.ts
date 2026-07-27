@@ -5,6 +5,7 @@ import {
   FormTemplateError,
   listFormTemplateAssignedEmployees,
   unassignFormTemplateFromEmployees,
+  updateAssignmentSelfAssessmentDisabled,
 } from "@/lib/queries/forms";
 
 interface RouteContext {
@@ -70,13 +71,13 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   try {
-    const body = (await request.json()) as { employeeIds?: unknown };
+    const body = (await request.json()) as { employeeIds?: unknown; selfAssessmentDisabledMap?: Record<string, boolean> };
     const employeeIds = parseEmployeeIds(body);
     if (employeeIds instanceof NextResponse) {
       return employeeIds;
     }
 
-    const result = await assignFormTemplateToEmployees(templateId, employeeIds);
+    const result = await assignFormTemplateToEmployees(templateId, employeeIds, body.selfAssessmentDisabledMap);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof FormTemplateError) {
@@ -125,6 +126,53 @@ export async function DELETE(request: Request, context: RouteContext) {
     const detail = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       { error: "Failed to unassign form.", detail },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(request: Request, context: RouteContext) {
+  const auth = await requireSuperAdminApi();
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const { id } = await context.params;
+  const templateId = Number(id);
+  if (Number.isNaN(templateId)) {
+    return NextResponse.json({ error: "Invalid template id." }, { status: 400 });
+  }
+
+  try {
+    const body = (await request.json()) as { employeeId?: unknown; selfAssessmentDisabled?: unknown };
+    if (typeof body.employeeId !== "string" || !body.employeeId.trim()) {
+      return NextResponse.json(
+        { error: "employeeId must be a non-empty string." },
+        { status: 400 },
+      );
+    }
+    if (typeof body.selfAssessmentDisabled !== "boolean") {
+      return NextResponse.json(
+        { error: "selfAssessmentDisabled must be a boolean." },
+        { status: 400 },
+      );
+    }
+
+    const result = await updateAssignmentSelfAssessmentDisabled(
+      templateId,
+      body.employeeId,
+      body.selfAssessmentDisabled,
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof FormTemplateError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
+    console.error("Failed to update self-assessment flag:", error);
+    const detail = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: "Failed to update self-assessment flag.", detail },
       { status: 500 },
     );
   }

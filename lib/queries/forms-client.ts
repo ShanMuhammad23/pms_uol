@@ -98,12 +98,13 @@ export async function deleteFormTemplate(id: number): Promise<{ appraisalCount: 
 export async function assignFormTemplateToEmployees(
   templateId: number,
   employeeIds: string[],
+  selfAssessmentDisabledMap?: Record<string, boolean>,
 ): Promise<{ assignedCount: number; templateId: number }> {
   const response = await fetch(`/api/admin/forms/${templateId}/assignments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ employeeIds }),
+    body: JSON.stringify({ employeeIds, selfAssessmentDisabledMap }),
   });
 
   return parseResponse<{ assignedCount: number; templateId: number }>(response);
@@ -125,13 +126,28 @@ export async function unassignFormTemplateFromEmployees(
 
 export async function fetchFormTemplateAssignments(
   templateId: number,
-): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {
+): Promise<Array<{ employeeId: string; employeeName: string; email: string | null; selfAssessmentDisabled: boolean }>> {
   const response = await fetch(`/api/admin/forms/${templateId}/assignments`, {
     credentials: "include",
     cache: "no-store",
   });
 
-  return parseResponse<Array<{ employeeId: string; employeeName: string; email: string | null }>>(response);
+  return parseResponse<Array<{ employeeId: string; employeeName: string; email: string | null; selfAssessmentDisabled: boolean }>>(response);
+}
+
+export async function updateAssignmentSelfAssessmentDisabled(
+  templateId: number,
+  employeeId: string,
+  selfAssessmentDisabled: boolean,
+): Promise<{ templateId: number; employeeId: string; selfAssessmentDisabled: boolean }> {
+  const response = await fetch(`/api/admin/forms/${templateId}/assignments`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ employeeId, selfAssessmentDisabled }),
+  });
+
+  return parseResponse<{ templateId: number; employeeId: string; selfAssessmentDisabled: boolean }>(response);
 }
 
 export async function fetchAppraisalCycles(): Promise<AppraisalCycleRecord[]> {

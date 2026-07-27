@@ -13,7 +13,6 @@ export interface FormSubmissionListItem {
   designation: string | null;
   /** Free-text role category; not derived from staff categories. */
   roleCategory: string | null;
-  gradeGroup: string | null;
   dateOfJoining: string | null;
   empCategory: string | null;
   empSubCategory: string | null;

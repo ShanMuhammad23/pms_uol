@@ -52,11 +52,10 @@ export async function PATCH(request: Request) {
     }
 
     const roleCategory = parseOptionalTextField(body, "roleCategory");
-    const gradeGroup = parseOptionalTextField(body, "gradeGroup");
 
-    if (!roleCategory.provided && !gradeGroup.provided) {
+    if (!roleCategory.provided) {
       return NextResponse.json(
-        { error: "Provide roleCategory and/or gradeGroup to update." },
+        { error: "Provide roleCategory to update." },
         { status: 400 },
       );
     }
@@ -67,7 +66,6 @@ export async function PATCH(request: Request) {
         ...(roleCategory.provided
           ? { roleCategory: roleCategory.value }
           : {}),
-        ...(gradeGroup.provided ? { gradeGroup: gradeGroup.value } : {}),
       },
     );
 

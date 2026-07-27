@@ -138,7 +138,6 @@ function mapOverviewRow(
     employeeEmail: row.employee_email,
     designation: row.designation,
     roleCategory: row.role_category,
-    gradeGroup: null,
     dateOfJoining: row.date_of_joining,
     empCategory: null,
     empSubCategory: null,

@@ -26,7 +26,6 @@ export default async function MyFormsPage() {
         email: user.email,
         designation: user.designation,
         roleCategory: user.roleCategory,
-        gradeGroup: user.gradeGroup,
         orgLevel1: getUserOrgLevel1(user),
         orgLevel2: getUserOrgLevel2(user),
         systemRole:

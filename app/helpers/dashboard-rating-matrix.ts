@@ -6,7 +6,7 @@ import {
   sortPerformanceMatrix,
 } from "@/lib/performance-matrix";
 import { resolvePerformanceQuartile } from "@/lib/performance-rating";
-import { formatPerformanceScore, type PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
+import { type PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 export function buildRatingQuartileMatrix(
@@ -75,7 +75,7 @@ export function buildRatingQuartileMatrix(
         id: quartile.id,
         label: quartile.name,
         sortOrder: quartile.sortOrder,
-        sublabel: `${formatPerformanceScore(quartile.scoreMin)} – ${formatPerformanceScore(quartile.scoreMax)}`,
+        sublabel: quartile.name,
         count: counts.get(`${level.id}-${quartile.id}`) ?? 0,
       };
     });

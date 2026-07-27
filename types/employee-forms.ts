@@ -40,6 +40,7 @@ export interface EmployeeFormDetail {
   answers: EmployeeFormAnswerRecord[];
   rawScore: number;
   maxRawScore: number;
+  selfAssessmentEnabled: boolean;
 }
 
 export interface EmployeeFormAnswerInput {

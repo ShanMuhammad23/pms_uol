@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Filter, RotateCcw, Search } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -14,6 +14,7 @@ import {
   assignFormTemplateToEmployees,
   fetchFormTemplateAssignments,
   unassignFormTemplateFromEmployees,
+  updateAssignmentSelfAssessmentDisabled,
 } from "@/lib/queries/forms-client";
 import { fetchUsers } from "@/lib/queries/users-client";
 import type { UserRecord } from "@/types/users";
@@ -30,31 +31,42 @@ type FilterId =
   | "entityName"
   | "designation"
   | "roleCategory"
-  | "gradeGroup";
+  | "headName"
+  | "manager2Name"
+  | "assignmentStatus";
 
 type FilterSelection = string[] | null;
 
 type FilterState = Record<FilterId, FilterSelection>;
 
 const FILTER_CONFIG: { id: FilterId; label: string }[] = [
+  { id: "assignmentStatus", label: "Assignment Status" },
   { id: "entityName", label: "Entity" },
   { id: "designation", label: "Designation" },
   { id: "roleCategory", label: "Role Category" },
-  { id: "gradeGroup", label: "Grade Group" },
+  { id: "headName", label: "Manager 1" },
+  { id: "manager2Name", label: "Manager 2" },
 ];
 
 const EMPTY_FILTERS: FilterState = {
+  assignmentStatus: null,
   entityName: null,
   designation: null,
   roleCategory: null,
-  gradeGroup: null,
+  headName: null,
+  manager2Name: null,
 };
+
+function getAssignmentStatus(user: UserRecord, assignedIds: Set<string>): string {
+  return assignedIds.has(user.employeeId) ? "Assigned" : "Unassigned";
+}
 
 function buildOptions(
   users: UserRecord[],
   field: FilterId,
   filters: FilterState,
   selected: FilterSelection,
+  assignedEmployeeIds: Set<string>,
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 
@@ -68,7 +80,9 @@ function buildOptions(
         passesOtherFilters = false;
         break;
       }
-      const val = String(user[f.id] ?? "—");
+      const val = f.id === "assignmentStatus"
+        ? getAssignmentStatus(user, assignedEmployeeIds)
+        : String(user[f.id] ?? "—");
       if (!sel.includes(val)) {
         passesOtherFilters = false;
         break;
@@ -76,7 +90,9 @@ function buildOptions(
     }
     if (!passesOtherFilters) continue;
 
-    const value = String(user[field] ?? "—");
+    const value = field === "assignmentStatus"
+      ? getAssignmentStatus(user, assignedEmployeeIds)
+      : String(user[field] ?? "—");
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
@@ -97,12 +113,18 @@ function buildOptions(
     });
 }
 
-function userMatchesFilters(user: UserRecord, filters: FilterState): boolean {
+function userMatchesFilters(
+  user: UserRecord,
+  filters: FilterState,
+  assignedEmployeeIds: Set<string>,
+): boolean {
   for (const f of FILTER_CONFIG) {
     const sel = filters[f.id];
     if (sel === null || sel === undefined) continue;
     if (sel.length === 0) return false;
-    const val = String(user[f.id] ?? "—");
+    const val = f.id === "assignmentStatus"
+      ? getAssignmentStatus(user, assignedEmployeeIds)
+      : String(user[f.id] ?? "—");
     if (!sel.includes(val)) return false;
   }
   return true;
@@ -119,6 +141,7 @@ export default function FormEmployeeAssignment({
   templateId,
   templateTitle,
 }: FormEmployeeAssignmentProps) {
+  const queryClient = useQueryClient();
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -146,21 +169,29 @@ export default function FormEmployeeAssignment({
     [assignedEmployees],
   );
 
+  const assignedSelfAssessmentDisabled = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const e of assignedEmployees ?? []) {
+      map.set(e.employeeId, e.selfAssessmentDisabled);
+    }
+    return map;
+  }, [assignedEmployees]);
+
   const optionsByFilter = useMemo(() => {
     const map = new Map<FilterId, MultiSelectOption[]>();
     for (const f of FILTER_CONFIG) {
       map.set(
         f.id,
-        buildOptions(allUsers, f.id, filters, filters[f.id]),
+        buildOptions(allUsers, f.id, filters, filters[f.id], assignedEmployeeIds),
       );
     }
     return map;
-  }, [allUsers, filters]);
+  }, [allUsers, filters, assignedEmployeeIds]);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allUsers.filter((user) => {
-      if (!userMatchesFilters(user, filters)) return false;
+      if (!userMatchesFilters(user, filters, assignedEmployeeIds)) return false;
       if (!query) return true;
       const name = `${user.firstName} ${user.lastName}`.toLowerCase();
       return (
@@ -168,7 +199,31 @@ export default function FormEmployeeAssignment({
         name.includes(query)
       );
     });
-  }, [search, allUsers, filters]);
+  }, [search, allUsers, filters, assignedEmployeeIds]);
+
+  const filteredAssignedEmployeeIds = useMemo(
+    () => filteredUsers.filter((u) => assignedEmployeeIds.has(u.employeeId)).map((u) => u.employeeId),
+    [filteredUsers, assignedEmployeeIds],
+  );
+
+  const filteredAssignedAllEnabled = useMemo(
+    () => filteredAssignedEmployeeIds.length > 0 &&
+      filteredAssignedEmployeeIds.every((id) => !assignedSelfAssessmentDisabled.get(id)),
+    [filteredAssignedEmployeeIds, assignedSelfAssessmentDisabled],
+  );
+  const filteredAssignedSomeEnabled = useMemo(
+    () => filteredAssignedEmployeeIds.some((id) => !assignedSelfAssessmentDisabled.get(id)),
+    [filteredAssignedEmployeeIds, assignedSelfAssessmentDisabled],
+  );
+
+  function handleBulkToggleSelfAssessment() {
+    if (filteredAssignedEmployeeIds.length === 0) return;
+    const disableAll = filteredAssignedAllEnabled;
+    bulkToggleSelfAssessment.mutate({
+      employeeIds: filteredAssignedEmployeeIds,
+      disabled: disableAll,
+    });
+  }
 
   const totalCount = filteredUsers.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
@@ -289,7 +344,74 @@ export default function FormEmployeeAssignment({
     },
   });
 
-  const isMutating = assignMutation.isPending || unassignMutation.isPending;
+  const toggleSelfAssessment = useMutation({
+    mutationFn: ({ employeeId, disabled }: { employeeId: string; disabled: boolean }) =>
+      updateAssignmentSelfAssessmentDisabled(templateId, employeeId, disabled),
+    onMutate: async ({ employeeId, disabled }) => {
+      await queryClient.cancelQueries({ queryKey: ["form-assigned-employees", templateId] });
+      const previous = assignedEmployees;
+      queryClient.setQueryData(
+        ["form-assigned-employees", templateId],
+        (old: typeof previous) =>
+          (old ?? []).map((e) =>
+            e.employeeId === employeeId
+              ? { ...e, selfAssessmentDisabled: disabled }
+              : e,
+          ),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["form-assigned-employees", templateId], context.previous);
+      }
+      setIsError(true);
+      setMessage("Failed to update self-assessment setting.");
+    },
+    onSuccess: () => {
+      setIsError(false);
+      setMessage(null);
+    },
+  });
+
+  const bulkToggleSelfAssessment = useMutation({
+    mutationFn: async ({ employeeIds, disabled }: { employeeIds: string[]; disabled: boolean }) => {
+      await Promise.all(
+        employeeIds.map((employeeId) =>
+          updateAssignmentSelfAssessmentDisabled(templateId, employeeId, disabled),
+        ),
+      );
+      return { employeeIds, disabled };
+    },
+    onMutate: async ({ employeeIds, disabled }) => {
+      await queryClient.cancelQueries({ queryKey: ["form-assigned-employees", templateId] });
+      const previous = assignedEmployees;
+      const idSet = new Set(employeeIds);
+      queryClient.setQueryData(
+        ["form-assigned-employees", templateId],
+        (old: typeof previous) =>
+          (old ?? []).map((e) =>
+            idSet.has(e.employeeId)
+              ? { ...e, selfAssessmentDisabled: disabled }
+              : e,
+          ),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["form-assigned-employees", templateId], context.previous);
+      }
+      setIsError(true);
+      setMessage("Failed to update self-assessment settings.");
+    },
+    onSuccess: () => {
+      setIsError(false);
+      setMessage(null);
+    },
+  });
+
+  const isMutating = assignMutation.isPending || unassignMutation.isPending || toggleSelfAssessment.isPending || bulkToggleSelfAssessment.isPending;
   function handleFilterChange(id: FilterId, next: FilterSelection) {
     setFilters((prev) => ({ ...prev, [id]: next }));
   }
@@ -303,8 +425,9 @@ export default function FormEmployeeAssignment({
     { id: "name", label: "Employee Name", width: 200, getValue: (u) => `${u.firstName} ${u.lastName}`.trim() },
     { id: "designation", label: "Designation", width: 180, getValue: (u) => u.designation ?? "—" },
     { id: "entityName", label: "Entity", width: 160, getValue: (u) => u.entityName ?? "—" },
-    { id: "gradeGroup", label: "Grade Group", width: 100, getValue: (u) => u.gradeGroup ?? "—" },
     { id: "roleCategory", label: "Role Category", width: 150, getValue: (u) => u.roleCategory ?? "—" },
+    { id: "headName", label: "Manager 1", width: 160, getValue: (u) => u.headName ?? "—" },
+    { id: "manager2Name", label: "Manager 2", width: 160, getValue: (u) => u.manager2Name ?? "—" },
   ];
 
   const STICKY_SHADOW_LEFT = "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.5)]";
@@ -481,12 +604,33 @@ export default function FormEmployeeAssignment({
                   {column.label}
                 </th>
               ))}
+              <th
+                className="sticky top-0 z-30 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400"
+              >
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={filteredAssignedAllEnabled}
+                    ref={(element) => {
+                      if (element) {
+                        element.indeterminate =
+                          filteredAssignedSomeEnabled && !filteredAssignedAllEnabled;
+                      }
+                    }}
+                    onChange={handleBulkToggleSelfAssessment}
+                    disabled={filteredAssignedEmployeeIds.length === 0 || bulkToggleSelfAssessment.isPending}
+                    aria-label="Toggle self assessment for all filtered assigned employees"
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
+                  />
+                  Self Assessment
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
             {paginatedUsers.length === 0 ? (
               <tr>
-                <td colSpan={USER_COLUMNS.length + 1} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                <td colSpan={USER_COLUMNS.length + 2} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                   No employees match your filters.
                 </td>
               </tr>
@@ -544,6 +688,29 @@ export default function FormEmployeeAssignment({
                         </td>
                       );
                     })}
+                    <td className="whitespace-nowrap border-b border-slate-100 px-2 py-1.5 text-center align-middle dark:border-white/[0.03]">
+                      {assignedEmployeeIds.has(user.employeeId) ? (
+                        <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={!assignedSelfAssessmentDisabled.get(user.employeeId)}
+                            onChange={(e) => {
+                              toggleSelfAssessment.mutate({
+                                employeeId: user.employeeId,
+                                disabled: !e.target.checked,
+                              });
+                            }}
+                            disabled={toggleSelfAssessment.isPending}
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
+                          />
+                          <span className="text-[10px]">
+                            {assignedSelfAssessmentDisabled.get(user.employeeId) ? "Disabled" : "Enabled"}
+                          </span>
+                        </label>
+                      ) : (
+                        <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })
