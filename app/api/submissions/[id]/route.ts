@@ -59,12 +59,17 @@ export async function GET(_request: Request, context: RouteContext) {
           Number.isFinite(reviewerUserId) &&
           managerCanReviewSubmission(reviewerUserId, summary)));
 
+    const canEditHrReview =
+      canReviewSubmissions(role) &&
+      summary.status !== "PENDING_SELF_ASSESSMENT";
+
     const canEditScoreAdjustments = canReviewSubmissions(role);
 
     const submission = await getFormSubmissionById(submissionId, {
       reviewerUserId,
-      seedManagerAnswers: canEditManagerReview,
+      seedManagerAnswers: canEditManagerReview || canEditHrReview,
       canEditManagerReview,
+      canEditHrReview,
       canEditScoreAdjustments,
     });
 
@@ -121,6 +126,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const SCORE_ADJ_FIELDS: AppraisalScoreAdjustmentField[] = [
       "creditHrsErpScoreAdj",
       "pubOricScoreAdj",
+      "qecScoreAdj",
       "calibrationFactor",
       "calibratedScoreNumeric",
     ];
@@ -163,7 +169,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json(
         {
           error:
-            "One of remarksEvaluation, remarksCompensation, creditHrsErpScoreAdj, pubOricScoreAdj, calibrationFactor, or calibratedScoreNumeric is required.",
+            "One of remarksEvaluation, remarksCompensation, creditHrsErpScoreAdj, pubOricScoreAdj, qecScoreAdj, calibrationFactor, or calibratedScoreNumeric is required.",
         },
         { status: 400 },
       );

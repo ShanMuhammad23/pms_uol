@@ -26,12 +26,28 @@ export function buildRatingQuartileMatrix(
   });
 
   chartSubmissions.forEach((submission) => {
-    if (submission.normalizedScore == null) {
+    const scoreO = submission.scoreO ?? submission.rawScore;
+    if (scoreO == null || Number.isNaN(scoreO)) {
       return;
     }
 
+    const chAdj = submission.creditHrsErpScoreAdj ?? 0;
+    const oricAdj = submission.pubOricScoreAdj ?? 0;
+    const qecAdj = submission.qecScoreAdj ?? 0;
+    const adjustedScore = scoreO + chAdj + oricAdj + qecAdj;
+    const calFr = submission.calibrationFactor ?? 1;
+    const normalizedScore = adjustedScore * calFr;
+
+    if (submission.maxRawScore <= 0) {
+      return;
+    }
+
+    const scorePercent = Number(
+      ((normalizedScore / submission.maxRawScore) * 100).toFixed(2),
+    );
+
     const resolved = resolvePerformanceQuartile(
-      submission.normalizedScore,
+      scorePercent,
       bands,
     );
 

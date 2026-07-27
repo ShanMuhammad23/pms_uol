@@ -12,6 +12,7 @@ ALTER TABLE appraisals
     ADD COLUMN IF NOT EXISTS initial_score_numeric NUMERIC(10, 2),
     ADD COLUMN IF NOT EXISTS credit_hrs_erp_score_adj NUMERIC(10, 2),
     ADD COLUMN IF NOT EXISTS pub_oric_score_adj NUMERIC(10, 2),
+    ADD COLUMN IF NOT EXISTS qec_score_adj NUMERIC(10, 2),
     ADD COLUMN IF NOT EXISTS calibration_factor NUMERIC(10, 4),
     ADD COLUMN IF NOT EXISTS normalized_score NUMERIC(10, 2),
     ADD COLUMN IF NOT EXISTS performance_quartile_id BIGINT REFERENCES performance_quartiles(id) ON DELETE SET NULL,

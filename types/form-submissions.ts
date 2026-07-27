@@ -47,6 +47,7 @@ export interface FormSubmissionListItem {
   ratingO: PerformanceRating | null;
   creditHrsErpScoreAdj: number | null;
   pubOricScoreAdj: number | null;
+  qecScoreAdj: number | null;
   calibrationFactor: number | null;
   normalizedScore: number | null;
   ratingN: PerformanceRating | null;
@@ -112,8 +113,10 @@ export interface FormSubmissionDetail {
   manager1Answers: EmployeeFormAnswerRecord[];
   manager2Answers: EmployeeFormAnswerRecord[];
   canEditManagerReview: boolean;
+  canEditHrReview: boolean;
   creditHrsErpScoreAdj: number | null;
   pubOricScoreAdj: number | null;
+  qecScoreAdj: number | null;
   calibrationFactor: number | null;
   calibratedScoreNumeric: number | null;
   canEditScoreAdjustments: boolean;

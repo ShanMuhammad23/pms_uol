@@ -4,12 +4,14 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Eye, Pencil, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
 import { useDashboardColumnVisibility } from "@/app/components/dashboard/ColumnVisibilityDropdown";
 import { InlineGradeGroupCell } from "@/app/components/dashboard/InlineGradeGroupCell";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScoreAdjustmentCell";
+import { HrInlineSaveButton, HrInlineApproveButton } from "@/app/components/dashboard/HrInlineButtons";
 import { FormAssignmentCell } from "@/app/components/dashboard/FormAssignmentCell";
 import {
   StaffListingMasterFilter,
@@ -39,6 +41,14 @@ import {
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
+import type { ScoreAdjustmentField } from "@/lib/queries/form-submissions-client";
+import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
+import { updateSubmissionScoreAdjustments, approveHrCalibration } from "@/lib/queries/form-submissions-client";
+import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
+import { buildQuartileBandsFromMatrix, sortPerformanceMatrix } from "@/lib/performance-matrix";
+import { resolvePerformanceQuartile } from "@/lib/performance-rating";
+import type { PerformanceQuartileBand } from "@/lib/performance-rating";
+import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -51,6 +61,10 @@ interface DashboardSubmissionsTableProps {
   onClearAllFilters: () => void;
   /** When set (HEAD role), only these columns are shown / toggleable. */
   allowedColumnIds?: readonly DashboardTableColumnId[];
+  /** Current user role — used to show HR/Board action buttons. */
+  role?: string | null;
+  /** Performance matrix for resolving quartile labels in sync with the matrix table. */
+  performanceMatrix?: PerformanceLevelWithQuartiles[];
 }
 
 function columnCellClassName(
@@ -125,10 +139,27 @@ function SubmissionViewControl({
   );
 }
 
+type PendingScoreChanges = Partial<Record<ScoreAdjustmentField, number | null>>;
+
+interface RenderCellContext {
+  isHrRole: boolean;
+  pendingChanges: PendingScoreChanges;
+  hasPending: boolean;
+  onBufferedChange: (field: ScoreAdjustmentField, value: number | null) => void;
+  onSave: () => void;
+  onApprove: () => void;
+  isSaving: boolean;
+  isApproving: boolean;
+  canApprove: boolean;
+  quartileBands: PerformanceQuartileBand[] | null;
+  sortedMatrix: PerformanceLevelWithQuartiles[] | null;
+}
+
 function renderCell(
   column: DashboardTableColumnDef,
   submission: FormSubmissionListItem,
   value: string,
+  ctx?: RenderCellContext,
 ) {
   const columnId = column.id;
 
@@ -204,6 +235,7 @@ function renderCell(
         employeeId={submission.employeeId}
         employeeName={submission.employeeName}
         formAssigned={submission.formAssigned}
+        selfAssessmentEnabled={submission.selfAssessmentEnabled}
       />
     );
   }
@@ -233,6 +265,8 @@ function renderCell(
         field="creditHrsErpScoreAdj"
         value={submission.creditHrsErpScoreAdj}
         disabled={submission.id <= 0}
+        onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
+        pendingValue={ctx?.isHrRole ? ctx.pendingChanges.creditHrsErpScoreAdj : undefined}
       />
     );
   }
@@ -244,19 +278,117 @@ function renderCell(
         field="pubOricScoreAdj"
         value={submission.pubOricScoreAdj}
         disabled={submission.id <= 0}
+        onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
+        pendingValue={ctx?.isHrRole ? ctx.pendingChanges.pubOricScoreAdj : undefined}
+      />
+    );
+  }
+
+  if (columnId === "qecScoreAdj") {
+    return (
+      <InlineScoreAdjustmentCell
+        submissionId={submission.id}
+        field="qecScoreAdj"
+        value={submission.qecScoreAdj}
+        disabled={submission.id <= 0}
+        onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
+        pendingValue={ctx?.isHrRole ? ctx.pendingChanges.qecScoreAdj : undefined}
       />
     );
   }
 
   if (columnId === "calibrationFactor") {
     return (
-      <InlineScoreAdjustmentCell
-        submissionId={submission.id}
-        field="calibrationFactor"
-        value={submission.calibrationFactor}
-        disabled={submission.id <= 0}
-        mode="decimal"
-      />
+      <div className="flex items-center justify-center">
+        <InlineScoreAdjustmentCell
+          submissionId={submission.id}
+          field="calibrationFactor"
+          value={submission.calibrationFactor}
+          disabled={submission.id <= 0}
+          mode="decimal"
+          onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
+          pendingValue={ctx?.isHrRole ? ctx.pendingChanges.calibrationFactor : undefined}
+        />
+        {ctx?.isHrRole && ctx.hasPending ? (
+          <HrInlineSaveButton onSave={ctx.onSave} isPending={ctx.isSaving} disabled={ctx.isApproving} />
+        ) : null}
+        {ctx?.isHrRole && ctx.canApprove ? (
+          <HrInlineApproveButton
+            onApprove={ctx.onApprove}
+            isPending={ctx.isApproving}
+            label={submission.status === "PENDING_HR_CALIBRATION" ? "Approve" : "Approve"}
+            disabled={ctx.isSaving}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  if (columnId === "quartile") {
+    if (ctx?.quartileBands && ctx.sortedMatrix) {
+      const scoreO = submission.scoreO ?? submission.rawScore;
+      if (scoreO == null || Number.isNaN(scoreO) || submission.maxRawScore <= 0) {
+        return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
+      }
+      const chAdj = submission.creditHrsErpScoreAdj ?? 0;
+      const oricAdj = submission.pubOricScoreAdj ?? 0;
+      const qecAdj = submission.qecScoreAdj ?? 0;
+      const adjustedScore = scoreO + chAdj + oricAdj + qecAdj;
+      const calFr = submission.calibrationFactor ?? 1;
+      const normalizedScore = adjustedScore * calFr;
+      const scorePercent = Number(
+        ((normalizedScore / submission.maxRawScore) * 100).toFixed(2),
+      );
+      const resolved = resolvePerformanceQuartile(scorePercent, ctx.quartileBands);
+      if (!resolved) {
+        return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
+      }
+      const level = ctx.sortedMatrix.find((l) => l.id === resolved.performanceLevelId);
+      const levelName = level?.name ?? resolved.performanceLevelName;
+      return (
+        <span className="block text-center text-xs font-medium text-slate-700 dark:text-slate-300">
+          {levelName}-{resolved.quartileName}
+        </span>
+      );
+    }
+    return (
+      <span className="block text-slate-700 dark:text-slate-300">
+        {value === "—" ? <span className="text-slate-400 italic dark:text-slate-500">—</span> : value}
+      </span>
+    );
+  }
+
+  if (columnId === "ratingN") {
+    if (ctx?.quartileBands && ctx.sortedMatrix) {
+      const scoreO = submission.scoreO ?? submission.rawScore;
+      if (scoreO == null || Number.isNaN(scoreO) || submission.maxRawScore <= 0) {
+        return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
+      }
+      const chAdj = submission.creditHrsErpScoreAdj ?? 0;
+      const oricAdj = submission.pubOricScoreAdj ?? 0;
+      const qecAdj = submission.qecScoreAdj ?? 0;
+      const adjustedScore = scoreO + chAdj + oricAdj + qecAdj;
+      const calFr = submission.calibrationFactor ?? 1;
+      const normalizedScore = adjustedScore * calFr;
+      const scorePercent = Number(
+        ((normalizedScore / submission.maxRawScore) * 100).toFixed(2),
+      );
+      const resolved = resolvePerformanceQuartile(scorePercent, ctx.quartileBands);
+      if (!resolved) {
+        return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
+      }
+      const level = ctx.sortedMatrix.find((l) => l.id === resolved.performanceLevelId);
+      const levelName = level?.name ?? resolved.performanceLevelName;
+      return (
+        <span className="block text-center text-xs font-semibold text-slate-700 dark:text-slate-300">
+          {levelName}
+        </span>
+      );
+    }
+    return (
+      <span className="block text-slate-700 dark:text-slate-300">
+        {value === "—" ? <span className="text-slate-400 italic dark:text-slate-500">—</span> : value}
+      </span>
     );
   }
 
@@ -305,6 +437,8 @@ export function DashboardSubmissionsTable({
   error,
   onClearAllFilters,
   allowedColumnIds,
+  role,
+  performanceMatrix,
 }: DashboardSubmissionsTableProps) {
   const {
     visibleIds,
@@ -326,6 +460,86 @@ export function DashboardSubmissionsTable({
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [masterFilterOpen, setMasterFilterOpen] = useState(false);
   const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
+
+  const isHrRole = canReviewSubmissions(role ?? undefined);
+  const queryClient = useQueryClient();
+  const [pendingScoreChanges, setPendingScoreChanges] = useState<
+    Record<number, PendingScoreChanges>
+  >({});
+
+  const quartileBands = useMemo(
+    () =>
+      performanceMatrix && performanceMatrix.length > 0
+        ? buildQuartileBandsFromMatrix(performanceMatrix)
+        : null,
+    [performanceMatrix],
+  );
+
+  const sortedMatrix = useMemo(
+    () =>
+      performanceMatrix && performanceMatrix.length > 0
+        ? sortPerformanceMatrix(performanceMatrix)
+        : null,
+    [performanceMatrix],
+  );
+
+  const handleBufferedChange = (submissionId: number) =>
+    (field: ScoreAdjustmentField, value: number | null) => {
+      setPendingScoreChanges((current) => {
+        const next = { ...current };
+        if (field === ("__clear__" as ScoreAdjustmentField)) {
+          delete next[submissionId];
+          return next;
+        }
+        const existing = next[submissionId] ?? {};
+        next[submissionId] = { ...existing, [field]: value };
+        return next;
+      });
+    };
+
+  const hrSaveMutation = useMutation({
+    mutationFn: async (submissionId: number) => {
+      const changes = pendingScoreChanges[submissionId];
+      if (!changes) return;
+      const entries = Object.entries(changes) as Array<
+        [ScoreAdjustmentField, number | null]
+      >;
+      for (const [field, value] of entries) {
+        await updateSubmissionScoreAdjustments(submissionId, field, value);
+      }
+    },
+    onSuccess: (_data, submissionId) => {
+      setPendingScoreChanges((current) => {
+        const next = { ...current };
+        delete next[submissionId];
+        return next;
+      });
+      invalidateStaffListingQueries(queryClient);
+    },
+  });
+
+  const hrApproveMutation = useMutation({
+    mutationFn: async (submissionId: number) => {
+      const changes = pendingScoreChanges[submissionId];
+      if (changes) {
+        const entries = Object.entries(changes) as Array<
+          [ScoreAdjustmentField, number | null]
+        >;
+        for (const [field, value] of entries) {
+          await updateSubmissionScoreAdjustments(submissionId, field, value);
+        }
+      }
+      return approveHrCalibration(submissionId);
+    },
+    onSuccess: (_data, submissionId) => {
+      setPendingScoreChanges((current) => {
+        const next = { ...current };
+        delete next[submissionId];
+        return next;
+      });
+      invalidateStaffListingQueries(queryClient);
+    },
+  });
 
   const visibleColumns = useMemo(
     () => resolveOrderedColumns(columnOrder, visibleIds, allowedColumnIds),
@@ -617,6 +831,22 @@ export function DashboardSubmissionsTable({
                       </td>
                       {visibleColumns.map((column) => {
                         const value = column.getValue(submission);
+                        const pending = pendingScoreChanges[submission.id];
+                        const cellCtx: RenderCellContext = {
+                          isHrRole: isHrRole,
+                          pendingChanges: pending ?? {},
+                          hasPending: pending != null && Object.keys(pending).length > 0,
+                          onBufferedChange: handleBufferedChange(submission.id),
+                          onSave: () => hrSaveMutation.mutate(submission.id),
+                          onApprove: () => hrApproveMutation.mutate(submission.id),
+                          isSaving: hrSaveMutation.isPending,
+                          isApproving: hrApproveMutation.isPending,
+                          canApprove:
+                            submission.status === "PENDING_HR_CALIBRATION" ||
+                            submission.status === "PENDING_BOARD_APPROVAL",
+                          quartileBands,
+                          sortedMatrix,
+                        };
                         return (
                           <td
                             key={column.id}
@@ -626,7 +856,7 @@ export function DashboardSubmissionsTable({
                             )}
                             style={getColumnWidthStyle(column)}
                           >
-                            {renderCell(column, submission, value)}
+                            {renderCell(column, submission, value, cellCtx)}
                           </td>
                         );
                       })}

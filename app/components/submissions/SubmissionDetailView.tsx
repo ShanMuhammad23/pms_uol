@@ -6,6 +6,8 @@ import {
   fetchFormSubmission,
   approveManagerReview,
   saveManagerReview,
+  approveHrCalibration,
+  saveHrReview,
 } from "@/lib/queries/form-submissions-client";
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
@@ -87,6 +89,11 @@ export default function SubmissionDetailView({
   const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
     new Map(),
   );
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [initialDraftsSnapshot, setInitialDraftsSnapshot] = useState<
+    Map<number, ManagerDraft>
+  >(new Map());
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["form-submission", submissionId],
@@ -96,13 +103,20 @@ export default function SubmissionDetailView({
   useEffect(() => {
     if (!data) return;
 
-    setManagerDrafts(
-      buildManagerDraftMap(
-        data.questions,
-        data.managerAnswers,
-        data.answers,
-        data.manager1Answers,
-        data.managerLevel ?? undefined,
+    const drafts = buildManagerDraftMap(
+      data.questions,
+      data.managerAnswers,
+      data.answers,
+      data.manager1Answers,
+      data.managerLevel ?? undefined,
+    );
+    setManagerDrafts(drafts);
+    setInitialDraftsSnapshot(
+      new Map(
+        [...drafts.entries()].map(([k, v]) => [
+          k,
+          { pointsEarned: v.pointsEarned, remarks: v.remarks },
+        ]),
       ),
     );
   }, [data]);
@@ -179,6 +193,89 @@ export default function SubmissionDetailView({
     },
   });
 
+  const hrSaveMutation = useMutation({
+    mutationFn: () => {
+      if (!data) {
+        throw new Error("Submission not loaded.");
+      }
+
+      const answers = data.questions
+        .filter(isScoredQuestion)
+        .map((question) => {
+          const draft = managerDrafts.get(question.id);
+          return {
+            questionId: question.id,
+            pointsEarned:
+              draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+            remarks: draft?.remarks?.trim() || null,
+          };
+        });
+
+      return saveHrReview(submissionId, answers);
+    },
+    onSuccess: (result) => {
+      setSaveMessage("HR review saved.");
+      queryClient.setQueryData(["form-submission", submissionId], (current) => {
+        if (!current || typeof current !== "object") return current;
+        return {
+          ...current,
+          managerAnswers: result.managerAnswers,
+        };
+      });
+      setInitialDraftsSnapshot(
+        new Map(
+          [...managerDrafts.entries()].map(([k, v]) => [
+            k,
+            { pointsEarned: v.pointsEarned, remarks: v.remarks },
+          ]),
+        ),
+      );
+    },
+    onError: (mutationError: Error) => {
+      setSaveMessage(mutationError.message);
+    },
+  });
+
+  const hrApproveMutation = useMutation({
+    mutationFn: async () => {
+      if (data?.canEditHrReview) {
+        const answers = data.questions
+          .filter(isScoredQuestion)
+          .map((question) => {
+            const draft = managerDrafts.get(question.id);
+            return {
+              questionId: question.id,
+              pointsEarned:
+                draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+              remarks: draft?.remarks?.trim() || null,
+            };
+          });
+        await saveHrReview(submissionId, answers);
+      }
+
+      return approveHrCalibration(submissionId);
+    },
+    onSuccess: (result) => {
+      setSaveMessage(
+        result.status === "APPROVED"
+          ? "Approved successfully."
+          : "HR review approved. Sent to Board for final approval.",
+      );
+      queryClient.setQueryData(["form-submission", submissionId], (current) => {
+        if (!current || typeof current !== "object") return current;
+        return {
+          ...current,
+          status: result.status,
+          canEditHrReview: false,
+        };
+      });
+      invalidateStaffListingQueries(queryClient);
+    },
+    onError: (mutationError: Error) => {
+      setSaveMessage(mutationError.message);
+    },
+  });
+
   const answerMap = useMemo(
     () => new Map(data?.answers.map((answer) => [answer.questionId, answer])),
     [data?.answers],
@@ -213,6 +310,18 @@ export default function SubmissionDetailView({
     data?.canEditManagerReview && currentManagerLevel === 1;
   const editingManager2 =
     data?.canEditManagerReview && currentManagerLevel === 2;
+  const editingHr = data?.canEditHrReview ?? false;
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (!editingHr) return false;
+    for (const [key, draft] of managerDrafts) {
+      const initial = initialDraftsSnapshot.get(key);
+      if (!initial) return true;
+      if (initial.pointsEarned !== draft.pointsEarned) return true;
+      if (initial.remarks !== draft.remarks) return true;
+    }
+    return false;
+  }, [editingHr, managerDrafts, initialDraftsSnapshot]);
 
   if (isLoading) {
     return (
@@ -421,6 +530,123 @@ export default function SubmissionDetailView({
         </div>
       ) : null}
 
+      {editingHr && hasUnsavedChanges ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-orange-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-orange-950/20">
+          <p className="text-orange-800 dark:text-orange-200">
+            {data.status === "PENDING_HR_CALIBRATION"
+              ? "HR Alignment phase. Save or approve to send to Board."
+              : data.status === "PENDING_BOARD_APPROVAL"
+                ? "Board Approval phase. Save or approve to finalize."
+                : "You have unsaved score changes. Save to persist your edits."}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSaveConfirm(true)}
+              disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
+              className="rounded-lg border border-orange-300 bg-white px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-50 disabled:opacity-60 dark:border-orange-700 dark:bg-slate-900 dark:text-orange-200 dark:hover:bg-orange-950/40"
+            >
+              {hrSaveMutation.isPending ? "Saving..." : "Save"}
+            </button>
+            {(data.status === "PENDING_HR_CALIBRATION" ||
+            data.status === "PENDING_BOARD_APPROVAL") ? (
+              <button
+                type="button"
+                onClick={() => setShowApproveConfirm(true)}
+                disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              >
+                {hrApproveMutation.isPending
+                  ? "Approving..."
+                  : data.status === "PENDING_HR_CALIBRATION"
+                    ? "Approve & Send to Board"
+                    : "Approve"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {showSaveConfirm ? (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close dialog"
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+            onClick={() => setShowSaveConfirm(false)}
+          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/15 dark:bg-slate-900">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+              Confirm Save
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              Are you sure you want to save the current scores? You can continue editing after saving.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSaveConfirm(false)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSaveConfirm(false);
+                  hrSaveMutation.mutate();
+                }}
+                disabled={hrSaveMutation.isPending}
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              >
+                {hrSaveMutation.isPending ? "Saving..." : "Confirm Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showApproveConfirm ? (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close dialog"
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+            onClick={() => setShowApproveConfirm(false)}
+          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/15 dark:bg-slate-900">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+              Confirm Approval
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              {data.status === "PENDING_HR_CALIBRATION"
+                ? "Are you sure you want to approve this appraisal? It will be sent to the Board for final approval."
+                : "Are you sure you want to approve this appraisal? This will finalize the appraisal."}
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowApproveConfirm(false)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowApproveConfirm(false);
+                  hrApproveMutation.mutate();
+                }}
+                disabled={hrApproveMutation.isPending}
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              >
+                {hrApproveMutation.isPending ? "Approving..." : "Confirm Approve"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {saveMessage ? (
         <div className="border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
           {saveMessage}
@@ -564,7 +790,7 @@ export default function SubmissionDetailView({
                     {/* Manager 1 Score */}
                     <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                       {scored ? (
-                        editingManager1 ? (
+                        editingManager1 || editingHr ? (
                           <input
                             type="number"
                             min={0}
@@ -593,7 +819,7 @@ export default function SubmissionDetailView({
                     {/* Manager 1 Remarks */}
                     <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                       {scored ? (
-                        editingManager1 ? (
+                        editingManager1 || editingHr ? (
                           <textarea
                             value={managerDraft.remarks}
                             rows={2}
@@ -621,7 +847,7 @@ export default function SubmissionDetailView({
                       <>
                         <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                           {scored ? (
-                            editingManager2 ? (
+                            editingManager2 || editingHr ? (
                               <input
                                 type="number"
                                 min={0}
@@ -652,7 +878,7 @@ export default function SubmissionDetailView({
                         </td>
                         <td className="px-2 py-2.5">
                           {scored ? (
-                            editingManager2 ? (
+                            editingManager2 || editingHr ? (
                               <textarea
                                 value={managerDraft.remarks}
                                 rows={2}

@@ -36,6 +36,7 @@ export type RemarksField = "remarksEvaluation" | "remarksCompensation";
 export type ScoreAdjustmentField =
   | "creditHrsErpScoreAdj"
   | "pubOricScoreAdj"
+  | "qecScoreAdj"
   | "calibrationFactor"
   | "calibratedScoreNumeric";
 
@@ -47,6 +48,7 @@ export async function updateSubmissionScoreAdjustments(
   id: number;
   creditHrsErpScoreAdj: number | null;
   pubOricScoreAdj: number | null;
+  qecScoreAdj: number | null;
   calibrationFactor: number | null;
   calibratedScoreNumeric: number | null;
 }> {
@@ -60,6 +62,7 @@ export async function updateSubmissionScoreAdjustments(
     id: number;
     creditHrsErpScoreAdj: number | null;
     pubOricScoreAdj: number | null;
+    qecScoreAdj: number | null;
     calibrationFactor: number | null;
     calibratedScoreNumeric: number | null;
   }>(response);
@@ -86,6 +89,35 @@ export async function saveManagerReview(
   }>,
 ): Promise<{ managerAnswers: FormSubmissionDetail["managerAnswers"] }> {
   const response = await fetch(`/api/submissions/${id}/manager-review`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers }),
+  });
+
+  return parseResponse<{ managerAnswers: FormSubmissionDetail["managerAnswers"] }>(
+    response,
+  );
+}
+
+export async function approveHrCalibration(
+  id: number,
+): Promise<{ status: FormSubmissionDetail["status"] }> {
+  const response = await fetch(`/api/submissions/${id}/hr-approval`, {
+    method: "POST",
+  });
+
+  return parseResponse<{ status: FormSubmissionDetail["status"] }>(response);
+}
+
+export async function saveHrReview(
+  id: number,
+  answers: Array<{
+    questionId: number;
+    pointsEarned?: number;
+    remarks?: string | null;
+  }>,
+): Promise<{ managerAnswers: FormSubmissionDetail["managerAnswers"] }> {
+  const response = await fetch(`/api/submissions/${id}/hr-approval`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ answers }),

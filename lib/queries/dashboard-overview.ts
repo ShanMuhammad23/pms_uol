@@ -165,6 +165,7 @@ function mapOverviewRow(
     ratingO: row.initial_rating,
     creditHrsErpScoreAdj: null,
     pubOricScoreAdj: null,
+    qecScoreAdj: null,
     calibrationFactor: null,
     normalizedScore: toNumber(row.normalized_score),
     ratingN: row.calibrated_rating,

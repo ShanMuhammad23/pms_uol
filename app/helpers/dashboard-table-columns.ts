@@ -28,6 +28,7 @@ export type DashboardTableColumnId =
   | "scoreO"
   | "creditHrsErpAdj"
   | "pubOricScoreAdj"
+  | "qecScoreAdj"
   | "adjustedScore"
   | "ratingO"
   | "calibrationFactor"
@@ -101,6 +102,7 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
       "scoreO",
       "creditHrsErpAdj",
       "pubOricScoreAdj",
+      "qecScoreAdj",
       "adjustedScore",
       "ratingO",
       "calibrationFactor",
@@ -162,8 +164,9 @@ function getAdjustedScore(row: FormSubmissionListItem): number | null {
 
   const chAdj = row.creditHrsErpScoreAdj ?? 0;
   const oricAdj = row.pubOricScoreAdj ?? 0;
+  const qecAdj = row.qecScoreAdj ?? 0;
 
-  return scoreO + chAdj + oricAdj;
+  return scoreO + chAdj + oricAdj + qecAdj;
 }
 
 function getAdjustedScorePercent(row: FormSubmissionListItem): number | null {
@@ -259,7 +262,12 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     id: "formAssignment",
     label: "Form",
     width: 80,
-    getValue: (row) => (isFormAssigned(row) ? "✔" : "✖"),
+    getValue: (row) =>
+      isFormAssigned(row)
+        ? row.selfAssessmentEnabled
+          ? "✔"
+          : "Direct"
+        : "✖",
   },
   designation: {
     id: "designation",
@@ -383,6 +391,14 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     wrap: true,
     getValue: (row) => formatNumber(row.pubOricScoreAdj, 0),
   },
+  qecScoreAdj: {
+    id: "qecScoreAdj",
+    label: "QEC Adj",
+    align: "center",
+    width: 80,
+    wrap: true,
+    getValue: (row) => formatNumber(row.qecScoreAdj, 0),
+  },
   adjustedScore: {
     id: "adjustedScore",
     label: "Adjusted Score",
@@ -400,7 +416,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     id: "calibrationFactor",
     label: "Cal. Fr",
     align: "center",
-    width: 80,
+    width: 160,
     wrap: true,
     getValue: (row) => formatNumber(row.calibrationFactor ?? 1, 1),
   },

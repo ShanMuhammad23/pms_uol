@@ -154,7 +154,7 @@ export function useDashboardPage() {
   );
 
   const chartMetrics = useDashboardChartMetrics({
-    filteredSubmissions: filteredOverview,
+    filteredSubmissions,
     quotaEligibleCount,
     isDarkMode,
     matrixForDistribution,
@@ -185,6 +185,7 @@ export function useDashboardPage() {
     submissionsError,
     submissions: scopedSubmissions,
     performanceMatrixLoading,
+    matrixForDistribution,
     filteredSubmissions,
     activeFilters,
     handleCategory0EntityChange,

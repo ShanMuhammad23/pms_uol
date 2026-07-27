@@ -84,7 +84,7 @@ function readStoredPrefs(
       typeof (parsed as StoredColumnPrefs).version === "number"
     ) {
       const prefs = parsed as StoredColumnPrefs;
-      if (prefs.version < 3) {
+      if (prefs.version < 4) {
         return {
           order: getDefaultColumnOrder(allowedIds),
           visible: getDefaultVisibleColumnIds(allowedIds),
@@ -167,7 +167,7 @@ export function useDashboardColumnVisibility(options?: {
   useEffect(() => {
     if (!hydrated) return;
     const payload: StoredColumnPrefs = {
-      version: 3,
+      version: 4,
       order: columnOrder,
       visible: visibleIds,
     };

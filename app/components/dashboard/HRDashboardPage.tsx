@@ -71,6 +71,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     filteredCalibrationData,
     ratingQuartileMatrix,
     chartSubmissions,
+    matrixForDistribution,
   } = useDashboardPage();
 
   return (
@@ -211,6 +212,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           error={submissionsError}
           onClearAllFilters={clearAllFilters}
           allowedColumnIds={isHead ? HEAD_DASHBOARD_TABLE_COLUMN_IDS : undefined}
+          role={role}
+          performanceMatrix={matrixForDistribution}
         />
       </div>
         </>

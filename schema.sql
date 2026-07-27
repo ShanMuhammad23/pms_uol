@@ -166,6 +166,7 @@ CREATE TABLE appraisals (
     -- Adjustments + normalization pipeline
     credit_hrs_erp_score_adj NUMERIC(10, 2),
     pub_oric_score_adj NUMERIC(10, 2),
+    qec_score_adj NUMERIC(10, 2),
     calibration_factor NUMERIC(10, 4),
     normalized_score NUMERIC(10, 2),
     calibrated_score_numeric NUMERIC(10, 2), 

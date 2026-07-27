@@ -65,6 +65,7 @@ interface SubmissionListRow {
   initial_rating: PerformanceRating | null;
   credit_hrs_erp_score_adj: string | null;
   pub_oric_score_adj: string | null;
+  qec_score_adj: string | null;
   calibration_factor: string | null;
   normalized_score: string | null;
   calibrated_score_numeric: string | null;
@@ -244,6 +245,7 @@ function mapSubmissionRow(
     ratingO: row.initial_rating,
     creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
     pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
+    qecScoreAdj: toNumber(row.qec_score_adj),
     calibrationFactor: toNumber(row.calibration_factor),
     normalizedScore,
     ratingN: row.calibrated_rating,
@@ -358,6 +360,7 @@ export async function listFormSubmissions(
          ap.initial_score_numeric::text,
          ap.credit_hrs_erp_score_adj::text,
          ap.pub_oric_score_adj::text,
+         ap.qec_score_adj::text,
          ap.calibration_factor::text,
          ap.normalized_score::text,
          ap.calibrated_score_numeric::text,
@@ -390,6 +393,7 @@ export async function listFormSubmissions(
          NULL::text AS initial_score_numeric,
          NULL::text AS credit_hrs_erp_score_adj,
          NULL::text AS pub_oric_score_adj,
+         NULL::text AS qec_score_adj,
          NULL::text AS calibration_factor,
          NULL::text AS normalized_score,
          NULL::text AS calibrated_score_numeric,
@@ -758,12 +762,50 @@ export async function approveManagerReview(appraisalId: number): Promise<{
   return advance;
 }
 
+export async function approveHrCalibration(appraisalId: number): Promise<{
+  status: AppraisalStatus;
+}> {
+  const current = await db.query<{ status: AppraisalStatus }>(
+    `SELECT status FROM appraisals WHERE id = $1`,
+    [appraisalId],
+  );
+
+  const row = current.rows[0];
+  if (!row) {
+    throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  let nextStatus: AppraisalStatus;
+
+  if (row.status === "PENDING_HR_CALIBRATION") {
+    nextStatus = "PENDING_BOARD_APPROVAL";
+  } else if (row.status === "PENDING_BOARD_APPROVAL") {
+    nextStatus = "APPROVED";
+  } else {
+    throw new FormSubmissionError(
+      "HR/Board approval is not open for this submission.",
+      409,
+    );
+  }
+
+  await db.query(
+    `UPDATE appraisals
+     SET status = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1`,
+    [appraisalId, nextStatus],
+  );
+
+  return { status: nextStatus };
+}
+
 export async function getFormSubmissionById(
   id: number,
   options?: {
     reviewerUserId?: number | null;
     seedManagerAnswers?: boolean;
     canEditManagerReview?: boolean;
+    canEditHrReview?: boolean;
     canEditScoreAdjustments?: boolean;
   },
 ): Promise<FormSubmissionDetail | null> {
@@ -869,8 +911,10 @@ export async function getFormSubmissionById(
     manager1Answers,
     manager2Answers,
     canEditManagerReview: Boolean(options?.canEditManagerReview),
+    canEditHrReview: Boolean(options?.canEditHrReview),
     creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,
     pubOricScoreAdj: summary.pubOricScoreAdj,
+    qecScoreAdj: summary.qecScoreAdj,
     calibrationFactor: summary.calibrationFactor,
     calibratedScoreNumeric: summary.normalizedScore,
     canEditScoreAdjustments: Boolean(options?.canEditScoreAdjustments),
@@ -885,6 +929,7 @@ export type AppraisalRemarksField =
 export type AppraisalScoreAdjustmentField =
   | "creditHrsErpScoreAdj"
   | "pubOricScoreAdj"
+  | "qecScoreAdj"
   | "calibrationFactor"
   | "calibratedScoreNumeric";
 
@@ -900,6 +945,7 @@ export async function updateAppraisalScoreAdjustments(
   id: number;
   creditHrsErpScoreAdj: number | null;
   pubOricScoreAdj: number | null;
+  qecScoreAdj: number | null;
   calibrationFactor: number | null;
   calibratedScoreNumeric: number | null;
 }> {
@@ -912,6 +958,7 @@ export async function updateAppraisalScoreAdjustments(
   > = {
     creditHrsErpScoreAdj: "credit_hrs_erp_score_adj",
     pubOricScoreAdj: "pub_oric_score_adj",
+    qecScoreAdj: "qec_score_adj",
     calibrationFactor: "calibration_factor",
     calibratedScoreNumeric: "calibrated_score_numeric",
   };
@@ -934,6 +981,7 @@ export async function updateAppraisalScoreAdjustments(
     id: string;
     credit_hrs_erp_score_adj: string | null;
     pub_oric_score_adj: string | null;
+    qec_score_adj: string | null;
     calibration_factor: string | null;
     calibrated_score_numeric: string | null;
   }>(
@@ -943,6 +991,7 @@ export async function updateAppraisalScoreAdjustments(
      RETURNING id,
        credit_hrs_erp_score_adj::text,
        pub_oric_score_adj::text,
+       qec_score_adj::text,
        calibration_factor::text,
        calibrated_score_numeric::text`,
     values,
@@ -956,6 +1005,7 @@ export async function updateAppraisalScoreAdjustments(
     id: Number(result.rows[0].id),
     creditHrsErpScoreAdj: toNumber(result.rows[0].credit_hrs_erp_score_adj),
     pubOricScoreAdj: toNumber(result.rows[0].pub_oric_score_adj),
+    qecScoreAdj: toNumber(result.rows[0].qec_score_adj),
     calibrationFactor: toNumber(result.rows[0].calibration_factor),
     calibratedScoreNumeric: toNumber(result.rows[0].calibrated_score_numeric),
   };

@@ -16,11 +16,16 @@ interface InlineScoreAdjustmentCellProps {
   value: number | null;
   disabled?: boolean;
   mode?: "integer" | "decimal";
+  /** When provided, the cell buffers changes locally and calls this callback instead of auto-saving. */
+  onBufferedChange?: (field: ScoreAdjustmentField, value: number | null) => void;
+  /** Pending buffered value (from parent). When set, cell shows this instead of the saved value. */
+  pendingValue?: number | null;
 }
 
 const FIELD_LABELS: Record<ScoreAdjustmentField, string> = {
   creditHrsErpScoreAdj: "CH Adj",
   pubOricScoreAdj: "ORIC Adj",
+  qecScoreAdj: "QEC Adj",
   calibrationFactor: "Cal. Fr",
   calibratedScoreNumeric: "HR Calibration",
 };
@@ -31,23 +36,27 @@ export function InlineScoreAdjustmentCell({
   value,
   disabled = false,
   mode = "integer",
+  onBufferedChange,
+  pendingValue,
 }: InlineScoreAdjustmentCellProps) {
   const isDecimal = mode === "decimal";
+  const isBuffered = onBufferedChange != null;
+  const displayValue = isBuffered ? (pendingValue ?? value) : value;
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const committingRef = useRef(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(
-    value != null ? String(isDecimal ? value : Math.round(value)) : isDecimal ? "1" : "",
+    displayValue != null ? String(isDecimal ? displayValue : Math.round(displayValue)) : isDecimal ? "1" : "",
   );
   const [error, setError] = useState<string | null>(null);
   const fieldLabel = FIELD_LABELS[field];
 
   useEffect(() => {
     if (!editing) {
-      setDraft(value != null ? String(isDecimal ? value : Math.round(value)) : isDecimal ? "1" : "");
+      setDraft(displayValue != null ? String(isDecimal ? displayValue : Math.round(displayValue)) : isDecimal ? "1" : "");
     }
-  }, [editing, value, isDecimal]);
+  }, [editing, displayValue, isDecimal]);
 
   useEffect(() => {
     if (editing) {
@@ -103,6 +112,12 @@ export function InlineScoreAdjustmentCell({
   const commit = () => {
     const trimmed = draft.trim();
     if (trimmed === "") {
+      if (isBuffered) {
+        onBufferedChange?.(field, null);
+        setEditing(false);
+        setError(null);
+        return;
+      }
       const currentValue = value != null ? String(value) : "";
       if (currentValue === "") {
         setEditing(false);
@@ -129,8 +144,15 @@ export function InlineScoreAdjustmentCell({
       return;
     }
 
-    const currentValue = value != null ? value : null;
+    const currentValue = displayValue != null ? displayValue : null;
     if (parsed === currentValue) {
+      setEditing(false);
+      setError(null);
+      return;
+    }
+
+    if (isBuffered) {
+      onBufferedChange?.(field, parsed);
       setEditing(false);
       setError(null);
       return;
@@ -149,7 +171,7 @@ export function InlineScoreAdjustmentCell({
       return;
     }
 
-    setDraft(value != null ? String(isDecimal ? value : Math.round(value)) : "");
+    setDraft(displayValue != null ? String(isDecimal ? displayValue : Math.round(displayValue)) : "");
     setError(null);
     setEditing(false);
   };
@@ -195,13 +217,13 @@ export function InlineScoreAdjustmentCell({
         {error ? (
           <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">{error}</p>
         ) : (
-          <p className="mt-1 text-[11px] text-slate-400">Enter to save · Esc to cancel</p>
+          <p className="mt-1 text-[11px] text-slate-400">{isBuffered ? "Enter to confirm · Esc to cancel" : "Enter to save · Esc to cancel"}</p>
         )}
       </div>
     );
   }
 
-  const displayValue = isDecimal ? (value ?? 1) : value;
+  const finalDisplayValue = isDecimal ? (displayValue ?? 1) : displayValue;
 
   return (
     <button
@@ -209,9 +231,10 @@ export function InlineScoreAdjustmentCell({
       onClick={() => setEditing(true)}
       className={cn(
         "block w-full rounded px-1.5 py-0.5 text-center text-sm tabular-nums text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white",
-        displayValue == null && "text-slate-400 italic dark:text-slate-500",
+        finalDisplayValue == null && "text-slate-400 italic dark:text-slate-500",
+        isBuffered && pendingValue != null && pendingValue !== value && "ring-2 ring-orange-400/60",
       )}
-      title={displayValue != null ? `${displayValue} (click to edit)` : `Click to set ${fieldLabel}`}
+      title={finalDisplayValue != null ? `${finalDisplayValue} (click to edit)` : `Click to set ${fieldLabel}`}
     >
       {displayValue != null ? (isDecimal ? displayValue.toFixed(1) : Math.round(displayValue)) : "—"}
     </button>

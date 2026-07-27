@@ -11,12 +11,14 @@ interface FormAssignmentCellProps {
   employeeId: string;
   employeeName: string;
   formAssigned: boolean;
+  selfAssessmentEnabled?: boolean;
 }
 
 export function FormAssignmentCell({
   employeeId,
   employeeName,
   formAssigned,
+  selfAssessmentEnabled = true,
 }: FormAssignmentCellProps) {
   const titleId = useId();
   const [open, setOpen] = useState(false);
@@ -65,15 +67,24 @@ export function FormAssignmentCell({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="View assigned form"
+        title={
+          selfAssessmentEnabled
+            ? "View assigned form"
+            : "View assigned form (Direct Assessment)"
+        }
         aria-label={`View form assigned to ${employeeName}`}
         className={cn(
-          "inline-flex size-6 items-center justify-center rounded-md text-emerald-600 transition-colors",
-          "hover:bg-emerald-50 hover:text-emerald-700",
-          "dark:text-emerald-400 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300",
+          "inline-flex items-center justify-center rounded-md text-xs font-semibold transition-colors",
+          selfAssessmentEnabled
+            ? "size-6 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"
+            : "px-1.5 py-0.5 text-violet-700 hover:bg-violet-50 hover:text-violet-800 dark:text-violet-300 dark:hover:bg-violet-500/10 dark:hover:text-violet-200",
         )}
       >
-        <Check className="h-3.5 w-3.5" strokeWidth={2.75} />
+        {selfAssessmentEnabled ? (
+          <Check className="h-3.5 w-3.5" strokeWidth={2.75} />
+        ) : (
+          "Direct"
+        )}
       </button>
 
       <AnimatePresence>
