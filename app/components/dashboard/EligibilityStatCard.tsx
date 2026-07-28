@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import type { PieLabelRenderProps } from "recharts";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
@@ -46,6 +47,13 @@ function renderSlicePercentLabel({
 }
 
 export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
+  const [chartReady, setChartReady] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setChartReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   const hasData = data.some((entry) => entry.value > 0);
   const fullyEligible =
     data.find((entry) => entry.name === "Fully Eligible")?.value ?? 0;
@@ -85,6 +93,7 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
       {hasData ? (
         <div className="mt-2 flex items-center gap-2 sm:mt-3 sm:gap-3">
           <div className="h-16 w-16 shrink-0  sm:hidden xl:block">
+            {chartReady ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -107,6 +116,7 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
                 <Tooltip content={<CustomTooltip />} />
               </PieChart>
             </ResponsiveContainer>
+            ) : null}
           </div>
 
           <ul className="min-w-0 flex-1 space-y-1 sm:space-y-1.5">

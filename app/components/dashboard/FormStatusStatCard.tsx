@@ -51,7 +51,7 @@ export function FormStatusStatCard({ delay }: FormStatusStatCardProps) {
       className="@container/stat group relative min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-[#FFE5B4] p-2.5 text-white shadow-sm transition-all duration-300 hover:shadow-md @[12rem]/stat:p-3 @[16rem]/stat:p-4 dark:border-slate-700 dark:bg-slate-900"
     >
       <div className="flex items-start justify-between gap-1.5 @[14rem]/stat:gap-2">
-        <p className="min-w-0 text-black font-semibold uppercase leading-tight tracking-wide">
+        <p className="min-w-0 text-black dark:text-white font-semibold uppercase leading-tight tracking-wide">
           My Forms
         </p>
         <span
@@ -63,22 +63,22 @@ export function FormStatusStatCard({ delay }: FormStatusStatCardProps) {
       </div>
 
       {isLoading ? (
-        <p className="mt-3 text-[clamp(0.625rem,3.8cqi,0.75rem)] text-black">
+        <p className="mt-3 text-[clamp(0.625rem,3.8cqi,0.75rem)] text-black dark:text-slate-300">
           Loading assigned forms…
         </p>
       ) : error ? (
-        <p className="mt-3 text-[clamp(0.625rem,3.8cqi,0.75rem)] text-black">
+        <p className="mt-3 text-[clamp(0.625rem,3.8cqi,0.75rem)] text-black dark:text-slate-300">
           Failed to load your forms
         </p>
       ) : total === 0 ? (
-        <div className="mt-3 flex items-start gap-2 text-[clamp(0.625rem,3.8cqi,0.75rem)] text-black">
+        <div className="mt-3 flex items-start gap-2 text-[clamp(0.625rem,3.8cqi,0.75rem)] text-black dark:text-slate-300">
           <ClipboardList className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-          <span className="text-black">No forms assigned to you</span>
+          <span>No forms assigned to you</span>
         </div>
       ) : (
         <div className="mt-2 space-y-2 @[16rem]/stat:mt-3">
           {awaitingAction > 0 ? (
-            <p className="text-[16px] text-[#800000]">
+            <p className="text-[16px] text-[#800000] dark:text-red-400">
               {awaitingAction} Submission Pending
             </p>
           ) : null}
@@ -89,14 +89,14 @@ export function FormStatusStatCard({ delay }: FormStatusStatCardProps) {
                 <Link
                   href={`/dashboard/my-forms/${form.templateId}`}
                   className={cn(
-                    "flex items-start justify-between gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-white/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40",
+                    "flex items-start justify-between gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-white/10 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40",
                   )}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-[clamp(0.625rem,3.8cqi,0.75rem)] font-medium text-black">
+                    <span className="block truncate text-[clamp(0.625rem,3.8cqi,0.75rem)] font-medium text-black dark:text-white">
                       {form.title}
                     </span>
-                    <span className="mt-0.5 flex items-center gap-1 text-[clamp(0.5625rem,3.2cqi,0.675rem)] text-black">
+                    <span className="mt-0.5 flex items-center gap-1 text-[clamp(0.5625rem,3.2cqi,0.675rem)] text-black dark:text-slate-300">
                       <span
                         className="h-1.5 w-1.5 shrink-0 rounded-full"
                         style={{ backgroundColor: STATUS_DOT[form.status] }}

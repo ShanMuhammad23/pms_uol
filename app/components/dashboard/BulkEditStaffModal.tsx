@@ -46,7 +46,8 @@ type FieldKey =
   | "qecScoreAdj"
   | "calibrationFactor"
   | "manager1UserId"
-  | "manager2UserId";
+  | "manager2UserId"
+  | "assessmentEligibility";
 
 const TEXT_FIELDS: { key: FieldKey; label: string; placeholder: string }[] = [
   { key: "roleCategory", label: "Role Category", placeholder: "Enter role category" },
@@ -84,6 +85,7 @@ export function BulkEditStaffModal({
   const [numberValues, setNumberValues] = useState<Partial<Record<FieldKey, string>>>({});
   const [selectValues, setSelectValues] = useState<Partial<Record<FieldKey, string>>>({});
   const [selectedFormTemplateIds, setSelectedFormTemplateIds] = useState<Set<number>>(new Set());
+  const [assessmentEligibility, setAssessmentEligibility] = useState<"" | "true" | "false">("");
   const [error, setError] = useState<string | null>(null);
 
   const canEditScores = canReviewSubmissions(role ?? undefined);
@@ -112,6 +114,7 @@ export function BulkEditStaffModal({
       setNumberValues({});
       setSelectValues({});
       setSelectedFormTemplateIds(new Set());
+      setAssessmentEligibility("");
       setError(null);
     }
   }, [open]);
@@ -163,6 +166,9 @@ export function BulkEditStaffModal({
       if (Number.isFinite(parsed)) {
         fields.manager2UserId = parsed;
       }
+    }
+    if (assessmentEligibility !== "") {
+      fields.assessmentEligibility = assessmentEligibility === "true";
     }
 
     return fields;
@@ -222,6 +228,7 @@ export function BulkEditStaffModal({
           ...(fields.calibrationFactor != null ? { calibrationFactor: fields.calibrationFactor as number } : {}),
           ...(fields.manager1UserId != null ? { manager1UserId: fields.manager1UserId as number } : {}),
           ...(fields.manager2UserId != null ? { manager2UserId: fields.manager2UserId as number } : {}),
+          ...(fields.assessmentEligibility !== undefined ? { assessmentEligibility: fields.assessmentEligibility as boolean } : {}),
         };
       });
 
@@ -510,6 +517,21 @@ export function BulkEditStaffModal({
                       {m.label}
                     </option>
                   ))}
+                </select>
+              </label>
+
+              {/* Assessment Eligibility */}
+              <label className="block space-y-1.5">
+                <span className={labelClassName}>Assessment Eligibility</span>
+                <select
+                  value={assessmentEligibility}
+                  onChange={(e) => setAssessmentEligibility(e.target.value as "" | "true" | "false")}
+                  disabled={saveMutation.isPending}
+                  className={inputClassName}
+                >
+                  <option value="">— Keep existing —</option>
+                  <option value="true">Eligible</option>
+                  <option value="false">Not Eligible</option>
                 </select>
               </label>
             </div>

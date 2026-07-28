@@ -23,6 +23,7 @@ export type DashboardTableColumnId =
   | "qualificationCountry"
   | "status"
   | "eligible"
+  | "assessmentEligible"
   | "applicableDuration"
   | "scoreO"
   | "creditHrsErpAdj"
@@ -96,6 +97,7 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
     label: "Performance",
     columnIds: [
       "eligible",
+      "assessmentEligible",
       "applicableDuration",
       "scoreO",
       "creditHrsErpAdj",
@@ -356,6 +358,13 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     getValue: (row) =>
       getEligibilityShortLabel(getSubmissionEligibilityStatus(row)),
   },
+  assessmentEligible: {
+    id: "assessmentEligible",
+    label: "Assess Eligible?",
+    align: "center",
+    width: 90,
+    getValue: (row) => (row.assessmentEligibility ? "Yes" : "No"),
+  },
   applicableDuration: {
     id: "applicableDuration",
     label: "Applicable Dur",
@@ -550,6 +559,7 @@ export const HEAD_DASHBOARD_TABLE_COLUMN_IDS = [
   "qualificationCountry",
   "status",
   "eligible",
+  "assessmentEligible",
   "applicableDuration",
   "scoreO",
   "adjustedScore",

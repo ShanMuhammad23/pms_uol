@@ -36,9 +36,11 @@ export function DashboardPrimaryCharts({
 }: DashboardPrimaryChartsProps) {
   const isHead = role === "MANAGER";
   const [chartsKey, setChartsKey] = useState(0);
+  const [chartReady, setChartReady] = useState(false);
 
   useEffect(() => {
     setChartsKey((key) => key + 1);
+    setChartReady(true);
     const frame = window.requestAnimationFrame(() => {
       window.dispatchEvent(new Event("resize"));
     });
@@ -59,7 +61,8 @@ export function DashboardPrimaryCharts({
           className={isHead ? "lg:col-span-12" : "lg:col-span-6"}
         >
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
+            {chartReady ? (
+            <ResponsiveContainer key={chartsKey} width="100%" height="100%">
               <AreaChart
                 data={calibrationData}
                 margin={{ top: 20, right: 10, left: -10, bottom: 0 }}
@@ -141,6 +144,7 @@ export function DashboardPrimaryCharts({
                 )}
               </AreaChart>
             </ResponsiveContainer>
+            ) : null}
           </div>
         </ChartCard>
 

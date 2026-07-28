@@ -86,6 +86,20 @@ export async function PATCH(request: Request) {
     const calibrationFactor = parseOptionalNumberField(body, "calibrationFactor");
     const manager1UserId = parseOptionalNumberField(body, "manager1UserId");
     const manager2UserId = parseOptionalNumberField(body, "manager2UserId");
+    const assessmentEligibility =
+      "assessmentEligibility" in body
+        ? { provided: true as const, value: body.assessmentEligibility as boolean }
+        : { provided: false as const, value: null };
+
+    if (
+      assessmentEligibility.provided &&
+      typeof assessmentEligibility.value !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "assessmentEligibility must be a boolean." },
+        { status: 400 },
+      );
+    }
 
     const fields: Record<string, unknown> = {};
 
@@ -104,6 +118,7 @@ export async function PATCH(request: Request) {
     if (calibrationFactor.provided) fields.calibrationFactor = calibrationFactor.value;
     if (manager1UserId.provided) fields.manager1UserId = manager1UserId.value;
     if (manager2UserId.provided) fields.manager2UserId = manager2UserId.value;
+    if (assessmentEligibility.provided) fields.assessmentEligibility = assessmentEligibility.value;
 
     if (Object.keys(fields).length === 0) {
       return NextResponse.json(

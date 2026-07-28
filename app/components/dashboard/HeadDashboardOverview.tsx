@@ -66,7 +66,7 @@ export function HeadDashboardOverview({
   chartsVisible = true,
 }: HeadDashboardOverviewProps) {
   const [chartsKey, setChartsKey] = useState(0);
-  const [chartReady, setChartReady] = useState(chartsVisible);
+  const [chartReady, setChartReady] = useState(false);
   const wasChartsVisibleRef = useRef(chartsVisible);
 
   useEffect(() => {

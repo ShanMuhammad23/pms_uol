@@ -96,6 +96,7 @@ interface SubmissionListRow {
   form_assigned: boolean;
   direct_score_entry: boolean;
   self_assessment_disabled: boolean;
+  assessment_eligibility: boolean | null;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -144,6 +145,27 @@ async function hasQualificationsTable(): Promise<boolean> {
   );
 
   return Boolean(result.rows[0]?.exists);
+}
+
+async function hasAssessmentEligibilityColumn(): Promise<boolean> {
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'users'
+         AND column_name = 'assessment_eligibility'
+     ) AS exists`,
+  );
+
+  return Boolean(result.rows[0]?.exists);
+}
+
+async function ensureAssessmentEligibilityColumn(): Promise<void> {
+  await db.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS assessment_eligibility BOOLEAN NOT NULL DEFAULT TRUE`,
+  );
 }
 
 function toNumber(value: string | number | null | undefined): number | null {
@@ -280,6 +302,7 @@ function mapSubmissionRow(
     qualificationCountry: row.qualification_country,
     submittedAt: row.submitted_at,
     selfAssessmentEnabled: !row.self_assessment_disabled,
+    assessmentEligibility: row.assessment_eligibility ?? true,
   };
 }
 
@@ -343,6 +366,7 @@ export async function listFormSubmissions(
     ensureManagerLevelColumn(),
     ensureEligibilityColumns(),
     ensureManager2Column(),
+    ensureAssessmentEligibilityColumn(),
   ]);
 
   const roleCategorySelect = roleCategoryReady
@@ -517,7 +541,8 @@ export async function listFormSubmissions(
          '0'
        ) AS max_raw_score,
        ap.submitted_at::text,
-       COALESCE(efa.self_assessment_disabled, false) AS self_assessment_disabled
+       COALESCE(efa.self_assessment_disabled, false) AS self_assessment_disabled,
+      COALESCE(u.assessment_eligibility, true) AS assessment_eligibility
      FROM users u
      LEFT JOIN LATERAL (
        SELECT ap_inner.*
@@ -568,9 +593,11 @@ export async function getFormSubmissionSummaryById(
     | "managerLevel"
     | "manager1UserId"
     | "manager2UserId"
+    | "assessmentEligibility"
   > | null
 > {
   await ensureManager2Column();
+  await ensureAssessmentEligibilityColumn();
 
   const result = await db.query<{
     id: string;
@@ -579,13 +606,15 @@ export async function getFormSubmissionSummaryById(
     manager_level: number | null;
     manager_1_user_id: string | null;
     manager_2_user_id: string | null;
+    assessment_eligibility: boolean | null;
   }>(
     `SELECT ap.id,
             u.entity_id,
             ap.status,
             ap.manager_level,
             u.head_id::text AS manager_1_user_id,
-            u.manager_2_id::text AS manager_2_user_id
+            u.manager_2_id::text AS manager_2_user_id,
+            COALESCE(u.assessment_eligibility, true) AS assessment_eligibility
      FROM appraisals ap
      INNER JOIN users u ON u.id = ap.employee_id
      WHERE ap.id = $1
@@ -609,6 +638,7 @@ export async function getFormSubmissionSummaryById(
     manager2UserId: row.manager_2_user_id
       ? Number(row.manager_2_user_id)
       : null,
+    assessmentEligibility: row.assessment_eligibility ?? true,
   };
 }
 
@@ -930,6 +960,7 @@ export async function getFormSubmissionById(
     initialScoreNumeric: summary.scoreO,
     canEditScoreAdjustments: Boolean(options?.canEditScoreAdjustments),
     selfAssessmentEnabled: summary.selfAssessmentEnabled,
+    assessmentEligibility: summary.assessmentEligibility,
   };
 }
 
@@ -1132,6 +1163,7 @@ export async function bulkUpdateEmployeeListingFields(
     calibrationFactor?: number | null;
     manager1UserId?: number | null;
     manager2UserId?: number | null;
+    assessmentEligibility?: boolean;
   },
 ): Promise<{
   updatedCount: number;
@@ -1151,6 +1183,7 @@ export async function bulkUpdateEmployeeListingFields(
   calibrationFactor?: number | null;
   manager1UserId?: number | null;
   manager2UserId?: number | null;
+  assessmentEligibility?: boolean;
 }> {
   const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
 
@@ -1173,6 +1206,7 @@ export async function bulkUpdateEmployeeListingFields(
   const updatesCalFr = "calibrationFactor" in fields;
   const updatesManager1 = "manager1UserId" in fields;
   const updatesManager2 = "manager2UserId" in fields;
+  const updatesAssessmentEligibility = "assessmentEligibility" in fields;
 
   const hasAnyUpdate =
     updatesRole ||
@@ -1189,7 +1223,8 @@ export async function bulkUpdateEmployeeListingFields(
     updatesQecAdj ||
     updatesCalFr ||
     updatesManager1 ||
-    updatesManager2;
+    updatesManager2 ||
+    updatesAssessmentEligibility;
 
   if (!hasAnyUpdate) {
     throw new FormSubmissionError(
@@ -1236,6 +1271,10 @@ export async function bulkUpdateEmployeeListingFields(
   if (updatesManager2) {
     userValues.push(fields.manager2UserId ?? null);
     userSetClauses.push(`manager_2_id = $${++paramIdx}`);
+  }
+  if (updatesAssessmentEligibility) {
+    userValues.push(fields.assessmentEligibility);
+    userSetClauses.push(`assessment_eligibility = $${++paramIdx}`);
   }
 
   let updatedUserIds: string[] = [];
@@ -1457,5 +1496,6 @@ export async function bulkUpdateEmployeeListingFields(
     ...(updatesCalFr ? { calibrationFactor: fields.calibrationFactor ?? null } : {}),
     ...(updatesManager1 ? { manager1UserId: fields.manager1UserId ?? null } : {}),
     ...(updatesManager2 ? { manager2UserId: fields.manager2UserId ?? null } : {}),
+    ...(updatesAssessmentEligibility ? { assessmentEligibility: fields.assessmentEligibility } : {}),
   };
 }

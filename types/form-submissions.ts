@@ -83,6 +83,8 @@ export interface FormSubmissionListItem {
   eligibilityReferenceEndDate?: string | null;
   submittedAt: string | null;
   selfAssessmentEnabled: boolean;
+  /** Manual toggle: when false, all score editing is disabled for this employee. */
+  assessmentEligibility: boolean;
 }
 
 export interface FormSubmissionDetail {
@@ -123,4 +125,5 @@ export interface FormSubmissionDetail {
   initialScoreNumeric: number | null;
   canEditScoreAdjustments: boolean;
   selfAssessmentEnabled: boolean;
+  assessmentEligibility: boolean;
 }

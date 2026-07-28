@@ -186,6 +186,7 @@ export async function bulkUpdateEmployeeListingFields(
     calibrationFactor?: number | null;
     manager1UserId?: number | null;
     manager2UserId?: number | null;
+    assessmentEligibility?: boolean;
   },
 ): Promise<{
   updatedCount: number;
@@ -221,4 +222,25 @@ export async function fetchEmployeeAssignedForms(
   return parseResponse<{ employeeId: string; forms: EmployeeAssignedForm[] }>(
     response,
   );
+}
+
+export async function updateAssessmentEligibility(
+  employeeIds: string[],
+  assessmentEligibility: boolean,
+): Promise<{
+  updatedCount: number;
+  employeeIds: string[];
+  assessmentEligibility: boolean;
+}> {
+  const response = await fetch("/api/staff/eligibility", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employeeIds, assessmentEligibility }),
+  });
+
+  return parseResponse<{
+    updatedCount: number;
+    employeeIds: string[];
+    assessmentEligibility: boolean;
+  }>(response);
 }

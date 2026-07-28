@@ -42,8 +42,14 @@ import {
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { ScoreAdjustmentField } from "@/lib/queries/form-submissions-client";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
-import { updateSubmissionScoreAdjustments, approveHrCalibration } from "@/lib/queries/form-submissions-client";
-import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
+import { updateSubmissionScoreAdjustments, approveHrCalibration, updateAssessmentEligibility } from "@/lib/queries/form-submissions-client";
+import {
+  invalidateStaffListingQueries,
+  cancelStaffListingQueries,
+  getStaffListingSnapshots,
+  restoreStaffListingSnapshots,
+  patchStaffListingCaches,
+} from "@/app/helpers/dashboard-listing-cache";
 import { buildQuartileBandsFromMatrix, sortPerformanceMatrix } from "@/lib/performance-matrix";
 import { resolvePerformanceQuartile } from "@/lib/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
@@ -153,6 +159,8 @@ interface RenderCellContext {
   canApprove: boolean;
   quartileBands: PerformanceQuartileBand[] | null;
   sortedMatrix: PerformanceLevelWithQuartiles[] | null;
+  onToggleAssessmentEligibility?: (employeeId: string, current: boolean) => void;
+  isTogglingEligibility?: boolean;
 }
 
 function renderCell(
@@ -238,6 +246,38 @@ function renderCell(
     );
   }
 
+  if (columnId === "assessmentEligible") {
+    const eligible = submission.assessmentEligibility;
+    if (ctx?.isHrRole && ctx.onToggleAssessmentEligibility) {
+      return (
+        <button
+          type="button"
+          onClick={() => ctx.onToggleAssessmentEligibility!(submission.employeeId, eligible)}
+          disabled={ctx.isTogglingEligibility}
+          title={eligible ? "Click to mark as not eligible" : "Click to mark as eligible"}
+          className={cn(
+            "inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white transition-colors disabled:opacity-60",
+            eligible
+              ? "bg-emerald-600 hover:bg-emerald-700"
+              : "bg-slate-400 hover:bg-slate-500",
+          )}
+        >
+          {eligible ? "Yes" : "No"}
+        </button>
+      );
+    }
+    return (
+      <span
+        className={cn(
+          "inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white",
+          eligible ? "bg-emerald-600" : "bg-slate-400",
+        )}
+      >
+        {eligible ? "Yes" : "No"}
+      </span>
+    );
+  }
+
   if (columnId === "formAssignment") {
     return (
       <FormAssignmentCell
@@ -265,7 +305,7 @@ function renderCell(
         submissionId={submission.id}
         field="creditHrsErpScoreAdj"
         value={submission.creditHrsErpScoreAdj}
-        disabled={submission.id <= 0}
+        disabled={submission.id <= 0 || !submission.assessmentEligibility}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.creditHrsErpScoreAdj : undefined}
       />
@@ -278,7 +318,7 @@ function renderCell(
         submissionId={submission.id}
         field="pubOricScoreAdj"
         value={submission.pubOricScoreAdj}
-        disabled={submission.id <= 0}
+        disabled={submission.id <= 0 || !submission.assessmentEligibility}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.pubOricScoreAdj : undefined}
       />
@@ -291,7 +331,7 @@ function renderCell(
         submissionId={submission.id}
         field="qecScoreAdj"
         value={submission.qecScoreAdj}
-        disabled={submission.id <= 0}
+        disabled={submission.id <= 0 || !submission.assessmentEligibility}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.qecScoreAdj : undefined}
       />
@@ -305,7 +345,7 @@ function renderCell(
           submissionId={submission.id}
           field="calibrationFactor"
           value={submission.calibrationFactor}
-          disabled={submission.id <= 0}
+          disabled={submission.id <= 0 || !submission.assessmentEligibility}
           mode="decimal"
           onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
           pendingValue={ctx?.isHrRole ? ctx.pendingChanges.calibrationFactor : undefined}
@@ -432,6 +472,7 @@ function renderCell(
         field="initialScoreNumeric"
         value={submission.scoreO}
         mode="score"
+        disabled={!submission.assessmentEligibility}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.initialScoreNumeric : undefined}
       />
@@ -590,6 +631,36 @@ export function DashboardSubmissionsTable({
         delete next[submissionId];
         return next;
       });
+      invalidateStaffListingQueries(queryClient);
+    },
+  });
+
+  const eligibilityToggleMutation = useMutation({
+    mutationFn: async ({
+      employeeId,
+      current,
+    }: {
+      employeeId: string;
+      current: boolean;
+    }) => {
+      return updateAssessmentEligibility([employeeId], !current);
+    },
+    onMutate: ({ employeeId, current }) => {
+      void cancelStaffListingQueries(queryClient);
+      const snapshots = getStaffListingSnapshots(queryClient);
+      patchStaffListingCaches(queryClient, (row) =>
+        row.employeeId === employeeId
+          ? { ...row, assessmentEligibility: !current }
+          : row,
+      );
+      return { snapshots };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.snapshots) {
+        restoreStaffListingSnapshots(queryClient, context.snapshots);
+      }
+    },
+    onSuccess: () => {
       invalidateStaffListingQueries(queryClient);
     },
   });
@@ -869,6 +940,7 @@ export function DashboardSubmissionsTable({
                       className={cn(
                         "group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
                         isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
+                        !submission.assessmentEligibility && "opacity-50",
                       )}
                     >
                       <td className={stickySelectCellClassName(isSelected)}>
@@ -900,6 +972,9 @@ export function DashboardSubmissionsTable({
                             submission.status === "PENDING_BOARD_APPROVAL",
                           quartileBands,
                           sortedMatrix,
+                          onToggleAssessmentEligibility: (employeeId: string, current: boolean) =>
+                            eligibilityToggleMutation.mutate({ employeeId, current }),
+                          isTogglingEligibility: eligibilityToggleMutation.isPending,
                         };
                         return (
                           <td

@@ -18,8 +18,11 @@ interface EntityListFilterBarProps {
   onEntityIdsChange: (value: string[] | null) => void;
   selectedChildEntityIds: string[] | null;
   onChildEntityIdsChange: (value: string[] | null) => void;
+  selectedParentEntityIds: string[] | null;
+  onParentEntityIdsChange: (value: string[] | null) => void;
   entityOptions: MultiSelectOption[];
   childEntityOptions: MultiSelectOption[];
+  parentEntityOptions: MultiSelectOption[];
   categories: EntityCategoryRecord[];
   categoriesLoading?: boolean;
   filteredCount: number;
@@ -43,8 +46,11 @@ export function EntityListFilterBar({
   onEntityIdsChange,
   selectedChildEntityIds,
   onChildEntityIdsChange,
+  selectedParentEntityIds,
+  onParentEntityIdsChange,
   entityOptions,
   childEntityOptions,
+  parentEntityOptions,
   categories,
   categoriesLoading = false,
   filteredCount,
@@ -74,7 +80,7 @@ export function EntityListFilterBar({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <div className="space-y-1.5">
           <label
             htmlFor="entity-list-search"
@@ -130,6 +136,21 @@ export function EntityListFilterBar({
             <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-foreground/50" />
           </div>
         </div>
+
+        <MultiSelectFilterDropdown
+          label="Parent"
+          icon={Building2}
+          options={parentEntityOptions}
+          selectedValues={selectedParentEntityIds}
+          onChange={onParentEntityIdsChange}
+          disabled={parentEntityOptions.length === 0}
+          placeholder={
+            parentEntityOptions.length === 0
+              ? "No parent entities"
+              : "All"
+          }
+          searchable={parentEntityOptions.length > 8}
+        />
 
         <MultiSelectFilterDropdown
           label="Entity"

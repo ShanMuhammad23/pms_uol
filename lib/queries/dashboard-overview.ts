@@ -33,6 +33,7 @@ interface OverviewRow {
   eligibility_status: EligibilityStatus | null;
   applicable_duration: string | null;
   applicable_duration_factor: string | null;
+  assessment_eligibility: boolean | null;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -75,6 +76,13 @@ async function ensureEligibilityColumns(): Promise<void> {
     `ALTER TABLE appraisals
      ADD COLUMN IF NOT EXISTS eligibility_status VARCHAR(30),
      ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(3, 1)`,
+  );
+}
+
+async function ensureAssessmentEligibilityColumn(): Promise<void> {
+  await db.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS assessment_eligibility BOOLEAN NOT NULL DEFAULT TRUE`,
   );
 }
 
@@ -200,6 +208,7 @@ function mapOverviewRow(
     qualificationCountry: null,
     submittedAt: null,
     selfAssessmentEnabled: true,
+    assessmentEligibility: row.assessment_eligibility ?? true,
   };
 }
 
@@ -217,6 +226,7 @@ export async function listDashboardOverview(
     ensureManagerLevelColumn(),
     ensureEligibilityColumns(),
     ensureManager2Column(),
+    ensureAssessmentEligibilityColumn(),
   ]);
 
   const designationSelect = excelReady
@@ -236,12 +246,14 @@ export async function listDashboardOverview(
        ap.is_eligible,
        ap.eligibility_status,
        ap.applicable_duration,
-       ap.applicable_duration_factor::text`
+       ap.applicable_duration_factor::text,
+       COALESCE(u.assessment_eligibility, true) AS assessment_eligibility`
     : `NULL::text AS uol_experience_years,
        NULL::boolean AS is_eligible,
        NULL::text AS eligibility_status,
        NULL::text AS applicable_duration,
-       NULL::text AS applicable_duration_factor`;
+       NULL::text AS applicable_duration_factor,
+       COALESCE(u.assessment_eligibility, true) AS assessment_eligibility`;
 
   const scoped = appendStaffVisibilityClause(options);
 

@@ -141,6 +141,13 @@ export async function PATCH(request: Request, context: RouteContext) {
         );
       }
 
+      if (!summary.assessmentEligibility) {
+        return NextResponse.json(
+          { error: "Score editing is disabled: employee is not eligible for assessment." },
+          { status: 403 },
+        );
+      }
+
       const rawValue = body[scoreAdjField];
       const numValue =
         rawValue === null || rawValue === undefined || rawValue === ""

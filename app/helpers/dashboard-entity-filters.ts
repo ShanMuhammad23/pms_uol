@@ -225,6 +225,8 @@ export type EntityListFilterState = {
   entityIds: MultiFilterSelection<number>;
   /** Direct children of selected entities. `null` = all, `[]` = none. */
   childEntityIds: MultiFilterSelection<number>;
+  /** Filter by parent entity. `null` = all, `[]` = none. */
+  parentEntityIds: MultiFilterSelection<number>;
 };
 
 /** Entities that belong to a category code (for cascading filter dropdowns). */
@@ -290,7 +292,7 @@ export function filterEntityRecords(
   filters: EntityListFilterState,
 ): EntityRecord[] {
   const query = filters.searchQuery.trim().toLowerCase();
-  const { categoryCode, entityIds, childEntityIds } = filters;
+  const { categoryCode, entityIds, childEntityIds, parentEntityIds } = filters;
 
   return entities.filter((entity) => {
     if (childEntityIds !== null) {
@@ -309,6 +311,14 @@ export function filterEntityRecords(
         return false;
       }
     } else if (categoryCode !== "ALL" && entity.categoryCode !== categoryCode) {
+      return false;
+    }
+
+    if (
+      parentEntityIds !== null &&
+      (entity.parentEntityId == null ||
+        !parentEntityIds.includes(entity.parentEntityId))
+    ) {
       return false;
     }
 
