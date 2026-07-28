@@ -28,7 +28,8 @@ function normalizeOrder(
   const seen = new Set<DashboardTableColumnId>();
   const next: DashboardTableColumnId[] = [];
 
-  for (const id of [...defaults, ...order]) {
+  // Prefer the user order first; append any new default columns at the end.
+  for (const id of [...order, ...defaults]) {
     if (!allowed.has(id) || seen.has(id)) continue;
     seen.add(id);
     next.push(id);

@@ -84,7 +84,7 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
       </div>
       {hasData ? (
         <div className="mt-2 flex items-center gap-2 sm:mt-3 sm:gap-3">
-          <div className="h-16 w-16 shrink-0 sm:h-[88px] sm:w-[88px]">
+          <div className="h-16 w-16 shrink-0  sm:hidden xl:block">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

@@ -34,44 +34,46 @@ export function ManagerReviewStatCard({
           : "hover:shadow-md",
       )}
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1.5 sm:gap-x-2 sm:gap-y-2">
-        <p className="min-w-0 text-[10px] font-semibold uppercase leading-tight tracking-wider text-white sm:text-xs lg:text-sm">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-1 gap-y-1.5 sm:gap-y-2 xl:gap-x-1.5 2xl:gap-x-2">
+        <p className="min-w-0 truncate text-[10px] font-semibold uppercase leading-tight tracking-wide text-white sm:text-xs 2xl:tracking-wider 2xl:text-sm">
           Review
         </p>
-        <p className="truncate text-center text-[9px] font-semibold uppercase tracking-wider text-white/90 sm:text-[10px]">
-          Manager 1
+        <p className="min-w-0 truncate text-center text-[9px] font-semibold uppercase leading-tight tracking-wide text-white/90 sm:text-[10px]">
+          <span className="2xl:hidden">Mgr 1</span>
+          <span className="hidden 2xl:inline">Manager 1</span>
         </p>
-        <p className="truncate text-center text-[9px] font-semibold uppercase tracking-wider text-white/90 sm:text-[10px]">
-          Manager 2
+        <p className="min-w-0 truncate text-center text-[9px] font-semibold uppercase leading-tight tracking-wide text-white/90 sm:text-[10px]">
+          <span className="2xl:hidden">Mgr 2</span>
+          <span className="hidden 2xl:inline">Manager 2</span>
         </p>
 
         <span aria-hidden className="block" />
         <p
-          className="text-center text-[10px] font-semibold tabular-nums text-amber-200 sm:text-xs"
+          className="min-w-0 text-center text-[10px] font-semibold tabular-nums text-amber-200 sm:text-xs"
           title="Completion percentage"
         >
           {manager1.percentageLabel}
         </p>
         <p
-          className="text-center text-[10px] font-semibold tabular-nums text-amber-200 sm:text-xs"
+          className="min-w-0 text-center text-[10px] font-semibold tabular-nums text-amber-200 sm:text-xs"
           title="Completion percentage"
         >
           {manager2.percentageLabel}
         </p>
 
-        <p className="truncate text-[10px] text-white/90 sm:text-xs">Submitted</p>
-        <p className="text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg lg:text-xl">
+        <p className="min-w-0 truncate text-[10px] text-white/90 sm:text-xs">Submitted</p>
+        <p className="min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg 2xl:text-xl">
           {manager1.awaiting}
         </p>
-        <p className="text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg lg:text-xl">
+        <p className="min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg 2xl:text-xl">
           {manager2.awaiting}
         </p>
 
-        <p className="truncate text-[10px] text-white/90 sm:text-xs">Reviewed</p>
-        <p className="text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg lg:text-xl">
+        <p className="min-w-0 truncate text-[10px] text-white/90 sm:text-xs">Reviewed</p>
+        <p className="min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg 2xl:text-xl">
           {manager1.completed}
         </p>
-        <p className="text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg lg:text-xl">
+        <p className="min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg 2xl:text-xl">
           {manager2.completed}
         </p>
       </div>

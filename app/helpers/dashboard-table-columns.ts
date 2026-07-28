@@ -641,7 +641,8 @@ export function resolveOrderedColumns(
   const seen = new Set<DashboardTableColumnId>();
   const orderedToggleable: DashboardTableColumnDef[] = [];
 
-  for (const id of [...defaults, ...columnOrder]) {
+  // Prefer saved columnOrder first; append any new default columns at the end.
+  for (const id of [...columnOrder, ...defaults]) {
     if (seen.has(id)) continue;
     if (allowed && !allowed.has(id)) continue;
     seen.add(id);
