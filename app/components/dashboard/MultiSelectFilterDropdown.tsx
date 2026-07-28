@@ -328,14 +328,14 @@ export function MultiSelectFilterDropdown({
     <div
       ref={rootRef}
       className={cn(
-        "relative min-w-[180px] flex-1",
+        "relative min-w-0 w-full",
         quiet ? "space-y-1" : "space-y-1.5",
         className,
       )}
     >
       <label
         className={cn(
-          "text-slate-500 dark:text-slate-400",
+          "block truncate text-slate-500 dark:text-slate-400",
           quiet
             ? "text-[11px] font-medium"
             : "text-xs font-semibold uppercase tracking-wider",
