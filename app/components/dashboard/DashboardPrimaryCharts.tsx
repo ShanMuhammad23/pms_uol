@@ -34,7 +34,7 @@ export function DashboardPrimaryCharts({
   performanceMatrixLoading,
   role,
 }: DashboardPrimaryChartsProps) {
-  const isHead = role === "HEAD";
+  const isHead = role === "MANAGER";
   const [chartsKey, setChartsKey] = useState(0);
 
   useEffect(() => {

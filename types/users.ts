@@ -1,13 +1,13 @@
 export type UserRole =
   | "EMPLOYEE"
-  | "HEAD"
+  | "MANAGER"
   | "HR"
   | "BOARD"
   | "SUPER_ADMIN";
 
 export const USER_ROLES: UserRole[] = [
   "EMPLOYEE",
-  "HEAD",
+  "MANAGER",
   "HR",
   "BOARD",
   "SUPER_ADMIN",
@@ -15,7 +15,7 @@ export const USER_ROLES: UserRole[] = [
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   EMPLOYEE: "Employee",
-  HEAD: "Head",
+  MANAGER: "Manager",
   HR: "HR",
   BOARD: "Board",
   SUPER_ADMIN: "Super Admin",

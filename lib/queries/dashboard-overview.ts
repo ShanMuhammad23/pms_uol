@@ -144,6 +144,7 @@ function mapOverviewRow(
     templateId: null,
     templateTitle: null,
     formAssigned: false,
+    directScoreEntry: false,
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: null,
     parentEntityName: row.parent_entity_name,

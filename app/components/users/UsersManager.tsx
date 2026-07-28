@@ -21,6 +21,11 @@ import {
   updateUser,
 } from "@/lib/queries/users-client";
 import {
+  assignFormTemplateToEmployees,
+  unassignFormTemplateFromEmployees,
+} from "@/lib/queries/forms-client";
+import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
+import {
   USER_ROLE_LABELS,
   USER_ROLES,
   type UserRecord,
@@ -143,13 +148,37 @@ export default function UsersManager() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       id,
       input,
+      templateIds,
+      employeeId,
     }: {
       id: number;
       input: Parameters<typeof updateUser>[1];
-    }) => updateUser(id, input),
+      templateIds?: number[];
+      employeeId: string;
+    }) => {
+      const updatedUser = await updateUser(id, input);
+
+      if (templateIds !== undefined) {
+        const assigned = await fetchEmployeeAssignedForms(employeeId);
+        const currentIds = new Set(assigned.forms.map((f) => f.templateId));
+        const targetIds = new Set(templateIds);
+
+        const toAssign = templateIds.filter((tid) => !currentIds.has(tid));
+        const toUnassign = [...currentIds].filter((tid) => !targetIds.has(tid));
+
+        for (const tid of toAssign) {
+          await assignFormTemplateToEmployees(tid, [employeeId]);
+        }
+        for (const tid of toUnassign) {
+          await unassignFormTemplateFromEmployees(tid, [employeeId]);
+        }
+      }
+
+      return updatedUser;
+    },
     onSuccess: (user) => {
       setFormMessage({
         tone: "success",
@@ -158,6 +187,12 @@ export default function UsersManager() {
       setEditingUser(null);
       invalidateList();
       invalidateStaffListingQueries(queryClient);
+      void queryClient.invalidateQueries({
+        queryKey: ["employee-assigned-forms"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["form-templates"],
+      });
     },
     onError: (mutationError: Error) => {
       setFormMessage({ tone: "error", text: mutationError.message });
@@ -593,10 +628,15 @@ export default function UsersManager() {
                 : null
             }
             onClose={handleCancelEdit}
-            onSubmit={(input) => {
+            onSubmit={(input, templateIds) => {
               if (!editingUser) return;
               setFormMessage(null);
-              updateMutation.mutate({ id: editingUser.id, input });
+              updateMutation.mutate({
+                id: editingUser.id,
+                input,
+                templateIds,
+                employeeId: editingUser.employeeId,
+              });
             }}
           />
         </div>

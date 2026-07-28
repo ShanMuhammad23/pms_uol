@@ -7,7 +7,7 @@
 -- 1. EXTENSIONS & ENUMS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TYPE user_role AS ENUM ('EMPLOYEE', 'HEAD', 'HR', 'BOARD', 'SUPER_ADMIN');
+CREATE TYPE user_role AS ENUM ('EMPLOYEE', 'MANAGER', 'HR', 'BOARD', 'SUPER_ADMIN');
 CREATE TYPE employee_category AS ENUM ('ACADEMIC', 'SUPPORT_STAFF', 'BLUE_COLLAR', 'ADMINISTRATION');
 
 CREATE TYPE sub_category AS ENUM (
@@ -145,6 +145,24 @@ CREATE INDEX idx_employee_form_assignments_employee
 
 CREATE INDEX idx_employee_form_assignments_template
     ON employee_form_assignments(template_id);
+
+-- Direct Score Entry assignments — employees marked for direct score entry
+-- without any form assignment, self-assessment, or manager review workflow.
+-- Authorised users (HR, Board, Super Admin) can enter scores directly in the dashboard.
+CREATE TABLE direct_score_entry_assignments (
+    id BIGSERIAL PRIMARY KEY,
+    employee_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    cycle_id INT NOT NULL REFERENCES appraisal_cycles(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_direct_score_entry_assignment UNIQUE (employee_id, cycle_id)
+);
+
+CREATE INDEX idx_direct_score_entry_assignments_employee
+    ON direct_score_entry_assignments(employee_id);
+
+CREATE INDEX idx_direct_score_entry_assignments_cycle
+    ON direct_score_entry_assignments(cycle_id);
 
 -- =========================================================================
 -- CORE PROCESS ENGINE & RUNTIME DATA WORKSPACE

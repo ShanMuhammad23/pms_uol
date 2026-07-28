@@ -176,3 +176,42 @@ export async function fetchIncrementMatrices(
 
   return parseResponse<IncrementMatrixInput[]>(response);
 }
+
+// =========================================================================
+// Direct Score Entry — client-side wrappers (standalone, no template)
+// =========================================================================
+
+export async function assignDirectScoreEntry(
+  employeeIds: string[],
+): Promise<{ assignedCount: number }> {
+  const response = await fetch(`/api/admin/direct-score-entry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ employeeIds }),
+  });
+
+  return parseResponse<{ assignedCount: number }>(response);
+}
+
+export async function unassignDirectScoreEntry(
+  employeeIds: string[],
+): Promise<{ unassignedCount: number }> {
+  const response = await fetch(`/api/admin/direct-score-entry`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ employeeIds }),
+  });
+
+  return parseResponse<{ unassignedCount: number }>(response);
+}
+
+export async function fetchDirectScoreEntryAssignments(): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {
+  const response = await fetch(`/api/admin/direct-score-entry`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  return parseResponse<Array<{ employeeId: string; employeeName: string; email: string | null }>>(response);
+}

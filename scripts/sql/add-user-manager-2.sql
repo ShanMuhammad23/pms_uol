@@ -71,12 +71,12 @@ resolved AS (
     FROM users hu
     WHERE hu.entity_id = ep.parent_entity_id
       AND hu.is_active = TRUE
-      AND hu.system_role IN ('HEAD', 'SUPER_ADMIN', 'HR')
+      AND hu.system_role IN ('MANAGER', 'SUPER_ADMIN', 'HR')
       AND hu.id <> ep.manager_1_id
       AND hu.id <> ep.employee_id
     ORDER BY
       CASE hu.system_role
-        WHEN 'HEAD' THEN 0
+        WHEN 'MANAGER' THEN 0
         WHEN 'SUPER_ADMIN' THEN 1
         ELSE 2
       END,

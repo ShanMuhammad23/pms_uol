@@ -176,11 +176,11 @@ function getAdjustedScorePercent(row: FormSubmissionListItem): number | null {
 function getAdjustedRating(row: FormSubmissionListItem): string | null {
   const pct = getAdjustedScorePercent(row);
   if (pct === null) return null;
-  if (pct >= 85) return "OUT";
-  if (pct >= 70) return "EXC";
-  if (pct >= 55) return "STR";
-  if (pct >= 40) return "IMP";
-  return "UNS";
+  if (pct >= 85) return "OS";
+  if (pct >= 70) return "EX";
+  if (pct >= 55) return "ST";
+  if (pct >= 40) return "IN";
+  return "UN";
 }
 
 function getNormalizedScore(row: FormSubmissionListItem): number | null {
@@ -199,11 +199,11 @@ function getNormalizedScorePercent(row: FormSubmissionListItem): number | null {
 function getNormalizedRating(row: FormSubmissionListItem): string | null {
   const pct = getNormalizedScorePercent(row);
   if (pct === null) return null;
-  if (pct >= 85) return "OUT";
-  if (pct >= 70) return "EXC";
-  if (pct >= 55) return "STR";
-  if (pct >= 40) return "IMP";
-  return "UNS";
+  if (pct >= 85) return "OS";
+  if (pct >= 70) return "EX";
+  if (pct >= 55) return "ST";
+  if (pct >= 40) return "IN";
+  return "UN";
 }
 
 function getNormalizedQuartile(row: FormSubmissionListItem): string | null {
@@ -211,11 +211,11 @@ function getNormalizedQuartile(row: FormSubmissionListItem): string | null {
   if (pct === null) return null;
 
   const levelDefs = [
-    { name: "UNS", scoreMin: 0, scoreMax: 39 },
-    { name: "IMP", scoreMin: 40, scoreMax: 54 },
-    { name: "STR", scoreMin: 55, scoreMax: 69 },
-    { name: "EXC", scoreMin: 70, scoreMax: 84 },
-    { name: "OUT", scoreMin: 85, scoreMax: 100 },
+    { name: "UN", scoreMin: 0, scoreMax: 39 },
+    { name: "IN", scoreMin: 40, scoreMax: 54 },
+    { name: "ST", scoreMin: 55, scoreMax: 69 },
+    { name: "EX", scoreMin: 70, scoreMax: 84 },
+    { name: "OS", scoreMin: 85, scoreMax: 100 },
   ];
 
   const level = levelDefs.find(
@@ -261,11 +261,13 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     label: "Form",
     width: 80,
     getValue: (row) =>
-      isFormAssigned(row)
-        ? row.selfAssessmentEnabled
-          ? "✔"
-          : "Direct"
-        : "✖",
+      row.directScoreEntry
+        ? "DS"
+        : isFormAssigned(row)
+          ? row.selfAssessmentEnabled
+            ? "✔"
+            : "MA"
+          : "✖",
   },
   designation: {
     id: "designation",
@@ -343,7 +345,10 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     id: "status",
     label: "Status",
     width: 160,
-    getValue: (row) => APPRAISAL_STATE_CONFIG[row.status]?.label ?? row.status,
+    getValue: (row) =>
+      row.directScoreEntry
+        ? "Direct Score Entry"
+        : APPRAISAL_STATE_CONFIG[row.status]?.label ?? row.status,
   },
   eligible: {
     id: "eligible",
@@ -394,14 +399,14 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   adjustedScore: {
     id: "adjustedScore",
-    label: "Adjusted Score",
+    label: "Adj Score (100)",
     align: "center",
     width: 110,
     wrap: true,
     getValue: (row) => {
       const pct = getAdjustedScorePercent(row);
       if (pct === null) return "—";
-      return `${formatNumber(pct)}\u00A0\u002F₁₀₀`;
+      return `${formatNumber(pct)}`;
     },
   },
   ratingO: {

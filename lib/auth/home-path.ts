@@ -8,7 +8,7 @@ export function isEmployeeRole(role: string | null | undefined): boolean {
 }
 
 export function isHeadRole(role: string | null | undefined): boolean {
-  return role === "HEAD";
+  return role === "MANAGER";
 }
 
 export function getPostLoginPath(role: string | null | undefined): string {

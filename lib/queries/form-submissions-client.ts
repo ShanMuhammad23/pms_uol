@@ -38,7 +38,8 @@ export type ScoreAdjustmentField =
   | "pubOricScoreAdj"
   | "qecScoreAdj"
   | "calibrationFactor"
-  | "calibratedScoreNumeric";
+  | "calibratedScoreNumeric"
+  | "initialScoreNumeric";
 
 export async function updateSubmissionScoreAdjustments(
   id: number,
@@ -51,6 +52,7 @@ export async function updateSubmissionScoreAdjustments(
   qecScoreAdj: number | null;
   calibrationFactor: number | null;
   calibratedScoreNumeric: number | null;
+  initialScoreNumeric: number | null;
 }> {
   const response = await fetch(`/api/submissions/${id}`, {
     method: "PATCH",
@@ -65,6 +67,7 @@ export async function updateSubmissionScoreAdjustments(
     qecScoreAdj: number | null;
     calibrationFactor: number | null;
     calibratedScoreNumeric: number | null;
+    initialScoreNumeric: number | null;
   }>(response);
 }
 
@@ -169,11 +172,25 @@ export async function bulkUpdateEmployeeListingFields(
   employeeIds: string[],
   fields: {
     roleCategory?: string | null;
+    designation?: string | null;
+    entityId?: number | null;
+    templateId?: number | null;
+    qualification?: string | null;
+    qualificationYear?: number | null;
+    qualificationSubject?: string | null;
+    qualificationInstitute?: string | null;
+    qualificationCountry?: string | null;
+    creditHrsErpScoreAdj?: number | null;
+    pubOricScoreAdj?: number | null;
+    qecScoreAdj?: number | null;
+    calibrationFactor?: number | null;
+    manager1UserId?: number | null;
+    manager2UserId?: number | null;
   },
 ): Promise<{
   updatedCount: number;
   employeeIds: string[];
-  roleCategory?: string | null;
+  [key: string]: unknown;
 }> {
   const response = await fetch("/api/submissions/bulk-edit", {
     method: "PATCH",
@@ -184,7 +201,7 @@ export async function bulkUpdateEmployeeListingFields(
   return parseResponse<{
     updatedCount: number;
     employeeIds: string[];
-    roleCategory?: string | null;
+    [key: string]: unknown;
   }>(response);
 }
 

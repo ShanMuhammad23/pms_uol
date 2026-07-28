@@ -129,6 +129,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       "qecScoreAdj",
       "calibrationFactor",
       "calibratedScoreNumeric",
+      "initialScoreNumeric",
     ];
     const scoreAdjField = SCORE_ADJ_FIELDS.find((f) => f in body);
 

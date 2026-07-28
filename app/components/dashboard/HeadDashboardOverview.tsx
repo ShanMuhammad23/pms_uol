@@ -124,8 +124,8 @@ export function HeadDashboardOverview({
             transition={panelTransition}
             className="grid grid-cols-1 gap-4 overflow-hidden sm:grid-cols-2 lg:items-stretch"
           >
-            <EligibilityStatCard data={eligibilityData} delay={0} />
             <FormStatusStatCard delay={0.05} />
+            <EligibilityStatCard data={eligibilityData} delay={0} />
             <StatCard
               title="Staff Assessment"
               awaiting={selfAssessmentStats.awaiting}
@@ -225,7 +225,7 @@ export function HeadDashboardOverview({
                       <Area
                         type="monotone"
                         dataKey="quota"
-                        name="Institutional Quota"
+                        name="Quota"
                         stroke="#64748b"
                         strokeWidth={2}
                         fill={`url(#headQuotaGrad-${chartsKey})`}

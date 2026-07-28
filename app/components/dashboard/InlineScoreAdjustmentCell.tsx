@@ -15,7 +15,7 @@ interface InlineScoreAdjustmentCellProps {
   field: ScoreAdjustmentField;
   value: number | null;
   disabled?: boolean;
-  mode?: "integer" | "decimal";
+  mode?: "integer" | "decimal" | "score";
   /** When provided, the cell buffers changes locally and calls this callback instead of auto-saving. */
   onBufferedChange?: (field: ScoreAdjustmentField, value: number | null) => void;
   /** Pending buffered value (from parent). When set, cell shows this instead of the saved value. */
@@ -28,6 +28,7 @@ const FIELD_LABELS: Record<ScoreAdjustmentField, string> = {
   qecScoreAdj: "QEC Adj",
   calibrationFactor: "Cal. Fr",
   calibratedScoreNumeric: "HR Calibration",
+  initialScoreNumeric: "Score (O)",
 };
 
 export function InlineScoreAdjustmentCell({
@@ -39,7 +40,8 @@ export function InlineScoreAdjustmentCell({
   onBufferedChange,
   pendingValue,
 }: InlineScoreAdjustmentCellProps) {
-  const isDecimal = mode === "decimal";
+  const isDecimal = mode === "decimal" || mode === "score";
+  const hasRangeConstraint = mode === "decimal";
   const isBuffered = onBufferedChange != null;
   const displayValue = isBuffered ? (pendingValue ?? value) : value;
   const queryClient = useQueryClient();
@@ -139,7 +141,7 @@ export function InlineScoreAdjustmentCell({
       return;
     }
 
-    if (isDecimal && (parsed < 0.1 || parsed > 1.0)) {
+    if (hasRangeConstraint && (parsed < 0.1 || parsed > 1.0)) {
       setError("Value must be between 0.1 and 1.0.");
       return;
     }
@@ -187,8 +189,8 @@ export function InlineScoreAdjustmentCell({
           ref={inputRef}
           type="number"
           step={isDecimal ? 0.01 : 1}
-          min={isDecimal ? 0.1 : undefined}
-          max={isDecimal ? 1.0 : undefined}
+          min={hasRangeConstraint ? 0.1 : undefined}
+          max={hasRangeConstraint ? 1.0 : undefined}
           value={draft}
           disabled={saveMutation.isPending}
           onChange={(event) => setDraft(event.target.value)}
@@ -212,7 +214,7 @@ export function InlineScoreAdjustmentCell({
             saveMutation.isPending && "opacity-70",
           )}
           aria-label={`Edit ${fieldLabel}`}
-          placeholder={isDecimal ? "0.1–1.0" : "+/-"}
+          placeholder={hasRangeConstraint ? "0.1–1.0" : isDecimal ? "0.00" : "+/-"}
         />
         {error ? (
           <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">{error}</p>

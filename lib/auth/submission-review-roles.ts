@@ -9,7 +9,7 @@ export const SUBMISSION_REVIEW_ROLES: UserRole[] = [
 /** Roles that can load dashboard submissions, stats, and filters. */
 export const DASHBOARD_SUBMISSION_ROLES: UserRole[] = [
   ...SUBMISSION_REVIEW_ROLES,
-  "HEAD",
+  "MANAGER",
 ];
 
 export function canReviewSubmissions(role: string | undefined): boolean {

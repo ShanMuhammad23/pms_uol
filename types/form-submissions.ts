@@ -20,6 +20,8 @@ export interface FormSubmissionListItem {
   templateTitle: string | null;
   /** True when this employee has an individual row in employee_form_assignments for the cycle. */
   formAssigned: boolean;
+  /** True when this employee is marked for direct score entry (no form assignment). */
+  directScoreEntry: boolean;
   entityId: number | null;
   entityName: string | null;
   parentEntityName: string | null;
@@ -118,6 +120,7 @@ export interface FormSubmissionDetail {
   qecScoreAdj: number | null;
   calibrationFactor: number | null;
   calibratedScoreNumeric: number | null;
+  initialScoreNumeric: number | null;
   canEditScoreAdjustments: boolean;
   selfAssessmentEnabled: boolean;
 }

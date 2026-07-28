@@ -3,11 +3,13 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Pencil, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   getUserOrgLevel1,
   getUserOrgLevel2,
 } from "@/app/helpers/users-table-columns";
 import type { EntityRecord } from "@/types/entities";
+import type { FormTemplateListItem } from "@/types/forms";
 import {
   USER_ROLE_LABELS,
   USER_ROLES,
@@ -15,6 +17,8 @@ import {
   type UserRecord,
   type UserRole,
 } from "@/types/users";
+import { fetchFormTemplatesForDashboard } from "@/lib/queries/forms-client";
+import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
 import { cn } from "@/lib/utils";
 
 interface EditUserFormState {
@@ -69,7 +73,7 @@ interface EditUserModalProps {
   isSubmitting: boolean;
   errorMessage: string | null;
   onClose: () => void;
-  onSubmit: (input: UpdateUserInput) => void;
+  onSubmit: (input: UpdateUserInput, templateIds?: number[]) => void;
 }
 
 export function EditUserModal({
@@ -83,15 +87,36 @@ export function EditUserModal({
   onSubmit,
 }: EditUserModalProps) {
   const [form, setForm] = useState<EditUserFormState | null>(null);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<number>>(new Set());
+  const [initialTemplateIds, setInitialTemplateIds] = useState<Set<number>>(new Set());
+
+  const { data: formTemplates } = useQuery({
+    queryKey: ["form-templates"],
+    queryFn: fetchFormTemplatesForDashboard,
+    enabled: open,
+  });
+
+  const { data: assignedFormsData } = useQuery({
+    queryKey: ["employee-assigned-forms", user?.employeeId],
+    queryFn: () => fetchEmployeeAssignedForms(user!.employeeId),
+    enabled: open && !!user?.employeeId,
+  });
 
   useEffect(() => {
     if (open && user) {
       setForm(toFormState(user));
+      const assignedIds = new Set(
+        (assignedFormsData?.forms ?? []).map((f) => f.templateId),
+      );
+      setSelectedTemplateIds(assignedIds);
+      setInitialTemplateIds(assignedIds);
     }
     if (!open) {
       setForm(null);
+      setSelectedTemplateIds(new Set());
+      setInitialTemplateIds(new Set());
     }
-  }, [open, user]);
+  }, [open, user, assignedFormsData]);
 
   const headOptions = useMemo(() => {
     if (!user) return users;
@@ -131,28 +156,36 @@ export function EditUserModal({
     event.preventDefault();
 
     const yearValue = form.qualificationYear.trim();
-    onSubmit({
-      employeeId: form.employeeId.trim(),
-      email: form.email.trim(),
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      designation: form.designation.trim() || null,
-      roleCategory: form.roleCategory.trim() || null,
-      dateOfJoining: form.dateOfJoining || null,
-      systemRole: form.systemRole,
-      empCategory: "ADMINISTRATION",
-      empSubCategory: "SYSTEM_ADMIN",
-      entityId: form.entityId ? Number(form.entityId) : null,
-      headId: form.headId ? Number(form.headId) : null,
-      manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
-      qualification: form.qualification.trim() || null,
-      qualificationYear: yearValue ? Number(yearValue) : null,
-      qualificationSubject: form.qualificationSubject.trim() || null,
-      qualificationInstitute: form.qualificationInstitute.trim() || null,
-      qualificationCountry: form.qualificationCountry.trim() || null,
-      isActive: form.isActive,
-      ...(form.password ? { password: form.password } : {}),
-    });
+    const templateIds = [...selectedTemplateIds].sort((a, b) => a - b);
+    const initialIds = [...initialTemplateIds].sort((a, b) => a - b);
+    const templatesChanged =
+      templateIds.length !== initialIds.length ||
+      templateIds.some((id, i) => id !== initialIds[i]);
+    onSubmit(
+      {
+        employeeId: form.employeeId.trim(),
+        email: form.email.trim(),
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        designation: form.designation.trim() || null,
+        roleCategory: form.roleCategory.trim() || null,
+        dateOfJoining: form.dateOfJoining || null,
+        systemRole: form.systemRole,
+        empCategory: "ADMINISTRATION",
+        empSubCategory: "SYSTEM_ADMIN",
+        entityId: form.entityId ? Number(form.entityId) : null,
+        headId: form.headId ? Number(form.headId) : null,
+        manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
+        qualification: form.qualification.trim() || null,
+        qualificationYear: yearValue ? Number(yearValue) : null,
+        qualificationSubject: form.qualificationSubject.trim() || null,
+        qualificationInstitute: form.qualificationInstitute.trim() || null,
+        qualificationCountry: form.qualificationCountry.trim() || null,
+        isActive: form.isActive,
+        ...(form.password ? { password: form.password } : {}),
+      },
+      templatesChanged ? templateIds : undefined,
+    );
   };
 
   return (
@@ -613,6 +646,54 @@ export function EditUserModal({
                       />
                       Active account
                     </label>
+                  </div>
+                </div>
+
+                {/* Form Assignment */}
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Form Assignment
+                  </span>
+                  <div className="mt-1.5 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 dark:border-white/10 dark:bg-slate-950">
+                    {formTemplates && formTemplates.length > 0 ? (
+                      <div className="space-y-1">
+                        {formTemplates.map((t: FormTemplateListItem) => {
+                          const checked = selectedTemplateIds.has(t.id);
+                          return (
+                            <label
+                              key={t.id}
+                              className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  setSelectedTemplateIds((current) => {
+                                    const next = new Set(current);
+                                    if (next.has(t.id)) {
+                                      next.delete(t.id);
+                                    } else {
+                                      next.add(t.id);
+                                    }
+                                    return next;
+                                  })
+                                }
+                                disabled={isSubmitting}
+                                className="size-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20"
+                              />
+                              <span className="truncate">{t.title}</span>
+                              <span className="ml-auto shrink-0 text-xs text-slate-400">
+                                FY {t.fiscalYear}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="py-2 text-center text-sm text-slate-400">
+                        No form templates available.
+                      </p>
+                    )}
                   </div>
                 </div>
 

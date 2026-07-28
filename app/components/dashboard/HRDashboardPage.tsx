@@ -100,7 +100,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
             )}
           >
             <ClipboardList className="size-3.5" />
-            Direct Assessment
+            Direct Assessment by Manager
           </button>
         </div>
       ) : null}

@@ -24,6 +24,26 @@ function parseOptionalTextField(
   };
 }
 
+function parseOptionalNumberField(
+  body: Record<string, unknown>,
+  key: string,
+): { provided: boolean; value: number | null } {
+  if (!(key in body)) {
+    return { provided: false, value: null };
+  }
+
+  const raw = body[key];
+  if (raw === null) {
+    return { provided: true, value: null };
+  }
+
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    throw new FormSubmissionError(`${key} must be a number or null.`, 400);
+  }
+
+  return { provided: true, value: raw };
+}
+
 export async function PATCH(request: Request) {
   const auth = await requireSubmissionReviewerApi();
   if (auth instanceof NextResponse) {
@@ -52,21 +72,49 @@ export async function PATCH(request: Request) {
     }
 
     const roleCategory = parseOptionalTextField(body, "roleCategory");
+    const designation = parseOptionalTextField(body, "designation");
+    const entityId = parseOptionalNumberField(body, "entityId");
+    const templateId = parseOptionalNumberField(body, "templateId");
+    const qualification = parseOptionalTextField(body, "qualification");
+    const qualificationYear = parseOptionalNumberField(body, "qualificationYear");
+    const qualificationSubject = parseOptionalTextField(body, "qualificationSubject");
+    const qualificationInstitute = parseOptionalTextField(body, "qualificationInstitute");
+    const qualificationCountry = parseOptionalTextField(body, "qualificationCountry");
+    const creditHrsErpScoreAdj = parseOptionalNumberField(body, "creditHrsErpScoreAdj");
+    const pubOricScoreAdj = parseOptionalNumberField(body, "pubOricScoreAdj");
+    const qecScoreAdj = parseOptionalNumberField(body, "qecScoreAdj");
+    const calibrationFactor = parseOptionalNumberField(body, "calibrationFactor");
+    const manager1UserId = parseOptionalNumberField(body, "manager1UserId");
+    const manager2UserId = parseOptionalNumberField(body, "manager2UserId");
 
-    if (!roleCategory.provided) {
+    const fields: Record<string, unknown> = {};
+
+    if (roleCategory.provided) fields.roleCategory = roleCategory.value;
+    if (designation.provided) fields.designation = designation.value;
+    if (entityId.provided) fields.entityId = entityId.value;
+    if (templateId.provided) fields.templateId = templateId.value;
+    if (qualification.provided) fields.qualification = qualification.value;
+    if (qualificationYear.provided) fields.qualificationYear = qualificationYear.value;
+    if (qualificationSubject.provided) fields.qualificationSubject = qualificationSubject.value;
+    if (qualificationInstitute.provided) fields.qualificationInstitute = qualificationInstitute.value;
+    if (qualificationCountry.provided) fields.qualificationCountry = qualificationCountry.value;
+    if (creditHrsErpScoreAdj.provided) fields.creditHrsErpScoreAdj = creditHrsErpScoreAdj.value;
+    if (pubOricScoreAdj.provided) fields.pubOricScoreAdj = pubOricScoreAdj.value;
+    if (qecScoreAdj.provided) fields.qecScoreAdj = qecScoreAdj.value;
+    if (calibrationFactor.provided) fields.calibrationFactor = calibrationFactor.value;
+    if (manager1UserId.provided) fields.manager1UserId = manager1UserId.value;
+    if (manager2UserId.provided) fields.manager2UserId = manager2UserId.value;
+
+    if (Object.keys(fields).length === 0) {
       return NextResponse.json(
-        { error: "Provide roleCategory to update." },
+        { error: "Provide at least one field to update." },
         { status: 400 },
       );
     }
 
     const updated = await bulkUpdateEmployeeListingFields(
       body.employeeIds as string[],
-      {
-        ...(roleCategory.provided
-          ? { roleCategory: roleCategory.value }
-          : {}),
-      },
+      fields,
     );
 
     return NextResponse.json(updated);

@@ -94,6 +94,7 @@ interface SubmissionListRow {
   qualification_country: string | null;
   submitted_at: string | null;
   form_assigned: boolean;
+  direct_score_entry: boolean;
   self_assessment_disabled: boolean;
 }
 
@@ -222,6 +223,7 @@ function mapSubmissionRow(
     templateId: row.template_id,
     templateTitle: row.template_title,
     formAssigned: Boolean(row.form_assigned),
+    directScoreEntry: Boolean(row.direct_score_entry),
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: row.entity_name,
     parentEntityName: row.parent_entity_name,
@@ -470,6 +472,17 @@ export async function listFormSubmissions(
              )
          )
        ) AS form_assigned,
+       (
+         EXISTS (
+           SELECT 1
+           FROM direct_score_entry_assignments dsea
+           WHERE dsea.employee_id = u.id
+             AND (
+               $1::int IS NULL
+               OR dsea.cycle_id = $1
+             )
+         )
+       ) AS direct_score_entry,
        u.entity_id,
        ent.name AS entity_name,
        p1.name AS parent_entity_name,
@@ -914,6 +927,7 @@ export async function getFormSubmissionById(
     qecScoreAdj: summary.qecScoreAdj,
     calibrationFactor: summary.calibrationFactor,
     calibratedScoreNumeric: summary.normalizedScore,
+    initialScoreNumeric: summary.scoreO,
     canEditScoreAdjustments: Boolean(options?.canEditScoreAdjustments),
     selfAssessmentEnabled: summary.selfAssessmentEnabled,
   };
@@ -928,7 +942,8 @@ export type AppraisalScoreAdjustmentField =
   | "pubOricScoreAdj"
   | "qecScoreAdj"
   | "calibrationFactor"
-  | "calibratedScoreNumeric";
+  | "calibratedScoreNumeric"
+  | "initialScoreNumeric";
 
 export async function updateAppraisalScoreAdjustments(
   appraisalId: number,
@@ -945,6 +960,7 @@ export async function updateAppraisalScoreAdjustments(
   qecScoreAdj: number | null;
   calibrationFactor: number | null;
   calibratedScoreNumeric: number | null;
+  initialScoreNumeric: number | null;
 }> {
   const setClauses: string[] = [];
   const values: unknown[] = [];
@@ -958,6 +974,7 @@ export async function updateAppraisalScoreAdjustments(
     qecScoreAdj: "qec_score_adj",
     calibrationFactor: "calibration_factor",
     calibratedScoreNumeric: "calibrated_score_numeric",
+    initialScoreNumeric: "initial_score_numeric",
   };
 
   for (const key of Object.keys(fields) as AppraisalScoreAdjustmentField[]) {
@@ -981,6 +998,7 @@ export async function updateAppraisalScoreAdjustments(
     qec_score_adj: string | null;
     calibration_factor: string | null;
     calibrated_score_numeric: string | null;
+    initial_score_numeric: string | null;
   }>(
     `UPDATE appraisals
      SET ${setClauses.join(",\n         ")}
@@ -990,7 +1008,8 @@ export async function updateAppraisalScoreAdjustments(
        pub_oric_score_adj::text,
        qec_score_adj::text,
        calibration_factor::text,
-       calibrated_score_numeric::text`,
+       calibrated_score_numeric::text,
+       initial_score_numeric::text`,
     values,
   );
 
@@ -1005,6 +1024,7 @@ export async function updateAppraisalScoreAdjustments(
     qecScoreAdj: toNumber(result.rows[0].qec_score_adj),
     calibrationFactor: toNumber(result.rows[0].calibration_factor),
     calibratedScoreNumeric: toNumber(result.rows[0].calibrated_score_numeric),
+    initialScoreNumeric: toNumber(result.rows[0].initial_score_numeric),
   };
 }
 
@@ -1098,11 +1118,39 @@ export async function bulkUpdateEmployeeListingFields(
   employeeIds: string[],
   fields: {
     roleCategory?: string | null;
+    designation?: string | null;
+    entityId?: number | null;
+    templateId?: number | null;
+    qualification?: string | null;
+    qualificationYear?: number | null;
+    qualificationSubject?: string | null;
+    qualificationInstitute?: string | null;
+    qualificationCountry?: string | null;
+    creditHrsErpScoreAdj?: number | null;
+    pubOricScoreAdj?: number | null;
+    qecScoreAdj?: number | null;
+    calibrationFactor?: number | null;
+    manager1UserId?: number | null;
+    manager2UserId?: number | null;
   },
 ): Promise<{
   updatedCount: number;
   employeeIds: string[];
   roleCategory?: string | null;
+  designation?: string | null;
+  entityId?: number | null;
+  templateId?: number | null;
+  qualification?: string | null;
+  qualificationYear?: number | null;
+  qualificationSubject?: string | null;
+  qualificationInstitute?: string | null;
+  qualificationCountry?: string | null;
+  creditHrsErpScoreAdj?: number | null;
+  pubOricScoreAdj?: number | null;
+  qecScoreAdj?: number | null;
+  calibrationFactor?: number | null;
+  manager1UserId?: number | null;
+  manager2UserId?: number | null;
 }> {
   const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
 
@@ -1111,11 +1159,49 @@ export async function bulkUpdateEmployeeListingFields(
   }
 
   const updatesRole = "roleCategory" in fields;
+  const updatesDesignation = "designation" in fields;
+  const updatesEntity = "entityId" in fields;
+  const updatesTemplate = "templateId" in fields;
+  const updatesQualification = "qualification" in fields;
+  const updatesQualificationYear = "qualificationYear" in fields;
+  const updatesQualificationSubject = "qualificationSubject" in fields;
+  const updatesQualificationInstitute = "qualificationInstitute" in fields;
+  const updatesQualificationCountry = "qualificationCountry" in fields;
+  const updatesChAdj = "creditHrsErpScoreAdj" in fields;
+  const updatesOricAdj = "pubOricScoreAdj" in fields;
+  const updatesQecAdj = "qecScoreAdj" in fields;
+  const updatesCalFr = "calibrationFactor" in fields;
+  const updatesManager1 = "manager1UserId" in fields;
+  const updatesManager2 = "manager2UserId" in fields;
 
-  if (!updatesRole) {
+  const hasAnyUpdate =
+    updatesRole ||
+    updatesDesignation ||
+    updatesEntity ||
+    updatesTemplate ||
+    updatesQualification ||
+    updatesQualificationYear ||
+    updatesQualificationSubject ||
+    updatesQualificationInstitute ||
+    updatesQualificationCountry ||
+    updatesChAdj ||
+    updatesOricAdj ||
+    updatesQecAdj ||
+    updatesCalFr ||
+    updatesManager1 ||
+    updatesManager2;
+
+  if (!hasAnyUpdate) {
     throw new FormSubmissionError(
-      "Provide roleCategory to update.",
+      "Provide at least one field to update.",
       400,
+    );
+  }
+
+  if ((updatesRole || updatesDesignation) && !(await hasExcelSheetColumns())) {
+    throw new FormSubmissionError(
+      "Excel-sheet columns are not available. Run the excel-sheet columns migration.",
+      503,
     );
   }
 
@@ -1126,29 +1212,250 @@ export async function bulkUpdateEmployeeListingFields(
     );
   }
 
-  const setClauses: string[] = [];
-  const values: unknown[] = [uniqueIds];
+  // --- Update users table ---
+  const userSetClauses: string[] = [];
+  const userValues: unknown[] = [uniqueIds];
+  let paramIdx = 1;
 
   if (updatesRole) {
-    values.push(fields.roleCategory ?? null);
-    setClauses.push(`role_category = $${values.length}`);
+    userValues.push(fields.roleCategory ?? null);
+    userSetClauses.push(`role_category = $${++paramIdx}`);
+  }
+  if (updatesDesignation) {
+    userValues.push(fields.designation ?? null);
+    userSetClauses.push(`designation = $${++paramIdx}`);
+  }
+  if (updatesEntity) {
+    userValues.push(fields.entityId ?? null);
+    userSetClauses.push(`entity_id = $${++paramIdx}`);
+  }
+  if (updatesManager1) {
+    userValues.push(fields.manager1UserId ?? null);
+    userSetClauses.push(`head_id = $${++paramIdx}`);
+  }
+  if (updatesManager2) {
+    userValues.push(fields.manager2UserId ?? null);
+    userSetClauses.push(`manager_2_id = $${++paramIdx}`);
   }
 
-  const result = await db.query<{ employee_id: string }>(
-    `UPDATE users
-     SET ${setClauses.join(", ")}
-     WHERE employee_id = ANY($1::text[])
-     RETURNING employee_id`,
-    values,
-  );
+  let updatedUserIds: string[] = [];
 
-  if (result.rows.length === 0) {
+  if (userSetClauses.length > 0) {
+    const userResult = await db.query<{ employee_id: string }>(
+      `UPDATE users
+       SET ${userSetClauses.join(", ")}
+       WHERE employee_id = ANY($1::text[])
+       RETURNING employee_id`,
+      userValues,
+    );
+    updatedUserIds = userResult.rows.map((r) => r.employee_id);
+  } else {
+    // Still need to get the user IDs for downstream updates
+    const idResult = await db.query<{ id: string; employee_id: string }>(
+      `SELECT id::text, employee_id FROM users WHERE employee_id = ANY($1::text[])`,
+      [uniqueIds],
+    );
+    updatedUserIds = idResult.rows.map((r) => r.employee_id);
+  }
+
+  if (updatedUserIds.length === 0) {
     throw new FormSubmissionError("No matching employees found.", 404);
   }
 
+  // --- Update employee_form_assignments (Form / templateId) ---
+  if (updatesTemplate) {
+    const templateId = fields.templateId ?? null;
+    // Get user IDs for these employees
+    const userIdResult = await db.query<{ id: string; employee_id: string }>(
+      `SELECT id::text, employee_id FROM users WHERE employee_id = ANY($1::text[])`,
+      [uniqueIds],
+    );
+    const userIds = userIdResult.rows.map((r) => Number(r.id));
+
+    if (templateId != null) {
+      // Upsert form assignment for each user
+      for (const userId of userIds) {
+        await db.query(
+          `INSERT INTO employee_form_assignments (employee_id, template_id)
+           VALUES ($1, $2)
+           ON CONFLICT (employee_id, template_id) DO NOTHING`,
+          [userId, templateId],
+        );
+      }
+    }
+  }
+
+  // --- Update employee_qualifications ---
+  const updatesAnyQualification =
+    updatesQualification ||
+    updatesQualificationYear ||
+    updatesQualificationSubject ||
+    updatesQualificationInstitute ||
+    updatesQualificationCountry;
+
+  if (updatesAnyQualification && (await hasQualificationsTable())) {
+    const userIdResult = await db.query<{ id: string; employee_id: string }>(
+      `SELECT id::text, employee_id FROM users WHERE employee_id = ANY($1::text[])`,
+      [uniqueIds],
+    );
+
+    for (const userRow of userIdResult.rows) {
+      const userId = Number(userRow.id);
+
+      // Check if primary qualification exists
+      const existing = await db.query<{ id: string }>(
+        `SELECT id::text FROM employee_qualifications
+         WHERE user_id = $1 AND is_primary = TRUE
+         LIMIT 1`,
+        [userId],
+      );
+
+      const qualSetClauses: string[] = [];
+      const qualValues: unknown[] = [];
+      let qualParamIdx = 0;
+
+      if (updatesQualification) {
+        qualValues.push(fields.qualification ?? null);
+        qualSetClauses.push(`qualification = $${++qualParamIdx}`);
+      }
+      if (updatesQualificationYear) {
+        qualValues.push(fields.qualificationYear ?? null);
+        qualSetClauses.push(`year = $${++qualParamIdx}`);
+      }
+      if (updatesQualificationSubject) {
+        qualValues.push(fields.qualificationSubject ?? null);
+        qualSetClauses.push(`subject = $${++qualParamIdx}`);
+      }
+      if (updatesQualificationInstitute) {
+        qualValues.push(fields.qualificationInstitute ?? null);
+        qualSetClauses.push(`institute = $${++qualParamIdx}`);
+      }
+      if (updatesQualificationCountry) {
+        qualValues.push(fields.qualificationCountry ?? null);
+        qualSetClauses.push(`country = $${++qualParamIdx}`);
+      }
+
+      if (existing.rows.length > 0) {
+        // Update existing primary qualification
+        qualValues.push(Number(existing.rows[0].id));
+        await db.query(
+          `UPDATE employee_qualifications
+           SET ${qualSetClauses.join(", ")}
+           WHERE id = $${++qualParamIdx}`,
+          qualValues,
+        );
+      } else {
+        // Insert new primary qualification
+        const insertCols: string[] = ["user_id", "is_primary"];
+        const insertPlaceholders: string[] = ["$1", "TRUE"];
+        const insertVals: unknown[] = [userId];
+        let insertIdx = 1;
+
+        if (updatesQualification) {
+          insertCols.push("qualification");
+          insertVals.push(fields.qualification ?? null);
+          insertPlaceholders.push(`$${++insertIdx}`);
+        }
+        if (updatesQualificationYear) {
+          insertCols.push("year");
+          insertVals.push(fields.qualificationYear ?? null);
+          insertPlaceholders.push(`$${++insertIdx}`);
+        }
+        if (updatesQualificationSubject) {
+          insertCols.push("subject");
+          insertVals.push(fields.qualificationSubject ?? null);
+          insertPlaceholders.push(`$${++insertIdx}`);
+        }
+        if (updatesQualificationInstitute) {
+          insertCols.push("institute");
+          insertVals.push(fields.qualificationInstitute ?? null);
+          insertPlaceholders.push(`$${++insertIdx}`);
+        }
+        if (updatesQualificationCountry) {
+          insertCols.push("country");
+          insertVals.push(fields.qualificationCountry ?? null);
+          insertPlaceholders.push(`$${++insertIdx}`);
+        }
+
+        await db.query(
+          `INSERT INTO employee_qualifications (${insertCols.join(", ")})
+           VALUES (${insertPlaceholders.join(", ")})`,
+          insertVals,
+        );
+      }
+    }
+  }
+
+  // --- Update appraisals (score adjustments + calibration factor) ---
+  const updatesAnyScoreAdj =
+    updatesChAdj || updatesOricAdj || updatesQecAdj || updatesCalFr;
+
+  if (updatesAnyScoreAdj) {
+    const appraisalSetClauses: string[] = [];
+    const appraisalValues: unknown[] = [];
+    let appraisalParamIdx = 0;
+
+    if (updatesChAdj) {
+      appraisalValues.push(fields.creditHrsErpScoreAdj ?? null);
+      appraisalSetClauses.push(`credit_hrs_erp_score_adj = $${++appraisalParamIdx}`);
+    }
+    if (updatesOricAdj) {
+      appraisalValues.push(fields.pubOricScoreAdj ?? null);
+      appraisalSetClauses.push(`pub_oric_score_adj = $${++appraisalParamIdx}`);
+    }
+    if (updatesQecAdj) {
+      appraisalValues.push(fields.qecScoreAdj ?? null);
+      appraisalSetClauses.push(`qec_score_adj = $${++appraisalParamIdx}`);
+    }
+    if (updatesCalFr) {
+      appraisalValues.push(fields.calibrationFactor ?? null);
+      appraisalSetClauses.push(`calibration_factor = $${++appraisalParamIdx}`);
+    }
+
+    // Get active cycle
+    const cycleResult = await db.query<{ id: number }>(
+      `SELECT id FROM appraisal_cycles WHERE is_active = TRUE LIMIT 1`,
+    );
+    const cycleId = cycleResult.rows[0]?.id;
+
+    if (cycleId != null) {
+      // Get user IDs
+      const userIdResult = await db.query<{ id: string }>(
+        `SELECT id::text FROM users WHERE employee_id = ANY($1::text[])`,
+        [uniqueIds],
+      );
+      const userIds = userIdResult.rows.map((r) => Number(r.id));
+
+      appraisalValues.push(userIds);
+      appraisalValues.push(cycleId);
+
+      await db.query(
+        `UPDATE appraisals
+         SET ${appraisalSetClauses.join(", ")}
+         WHERE employee_id = ANY($${++appraisalParamIdx}::bigint[])
+           AND cycle_id = $${++appraisalParamIdx}`,
+        appraisalValues,
+      );
+    }
+  }
+
   return {
-    updatedCount: result.rows.length,
-    employeeIds: result.rows.map((row) => row.employee_id),
+    updatedCount: updatedUserIds.length,
+    employeeIds: updatedUserIds,
     ...(updatesRole ? { roleCategory: fields.roleCategory ?? null } : {}),
+    ...(updatesDesignation ? { designation: fields.designation ?? null } : {}),
+    ...(updatesEntity ? { entityId: fields.entityId ?? null } : {}),
+    ...(updatesTemplate ? { templateId: fields.templateId ?? null } : {}),
+    ...(updatesQualification ? { qualification: fields.qualification ?? null } : {}),
+    ...(updatesQualificationYear ? { qualificationYear: fields.qualificationYear ?? null } : {}),
+    ...(updatesQualificationSubject ? { qualificationSubject: fields.qualificationSubject ?? null } : {}),
+    ...(updatesQualificationInstitute ? { qualificationInstitute: fields.qualificationInstitute ?? null } : {}),
+    ...(updatesQualificationCountry ? { qualificationCountry: fields.qualificationCountry ?? null } : {}),
+    ...(updatesChAdj ? { creditHrsErpScoreAdj: fields.creditHrsErpScoreAdj ?? null } : {}),
+    ...(updatesOricAdj ? { pubOricScoreAdj: fields.pubOricScoreAdj ?? null } : {}),
+    ...(updatesQecAdj ? { qecScoreAdj: fields.qecScoreAdj ?? null } : {}),
+    ...(updatesCalFr ? { calibrationFactor: fields.calibrationFactor ?? null } : {}),
+    ...(updatesManager1 ? { manager1UserId: fields.manager1UserId ?? null } : {}),
+    ...(updatesManager2 ? { manager2UserId: fields.manager2UserId ?? null } : {}),
   };
 }

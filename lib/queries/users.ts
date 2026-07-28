@@ -294,7 +294,7 @@ async function assertValidManagers(
   headId: number | null,
   manager2Id: number | null,
 ): Promise<void> {
-  await assertValidManager(userId, headId, "Head");
+  await assertValidManager(userId, headId, "Manager 1");
   await assertValidManager(userId, manager2Id, "Manager 2");
 
   if (headId !== null && manager2Id !== null && headId === manager2Id) {

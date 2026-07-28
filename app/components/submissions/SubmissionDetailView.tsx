@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchFormSubmission,
   approveManagerReview,
@@ -313,7 +313,7 @@ export default function SubmissionDetailView({
   const editingHr = data?.canEditHrReview ?? false;
 
   const hasUnsavedChanges = useMemo(() => {
-    if (!editingHr) return false;
+    if (!editingHr && !data?.canEditManagerReview) return false;
     for (const [key, draft] of managerDrafts) {
       const initial = initialDraftsSnapshot.get(key);
       if (!initial) return true;
@@ -321,7 +321,38 @@ export default function SubmissionDetailView({
       if (initial.remarks !== draft.remarks) return true;
     }
     return false;
-  }, [editingHr, managerDrafts, initialDraftsSnapshot]);
+  }, [editingHr, data?.canEditManagerReview, managerDrafts, initialDraftsSnapshot]);
+
+  const cancelEditing = useCallback(() => {
+    setManagerDrafts(
+      new Map(
+        [...initialDraftsSnapshot.entries()].map(([k, v]) => [
+          k,
+          { pointsEarned: v.pointsEarned, remarks: v.remarks },
+        ]),
+      ),
+    );
+    setSaveMessage(null);
+  }, [initialDraftsSnapshot]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        const target = event.target as HTMLElement | null;
+        if (
+          target &&
+          (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+        ) {
+          target.blur();
+        }
+        event.preventDefault();
+        cancelEditing();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [hasUnsavedChanges, cancelEditing]);
 
   if (isLoading) {
     return (
@@ -511,22 +542,36 @@ export default function SubmissionDetailView({
               ? "Manager scores are pre-filled from self assessment. Edit any value and save your review."
               : "Enter scores directly for this employee. Edit any value and save your review."}
           </p>
-          <button
-            type="button"
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || approveMutation.isPending}
-            className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
-          >
-            {saveMutation.isPending ? "Saving..." : "Save"}
-          </button>
-          <button
-            type="button"
-            onClick={() => approveMutation.mutate()}
-            disabled={saveMutation.isPending || approveMutation.isPending}
-            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
-          >
-            {approveMutation.isPending ? "Approving..." : "Approve Review"}
-          </button>
+          <div className="flex items-center gap-2">
+            {hasUnsavedChanges ? (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  disabled={saveMutation.isPending || approveMutation.isPending}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveMutation.mutate()}
+                  disabled={saveMutation.isPending || approveMutation.isPending}
+                  className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
+                >
+                  {saveMutation.isPending ? "Saving..." : "Save"}
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => approveMutation.mutate()}
+              disabled={saveMutation.isPending || approveMutation.isPending}
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {approveMutation.isPending ? "Approving..." : "Approve Review"}
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -540,6 +585,14 @@ export default function SubmissionDetailView({
                 : "You have unsaved score changes. Save to persist your edits."}
           </p>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={cancelEditing}
+              disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+            >
+              Cancel
+            </button>
             <button
               type="button"
               onClick={() => setShowSaveConfirm(true)}

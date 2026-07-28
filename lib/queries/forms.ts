@@ -1290,3 +1290,181 @@ export async function listFormTemplateAssignedEmployees(
     selfAssessmentDisabled: row.self_assessment_disabled,
   }));
 }
+
+// =========================================================================
+// Direct Score Entry — standalone, not tied to any form template.
+// Employees marked for direct score entry have their Score (O) adjusted
+// manually from the main dashboard by HR, Board, and Super Admin.
+// =========================================================================
+
+export async function assignDirectScoreEntryToEmployees(
+  employeeCodes: string[],
+): Promise<{ assignedCount: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    throw new FormTemplateError("At least one employee is required.", 400);
+  }
+
+  const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
+  const cycleId = cycle.id;
+
+  const usersResult = await db.query<{ id: string; employee_id: string }>(
+    `SELECT id, employee_id FROM users WHERE employee_id = ANY($1::text[]) AND is_active = TRUE`,
+    [normalizedCodes],
+  );
+
+  if (usersResult.rows.length === 0) {
+    throw new FormTemplateError("No matching active employees found.", 404);
+  }
+
+  const userIds = usersResult.rows.map((r) => r.id);
+
+  // Conflict check: employees already have a form assignment in this cycle
+  const alreadyAssigned = await db.query<{ employee_id: string }>(
+    `SELECT efa.employee_id::text
+     FROM employee_form_assignments efa
+     INNER JOIN form_templates ft ON ft.id = efa.template_id
+     WHERE ft.cycle_id = $1 AND efa.employee_id = ANY($2::bigint[])`,
+    [cycleId, userIds],
+  );
+
+  if (alreadyAssigned.rows.length > 0) {
+    const codes = usersResult.rows
+      .filter((r) => alreadyAssigned.rows.some((a) => a.employee_id === r.id))
+      .map((r) => r.employee_id);
+    throw new FormTemplateError(
+      `These employees are already assigned to a form in the current cycle: ${codes.join(", ")}. Unassign them first before marking for direct score entry.`,
+      409,
+    );
+  }
+
+  // Insert direct score entry assignments
+  await db.query(
+    `INSERT INTO direct_score_entry_assignments (employee_id, cycle_id)
+     SELECT u.id, $2
+     FROM unnest($1::bigint[]) AS u(id)
+     ON CONFLICT (employee_id, cycle_id) DO UPDATE
+       SET updated_at = CURRENT_TIMESTAMP`,
+    [userIds, cycleId],
+  );
+
+  // Create appraisals with NULL template_id and PENDING_HEAD_REVIEW status
+  await db.query(
+    `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
+     SELECT u.id, $2, NULL, $3
+     FROM unnest($1::bigint[]) AS u(id)
+     ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
+       SET template_id = NULL,
+           status = CASE
+             WHEN appraisals.submitted_at IS NULL THEN $3
+             ELSE appraisals.status
+           END,
+           updated_at = CURRENT_TIMESTAMP
+     WHERE appraisals.submitted_at IS NULL`,
+    [userIds, cycleId, "PENDING_HEAD_REVIEW"],
+  );
+
+  return {
+    assignedCount: usersResult.rows.length,
+  };
+}
+
+export async function unassignDirectScoreEntryFromEmployees(
+  employeeCodes: string[],
+): Promise<{ unassignedCount: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    throw new FormTemplateError("At least one employee is required.", 400);
+  }
+
+  const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
+  const cycleId = cycle.id;
+
+  const usersResult = await db.query<{ id: string; employee_id: string }>(
+    `SELECT id, employee_id FROM users WHERE employee_id = ANY($1::text[])`,
+    [normalizedCodes],
+  );
+
+  if (usersResult.rows.length === 0) {
+    throw new FormTemplateError("No matching employees found.", 404);
+  }
+
+  const userIds = usersResult.rows.map((r) => r.id);
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const deletedAssignments = await client.query<{ employee_id: string }>(
+      `DELETE FROM direct_score_entry_assignments
+       WHERE cycle_id = $1 AND employee_id = ANY($2::bigint[])
+       RETURNING employee_id`,
+      [cycleId, userIds],
+    );
+
+    if (deletedAssignments.rows.length === 0) {
+      await client.query("ROLLBACK");
+      throw new FormTemplateError(
+        "None of the selected employees are marked for direct score entry.",
+        404,
+      );
+    }
+
+    const removedUserIds = deletedAssignments.rows.map((row) => row.employee_id);
+
+    // Remove only not-yet-submitted appraisals with NULL template_id (direct score entry appraisals)
+    await client.query(
+      `DELETE FROM appraisal_answers
+       WHERE appraisal_id IN (
+         SELECT id FROM appraisals
+         WHERE employee_id = ANY($1::bigint[])
+           AND cycle_id = $2 AND template_id IS NULL AND submitted_at IS NULL
+       )`,
+      [removedUserIds, cycleId],
+    );
+    await client.query(
+      `DELETE FROM appraisals
+       WHERE employee_id = ANY($1::bigint[])
+         AND cycle_id = $2 AND template_id IS NULL AND submitted_at IS NULL`,
+      [removedUserIds, cycleId],
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      unassignedCount: deletedAssignments.rows.length,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listDirectScoreEntryEmployees(): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {
+  const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
+  const cycleId = cycle.id;
+
+  const result = await db.query<{
+    employee_id: string;
+    employee_name: string;
+    email: string | null;
+  }>(
+    `SELECT
+       u.employee_id,
+       CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+       u.email
+     FROM direct_score_entry_assignments dsea
+     INNER JOIN users u ON u.id = dsea.employee_id
+     WHERE dsea.cycle_id = $1
+     ORDER BY u.first_name, u.last_name, u.employee_id`,
+    [cycleId],
+  );
+
+  return result.rows.map((row) => ({
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    email: row.email,
+  }));
+}

@@ -16,6 +16,7 @@ import {
   Pencil,
   Printer,
   Trash2,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,7 @@ const MENU_WIDTH = 224;
 function getMenuPosition(trigger: HTMLElement): MenuPosition {
   const rect = trigger.getBoundingClientRect();
   const gap = 6;
-  const menuHeightEstimate = 230;
+  const menuHeightEstimate = 280;
   const spaceBelow = window.innerHeight - rect.bottom - gap - 8;
   const spaceAbove = rect.top - gap - 8;
   const openUpward =
@@ -170,6 +171,13 @@ export default function FormActionsDropdown({
           label: "Edit Form",
           icon: <Pencil className="size-4" />,
           href: `/dashboard/forms/${templateId}`,
+          colorClass:
+            "text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40",
+        },
+        {
+          label: "Assign Employees",
+          icon: <Users className="size-4" />,
+          href: `/dashboard/forms/${templateId}/assign`,
           colorClass:
             "text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40",
         },

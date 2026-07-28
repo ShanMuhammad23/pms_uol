@@ -146,6 +146,7 @@ interface RenderCellContext {
   hasPending: boolean;
   onBufferedChange: (field: ScoreAdjustmentField, value: number | null) => void;
   onSave: () => void;
+  onCancel: () => void;
   onApprove: () => void;
   isSaving: boolean;
   isApproving: boolean;
@@ -163,6 +164,15 @@ function renderCell(
   const columnId = column.id;
 
   if (columnId === "status") {
+    if (submission.directScoreEntry) {
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700/50"
+        >
+          Direct Score Entry
+        </span>
+      );
+    }
     const stateConfig = APPRAISAL_STATE_CONFIG[submission.status];
     const StateIcon = stateConfig.icon;
     return (
@@ -234,6 +244,7 @@ function renderCell(
         employeeId={submission.employeeId}
         employeeName={submission.employeeName}
         formAssigned={submission.formAssigned}
+        directScoreEntry={submission.directScoreEntry}
         selfAssessmentEnabled={submission.selfAssessmentEnabled}
       />
     );
@@ -300,7 +311,17 @@ function renderCell(
           pendingValue={ctx?.isHrRole ? ctx.pendingChanges.calibrationFactor : undefined}
         />
         {ctx?.isHrRole && ctx.hasPending ? (
-          <HrInlineSaveButton onSave={ctx.onSave} isPending={ctx.isSaving} disabled={ctx.isApproving} />
+          <>
+            <HrInlineSaveButton onSave={ctx.onSave} isPending={ctx.isSaving} disabled={ctx.isApproving} />
+            <button
+              type="button"
+              onClick={ctx.onCancel}
+              disabled={ctx.isSaving || ctx.isApproving}
+              className="ml-1 inline-flex shrink-0 items-center rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold leading-none text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/10"
+            >
+              Cancel
+            </button>
+          </>
         ) : null}
         {ctx?.isHrRole && ctx.canApprove ? (
           <HrInlineApproveButton
@@ -404,6 +425,19 @@ function renderCell(
     );
   }
 
+  if (columnId === "scoreO" && submission.directScoreEntry && submission.id > 0) {
+    return (
+      <InlineScoreAdjustmentCell
+        submissionId={submission.id}
+        field="initialScoreNumeric"
+        value={submission.scoreO}
+        mode="score"
+        onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
+        pendingValue={ctx?.isHrRole ? ctx.pendingChanges.initialScoreNumeric : undefined}
+      />
+    );
+  }
+
   return (
     <span
       className={cn(
@@ -486,6 +520,35 @@ export function DashboardSubmissionsTable({
         return next;
       });
     };
+
+  const handleCancelScoreChanges = (submissionId: number) => () => {
+    setPendingScoreChanges((current) => {
+      const next = { ...current };
+      delete next[submissionId];
+      return next;
+    });
+  };
+
+  const hasAnyPending = Object.keys(pendingScoreChanges).length > 0;
+
+  useEffect(() => {
+    if (!hasAnyPending) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        const target = event.target as HTMLElement | null;
+        if (
+          target &&
+          (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+        ) {
+          return;
+        }
+        event.preventDefault();
+        setPendingScoreChanges({});
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [hasAnyPending]);
 
   const hrSaveMutation = useMutation({
     mutationFn: async (submissionId: number) => {
@@ -828,6 +891,7 @@ export function DashboardSubmissionsTable({
                           hasPending: pending != null && Object.keys(pending).length > 0,
                           onBufferedChange: handleBufferedChange(submission.id),
                           onSave: () => hrSaveMutation.mutate(submission.id),
+                          onCancel: handleCancelScoreChanges(submission.id),
                           onApprove: () => hrApproveMutation.mutate(submission.id),
                           isSaving: hrSaveMutation.isPending,
                           isApproving: hrApproveMutation.isPending,
@@ -914,6 +978,7 @@ export function DashboardSubmissionsTable({
         selectedEmployeeIds={[...selectedEmployeeIds]}
         onClose={() => setBulkEditOpen(false)}
         onSuccess={() => setSelectedEmployeeIds(new Set())}
+        role={role}
       />
     </motion.div>
   );

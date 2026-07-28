@@ -11,6 +11,7 @@ interface FormAssignmentCellProps {
   employeeId: string;
   employeeName: string;
   formAssigned: boolean;
+  directScoreEntry?: boolean;
   selfAssessmentEnabled?: boolean;
 }
 
@@ -18,6 +19,7 @@ export function FormAssignmentCell({
   employeeId,
   employeeName,
   formAssigned,
+  directScoreEntry = false,
   selfAssessmentEnabled = true,
 }: FormAssignmentCellProps) {
   const titleId = useId();
@@ -50,6 +52,17 @@ export function FormAssignmentCell({
     }
   }, [open]);
 
+  if (directScoreEntry && !formAssigned) {
+    return (
+      <span
+        className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
+        title="Direct Score Entry"
+      >
+        DS
+      </span>
+    );
+  }
+
   if (!formAssigned) {
     return (
       <span
@@ -70,7 +83,7 @@ export function FormAssignmentCell({
         title={
           selfAssessmentEnabled
             ? "View assigned form"
-            : "View assigned form (Direct Assessment)"
+            : "Will be Assessed by Manager directly"
         }
         aria-label={`View form assigned to ${employeeName}`}
         className={cn(
@@ -83,7 +96,7 @@ export function FormAssignmentCell({
         {selfAssessmentEnabled ? (
           <Check className="h-3.5 w-3.5" strokeWidth={2.75} />
         ) : (
-          "Direct"
+          "MA"
         )}
       </button>
 
