@@ -40,7 +40,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const data = await getDirectAssessmentData(
       templateId,
       reviewerUserId,
-      isHead,
+      true,
       headEntityId,
     );
 

@@ -227,20 +227,23 @@ export async function fetchEmployeeAssignedForms(
 export async function updateAssessmentEligibility(
   employeeIds: string[],
   assessmentEligibility: boolean,
+  ineligibilityReason?: string,
 ): Promise<{
   updatedCount: number;
   employeeIds: string[];
   assessmentEligibility: boolean;
+  ineligibilityReason: string | null;
 }> {
   const response = await fetch("/api/staff/eligibility", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ employeeIds, assessmentEligibility }),
+    body: JSON.stringify({ employeeIds, assessmentEligibility, ineligibilityReason }),
   });
 
   return parseResponse<{
     updatedCount: number;
     employeeIds: string[];
     assessmentEligibility: boolean;
+    ineligibilityReason: string | null;
   }>(response);
 }

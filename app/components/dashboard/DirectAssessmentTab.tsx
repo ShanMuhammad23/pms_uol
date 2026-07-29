@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchFormTemplatesForDashboard } from "@/lib/queries/forms-client";
+import { fetchDirectAssessmentTemplates } from "@/lib/queries/forms-client";
 import DirectAssessmentSpreadsheet from "@/app/components/dashboard/DirectAssessmentSpreadsheet";
 import { ClipboardList, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,13 +13,9 @@ export default function DirectAssessmentTab() {
   );
 
   const { data: templates = [], isLoading } = useQuery({
-    queryKey: ["form-templates"],
-    queryFn: fetchFormTemplatesForDashboard,
+    queryKey: ["direct-assessment-templates"],
+    queryFn: fetchDirectAssessmentTemplates,
   });
-
-  const directAssessmentTemplates = templates.filter(
-    (t) => !t.selfAssessmentEnabled,
-  );
 
   if (selectedTemplateId != null) {
     return (
@@ -39,8 +35,8 @@ export default function DirectAssessmentTab() {
             Direct Assessment
           </h2>
           <p className="text-sm text-foreground/70">
-            Forms where self-assessment is disabled. Managers enter scores
-            directly without employee self-assessment.
+            Forms where self-assessment is disabled. Reporting heads
+            enter scores directly without employee self-assessment.
           </p>
         </div>
       </div>
@@ -49,7 +45,7 @@ export default function DirectAssessmentTab() {
         <div className="rounded-md border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
           Loading form templates...
         </div>
-      ) : directAssessmentTemplates.length === 0 ? (
+      ) : templates.length === 0 ? (
         <div className="rounded-md border border-dashed border-slate-300/80 px-4 py-8 text-center text-sm text-foreground/70 dark:border-white/15">
           No forms with self-assessment disabled. When you create a form with
           self-assessment turned off, it will appear here for direct manager
@@ -57,7 +53,7 @@ export default function DirectAssessmentTab() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {directAssessmentTemplates.map((template) => (
+          {templates.map((template) => (
             <button
               key={template.id}
               onClick={() => setSelectedTemplateId(template.id)}

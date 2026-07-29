@@ -8,7 +8,7 @@ import {
   flattenAllQuestions,
   SUB_CATEGORY_LABELS,
 } from "@/types/forms";
-import { type ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 interface FormTemplateViewProps {
@@ -140,9 +140,6 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                 <th className=" border-r border-indigo-500/30  text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Sr
                 </th>
-                <th className="w-[240px] border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
-                  Key Task / Function
-                </th>
                 <th className="min-w-[280px] border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Key Performance Indicators (KPIs)
                 </th>
@@ -167,7 +164,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
             <tbody className="text-sm">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-indigo-400 dark:text-indigo-400/70 bg-indigo-50/50 dark:bg-indigo-950/20">
+                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-indigo-400 dark:text-indigo-400/70 bg-indigo-50/50 dark:bg-indigo-950/20">
                     No questions defined.
                   </td>
                 </tr>
@@ -176,7 +173,15 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                   const { question } = row;
                   const isEvenRow = rowIdx % 2 === 0;
                   return (
-                    <tr key={question.id} className={cn(
+                    <Fragment key={question.id}>
+                      {row.isFirstInSection && row.sectionTitle ? (
+                        <tr className="bg-indigo-100/70 dark:bg-indigo-900/30">
+                          <td colSpan={7} className="px-4 py-2 text-sm font-bold text-indigo-800 dark:text-indigo-200">
+                            {row.sectionTitle}
+                          </td>
+                        </tr>
+                      ) : null}
+                    <tr className={cn(
                       "align-top border-b border-indigo-100 dark:border-indigo-500/15",
                       isEvenRow
                         ? "bg-white dark:bg-slate-900/40"
@@ -185,20 +190,6 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                       <td className="border-r border-indigo-100 px-3 py-2.5 text-center tabular-nums text-indigo-600 dark:border-indigo-500/15 dark:text-indigo-300">
                         {row.sr}
                       </td>
-                      {row.isFirstInSection ? (
-                        <td
-                          className="max-w-[220px] border-r border-indigo-100 px-3 py-2.5 align-top bg-indigo-100/60 dark:bg-indigo-900/30 dark:border-indigo-500/15 print-section-cell"
-                          rowSpan={row.sectionRowCount}
-                        >
-                          {row.sectionTitle ? (
-                            <span className="line-clamp-3 font-medium text-indigo-800 dark:text-indigo-200" title={row.sectionTitle}>
-                              {row.sectionTitle}
-                            </span>
-                          ) : (
-                            <span className="text-indigo-300 dark:text-indigo-600">—</span>
-                          )}
-                        </td>
-                      ) : null}
                       <td className="border-r border-indigo-100 px-3 py-2.5 dark:border-indigo-500/15">
                         {row.subsectionTitle ? (
                           <span className="mb-1 block text-xs font-medium text-indigo-500 dark:text-indigo-400/70">
@@ -256,6 +247,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                         )}
                       </td>
                     </tr>
+                    </Fragment>
                   );
                 })
               )}
@@ -263,7 +255,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
             {rows.length > 0 ? (
               <tfoot>
                 <tr className="bg-indigo-600 dark:bg-indigo-800/80">
-                  <td colSpan={7} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-indigo-50 dark:text-indigo-100">
+                  <td colSpan={6} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-indigo-50 dark:text-indigo-100">
                     Total
                   </td>
                   <td className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">

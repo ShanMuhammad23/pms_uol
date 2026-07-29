@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, Paperclip, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import {
   deleteEmployeeFormAttachment,
@@ -24,6 +24,8 @@ import {
   type QuestionRecord,
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
+import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
+import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
 
 interface EmployeeFormFillProps {
   templateId: number;
@@ -148,7 +150,8 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
   const isReadOnly =
     data?.status === "SUBMITTED" ||
-    (data != null && !data.selfAssessmentEnabled);
+    (data != null && !data.selfAssessmentEnabled) ||
+    (data != null && !data.assessmentEligibility);
   const maxRawScore = useMemo(() => {
     if (!data) {
       return 0;
@@ -465,6 +468,13 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         ) : null}
       </div>
 
+      {data != null && !data.assessmentEligibility ? (
+        <IneligibilityBanner
+          role="self"
+          reason={data.ineligibilityReason}
+        />
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Status</p>
@@ -492,9 +502,6 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                 <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Sr. No.
                 </th>
-                <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
-                  Key Task / Function
-                </th>
                 <th className="min-w-[260px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Key Performance Indicators (KPIs)
                 </th>
@@ -502,7 +509,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                   Weight
                 </th>
                 <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
-                  Score
+                  Self Score
                 </th>
                 <th className="min-w-[220px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Remarks
@@ -516,7 +523,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/30"
                   >
                     No questions were found for this form.
@@ -535,6 +542,14 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                   const isEvenRow = rowIdx % 2 === 0;
 
                   return (
+                    <Fragment key={question.id}>
+                      {row.isFirstInSection && row.sectionTitle ? (
+                        <tr className="bg-amber-50/80 dark:bg-amber-950/20">
+                          <td colSpan={6} className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200">
+                            {row.sectionTitle}
+                          </td>
+                        </tr>
+                      ) : null}
                     <tr key={question.id} className={cn(
                       "align-top border-b border-slate-100 dark:border-slate-700/40",
                       isEvenRow
@@ -544,23 +559,6 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                       <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
                         {row.sr}
                       </td>
-                      {row.isFirstInSection ? (
-                        <td
-                          className="max-w-[220px] border-r border-slate-100 px-3 py-2.5 align-top bg-amber-50/80 dark:bg-amber-950/20 dark:border-slate-700/40"
-                          rowSpan={row.sectionRowCount}
-                        >
-                          {row.sectionTitle ? (
-                            <span
-                              className="line-clamp-3 font-semibold text-amber-800 dark:text-amber-200"
-                              title={row.sectionTitle}
-                            >
-                              {row.sectionTitle}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-                      ) : null}
                       <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
                         {row.subsectionTitle ? (
                           <span className="mb-1 block text-xs font-medium text-amber-600 dark:text-amber-400/70">
@@ -704,6 +702,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                         </div>
                       </td>
                     </tr>
+                    </Fragment>
                   );
                 })
               )}
@@ -712,7 +711,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
               <tfoot>
                 <tr className="bg-slate-800 dark:bg-slate-950/80">
                   <td
-                    colSpan={3}
+                    colSpan={2}
                     className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200 dark:text-slate-300"
                   >
                     Overall Score
@@ -730,6 +729,20 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
           </table>
         </div>
       </div>
+
+      {rows.length > 0 ? (
+        <AssessmentSummaryFooter
+          entries={[
+            {
+              label: "Self Assessment",
+              awardedMarks: displayedRawScore,
+              totalMarks: maxRawScore,
+              accentClass:
+                "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+            },
+          ]}
+        />
+      ) : null}
 
       {!isReadOnly ? (
         <div className="flex flex-wrap items-center justify-end gap-3">

@@ -537,6 +537,15 @@ export async function getEmployeeFormDetail(
   const rawScore = calculateRawScore(template, normalizedAnswers);
   const maxRawScore = calculateMaxRawScore(template);
 
+  const eligibilityResult = await db.query<{ assessment_eligibility: boolean; ineligibility_reason: string | null }>(
+    `SELECT COALESCE(assessment_eligibility, true) AS assessment_eligibility,
+            ineligibility_reason
+     FROM users WHERE id = $1 LIMIT 1`,
+    [userId],
+  );
+  const assessmentEligibility = eligibilityResult.rows[0]?.assessment_eligibility ?? true;
+  const ineligibilityReason = eligibilityResult.rows[0]?.ineligibility_reason ?? null;
+
   return {
     template,
     appraisalId: appraisal ? Number(appraisal.id) : null,
@@ -548,6 +557,8 @@ export async function getEmployeeFormDetail(
       : rawScore,
     maxRawScore,
     selfAssessmentEnabled,
+    assessmentEligibility,
+    ineligibilityReason,
   };
 }
 
@@ -561,6 +572,20 @@ export async function saveEmployeeForm(
   const template = await getFormTemplateById(templateId);
   if (!template) {
     throw new EmployeeFormError("Form not found.", 404);
+  }
+
+  const eligibilityResult = await db.query<{ assessment_eligibility: boolean; ineligibility_reason: string | null }>(
+    `SELECT COALESCE(assessment_eligibility, true) AS assessment_eligibility,
+            ineligibility_reason
+     FROM users WHERE id = $1 LIMIT 1`,
+    [userId],
+  );
+  const assessmentEligibility = eligibilityResult.rows[0]?.assessment_eligibility ?? true;
+  if (!assessmentEligibility) {
+    throw new EmployeeFormError(
+      "Score editing is disabled: you are not eligible for assessment.",
+      403,
+    );
   }
 
   const submit = Boolean(input.submit);

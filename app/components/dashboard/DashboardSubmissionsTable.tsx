@@ -2,16 +2,25 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Eye, Pencil, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Pencil, Search, ShieldCheck, ShieldOff, AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
-import { useDashboardColumnVisibility } from "@/app/components/dashboard/ColumnVisibilityDropdown";
+import { ResizableHeader } from "@/app/components/common/ResizableHeader";
+import {
+  ColumnManagementPanel,
+  ColumnManagementPanelTrigger,
+} from "@/app/components/common/ColumnManagementPanel";
+import {
+  useColumnConfig,
+  type ColumnDef,
+} from "@/app/hooks/use-column-config";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScoreAdjustmentCell";
 import { HrInlineSaveButton, HrInlineApproveButton } from "@/app/components/dashboard/HrInlineButtons";
 import { FormAssignmentCell } from "@/app/components/dashboard/FormAssignmentCell";
+import EligibilityConfirmationModal from "@/app/components/forms/EligibilityConfirmationModal";
 import {
   StaffListingMasterFilter,
   StaffListingMasterFilterTrigger,
@@ -34,8 +43,7 @@ import {
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
 import {
-  getColumnWidthStyle,
-  resolveOrderedColumns,
+  DASHBOARD_TABLE_COLUMNS,
   type DashboardTableColumnDef,
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
@@ -113,6 +121,46 @@ function canOpenSubmission(submission: FormSubmissionListItem) {
   return submission.id > 0 && submission.status !== "PENDING_SELF_ASSESSMENT";
 }
 
+function EligibilityToggleAction({
+  submission,
+  ctx,
+}: {
+  submission: FormSubmissionListItem;
+  ctx?: RenderCellContext;
+}) {
+  if (!ctx?.isHrRole || !ctx.onToggleAssessmentEligibility) {
+    return null;
+  }
+
+  const eligible = submission.assessmentEligibility;
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        ctx.onToggleAssessmentEligibility!(submission)
+      }
+      disabled={ctx.isTogglingEligibility}
+      title={
+        eligible ? "Disable Eligibility" : "Enable Eligibility"
+      }
+      aria-label={`${eligible ? "Disable" : "Enable"} eligibility for ${submission.employeeName}`}
+      className={cn(
+        "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-60",
+        eligible
+          ? "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+          : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-white/10",
+      )}
+    >
+      {eligible ? (
+        <ShieldCheck className="h-3.5 w-3.5" />
+      ) : (
+        <ShieldOff className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
 function SubmissionViewControl({
   submission,
 }: {
@@ -159,7 +207,7 @@ interface RenderCellContext {
   canApprove: boolean;
   quartileBands: PerformanceQuartileBand[] | null;
   sortedMatrix: PerformanceLevelWithQuartiles[] | null;
-  onToggleAssessmentEligibility?: (employeeId: string, current: boolean) => void;
+  onToggleAssessmentEligibility?: (submission: FormSubmissionListItem) => void;
   isTogglingEligibility?: boolean;
 }
 
@@ -202,6 +250,7 @@ function renderCell(
     return (
       <span className="inline-flex items-center gap-1.5">
         <SubmissionViewControl submission={submission} />
+        <EligibilityToggleAction submission={submission} ctx={ctx} />
         <span
           className={cn(
             "block text-slate-700 dark:text-slate-300",
@@ -248,32 +297,21 @@ function renderCell(
 
   if (columnId === "assessmentEligible") {
     const eligible = submission.assessmentEligibility;
-    if (ctx?.isHrRole && ctx.onToggleAssessmentEligibility) {
+    if (eligible) {
       return (
-        <button
-          type="button"
-          onClick={() => ctx.onToggleAssessmentEligibility!(submission.employeeId, eligible)}
-          disabled={ctx.isTogglingEligibility}
-          title={eligible ? "Click to mark as not eligible" : "Click to mark as eligible"}
-          className={cn(
-            "inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white transition-colors disabled:opacity-60",
-            eligible
-              ? "bg-emerald-600 hover:bg-emerald-700"
-              : "bg-slate-400 hover:bg-slate-500",
-          )}
+        <span
+          className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600"
         >
-          {eligible ? "Yes" : "No"}
-        </button>
+          Yes
+        </span>
       );
     }
     return (
       <span
-        className={cn(
-          "inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white",
-          eligible ? "bg-emerald-600" : "bg-slate-400",
-        )}
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-rose-500 text-white border border-rose-600 dark:bg-rose-600 dark:text-white dark:border-rose-500"
       >
-        {eligible ? "Yes" : "No"}
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        Ineligible
       </span>
     );
   }
@@ -506,15 +544,20 @@ export function DashboardSubmissionsTable({
   performanceMatrix,
 }: DashboardSubmissionsTableProps) {
   const {
-    visibleIds,
-    columnOrder,
-    toggleColumn,
-    showAll,
-    hideAll,
-    setColumnPosition,
-  } = useDashboardColumnVisibility(
-    allowedColumnIds ? { allowedColumnIds } : undefined,
-  );
+    config,
+    defaults: configDefaults,
+    visibleOrderedColumns,
+    frozenColumnIds,
+    lastFrozenColumnId,
+    stickyOffsets,
+    getColumnWidth,
+    setColumnWidth,
+    updateConfig,
+    resetConfig,
+  } = useColumnConfig("dashboard-staff-listing", {
+    allColumns: DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[],
+    allowedColumnIds,
+  });
   const [page, setPage] = useState(1);
   const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
     EMPTY_MASTER_FILTER_STATE,
@@ -524,6 +567,12 @@ export function DashboardSubmissionsTable({
   );
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [masterFilterOpen, setMasterFilterOpen] = useState(false);
+  const [columnMgmtOpen, setColumnMgmtOpen] = useState(false);
+  const [eligibilityModalState, setEligibilityModalState] = useState<{
+    open: boolean;
+    submission: FormSubmissionListItem | null;
+    error: string | null;
+  }>({ open: false, submission: null, error: null });
   const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
 
   const isHrRole = canReviewSubmissions(role ?? undefined);
@@ -639,11 +688,13 @@ export function DashboardSubmissionsTable({
     mutationFn: async ({
       employeeId,
       current,
+      reason,
     }: {
       employeeId: string;
       current: boolean;
+      reason?: string;
     }) => {
-      return updateAssessmentEligibility([employeeId], !current);
+      return updateAssessmentEligibility([employeeId], !current, reason);
     },
     onMutate: ({ employeeId, current }) => {
       void cancelStaffListingQueries(queryClient);
@@ -665,11 +716,12 @@ export function DashboardSubmissionsTable({
     },
   });
 
-  const visibleColumns = useMemo(
-    () => resolveOrderedColumns(columnOrder, visibleIds, allowedColumnIds),
-    [columnOrder, visibleIds, allowedColumnIds],
-  );
+  const visibleColumns = visibleOrderedColumns as DashboardTableColumnDef[];
   const colSpan = Math.max(visibleColumns.length, 1) + 1;
+  const frozenSet = useMemo(
+    () => new Set(frozenColumnIds),
+    [frozenColumnIds],
+  );
 
   const masterFilteredSubmissions = useMemo(
     () => applyMasterFilters(submissions, masterFilters),
@@ -816,7 +868,7 @@ export function DashboardSubmissionsTable({
               : ""}{" "}
             )
           </p>
-          {selectedCount > 0 ? (
+          {isHrRole && selectedCount > 0 ? (
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               {selectedCount} selected
             </p>
@@ -829,16 +881,22 @@ export function DashboardSubmissionsTable({
             onOpenChange={setMasterFilterOpen}
             activeCount={masterFilterActiveCount}
           />
-          <button
-            type="button"
-            onClick={() => setBulkEditOpen(true)}
-            disabled={selectedCount === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-amber-600 dark:hover:bg-amber-500"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Bulk edit
-            {selectedCount > 0 ? ` (${selectedCount})` : ""}
-          </button>
+          <ColumnManagementPanelTrigger
+            open={columnMgmtOpen}
+            onOpenChange={setColumnMgmtOpen}
+          />
+          {isHrRole ? (
+            <button
+              type="button"
+              onClick={() => setBulkEditOpen(true)}
+              disabled={selectedCount === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-amber-600 dark:hover:bg-amber-500"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Bulk edit
+              {selectedCount > 0 ? ` (${selectedCount})` : ""}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -851,60 +909,75 @@ export function DashboardSubmissionsTable({
         onTextChange={handleMasterTextChange}
         onMultiChange={handleMasterMultiChange}
         onClearAll={clearMasterFilters}
-        visibleIds={visibleIds}
-        columnOrder={columnOrder}
-        onToggleColumn={toggleColumn}
-        onShowAllColumns={showAll}
-        onHideAllColumns={hideAll}
-        onSetColumnPosition={setColumnPosition}
-        allowedColumnIds={allowedColumnIds}
+      />
+
+      <ColumnManagementPanel
+        open={columnMgmtOpen}
+        onOpenChange={setColumnMgmtOpen}
+        columns={DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[]}
+        config={config}
+        defaults={configDefaults}
+        onApply={updateConfig}
+        onReset={resetConfig}
       />
 
       <div className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain">
         <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
             <tr className="bg-primary text-white">
-              <th className={stickySelectHeaderClassName()}>
-                <input
-                  type="checkbox"
-                  checked={allFilteredSelected}
-                  ref={(element) => {
-                    if (element) {
-                      element.indeterminate = someFilteredSelected;
-                    }
-                  }}
-                  onChange={toggleSelectAllFiltered}
-                  disabled={filteredEmployeeIds.length === 0}
-                  aria-label="Select all filtered staff"
-                  className="h-4 w-4 rounded border-white/40 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40"
-                />
-              </th>
-              {visibleColumns.map((column) => (
-                <th
-                  key={column.id}
-                  className={columnCellClassName(
-                    column,
-                    cn(
-                      stickyHeaderClassName(),
-                      "text-xs font-semibold uppercase tracking-wider text-white",
-                    ),
-                  )}
-                  style={getColumnWidthStyle(column)}
-                >
-                  {isMasterFilterableColumn(column.id) ? (
-                    <TableColumnHeaderFilter
-                      column={column}
-                      submissions={submissions}
-                      allSubmissions={allSubmissions}
-                      filters={masterFilters}
-                      onTextChange={handleMasterTextChange}
-                      onMultiChange={handleMasterMultiChange}
-                    />
-                  ) : (
-                    column.label
-                  )}
+              {isHrRole ? (
+                <th className={stickySelectHeaderClassName()}>
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    ref={(element) => {
+                      if (element) {
+                        element.indeterminate = someFilteredSelected;
+                      }
+                    }}
+                    onChange={toggleSelectAllFiltered}
+                    disabled={filteredEmployeeIds.length === 0}
+                    aria-label="Select all filtered staff"
+                    className="h-4 w-4 rounded border-white/40 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40"
+                  />
                 </th>
-              ))}
+              ) : null}
+              {visibleColumns.map((column) => {
+                const savedWidth = getColumnWidth(column.id, column.width);
+                const isFrozen = frozenSet.has(column.id);
+                return (
+                  <ResizableHeader
+                    key={column.id}
+                    columnId={column.id}
+                    width={savedWidth}
+                    onResize={setColumnWidth}
+                    frozen={isFrozen}
+                    stickyLeft={isFrozen ? stickyOffsets[column.id] : undefined}
+                    className={columnCellClassName(
+                      column,
+                      cn(
+                        stickyHeaderClassName(),
+                        "text-xs font-semibold uppercase tracking-wider text-white",
+                        isFrozen && "bg-primary",
+                        column.id === lastFrozenColumnId && "border-r-2 border-slate-300/60 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] dark:border-white/20",
+                      ),
+                    )}
+                  >
+                    {isMasterFilterableColumn(column.id) ? (
+                      <TableColumnHeaderFilter
+                        column={column}
+                        submissions={submissions}
+                        allSubmissions={allSubmissions}
+                        filters={masterFilters}
+                        onTextChange={handleMasterTextChange}
+                        onMultiChange={handleMasterMultiChange}
+                      />
+                    ) : (
+                      column.label
+                    )}
+                  </ResizableHeader>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -938,24 +1011,35 @@ export function DashboardSubmissionsTable({
                         ease: [0.23, 1, 0.32, 1],
                       }}
                       className={cn(
-                        "group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
-                        isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
-                        !submission.assessmentEligibility && "opacity-50",
+                        "group transition-colors",
+                        !submission.assessmentEligibility
+                          ? "bg-rose-200/70 dark:bg-rose-900/40"
+                          : isSelected
+                            ? "bg-amber-50/60 dark:bg-amber-500/5"
+                            : "hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
+                        !submission.assessmentEligibility && isSelected &&
+                          "bg-rose-300/70 dark:bg-rose-800/40",
+                        !submission.assessmentEligibility &&
+                          "hover:bg-rose-300/60 dark:hover:bg-rose-800/30",
                       )}
                     >
-                      <td className={stickySelectCellClassName(isSelected)}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() =>
-                            toggleEmployeeSelection(submission.employeeId)
-                          }
-                          aria-label={`Select ${submission.employeeName}`}
-                          className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20 dark:bg-slate-950"
-                        />
-                      </td>
+                      {isHrRole ? (
+                        <td className={stickySelectCellClassName(isSelected)}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() =>
+                              toggleEmployeeSelection(submission.employeeId)
+                            }
+                            aria-label={`Select ${submission.employeeName}`}
+                            className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20 dark:bg-slate-950"
+                          />
+                        </td>
+                      ) : null}
                       {visibleColumns.map((column) => {
                         const value = column.getValue(submission);
+                        const savedWidth = getColumnWidth(column.id, column.width);
+                        const isFrozen = frozenSet.has(column.id);
                         const pending = pendingScoreChanges[submission.id];
                         const cellCtx: RenderCellContext = {
                           isHrRole: isHrRole,
@@ -972,18 +1056,32 @@ export function DashboardSubmissionsTable({
                             submission.status === "PENDING_BOARD_APPROVAL",
                           quartileBands,
                           sortedMatrix,
-                          onToggleAssessmentEligibility: (employeeId: string, current: boolean) =>
-                            eligibilityToggleMutation.mutate({ employeeId, current }),
+                          onToggleAssessmentEligibility: (submission: FormSubmissionListItem) =>
+                            setEligibilityModalState({ open: true, submission, error: null }),
                           isTogglingEligibility: eligibilityToggleMutation.isPending,
                         };
                         return (
                           <td
                             key={column.id}
-                            className={columnCellClassName(
-                              column,
-                              "align-middle border-b border-slate-100 dark:border-white/[0.03]",
+                            className={cn(
+                              columnCellClassName(
+                                column,
+                                "align-middle border-b border-slate-100 dark:border-white/[0.03]",
+                              ),
+                              isFrozen && "sticky",
+                              isFrozen && (
+                                !submission.assessmentEligibility
+                                  ? "bg-rose-200/70 dark:bg-rose-900/40"
+                                  : isSelected
+                                    ? "bg-amber-50/60 dark:bg-amber-500/5"
+                                    : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]"
+                              ),
+                              column.id === lastFrozenColumnId && "border-r-2 border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:border-white/20",
                             )}
-                            style={getColumnWidthStyle(column)}
+                            style={{
+                              ...(savedWidth != null ? { width: savedWidth, minWidth: savedWidth, maxWidth: savedWidth } : {}),
+                              ...(isFrozen ? { left: stickyOffsets[column.id], zIndex: 20 } : {}),
+                            }}
                           >
                             {renderCell(column, submission, value, cellCtx)}
                           </td>
@@ -1048,13 +1146,53 @@ export function DashboardSubmissionsTable({
         </div>
       ) : null}
 
-      <BulkEditStaffModal
-        open={bulkEditOpen}
-        selectedEmployeeIds={[...selectedEmployeeIds]}
-        onClose={() => setBulkEditOpen(false)}
-        onSuccess={() => setSelectedEmployeeIds(new Set())}
-        role={role}
-      />
+      {isHrRole ? (
+        <BulkEditStaffModal
+          open={bulkEditOpen}
+          selectedEmployeeIds={[...selectedEmployeeIds]}
+          onClose={() => setBulkEditOpen(false)}
+          onSuccess={() => setSelectedEmployeeIds(new Set())}
+          role={role}
+        />
+      ) : null}
+
+      {isHrRole && eligibilityModalState.submission ? (
+        <EligibilityConfirmationModal
+          open={eligibilityModalState.open}
+          employeeName={eligibilityModalState.submission.employeeName}
+          currentEligibility={eligibilityModalState.submission.assessmentEligibility}
+          isPending={eligibilityToggleMutation.isPending}
+          error={eligibilityModalState.error}
+          onClose={() =>
+            setEligibilityModalState({ open: false, submission: null, error: null })
+          }
+          onConfirm={(reason) => {
+            const sub = eligibilityModalState.submission;
+            if (!sub) return;
+            eligibilityToggleMutation.mutate(
+              {
+                employeeId: sub.employeeId,
+                current: sub.assessmentEligibility,
+                reason: sub.assessmentEligibility ? reason : undefined,
+              },
+              {
+                onSuccess: () => {
+                  setEligibilityModalState({ open: false, submission: null, error: null });
+                },
+                onError: (error) => {
+                  setEligibilityModalState((prev) => ({
+                    ...prev,
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to update eligibility.",
+                  }));
+                },
+              },
+            );
+          }}
+        />
+      ) : null}
     </motion.div>
   );
 }

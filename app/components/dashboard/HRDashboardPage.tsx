@@ -13,6 +13,7 @@ import { HeadDashboardOverview } from "@/app/components/dashboard/HeadDashboardO
 import { useDashboardPage } from "@/app/queries/dashboard";
 import { HEAD_DASHBOARD_TABLE_COLUMN_IDS } from "@/app/helpers/dashboard-table-columns";
 import { isHeadRole } from "@/lib/auth/home-path";
+import { canAccessDashboardSubmissions } from "@/lib/auth/submission-review-roles";
 import { cn } from "@/lib/utils";
 
 interface HRDashboardPageProps {
@@ -28,6 +29,7 @@ type DashboardTab = "overview" | "direct-assessment";
 
 export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   const isHead = isHeadRole(role);
+  const canAccessDirectAssessment = canAccessDashboardSubmissions(role ?? undefined);
   const [statsVisible, setStatsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
@@ -76,7 +78,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
 
   return (
     <div className="relative min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
-      {isHead ? (
+      {canAccessDirectAssessment ? (
         <div className="mb-2 flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
           <button
             onClick={() => setActiveTab("overview")}
@@ -100,12 +102,12 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
             )}
           >
             <ClipboardList className="size-3.5" />
-            Direct Assessment by Manager
+            Direct Assessment
           </button>
         </div>
       ) : null}
 
-      {activeTab === "direct-assessment" && isHead ? (
+      {activeTab === "direct-assessment" && canAccessDirectAssessment ? (
         <div className="mx-auto w-full max-w-full min-w-0">
           <DirectAssessmentTab />
         </div>

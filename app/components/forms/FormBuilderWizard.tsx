@@ -374,19 +374,19 @@ function ModernFormDesignStep({
   );
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      {/* Left Sidebar - Sticky Tools */}
-      <div className="flex w-72 flex-col border-r border-slate-200 bg-slate-50/80 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/50">
-        <div className="border-b border-slate-200 p-4 dark:border-slate-800">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      {/* Top: Form Settings Panel */}
+      <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
             <Settings2 className="h-4 w-4" />
             Form Settings
           </h3>
         </div>
-        
-        <div className="flex-1 space-y-6 overflow-y-auto p-4">
+
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* Title Field */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Form Title
             </label>
@@ -396,7 +396,7 @@ function ModernFormDesignStep({
               onChange={(e) => onTitleChange(e.target.value)}
               placeholder="Enter form title..."
               className={cn(
-                "w-full rounded-lg border bg-white px-3 py-2.5 text-sm outline-none transition-all placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900",
+                "w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900",
                 errors.title
                   ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 dark:border-red-800"
                   : "border-slate-200 focus:border-primary focus:ring-primary/20 dark:border-slate-700"
@@ -410,7 +410,7 @@ function ModernFormDesignStep({
           </div>
 
           {/* Description Field */}
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:col-span-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Description
             </label>
@@ -418,58 +418,53 @@ function ModernFormDesignStep({
               value={description}
               onChange={(e) => onDescriptionChange(e.target.value)}
               placeholder="Optional description..."
-              rows={3}
-              className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
+              rows={2}
+              className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
             />
           </div>
 
-          {/* Self Assessment Setting — now per-employee, not form-level */}
-          <div className="space-y-2">
+          {/* Assessment Settings info */}
+          <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Assessment Settings
+              Assessment
             </label>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-              Self-assessment is configured per employee during form assignment. Question-level self-assessment checkboxes control which questions are included.
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-snug text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              Self-assessment is configured per employee during assignment.
             </div>
           </div>
+        </div>
 
-          {/* Stats Card */}
-          <div className="rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Total Questions</span>
-              <span className="text-lg font-bold text-primary">{totalQuestions}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Sections</span>
-              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{sections.length}</span>
-            </div>
+        {/* Stats + Quick Actions Bar */}
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-2.5 dark:border-slate-800">
+          <div className="flex items-center gap-4 rounded-md border border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Questions: <span className="font-bold text-primary">{totalQuestions}</span>
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Sections: <span className="font-semibold text-slate-700 dark:text-slate-300">{sections.length}</span>
+            </span>
           </div>
-
-          {/* Quick Actions - Always Visible */}
-          <div className="sticky top-0 space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Quick Add
-            </label>
+          <div className="flex items-center gap-2">
             <button
               onClick={addSection}
-              className="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Add Section
             </button>
             <button
               onClick={addStandaloneQuestion}
-              className="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
             >
-              <HelpCircle className="h-4 w-4" />
-              Add Standalone Question
+              <HelpCircle className="h-3.5 w-3.5" />
+              Add Question
             </button>
           </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex flex-1 flex-col bg-slate-50/50 dark:bg-slate-950/50">
+      {/* Main Content Area - Full Width */}
+      <div className="flex min-h-0 flex-1 flex-col bg-slate-50/50 dark:bg-slate-950/50">
         {/* Toolbar */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-white/80 px-6 py-3 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
           <div className="flex items-center gap-4">

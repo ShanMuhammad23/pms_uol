@@ -35,9 +35,9 @@ export async function GET(request: Request) {
       );
     }
 
-    console.error("Failed to list institutional quotas:", error);
+    console.error("Failed to list quotas:", error);
     return NextResponse.json(
-      { error: "Failed to load institutional quotas." },
+      { error: "Failed to load quotas." },
       { status: 500 },
     );
   }
@@ -67,9 +67,9 @@ export async function PUT(request: Request) {
       );
     }
 
-    console.error("Failed to save institutional quotas:", error);
+    console.error("Failed to save quotas:", error);
     return NextResponse.json(
-      { error: "Failed to save institutional quotas." },
+      { error: "Failed to save quotas." },
       { status: 500 },
     );
   }

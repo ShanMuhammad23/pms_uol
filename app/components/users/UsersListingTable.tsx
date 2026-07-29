@@ -10,6 +10,15 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
+import { ResizableHeader } from "@/app/components/common/ResizableHeader";
+import {
+  ColumnManagementPanel,
+  ColumnManagementPanelTrigger,
+} from "@/app/components/common/ColumnManagementPanel";
+import {
+  useColumnConfig,
+  type ColumnDef,
+} from "@/app/hooks/use-column-config";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { UsersMasterFilter } from "@/app/components/users/UsersMasterFilter";
 import { UsersTableColumnHeaderFilter } from "@/app/components/users/UsersTableColumnHeaderFilter";
@@ -181,6 +190,26 @@ export function UsersListingTable({
     () => new Set(),
   );
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [columnMgmtOpen, setColumnMgmtOpen] = useState(false);
+
+  const {
+    config,
+    defaults: configDefaults,
+    visibleOrderedColumns,
+    frozenColumnIds,
+    lastFrozenColumnId,
+    stickyOffsets,
+    getColumnWidth,
+    setColumnWidth,
+    updateConfig,
+    resetConfig,
+  } = useColumnConfig("user-management", {
+    allColumns: USERS_TABLE_COLUMNS as readonly ColumnDef[],
+  });
+  const frozenSet = useMemo(
+    () => new Set(frozenColumnIds),
+    [frozenColumnIds],
+  );
 
   const masterFilteredUsers = useMemo(
     () => applyUsersMasterFilters(users, masterFilters),
@@ -354,6 +383,16 @@ export function UsersListingTable({
         onClearAll={clearMasterFilters}
       />
 
+      <ColumnManagementPanel
+        open={columnMgmtOpen}
+        onOpenChange={setColumnMgmtOpen}
+        columns={USERS_TABLE_COLUMNS as readonly ColumnDef[]}
+        config={config}
+        defaults={configDefaults}
+        onApply={updateConfig}
+        onReset={resetConfig}
+      />
+
       <div className="relative z-50 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
         <div className="min-w-0">
           <p className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -373,6 +412,10 @@ export function UsersListingTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <ColumnManagementPanelTrigger
+            open={columnMgmtOpen}
+            onOpenChange={setColumnMgmtOpen}
+          />
           <button
             type="button"
             onClick={() => setBulkEditOpen(true)}
@@ -405,31 +448,43 @@ export function UsersListingTable({
                   className="h-4 w-4 rounded border-white/40 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40"
                 />
               </th>
-              {USERS_TABLE_COLUMNS.map((column) => (
-                <th
-                  key={column.id}
-                  className={columnCellClassName(
-                    column,
-                    cn(
-                      stickyHeaderClassName(),
-                      "text-xs font-semibold uppercase tracking-wider text-white",
-                    ),
-                  )}
-                >
-                  {isUsersMasterFilterableColumn(column.id) ? (
-                    <UsersTableColumnHeaderFilter
-                      column={column}
-                      users={users}
-                      allUsers={allUsers}
-                      filters={masterFilters}
-                      onTextChange={handleMasterTextChange}
-                      onMultiChange={handleMasterMultiChange}
-                    />
-                  ) : (
-                    column.label
-                  )}
-                </th>
-              ))}
+              {visibleOrderedColumns.map((column) => {
+                const col = column as UsersTableColumnDef;
+                const savedWidth = getColumnWidth(col.id, col.width);
+                const isFrozen = frozenSet.has(col.id);
+                return (
+                  <ResizableHeader
+                    key={col.id}
+                    columnId={col.id}
+                    width={savedWidth}
+                    onResize={setColumnWidth}
+                    frozen={isFrozen}
+                    stickyLeft={isFrozen ? stickyOffsets[col.id] : undefined}
+                    className={columnCellClassName(
+                      col,
+                      cn(
+                        stickyHeaderClassName(),
+                        "text-xs font-semibold uppercase tracking-wider text-white",
+                        isFrozen && "bg-primary",
+                        col.id === lastFrozenColumnId && "border-r-2 border-slate-300/60 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] dark:border-white/20",
+                      ),
+                    )}
+                  >
+                    {isUsersMasterFilterableColumn(col.id) ? (
+                      <UsersTableColumnHeaderFilter
+                        column={col}
+                        users={users}
+                        allUsers={allUsers}
+                        filters={masterFilters}
+                        onTextChange={handleMasterTextChange}
+                        onMultiChange={handleMasterMultiChange}
+                      />
+                    ) : (
+                      col.label
+                    )}
+                  </ResizableHeader>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -461,18 +516,34 @@ export function UsersListingTable({
                         className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20 dark:bg-slate-950"
                       />
                     </td>
-                    {USERS_TABLE_COLUMNS.map((column) => {
-                      const value = column.getValue(user);
+                    {visibleOrderedColumns.map((column) => {
+                      const col = column as UsersTableColumnDef;
+                      const value = col.getValue(user);
+                      const savedWidth = getColumnWidth(col.id, col.width);
+                      const isFrozen = frozenSet.has(col.id);
                       return (
                         <td
-                          key={column.id}
-                          className={columnCellClassName(
-                            column,
-                            "align-middle border-b border-slate-100 dark:border-white/[0.03]",
+                          key={col.id}
+                          className={cn(
+                            columnCellClassName(
+                              col,
+                              "align-middle border-b border-slate-100 dark:border-white/[0.03]",
+                            ),
+                            isFrozen && "sticky",
+                            isFrozen && (
+                              isSelected
+                                ? "bg-amber-50/60 dark:bg-amber-500/5"
+                                : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]"
+                            ),
+                            col.id === lastFrozenColumnId && "border-r-2 border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:border-white/20",
                           )}
+                          style={{
+                            ...(savedWidth != null ? { width: savedWidth, minWidth: savedWidth, maxWidth: savedWidth } : {}),
+                            ...(isFrozen ? { left: stickyOffsets[col.id], zIndex: 20 } : {}),
+                          }}
                         >
                           {renderCell(
-                            column,
+                            col,
                             user,
                             value,
                             onEdit,

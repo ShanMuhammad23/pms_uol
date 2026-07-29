@@ -25,6 +25,7 @@ export type UsersTableColumnDef = {
   id: UsersTableColumnId;
   label: string;
   align?: "left" | "right" | "center";
+  width?: number;
   getValue: (row: UserRecord) => string;
 };
 

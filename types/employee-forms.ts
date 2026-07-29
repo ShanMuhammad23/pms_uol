@@ -41,6 +41,8 @@ export interface EmployeeFormDetail {
   rawScore: number;
   maxRawScore: number;
   selfAssessmentEnabled: boolean;
+  assessmentEligibility: boolean;
+  ineligibilityReason: string | null;
 }
 
 export interface EmployeeFormAnswerInput {

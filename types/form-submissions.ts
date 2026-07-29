@@ -85,6 +85,8 @@ export interface FormSubmissionListItem {
   selfAssessmentEnabled: boolean;
   /** Manual toggle: when false, all score editing is disabled for this employee. */
   assessmentEligibility: boolean;
+  /** Reason provided when eligibility was disabled. Null when eligible. */
+  ineligibilityReason: string | null;
 }
 
 export interface FormSubmissionDetail {
@@ -126,4 +128,5 @@ export interface FormSubmissionDetail {
   canEditScoreAdjustments: boolean;
   selfAssessmentEnabled: boolean;
   assessmentEligibility: boolean;
+  ineligibilityReason: string | null;
 }

@@ -8,6 +8,10 @@ async function ensureAssessmentEligibilityColumn(): Promise<void> {
     `ALTER TABLE users
      ADD COLUMN IF NOT EXISTS assessment_eligibility BOOLEAN NOT NULL DEFAULT TRUE`,
   );
+  await db.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS ineligibility_reason TEXT`,
+  );
 }
 
 export async function PATCH(request: Request) {
@@ -48,19 +52,29 @@ export async function PATCH(request: Request) {
 
     const employeeIds = body.employeeIds as string[];
     const eligibility = body.assessmentEligibility;
+    const reason = typeof body.ineligibilityReason === "string" ? body.ineligibilityReason.trim() : "";
+
+    if (!eligibility && !reason) {
+      return NextResponse.json(
+        { error: "A reason is required when disabling eligibility." },
+        { status: 400 },
+      );
+    }
 
     const result = await db.query<{ employee_id: string }>(
       `UPDATE users
-       SET assessment_eligibility = $2
+       SET assessment_eligibility = $2,
+           ineligibility_reason = $3
        WHERE employee_id = ANY($1::text[])
        RETURNING employee_id`,
-      [employeeIds, eligibility],
+      [employeeIds, eligibility, eligibility ? null : reason],
     );
 
     return NextResponse.json({
       updatedCount: result.rows.length,
       employeeIds: result.rows.map((r) => r.employee_id),
       assessmentEligibility: eligibility,
+      ineligibilityReason: eligibility ? null : reason,
     });
   } catch (error) {
     if (error instanceof FormSubmissionError) {

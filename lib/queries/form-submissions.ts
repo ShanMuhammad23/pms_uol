@@ -97,6 +97,7 @@ interface SubmissionListRow {
   direct_score_entry: boolean;
   self_assessment_disabled: boolean;
   assessment_eligibility: boolean | null;
+  ineligibility_reason: string | null;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -165,6 +166,10 @@ async function ensureAssessmentEligibilityColumn(): Promise<void> {
   await db.query(
     `ALTER TABLE users
      ADD COLUMN IF NOT EXISTS assessment_eligibility BOOLEAN NOT NULL DEFAULT TRUE`,
+  );
+  await db.query(
+    `ALTER TABLE users
+     ADD COLUMN IF NOT EXISTS ineligibility_reason TEXT`,
   );
 }
 
@@ -303,6 +308,7 @@ function mapSubmissionRow(
     submittedAt: row.submitted_at,
     selfAssessmentEnabled: !row.self_assessment_disabled,
     assessmentEligibility: row.assessment_eligibility ?? true,
+    ineligibilityReason: row.ineligibility_reason ?? null,
   };
 }
 
@@ -594,6 +600,7 @@ export async function getFormSubmissionSummaryById(
     | "manager1UserId"
     | "manager2UserId"
     | "assessmentEligibility"
+    | "ineligibilityReason"
   > | null
 > {
   await ensureManager2Column();
@@ -607,6 +614,7 @@ export async function getFormSubmissionSummaryById(
     manager_1_user_id: string | null;
     manager_2_user_id: string | null;
     assessment_eligibility: boolean | null;
+    ineligibility_reason: string | null;
   }>(
     `SELECT ap.id,
             u.entity_id,
@@ -614,7 +622,8 @@ export async function getFormSubmissionSummaryById(
             ap.manager_level,
             u.head_id::text AS manager_1_user_id,
             u.manager_2_id::text AS manager_2_user_id,
-            COALESCE(u.assessment_eligibility, true) AS assessment_eligibility
+            COALESCE(u.assessment_eligibility, true) AS assessment_eligibility,
+      u.ineligibility_reason
      FROM appraisals ap
      INNER JOIN users u ON u.id = ap.employee_id
      WHERE ap.id = $1
@@ -639,6 +648,7 @@ export async function getFormSubmissionSummaryById(
       ? Number(row.manager_2_user_id)
       : null,
     assessmentEligibility: row.assessment_eligibility ?? true,
+    ineligibilityReason: row.ineligibility_reason ?? null,
   };
 }
 
@@ -961,6 +971,7 @@ export async function getFormSubmissionById(
     canEditScoreAdjustments: Boolean(options?.canEditScoreAdjustments),
     selfAssessmentEnabled: summary.selfAssessmentEnabled,
     assessmentEligibility: summary.assessmentEligibility,
+    ineligibilityReason: summary.ineligibilityReason ?? null,
   };
 }
 

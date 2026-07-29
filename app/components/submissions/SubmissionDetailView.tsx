@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchFormSubmission,
   approveManagerReview,
@@ -21,6 +21,10 @@ import {
 } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 import { cn } from "@/lib/utils";
+import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
+import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
+import { useSession } from "next-auth/react";
+import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
@@ -85,6 +89,9 @@ export default function SubmissionDetailView({
   submissionId,
 }: SubmissionDetailViewProps) {
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
+  const userRole = session?.user?.role;
+  const isAdminRole = canReviewSubmissions(userRole);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
     new Map(),
@@ -306,11 +313,12 @@ export default function SubmissionDetailView({
   const hasManager2 = data?.manager2UserId != null;
   const currentManagerLevel = data?.managerLevel ?? 1;
   const selfAssessmentEnabled = data?.selfAssessmentEnabled ?? true;
+  const isEligible = data?.assessmentEligibility ?? true;
   const editingManager1 =
-    data?.canEditManagerReview && currentManagerLevel === 1;
+    isEligible && data?.canEditManagerReview && currentManagerLevel === 1;
   const editingManager2 =
-    data?.canEditManagerReview && currentManagerLevel === 2;
-  const editingHr = data?.canEditHrReview ?? false;
+    isEligible && data?.canEditManagerReview && currentManagerLevel === 2;
+  const editingHr = isEligible && (data?.canEditHrReview ?? false);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!editingHr && !data?.canEditManagerReview) return false;
@@ -535,6 +543,14 @@ export default function SubmissionDetailView({
         </div>
       </div>
 
+      {!isEligible ? (
+        <IneligibilityBanner
+          role={isAdminRole ? "admin" : "manager"}
+          employeeName={data?.employeeName}
+          reason={data?.ineligibilityReason}
+        />
+      ) : null}
+
       {data.canEditManagerReview ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-violet-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-violet-950/20">
           <p className="text-violet-800 dark:text-violet-200">
@@ -717,9 +733,6 @@ export default function SubmissionDetailView({
               <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Sr. No.
               </th>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
-                Key Task / Function
-              </th>
               <th className="min-w-[260px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Key Performance Indicators (KPIs)
               </th>
@@ -758,7 +771,7 @@ export default function SubmissionDetailView({
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={selfAssessmentEnabled ? (hasManager2 ? 10 : 8) : (hasManager2 ? 8 : 6)}
+                  colSpan={selfAssessmentEnabled ? (hasManager2 ? 9 : 7) : (hasManager2 ? 7 : 5)}
                   className="bg-slate-50 px-3 py-8 text-center text-sm text-slate-500 dark:bg-slate-800/30 dark:text-slate-400"
                 >
                   No questions were found for this submission.
@@ -778,6 +791,14 @@ export default function SubmissionDetailView({
                 const isEvenRow = rowIdx % 2 === 0;
 
                 return (
+                  <Fragment key={question.id}>
+                    {row.isFirstInSection && row.sectionTitle ? (
+                      <tr className="bg-amber-50/80 dark:bg-amber-950/20">
+                        <td colSpan={selfAssessmentEnabled ? (hasManager2 ? 9 : 7) : (hasManager2 ? 7 : 5)} className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200">
+                          {row.sectionTitle}
+                        </td>
+                      </tr>
+                    ) : null}
                   <tr
                     key={question.id}
                     className={cn(
@@ -790,23 +811,6 @@ export default function SubmissionDetailView({
                     <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40">
                       {row.sr}
                     </td>
-                    {row.isFirstInSection ? (
-                      <td
-                        className="max-w-[220px] border-r border-slate-100 bg-amber-50/80 px-3 py-2.5 align-top dark:border-slate-700/40 dark:bg-amber-950/20"
-                        rowSpan={row.sectionRowCount}
-                      >
-                        {row.sectionTitle ? (
-                          <span
-                            className="line-clamp-3 font-semibold text-amber-800 dark:text-amber-200"
-                            title={row.sectionTitle}
-                          >
-                            {row.sectionTitle}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                    ) : null}
                     <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
                       {row.subsectionTitle ? (
                         <span className="mb-1 block text-xs font-medium text-amber-600 dark:text-amber-400/70">
@@ -957,6 +961,7 @@ export default function SubmissionDetailView({
                       </>
                     ) : null}
                   </tr>
+                  </Fragment>
                 );
               })
             )}
@@ -965,7 +970,7 @@ export default function SubmissionDetailView({
             <tfoot>
               <tr className="bg-slate-800 dark:bg-slate-950/80">
                 <td
-                  colSpan={selfAssessmentEnabled ? 3 : 2}
+                  colSpan={2}
                   className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200"
                 >
                   Total
@@ -998,6 +1003,44 @@ export default function SubmissionDetailView({
           ) : null}
         </table>
       </div>
+
+      {rows.length > 0 ? (
+        <AssessmentSummaryFooter
+          entries={[
+            ...(selfAssessmentEnabled
+              ? [
+                  {
+                    label: "Self Assessment",
+                    awardedMarks: selfTotal,
+                    totalMarks: data.maxRawScore,
+                    accentClass:
+                      "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+                  },
+                ]
+              : []),
+            {
+              label: "Manager 1 Assessment",
+              awardedMarks: editingManager1 ? managerDraftTotal : manager1Total,
+              totalMarks: data.maxRawScore,
+              accentClass:
+                "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+            },
+            ...(hasManager2
+              ? [
+                  {
+                    label: "Manager 2 Assessment",
+                    awardedMarks: editingManager2
+                      ? managerDraftTotal
+                      : (manager2Total ?? 0),
+                    totalMarks: data.maxRawScore,
+                    accentClass:
+                      "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+                  },
+                ]
+              : []),
+          ]}
+        />
+      ) : null}
     </div>
   );
 }

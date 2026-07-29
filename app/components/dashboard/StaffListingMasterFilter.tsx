@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Eye, EyeOff, Filter, RotateCcw, Search } from "lucide-react";
+import {
+  ChevronDown,
+  Filter,
+  RotateCcw,
+  Search,
+} from "lucide-react";
 import {
   MultiSelectFilterDropdown,
   type MultiSelectOption,
@@ -17,7 +22,6 @@ import {
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
 import {
-  PINNED_DASHBOARD_TABLE_COLUMNS,
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
@@ -35,12 +39,6 @@ interface StaffListingMasterFilterProps {
     next: MasterFilterMultiSelection,
   ) => void;
   onClearAll: () => void;
-  visibleIds: DashboardTableColumnId[];
-  columnOrder: DashboardTableColumnId[];
-  onToggleColumn: (id: DashboardTableColumnId) => void;
-  onShowAllColumns: () => void;
-  onHideAllColumns: () => void;
-  onSetColumnPosition: (id: DashboardTableColumnId, position: number) => void;
   allowedColumnIds?: readonly DashboardTableColumnId[];
 }
 
@@ -69,89 +67,17 @@ function TextFilterControl({
 
 function ColumnFilterRow({
   columnId,
-  label,
-  orderValue,
-  orderMax,
-  visible,
-  pinned,
-  onToggleVisible,
-  onOrderChange,
-  onOrderCommit,
   children,
 }: {
   columnId: DashboardTableColumnId;
-  label: string;
-  orderValue: string;
-  orderMax: number;
-  visible: boolean;
-  pinned: boolean;
-  onToggleVisible: () => void;
-  onOrderChange: (next: string) => void;
-  onOrderCommit: () => void;
   children: ReactNode;
 }) {
   return (
     <div
       className={cn(
         "min-w-0 rounded-md border border-slate-200/70 bg-white/80 p-2 dark:border-white/10 dark:bg-slate-950/40",
-        !visible && "opacity-60",
       )}
     >
-      <div className="mb-1.5 flex items-center gap-2">
-        <label
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1.5",
-            pinned ? "cursor-default opacity-60" : "cursor-pointer",
-          )}
-          title={
-            pinned
-              ? "Pinned column (always visible)"
-              : visible
-                ? "Hide column"
-                : "Show column"
-          }
-        >
-          <input
-            type="checkbox"
-            checked={visible}
-            disabled={pinned}
-            onChange={onToggleVisible}
-            className="h-3.5 w-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 disabled:cursor-not-allowed"
-            aria-label={`Show ${label} column`}
-          />
-          {visible ? (
-            <Eye className="h-3 w-3 text-slate-400" aria-hidden />
-          ) : (
-            <EyeOff className="h-3 w-3 text-slate-400" aria-hidden />
-          )}
-        </label>
-
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-600 dark:text-slate-300">
-          {label}
-        </span>
-
-        <label className="inline-flex shrink-0 items-center gap-1 text-[10px] text-slate-400">
-          <span className="sr-only">Display order for {label}</span>
-          <span aria-hidden>Order</span>
-          <input
-            type="number"
-            min={1}
-            max={orderMax}
-            value={orderValue}
-            onChange={(event) => onOrderChange(event.target.value)}
-            onBlur={onOrderCommit}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                (event.target as HTMLInputElement).blur();
-              }
-            }}
-            className="h-6 w-10 rounded border border-slate-200 bg-white px-1 text-center text-xs tabular-nums text-slate-700 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300/50 dark:border-white/10 dark:bg-slate-950 dark:text-slate-200"
-            aria-label={`Display order for ${label}`}
-            data-column-id={columnId}
-          />
-        </label>
-      </div>
       {children}
     </div>
   );
@@ -199,16 +125,9 @@ export function StaffListingMasterFilter({
   onTextChange,
   onMultiChange,
   onClearAll,
-  visibleIds,
-  columnOrder,
-  onToggleColumn,
-  onShowAllColumns,
-  onHideAllColumns,
-  onSetColumnPosition,
   allowedColumnIds,
 }: StaffListingMasterFilterProps) {
   const activeCount = countActiveMasterFilters(filters);
-  const [draftOrders, setDraftOrders] = useState<Record<string, string>>({});
 
   const filterSections = useMemo(() => {
     if (!allowedColumnIds) {
@@ -221,24 +140,6 @@ export function StaffListingMasterFilter({
       columns: section.columns.filter((column) => allowed.has(column.id)),
     })).filter((section) => section.columns.length > 0);
   }, [allowedColumnIds]);
-
-  const orderIndexById = useMemo(() => {
-    const map = new Map<DashboardTableColumnId, number>();
-    columnOrder.forEach((id, index) => {
-      map.set(id, index + 1);
-    });
-    return map;
-  }, [columnOrder]);
-
-  const orderMax = Math.max(columnOrder.length, 1);
-
-  useEffect(() => {
-    const next: Record<string, string> = {};
-    for (const id of columnOrder) {
-      next[id] = String(orderIndexById.get(id) ?? 1);
-    }
-    setDraftOrders(next);
-  }, [columnOrder, orderIndexById]);
 
   const optionsByColumn = useMemo(() => {
     const map = new Map<string, MultiSelectOption[]>();
@@ -263,30 +164,6 @@ export function StaffListingMasterFilter({
     return map;
   }, [allSubmissions, filterSections, filters, submissions]);
 
-  const visibleToggleableCount = useMemo(
-    () =>
-      columnOrder.filter((id) => {
-        const pinned = PINNED_DASHBOARD_TABLE_COLUMNS.some(
-          (column) => column.id === id,
-        );
-        return !pinned && visibleIds.includes(id);
-      }).length,
-    [columnOrder, visibleIds],
-  );
-
-  const commitOrder = (id: DashboardTableColumnId) => {
-    const raw = draftOrders[id];
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) {
-      setDraftOrders((current) => ({
-        ...current,
-        [id]: String(orderIndexById.get(id) ?? 1),
-      }));
-      return;
-    }
-    onSetColumnPosition(id, parsed);
-  };
-
   return (
     <AnimatePresence initial={false}>
       {open ? (
@@ -302,24 +179,9 @@ export function StaffListingMasterFilter({
           <div className="px-5 pb-5 pt-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Filter values, toggle column visibility, and set display order.
+                Filter values for the staff listing.
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={onShowAllColumns}
-                  className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
-                >
-                  Show all columns
-                </button>
-                <button
-                  type="button"
-                  onClick={onHideAllColumns}
-                  disabled={visibleToggleableCount === 0}
-                  className="text-xs font-medium text-slate-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-slate-300"
-                >
-                  Hide all columns
-                </button>
                 {activeCount > 0 ? (
                   <button
                     type="button"
@@ -351,29 +213,10 @@ export function StaffListingMasterFilter({
                   </h3>
                   <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                     {section.columns.map((column) => {
-                      const pinned = Boolean(column.pinned);
-                      const visible = visibleIds.includes(column.id);
-
                       return (
                         <ColumnFilterRow
                           key={column.id}
                           columnId={column.id}
-                          label={column.label}
-                          orderValue={
-                            draftOrders[column.id] ??
-                            String(orderIndexById.get(column.id) ?? 1)
-                          }
-                          orderMax={orderMax}
-                          visible={visible}
-                          pinned={pinned}
-                          onToggleVisible={() => onToggleColumn(column.id)}
-                          onOrderChange={(next) =>
-                            setDraftOrders((current) => ({
-                              ...current,
-                              [column.id]: next,
-                            }))
-                          }
-                          onOrderCommit={() => commitOrder(column.id)}
                         >
                           {isMasterFilterTextColumn(column.id) ? (
                             <TextFilterControl

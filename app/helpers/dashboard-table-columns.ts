@@ -249,7 +249,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   sapCode: {
     id: "sapCode",
     label: "SAP Code",
-    width: 120,
+    width: 160,
     getValue: (row) => formatNullable(row.employeeId),
   },
   employeeName: {
@@ -562,7 +562,6 @@ export const HEAD_DASHBOARD_TABLE_COLUMN_IDS = [
   "assessmentEligible",
   "applicableDuration",
   "scoreO",
-  "adjustedScore",
 ] as const satisfies readonly DashboardTableColumnId[];
 
 export const HEAD_DASHBOARD_TABLE_COLUMN_ID_SET = new Set<DashboardTableColumnId>(

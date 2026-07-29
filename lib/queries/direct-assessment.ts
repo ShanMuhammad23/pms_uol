@@ -116,8 +116,10 @@ export async function getDirectAssessmentData(
        LIMIT 1
      ) ap ON TRUE
      WHERE efa.template_id = $1
+       AND efa.self_assessment_disabled = true
        AND u.is_active = TRUE
        AND u.employee_id <> 'EMP-0001'
+       AND COALESCE(u.assessment_eligibility, true) = true
        ${visibilityClause}`,
     [templateId, ...visibilityParams, templateId],
   );

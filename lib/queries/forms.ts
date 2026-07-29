@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { db } from "../db";
 import { upsertIncrementMatrices } from "./increment-matrices";
 import { getAppraisalCycleById, getDefaultAppraisalCycle, ensureDefaultAppraisalCycle } from "./appraisal-cycles";
+import { resolveEntitySubtreeIds } from "./entity-scope";
 import type {
   EmployeeCategory,
   FieldType,
@@ -690,6 +691,83 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
      LEFT JOIN employee_form_assignments efa ON efa.template_id = ft.id
      GROUP BY ft.id, ac.fiscal_year
      ORDER BY ft.updated_at DESC`,
+  );
+
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    title: row.title,
+    description: row.description,
+    cycleId: row.cycle_id,
+    fiscalYear: row.fiscal_year,
+    targetCategory: row.target_category,
+    targetSubCategory: row.target_sub_category,
+    selfAssessmentEnabled: row.self_assessment_enabled,
+    questionCount: Number(row.question_count),
+    appraisalCount: Number(row.appraisal_count),
+    assignedEmployeeCount: Number(row.assigned_employee_count),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function listDirectAssessmentTemplates(scope: {
+  reviewerUserId: number;
+  headEntityId: number | null;
+}): Promise<FormTemplateListItem[]> {
+  const { reviewerUserId, headEntityId } = scope;
+
+  const scopedEntityIds =
+    headEntityId != null && Number.isFinite(headEntityId)
+      ? await resolveEntitySubtreeIds(headEntityId)
+      : [];
+
+  let visibilityClause: string;
+  let visibilityParams: unknown[];
+
+  if (scopedEntityIds.length > 0) {
+    visibilityClause = `AND (
+      u.entity_id = ANY($1::bigint[])
+      OR u.head_id = $2
+      OR u.manager_2_id = $2
+    )`;
+    visibilityParams = [scopedEntityIds, reviewerUserId];
+  } else {
+    visibilityClause = `AND (
+      u.head_id = $1
+      OR u.manager_2_id = $1
+    )`;
+    visibilityParams = [reviewerUserId];
+  }
+
+  const result = await db.query<FormTemplateListRow>(
+    `SELECT
+       ft.id,
+       ft.title,
+       ft.description,
+       ft.cycle_id,
+       ac.fiscal_year,
+       ft.target_category,
+       ft.target_sub_category,
+       ft.self_assessment_enabled,
+       COUNT(DISTINCT fq.id)::text AS question_count,
+       COUNT(DISTINCT ap.id)::text AS appraisal_count,
+       COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
+       ft.created_at::text,
+       ft.updated_at::text
+     FROM form_templates ft
+     INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
+     LEFT JOIN form_questions fq ON fq.template_id = ft.id
+     LEFT JOIN appraisals ap ON ap.template_id = ft.id
+     INNER JOIN employee_form_assignments efa ON efa.template_id = ft.id
+     INNER JOIN users u ON u.id = efa.employee_id
+       AND u.is_active = TRUE
+       AND u.employee_id <> 'EMP-0001'
+       AND COALESCE(u.assessment_eligibility, true) = true
+       AND efa.self_assessment_disabled = true
+       ${visibilityClause}
+     GROUP BY ft.id, ac.fiscal_year
+     ORDER BY ft.updated_at DESC`,
+    visibilityParams,
   );
 
   return result.rows.map((row) => ({

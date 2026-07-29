@@ -51,6 +51,14 @@ export async function fetchFormTemplatesForDashboard(): Promise<FormTemplateList
   return parseResponse<FormTemplateListItem[]>(response);
 }
 
+export async function fetchDirectAssessmentTemplates(): Promise<FormTemplateListItem[]> {
+  const response = await fetch("/api/templates?directAssessment=true", {
+    credentials: "include",
+    cache: "no-store",
+  });
+  return parseResponse<FormTemplateListItem[]>(response);
+}
+
 export async function fetchFormTemplate(id: number): Promise<FormTemplateRecord> {
   const response = await fetch(`/api/admin/forms/${id}`, {
     credentials: "include",

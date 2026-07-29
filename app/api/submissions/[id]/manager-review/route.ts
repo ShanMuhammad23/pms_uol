@@ -59,6 +59,13 @@ export async function PUT(request: Request, context: RouteContext) {
 
     await assertSubmissionAccessible(auth, summary);
 
+    if (!summary.assessmentEligibility) {
+      return NextResponse.json(
+        { error: "Score editing is disabled: employee is not eligible for assessment." },
+        { status: 403 },
+      );
+    }
+
     const body = (await request.json()) as SaveManagerReviewInput;
     if (!Array.isArray(body.answers)) {
       return NextResponse.json(
@@ -138,6 +145,13 @@ export async function POST(_request: Request, context: RouteContext) {
     }
 
     await assertSubmissionAccessible(auth, summary);
+
+    if (!summary.assessmentEligibility) {
+      return NextResponse.json(
+        { error: "Score editing is disabled: employee is not eligible for assessment." },
+        { status: 403 },
+      );
+    }
 
     const result = await approveManagerReview(submissionId);
 
