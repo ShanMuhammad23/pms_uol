@@ -24,3 +24,12 @@ export function canAccessDashboardSubmissions(role: string | undefined): boolean
 export function isAdminRole(role: string | undefined): boolean {
   return SUBMISSION_REVIEW_ROLES.includes(role as UserRole);
 }
+
+/**
+ * Quartile is confidential performance information.
+ * Only HR, Board, and Super Admin may view quartile data.
+ * Employees and Managers (Manager 1 / Manager 2) are excluded.
+ */
+export function canViewQuartile(role: string | undefined): boolean {
+  return SUBMISSION_REVIEW_ROLES.includes(role as UserRole);
+}

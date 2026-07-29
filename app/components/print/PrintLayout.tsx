@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
-import type { PrintOrientation } from "@/app/components/print/PrintLayout";
+import { useEffect, type ReactNode } from "react";
 
-interface PrintTriggerProps {
+export type PrintOrientation = "portrait" | "landscape";
+
+interface PrintLayoutProps {
   orientation?: PrintOrientation;
+  children: ReactNode;
 }
 
-export default function PrintTrigger({ orientation = "portrait" }: PrintTriggerProps) {
+export default function PrintLayout({
+  orientation = "portrait",
+  children,
+}: PrintLayoutProps) {
   useEffect(() => {
     const html = document.documentElement;
     if (orientation === "landscape") {
@@ -15,16 +20,12 @@ export default function PrintTrigger({ orientation = "portrait" }: PrintTriggerP
     } else {
       html.classList.remove("print-landscape");
     }
-
-    const timeout = setTimeout(() => {
-      window.print();
-    }, 600);
-
     return () => {
-      clearTimeout(timeout);
       html.classList.remove("print-landscape");
     };
   }, [orientation]);
 
-  return null;
+  return (
+    <div className="print-content print-full-width">{children}</div>
+  );
 }

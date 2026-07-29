@@ -19,7 +19,7 @@ export default function AssessmentSummaryFooter({
   if (entries.length === 0) return null;
 
   return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    <div className="print-assessment-summary mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {entries.map((entry) => {
           const percentage =

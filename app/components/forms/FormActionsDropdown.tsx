@@ -144,7 +144,7 @@ export default function FormActionsDropdown({
           icon: <Printer className="size-4" />,
           onClick: () =>
             window.open(
-              `/dashboard/forms/${templateId}/view?print=true`,
+              `/dashboard/forms/${templateId}/view?print=true&orientation=landscape`,
               "_blank",
             ),
           colorClass:

@@ -1,15 +1,18 @@
 "use client";
 
-import type { FormTemplateRecord, QuestionRecord, FormSectionRecord, FormSubsectionRecord, FieldType } from "@/types/forms";
+import type { FormTemplateRecord, QuestionRecord, FieldType } from "@/types/forms";
 import {
   CATEGORY_LABELS,
   FIELD_TYPE_LABELS,
-  buildRootLayoutOrderFromRecord,
   flattenAllQuestions,
   SUB_CATEGORY_LABELS,
 } from "@/types/forms";
 import { Fragment, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import {
+  buildFormTableRows,
+  formatSectionLabel,
+} from "@/app/helpers/form-table-rows";
 
 interface FormTemplateViewProps {
   template: FormTemplateRecord;
@@ -18,76 +21,7 @@ interface FormTemplateViewProps {
 
 export default function FormTemplateView({ template, headerActions }: FormTemplateViewProps) {
   const allQuestions = flattenAllQuestions(template);
-  const rootLayout = buildRootLayoutOrderFromRecord(
-    template.sections,
-    template.questions,
-  );
-
-  type TableRow = {
-    sr: number;
-    sectionTitle: string | null;
-    subsectionTitle: string | null;
-    question: QuestionRecord;
-    isFirstInSection: boolean;
-    sectionRowCount: number;
-  };
-
-  const rows: TableRow[] = [];
-  let sr = 0;
-
-  const collectQuestions = (
-    section: FormSectionRecord,
-    subsection: FormSubsectionRecord | null,
-  ) => {
-    const questions = subsection ? subsection.questions : section.questions;
-    const startIdx = rows.length;
-    questions.forEach((question) => {
-      sr += 1;
-      rows.push({
-        sr,
-        sectionTitle: section.title,
-        subsectionTitle: subsection?.title ?? null,
-        question,
-        isFirstInSection: false,
-        sectionRowCount: 0,
-      });
-    });
-    if (rows.length > startIdx) {
-      rows[startIdx].isFirstInSection = true;
-      for (let i = startIdx; i < rows.length; i++) {
-        rows[i].sectionRowCount = rows.length - startIdx;
-      }
-    }
-  };
-
-  rootLayout.forEach((item) => {
-    if (item.kind === "section") {
-      const section = template.sections.find((s) => s.id === item.id);
-      if (!section) return;
-      const startIdx = rows.length;
-      section.subsections.forEach((sub) => collectQuestions(section, sub));
-      collectQuestions(section, null);
-      if (rows.length > startIdx) {
-        rows[startIdx].isFirstInSection = true;
-        for (let i = startIdx; i < rows.length; i++) {
-          rows[i].sectionRowCount = rows.length - startIdx;
-        }
-      }
-    } else {
-      const question = template.questions.find((q) => q.id === item.id);
-      if (question) {
-        sr += 1;
-        rows.push({
-          sr,
-          sectionTitle: null,
-          subsectionTitle: null,
-          question,
-          isFirstInSection: true,
-          sectionRowCount: 1,
-        });
-      }
-    }
-  });
+  const rows = buildFormTableRows(template.sections, template.questions);
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
@@ -133,29 +67,29 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
       </div>
 
       <div className="my-6">
-        <div className="form-template-table-wrapper rounded-lg border border-indigo-200 dark:border-indigo-500/30 overflow-auto max-h-[70vh] shadow-sm shadow-indigo-100/40 dark:shadow-indigo-900/10">
+        <div className="form-template-table-wrapper rounded-lg border border-indigo-200 dark:border-indigo-500/30 overflow-auto max-h-[70vh] shadow-sm shadow-indigo-100/40 dark:shadow-indigo-900/10 no-print-overflow">
           <table className="form-template-table w-full">
             <thead className="sticky top-0 z-10">
               <tr className="bg-indigo-600 dark:bg-indigo-800/80">
-                <th className=" border-r border-indigo-500/30  text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                <th className="print-col-minimal border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Sr
                 </th>
-                <th className="min-w-[280px] border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                <th className="min-w-[280px] print-col-largest border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Key Performance Indicators (KPIs)
                 </th>
-                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                <th className="print-col-minimal whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Weight
                 </th>
-                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                <th className="print-col-small whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Field Type
                 </th>
-                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                <th className="print-col-minimal whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Required
                 </th>
-                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                <th className="print-col-small whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   Self Assessment
                 </th>
-                <th className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                <th className="print-col-small whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
                   HOD Assessment
                 </th>
                 
@@ -177,7 +111,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-indigo-100/70 dark:bg-indigo-900/30">
                           <td colSpan={7} className="px-4 py-2 text-sm font-bold text-indigo-800 dark:text-indigo-200">
-                            {row.sectionTitle}
+                            {formatSectionLabel(row)}
                           </td>
                         </tr>
                       ) : null}

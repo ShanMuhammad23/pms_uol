@@ -33,10 +33,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <SidebarContext.Provider value={{ collapsed, toggle, width }}>
-      <div className="flex min-h-screen w-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground transition-colors">
+      <div className="flex min-h-screen w-screen max-w-[100vw] overflow-x-hidden bg-background text-foreground transition-colors print:block print:overflow-visible">
         <Sidebar />
         <main
-          className="dashboard-main min-h-screen min-w-0 overflow-x-hidden bg-background p-4 text-foreground transition-[margin,width] duration-300 ease-in-out"
+          className="dashboard-main min-h-screen min-w-0 overflow-x-hidden bg-background p-4 text-foreground transition-[margin,width] duration-300 ease-in-out print:p-0"
           style={{
             marginLeft: resolvedWidth,
             width: `calc(100vw - ${resolvedWidth}px)`,

@@ -22,10 +22,20 @@ import {
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
 import {
+  type DashboardColumnSectionId,
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
+
+const SECTION_STYLE: Record<DashboardColumnSectionId, string> = {
+  basic:
+    "bg-slate-100 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700/50",
+  performance:
+    "bg-emerald-100 border-emerald-200 dark:bg-emerald-900/40 dark:border-emerald-700/50",
+  compensation:
+    "bg-amber-100 border-amber-200 dark:bg-amber-900/40 dark:border-amber-700/50",
+};
 
 interface StaffListingMasterFilterProps {
   open: boolean;
@@ -43,24 +53,31 @@ interface StaffListingMasterFilterProps {
 }
 
 function TextFilterControl({
+  label,
   value,
   placeholder,
   onChange,
 }: {
+  label: string;
   value: string;
   placeholder: string;
   onChange: (next: string) => void;
 }) {
   return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-      <input
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-md border border-slate-200/80 bg-white/90 py-1.5 pl-8 pr-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-300/50 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-slate-500 dark:focus:ring-slate-600/40"
-      />
+    <div className="space-y-1">
+      <label className="block truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
+        {label}
+      </label>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+        <input
+          type="search"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className="w-full rounded-md border border-slate-200/80 bg-white/90 py-1.5 pl-8 pr-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-300/50 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-slate-500 dark:focus:ring-slate-600/40"
+        />
+      </div>
     </div>
   );
 }
@@ -206,7 +223,11 @@ export function StaffListingMasterFilter({
               {filterSections.map((section) => (
                 <section
                   key={section.id}
-                  className="min-w-0 rounded-lg border border-slate-200/80 bg-white/70 p-3 dark:border-white/10 dark:bg-slate-900/50"
+                  className={cn(
+                    "min-w-0 rounded-lg border p-3",
+                    SECTION_STYLE[section.id] ??
+                      "bg-slate-50/80 border-slate-200/80 dark:bg-slate-800/30 dark:border-slate-700/40",
+                  )}
                 >
                   <h3 className="mb-3 border-b border-slate-200/80 pb-2 text-xs font-semibold uppercase tracking-wider text-primary dark:border-white/10">
                     {section.label}
@@ -220,6 +241,7 @@ export function StaffListingMasterFilter({
                         >
                           {isMasterFilterTextColumn(column.id) ? (
                             <TextFilterControl
+                              label={column.label}
                               value={
                                 filters.text[
                                   column.id as MasterFilterTextColumnId
@@ -247,7 +269,7 @@ export function StaffListingMasterFilter({
                                 8
                               }
                               quiet
-                              className="min-w-0 flex-none [&_label]:sr-only"
+                              className="min-w-0 flex-none"
                             />
                           )}
                         </ColumnFilterRow>

@@ -19,6 +19,7 @@ import {
 } from "@/types/users";
 import { fetchFormTemplatesForDashboard } from "@/lib/queries/forms-client";
 import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
+import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
 import { cn } from "@/lib/utils";
 
 interface EditUserFormState {
@@ -450,59 +451,44 @@ export function EditUserModal({
                   </Field>
 
                   <Field label="Manager 1" htmlFor="edit-user-head">
-                    <select
+                    <SearchableManagerSelect
                       id="edit-user-head"
                       value={form.headId}
-                      onChange={(event) =>
+                      options={headOptions}
+                      onChange={(next) =>
                         setForm((current) => {
                           if (!current) return current;
-                          const nextHeadId = event.target.value;
                           const nextManager2Id =
-                            current.manager2Id === nextHeadId
+                            current.manager2Id === next
                               ? ""
                               : current.manager2Id;
                           return {
                             ...current,
-                            headId: nextHeadId,
+                            headId: next,
                             manager2Id: nextManager2Id,
                           };
                         })
                       }
                       disabled={isSubmitting}
                       className={inputClassName}
-                    >
-                      <option value="">None</option>
-                      {headOptions.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>
-                          {candidate.firstName} {candidate.lastName} (
-                          {candidate.employeeId})
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </Field>
 
                   <Field label="Manager 2" htmlFor="edit-user-manager-2">
-                    <select
+                    <SearchableManagerSelect
                       id="edit-user-manager-2"
                       value={form.manager2Id}
-                      onChange={(event) =>
+                      options={manager2Options}
+                      onChange={(next) =>
                         setForm((current) =>
                           current
-                            ? { ...current, manager2Id: event.target.value }
+                            ? { ...current, manager2Id: next }
                             : current,
                         )
                       }
                       disabled={isSubmitting}
                       className={inputClassName}
-                    >
-                      <option value="">None</option>
-                      {manager2Options.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>
-                          {candidate.firstName} {candidate.lastName} (
-                          {candidate.employeeId})
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </Field>
 
                   <Field label="Qualification" htmlFor="edit-user-qualification">

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Eye, Pencil, Search, ShieldCheck, ShieldOff, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Pencil, Search, ShieldCheck, ShieldOff } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
@@ -32,7 +32,7 @@ import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
 import {
   getEligibilityShortLabel,
-  getSubmissionEligibilityStatus,
+  getSubmissionEligibilityDisplayStatus,
 } from "@/app/helpers/dashboard-eligibility";
 import {
   EMPTY_MASTER_FILTER_STATE,
@@ -267,7 +267,7 @@ function renderCell(
   }
 
   if (columnId === "eligible" || columnId === "applicableDuration") {
-    const status = getSubmissionEligibilityStatus(submission);
+    const status = getSubmissionEligibilityDisplayStatus(submission);
     const backgroundColor = ELIGIBILITY_CONFIG[status].light;
 
     if (columnId === "eligible") {
@@ -291,27 +291,6 @@ function renderCell(
         title={status}
       >
         {value}
-      </span>
-    );
-  }
-
-  if (columnId === "assessmentEligible") {
-    const eligible = submission.assessmentEligibility;
-    if (eligible) {
-      return (
-        <span
-          className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600"
-        >
-          Yes
-        </span>
-      );
-    }
-    return (
-      <span
-        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-rose-500 text-white border border-rose-600 dark:bg-rose-600 dark:text-white dark:border-rose-500"
-      >
-        <AlertTriangle className="h-3 w-3 shrink-0" />
-        Ineligible
       </span>
     );
   }
@@ -558,6 +537,18 @@ export function DashboardSubmissionsTable({
     allColumns: DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[],
     allowedColumnIds,
   });
+
+  // Compute the RBAC-filtered column list for the Column Management panel.
+  // This ensures restricted columns never appear in the panel, even if
+  // previously saved preferences reference them.
+  const allowedColumns = useMemo(() => {
+    if (!allowedColumnIds) return DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[];
+    const allowed = new Set<string>(allowedColumnIds);
+    return (DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[]).filter((col) =>
+      allowed.has(col.id),
+    );
+  }, [allowedColumnIds]);
+
   const [page, setPage] = useState(1);
   const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
     EMPTY_MASTER_FILTER_STATE,
@@ -914,7 +905,7 @@ export function DashboardSubmissionsTable({
       <ColumnManagementPanel
         open={columnMgmtOpen}
         onOpenChange={setColumnMgmtOpen}
-        columns={DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[]}
+        columns={allowedColumns}
         config={config}
         defaults={configDefaults}
         onApply={updateConfig}

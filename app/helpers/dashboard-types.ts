@@ -18,7 +18,8 @@ export type FormState =
 export type EligibilityStatus =
   | "Fully Eligible"
   | "Partially Eligible"
-  | "Not Eligible";
+  | "Not Eligible"
+  | "Ineligible";
 
 export type RatingQuartileMatrixCell = {
   id: number | null;

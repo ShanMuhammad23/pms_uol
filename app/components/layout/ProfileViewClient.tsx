@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import type { UserProfile } from "@/lib/types/user-profile";
+import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
+import PrintFooter from "@/app/components/print/PrintFooter";
+import PrintButton from "@/app/components/forms/PrintButton";
 
 type ProfileViewClientProps = {
   profile: UserProfile;
@@ -128,11 +131,20 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
+      <PrintDocumentHeader
+        title="Employee Profile"
+        metaItems={[
+          { label: "Name", value: fullName },
+          { label: "Employee ID", value: profile.employeeId },
+          { label: "Designation", value: profile.designation },
+          { label: "Email", value: profile.emailAddress },
+        ]}
+      />
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] as const }}
-        className="flex items-center justify-between"
+        className="no-print flex items-center justify-between"
       >
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -140,7 +152,14 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
           </h1>
 
         </div>
-        <StatusBadge status={profile.employmentStatus} role={profile.systemRole} />
+        <div className="flex items-center gap-3">
+          <PrintButton
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+            recommendedOrientation="portrait"
+            documentTitle={`${fullName} — Employee Profile`}
+          />
+          <StatusBadge status={profile.employmentStatus} role={profile.systemRole} />
+        </div>
       </motion.div>
 
       <motion.div
@@ -258,10 +277,11 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1 }}
-        className="text-center text-xs text-slate-400 dark:text-slate-600"
+        className="no-print text-center text-xs text-slate-400 dark:text-slate-600"
       >
         Data sourced from the PMS database. Contact HR for corrections.
       </motion.p>
+      <PrintFooter />
     </div>
   );
 }

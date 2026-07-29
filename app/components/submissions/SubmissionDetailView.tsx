@@ -13,18 +13,22 @@ import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-c
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   APPRAISAL_STATUS_LABELS,
-  buildRootLayoutOrderFromRecord,
   type AppraisalStatus,
-  type FormSectionRecord,
-  type FormSubsectionRecord,
   type QuestionRecord,
 } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 import { cn } from "@/lib/utils";
+import {
+  buildFormTableRows,
+  formatSectionLabel,
+} from "@/app/helpers/form-table-rows";
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
 import { useSession } from "next-auth/react";
-import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
+import { canReviewSubmissions, canViewQuartile } from "@/lib/auth/submission-review-roles";
+import PrintButton from "@/app/components/forms/PrintButton";
+import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
+import PrintFooter from "@/app/components/print/PrintFooter";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
@@ -92,6 +96,7 @@ export default function SubmissionDetailView({
   const { data: session } = useSession();
   const userRole = session?.user?.role;
   const isAdminRole = canReviewSubmissions(userRole);
+  const showQuartile = canViewQuartile(userRole);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
     new Map(),
@@ -312,6 +317,11 @@ export default function SubmissionDetailView({
 
   const hasManager2 = data?.manager2UserId != null;
   const currentManagerLevel = data?.managerLevel ?? 1;
+  // Manager 2 data is visible to HR/Board/SuperAdmin and Manager 2 themselves.
+  // Manager 1 must never see Manager 2 assessment data.
+  const showManager2Data =
+    isAdminRole ||
+    (userRole === "MANAGER" && Number(session?.user?.id) === data?.manager2UserId);
   const selfAssessmentEnabled = data?.selfAssessmentEnabled ?? true;
   const isEligible = data?.assessmentEligibility ?? true;
   const editingManager1 =
@@ -378,76 +388,7 @@ export default function SubmissionDetailView({
     );
   }
 
-  const rootLayout = buildRootLayoutOrderFromRecord(
-    data.sections,
-    data.rootQuestions,
-  );
-
-  type TableRow = {
-    sr: number;
-    sectionTitle: string | null;
-    subsectionTitle: string | null;
-    question: QuestionRecord;
-    isFirstInSection: boolean;
-    sectionRowCount: number;
-  };
-
-  const rows: TableRow[] = [];
-  let sr = 0;
-
-  const collectQuestions = (
-    section: FormSectionRecord,
-    subsection: FormSubsectionRecord | null,
-  ) => {
-    const questions = subsection ? subsection.questions : section.questions;
-    const startIdx = rows.length;
-    questions.forEach((question) => {
-      sr += 1;
-      rows.push({
-        sr,
-        sectionTitle: section.title,
-        subsectionTitle: subsection?.title ?? null,
-        question,
-        isFirstInSection: false,
-        sectionRowCount: 0,
-      });
-    });
-    if (rows.length > startIdx) {
-      rows[startIdx].isFirstInSection = true;
-      for (let i = startIdx; i < rows.length; i++) {
-        rows[i].sectionRowCount = rows.length - startIdx;
-      }
-    }
-  };
-
-  rootLayout.forEach((item) => {
-    if (item.kind === "section") {
-      const section = data.sections.find((s) => s.id === item.id);
-      if (!section) return;
-      const startIdx = rows.length;
-      section.subsections.forEach((sub) => collectQuestions(section, sub));
-      collectQuestions(section, null);
-      if (rows.length > startIdx) {
-        rows[startIdx].isFirstInSection = true;
-        for (let i = startIdx; i < rows.length; i++) {
-          rows[i].sectionRowCount = rows.length - startIdx;
-        }
-      }
-    } else {
-      const question = data.rootQuestions.find((q) => q.id === item.id);
-      if (question) {
-        sr += 1;
-        rows.push({
-          sr,
-          sectionTitle: null,
-          subsectionTitle: null,
-          question,
-          isFirstInSection: true,
-          sectionRowCount: 1,
-        });
-      }
-    }
-  });
+  const rows = buildFormTableRows(data.sections, data.rootQuestions);
 
   const statusStyles: Record<AppraisalStatus, string> = {
     PENDING_SELF_ASSESSMENT:
@@ -503,6 +444,16 @@ export default function SubmissionDetailView({
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden rounded-md border border-slate-300 bg-white shadow-md shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-900/30">
+      <PrintDocumentHeader
+        title="Assessment Submission"
+        metaItems={[
+          { label: "Employee", value: data.employeeName },
+          { label: "SAP ID", value: data.employeeId ?? "—" },
+          { label: "Form", value: data.templateTitle },
+          { label: "Status", value: APPRAISAL_STATUS_LABELS[data.status] },
+          { label: "Score", value: `${data.rawScore}/${data.maxRawScore} (${data.scorePercent}%)` },
+        ]}
+      />
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
@@ -524,15 +475,23 @@ export default function SubmissionDetailView({
           <span className="text-xs text-slate-500 dark:text-slate-400">
             {data.templateTitle}
           </span>
+          <div className="ml-auto no-print">
+            <PrintButton
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+              recommendedOrientation={hasManager2 && showManager2Data ? "landscape" : "portrait"}
+              documentTitle={`${data.employeeName} — ${data.templateTitle}`}
+              showOrientationDialog
+            />
+          </div>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
           <span className="font-semibold text-indigo-700 dark:text-indigo-300">
             Score {data.rawScore}/{data.maxRawScore} ({data.scorePercent}%)
           </span>
-          {data.performanceLevelName ? (
+          {showQuartile && data.performanceLevelName ? (
             <span className="font-medium text-teal-700 dark:text-teal-300">
               {data.performanceLevelName}
-              {data.quartileName ? ` · ${data.quartileName}` : ""}
+              {showQuartile && data.quartileName ? ` · ${data.quartileName}` : ""}
             </span>
           ) : null}
           {data.submittedAt ? (
@@ -552,7 +511,7 @@ export default function SubmissionDetailView({
       ) : null}
 
       {data.canEditManagerReview ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-violet-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-violet-950/20">
+        <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-violet-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-violet-950/20">
           <p className="text-violet-800 dark:text-violet-200">
             {selfAssessmentEnabled
               ? "Manager scores are pre-filled from self assessment. Edit any value and save your review."
@@ -592,7 +551,7 @@ export default function SubmissionDetailView({
       ) : null}
 
       {editingHr && hasUnsavedChanges ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-orange-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-orange-950/20">
+        <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-orange-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-orange-950/20">
           <p className="text-orange-800 dark:text-orange-200">
             {data.status === "PENDING_HR_CALIBRATION"
               ? "HR Alignment phase. Save or approve to send to Board."
@@ -637,7 +596,7 @@ export default function SubmissionDetailView({
       ) : null}
 
       {showSaveConfirm ? (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+        <div className="no-print fixed inset-0 z-100 flex items-center justify-center p-4">
           <button
             type="button"
             aria-label="Close dialog"
@@ -676,7 +635,7 @@ export default function SubmissionDetailView({
       ) : null}
 
       {showApproveConfirm ? (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+        <div className="no-print fixed inset-0 z-100 flex items-center justify-center p-4">
           <button
             type="button"
             aria-label="Close dialog"
@@ -717,12 +676,12 @@ export default function SubmissionDetailView({
       ) : null}
 
       {saveMessage ? (
-        <div className="border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+        <div className="no-print border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
           {saveMessage}
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
+      <div className="no-print flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
         Scroll horizontally to view all columns
       </div>
 
@@ -730,37 +689,37 @@ export default function SubmissionDetailView({
         <table className="min-w-full border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-800 dark:bg-slate-950/80">
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+              <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Sr. No.
               </th>
-              <th className="min-w-[260px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+              <th className="min-w-[260px] print-col-large border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Key Performance Indicators (KPIs)
               </th>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+              <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Weight
               </th>
               {selfAssessmentEnabled ? (
                 <>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+              <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
                 Self Score
               </th>
-              <th className="min-w-[180px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+              <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
                 Self Remarks
               </th>
                 </>
               ) : null}
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
+              <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
                 Mgr 1 Score
               </th>
-              <th className="min-w-[180px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
+              <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
                 Mgr 1 Remarks
               </th>
-              {hasManager2 ? (
+              {hasManager2 && showManager2Data ? (
                 <>
-                  <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                  <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
                     Mgr 2 Score
                   </th>
-                  <th className="min-w-[180px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                  <th className="min-w-[180px] print-col-medium px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
                     Mgr 2 Remarks
                   </th>
                 </>
@@ -771,7 +730,7 @@ export default function SubmissionDetailView({
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={selfAssessmentEnabled ? (hasManager2 ? 9 : 7) : (hasManager2 ? 7 : 5)}
+                  colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 9 : 7) : ((hasManager2 && showManager2Data) ? 7 : 5)}
                   className="bg-slate-50 px-3 py-8 text-center text-sm text-slate-500 dark:bg-slate-800/30 dark:text-slate-400"
                 >
                   No questions were found for this submission.
@@ -794,8 +753,8 @@ export default function SubmissionDetailView({
                   <Fragment key={question.id}>
                     {row.isFirstInSection && row.sectionTitle ? (
                       <tr className="bg-amber-50/80 dark:bg-amber-950/20">
-                        <td colSpan={selfAssessmentEnabled ? (hasManager2 ? 9 : 7) : (hasManager2 ? 7 : 5)} className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200">
-                          {row.sectionTitle}
+                        <td colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 9 : 7) : ((hasManager2 && showManager2Data) ? 7 : 5)} className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200">
+                          {formatSectionLabel(row)}
                         </td>
                       </tr>
                     ) : null}
@@ -900,7 +859,7 @@ export default function SubmissionDetailView({
                       )}
                     </td>
                     {/* Manager 2 Score + Remarks */}
-                    {hasManager2 ? (
+                    {hasManager2 && showManager2Data ? (
                       <>
                         <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                           {scored ? (
@@ -990,7 +949,7 @@ export default function SubmissionDetailView({
                   {editingManager1 ? managerDraftTotal : manager1Total}
                 </td>
                 <td className="border-r border-slate-700 px-3 py-2.5" />
-                {hasManager2 ? (
+                {hasManager2 && showManager2Data ? (
                   <>
                     <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-indigo-300">
                       {editingManager2 ? managerDraftTotal : (manager2Total ?? 0)}
@@ -1025,7 +984,7 @@ export default function SubmissionDetailView({
               accentClass:
                 "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
             },
-            ...(hasManager2
+            ...(hasManager2 && showManager2Data
               ? [
                   {
                     label: "Manager 2 Assessment",
@@ -1041,6 +1000,7 @@ export default function SubmissionDetailView({
           ]}
         />
       ) : null}
+      <PrintFooter />
     </div>
   );
 }

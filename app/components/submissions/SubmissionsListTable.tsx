@@ -3,10 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { ClipboardCheck, Eye } from "lucide-react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { fetchFormSubmissions } from "@/lib/queries/form-submissions-client";
 import { APPRAISAL_STATUS_LABELS } from "@/types/forms";
+import { canViewQuartile } from "@/lib/auth/submission-review-roles";
 
 export default function SubmissionsListTable() {
+  const { data: session } = useSession();
+  const showQuartile = canViewQuartile(session?.user?.role);
   const { data, isLoading, error } = useQuery({
     queryKey: ["form-submissions"],
     queryFn: fetchFormSubmissions,
@@ -47,25 +51,27 @@ export default function SubmissionsListTable() {
       <table className="min-w-full text-sm">
         <thead className="bg-primary/5">
           <tr>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="print-col-large px-4 py-3 text-left font-semibold text-text-primary">
               Employee
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="print-col-medium px-4 py-3 text-left font-semibold text-text-primary">
               Form
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="print-col-small px-4 py-3 text-left font-semibold text-text-primary">
               Raw Score
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
-              Performance / Quartile
-            </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            {showQuartile ? (
+              <th className="print-col-medium px-4 py-3 text-left font-semibold text-text-primary">
+                Performance / Quartile
+              </th>
+            ) : null}
+            <th className="print-col-small px-4 py-3 text-left font-semibold text-text-primary">
               Status
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="print-col-medium px-4 py-3 text-left font-semibold text-text-primary">
               Submitted
             </th>
-            <th className="px-4 py-3 text-right font-semibold text-text-primary">
+            <th className="no-print px-4 py-3 text-right font-semibold text-text-primary">
               Action
             </th>
           </tr>
@@ -93,12 +99,14 @@ export default function SubmissionsListTable() {
                   {submission.scorePercent}%
                 </span>
               </td>
-              <td className="px-4 py-3 text-text-primary">
-                {submission.performanceLevelName ?? "—"}
-                <span className="block text-xs text-foreground/70">
-                  {submission.quartileName ?? "No matching quartile"}
-                </span>
-              </td>
+              {showQuartile ? (
+                <td className="px-4 py-3 text-text-primary">
+                  {submission.performanceLevelName ?? "—"}
+                  <span className="block text-xs text-foreground/70">
+                    {submission.quartileName ?? "No matching quartile"}
+                  </span>
+                </td>
+              ) : null}
               <td className="px-4 py-3 text-text-primary">
                 {APPRAISAL_STATUS_LABELS[submission.status]}
               </td>
@@ -107,7 +115,7 @@ export default function SubmissionsListTable() {
                   ? new Date(submission.submittedAt).toLocaleString()
                   : "—"}
               </td>
-              <td className="px-4 py-3">
+              <td className="no-print px-4 py-3">
                 <div className="flex justify-end">
                   <Link
                     href={`/dashboard/submissions/${submission.id}`}

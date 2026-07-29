@@ -228,80 +228,86 @@ export function ColumnManagementPanel({
               </div>
             </div>
 
-            <div className="mb-4 grid grid-cols-[1.5rem_1fr_2rem_2rem] items-center gap-2 px-2 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-              <span />
-              <span>Column</span>
-              <span className="text-center">Freeze</span>
-              <span className="text-center">Show</span>
+            <div className="mb-2 flex items-center gap-4 px-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+              <span className="flex items-center gap-1">
+                <Pin className="h-3 w-3" />
+                Freeze
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded border border-slate-300" />
+                Show
+              </span>
             </div>
 
-            <div className="max-h-80 space-y-0.5 overflow-y-auto rounded-lg border border-slate-200/80 p-1 dark:border-white/10">
-              {draft.map((col, index) => (
-                <div
-                  key={col.id}
-                  draggable={!col.pinned}
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDrop={() => handleDrop(index)}
-                  onDragEnd={handleDragEnd}
-                  className={cn(
-                    "grid grid-cols-[1.5rem_1fr_2rem_2rem] items-center gap-2 rounded-md px-2 py-1.5 text-sm transition",
-                    dragOverIndex === index && "ring-2 ring-amber-400/50",
-                    !col.visible && "opacity-50",
-                    col.pinned
-                      ? "cursor-default bg-slate-50 dark:bg-slate-900/50"
-                      : "cursor-grab hover:bg-slate-50 dark:hover:bg-white/[0.03] active:cursor-grabbing",
-                  )}
-                >
-                  <div className="flex items-center justify-center">
-                    {col.pinned ? (
-                      <span className="text-[10px] text-slate-300" title="Pinned column">
-                        ●
-                      </span>
-                    ) : (
-                      <GripVertical className="h-3.5 w-3.5 text-slate-400" />
-                    )}
-                  </div>
-
-                  <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-300">
-                    {col.label}
-                    {col.pinned && (
-                      <span className="ml-1.5 text-[10px] text-slate-400">(always shown)</span>
-                    )}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => toggleFrozen(col.id)}
-                    disabled={!col.visible || col.pinned}
+            <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-200/80 p-1.5 dark:border-white/10">
+              <div className="grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(155px,1fr))]">
+                {draft.map((col, index) => (
+                  <div
+                    key={col.id}
+                    draggable={!col.pinned}
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={() => handleDrop(index)}
+                    onDragEnd={handleDragEnd}
                     className={cn(
-                      "flex items-center justify-center rounded p-1 transition-colors disabled:opacity-30",
-                      col.frozen
-                        ? "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                        : "text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5",
+                      "flex items-center gap-1.5 rounded-md px-2 py-1.5 transition",
+                      dragOverIndex === index && "ring-2 ring-amber-400/50",
+                      !col.visible && "opacity-50",
+                      col.pinned
+                        ? "cursor-default bg-slate-50 dark:bg-slate-900/50"
+                        : "cursor-grab hover:bg-slate-50 dark:hover:bg-white/[0.03] active:cursor-grabbing",
                     )}
-                    title={col.frozen ? "Unfreeze column" : "Freeze column"}
-                    aria-label={col.frozen ? `Unfreeze ${col.label}` : `Freeze ${col.label}`}
                   >
-                    {col.frozen ? (
-                      <Pin className="h-3.5 w-3.5" />
-                    ) : (
-                      <PinOff className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+                    <div className="flex shrink-0 items-center justify-center">
+                      {col.pinned ? (
+                        <span className="text-[10px] text-slate-300" title="Pinned column">
+                          ●
+                        </span>
+                      ) : (
+                        <GripVertical className="h-3.5 w-3.5 text-slate-400" />
+                      )}
+                    </div>
 
-                  <label className="flex items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={col.visible}
-                      disabled={col.pinned}
-                      onChange={() => toggleVisible(col.id)}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label={`Show ${col.label}`}
-                    />
-                  </label>
-                </div>
-              ))}
+                    <span
+                      className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700 dark:text-slate-300"
+                      title={col.label}
+                    >
+                      {col.label}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleFrozen(col.id)}
+                      disabled={!col.visible || col.pinned}
+                      className={cn(
+                        "flex shrink-0 items-center justify-center rounded p-1 transition-colors disabled:opacity-30",
+                        col.frozen
+                          ? "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                          : "text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5",
+                      )}
+                      title={col.frozen ? "Unfreeze column" : "Freeze column"}
+                      aria-label={col.frozen ? `Unfreeze ${col.label}` : `Freeze ${col.label}`}
+                    >
+                      {col.frozen ? (
+                        <Pin className="h-3.5 w-3.5" />
+                      ) : (
+                        <PinOff className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+
+                    <label className="flex shrink-0 items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={col.visible}
+                        disabled={col.pinned}
+                        onChange={() => toggleVisible(col.id)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`Show ${col.label}`}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2">

@@ -546,6 +546,18 @@ export async function getEmployeeFormDetail(
   const assessmentEligibility = eligibilityResult.rows[0]?.assessment_eligibility ?? true;
   const ineligibilityReason = eligibilityResult.rows[0]?.ineligibility_reason ?? null;
 
+  const managerResult = await db.query<{ head_name: string | null; manager_2_name: string | null }>(
+    `SELECT CONCAT(h.first_name, ' ', h.last_name) AS head_name,
+            CONCAT(m2.first_name, ' ', m2.last_name) AS manager_2_name
+     FROM users u
+     LEFT JOIN users h ON h.id = u.head_id
+     LEFT JOIN users m2 ON m2.id = u.manager_2_id
+     WHERE u.id = $1 LIMIT 1`,
+    [userId],
+  );
+  const headName = managerResult.rows[0]?.head_name ?? null;
+  const manager2Name = managerResult.rows[0]?.manager_2_name ?? null;
+
   return {
     template,
     appraisalId: appraisal ? Number(appraisal.id) : null,
@@ -559,6 +571,8 @@ export async function getEmployeeFormDetail(
     selfAssessmentEnabled,
     assessmentEligibility,
     ineligibilityReason,
+    headName,
+    manager2Name,
   };
 }
 

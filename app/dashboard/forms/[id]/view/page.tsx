@@ -5,6 +5,9 @@ import FormTemplateView from "@/app/components/forms/FormTemplateView";
 import PrintTrigger from "@/app/components/forms/PrintTrigger";
 import PdfDownloadTrigger from "@/app/components/forms/PdfDownloadTrigger";
 import PrintButton from "@/app/components/forms/PrintButton";
+import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
+import PrintFooter from "@/app/components/print/PrintFooter";
+import type { PrintOrientation } from "@/app/components/print/PrintLayout";
 import { cn } from "@/lib/utils";
 import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
 import { getFormTemplateById } from "@/lib/queries/forms";
@@ -13,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 interface ViewFormPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ print?: string; download?: string }>;
+  searchParams: Promise<{ print?: string; download?: string; orientation?: string }>;
 }
 
 export default async function ViewFormPage({
@@ -23,9 +26,11 @@ export default async function ViewFormPage({
   await requireSuperAdminSession();
 
   const { id } = await params;
-  const { print, download } = await searchParams;
+  const { print, download, orientation } = await searchParams;
   const isPrintMode = print === "true";
   const isDownloadMode = download === "true";
+  const printOrientation: PrintOrientation =
+    orientation === "landscape" ? "landscape" : "portrait";
 
   const templateId = Number(id);
 
@@ -52,7 +57,7 @@ export default async function ViewFormPage({
 
   return (
     <div className={cn("space-y-6 text-text-primary", isPrintMode && "print:space-y-0")}>
-      {isPrintMode ? <PrintTrigger /> : null}
+      {isPrintMode ? <PrintTrigger orientation={printOrientation} /> : null}
 
       <div className={isPrintMode ? "no-print" : ""}>
         <Link
@@ -66,7 +71,13 @@ export default async function ViewFormPage({
 
       <div className={isPrintMode ? "print-content print-full-width" : ""}>
         {isPrintMode ? (
-          <div className="print-title">{template.title}</div>
+          <PrintDocumentHeader
+            title={template.title}
+            metaItems={[
+              { label: "Category", value: template.targetCategory ?? "Unassigned" },
+              { label: "Appraisal Cycle", value: `FY ${template.fiscalYear}` },
+            ]}
+          />
         ) : null}
         <FormTemplateView
           template={template}
@@ -88,10 +99,14 @@ export default async function ViewFormPage({
               <PrintButton
                 className="inline-flex items-center gap-1.5 rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-sm font-medium text-secondary hover:bg-secondary/20 dark:border-secondary/50 dark:bg-secondary/15 dark:hover:bg-secondary/25"
                 printUrl={`/dashboard/forms/${templateId}/view?print=true`}
+                recommendedOrientation="landscape"
+                documentTitle={template.title}
+                showOrientationDialog
               />
             </>
           }
         />
+        {isPrintMode ? <PrintFooter /> : null}
       </div>
     </div>
   );

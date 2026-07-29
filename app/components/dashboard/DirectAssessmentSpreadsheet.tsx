@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { Fragment, useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchDirectAssessmentData,
@@ -10,13 +10,15 @@ import {
 } from "@/lib/queries/direct-assessment-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
-  buildRootLayoutOrderFromRecord,
-  type FormSectionRecord,
-  type FormSubsectionRecord,
   type QuestionRecord,
 } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 import { cn } from "@/lib/utils";
+import {
+  buildFormTableRows,
+  formatSectionLabel,
+  type FormTableRow,
+} from "@/app/helpers/form-table-rows";
 import { ArrowLeft, Save, CheckCircle } from "lucide-react";
 
 interface DirectAssessmentSpreadsheetProps {
@@ -38,81 +40,12 @@ function clampScore(value: string, maxMarks: number): string {
   return value;
 }
 
-type TableRow = {
-  sr: number;
-  sectionTitle: string | null;
-  subsectionTitle: string | null;
-  question: QuestionRecord;
-  isFirstInSection: boolean;
-  sectionRowCount: number;
-};
+type TableRow = FormTableRow;
 
 function buildTableRows(
   data: DirectAssessmentData,
 ): TableRow[] {
-  const rows: TableRow[] = [];
-  let sr = 0;
-
-  const rootLayout = buildRootLayoutOrderFromRecord(
-    data.sections,
-    data.rootQuestions,
-  );
-
-  const collectQuestions = (
-    section: FormSectionRecord,
-    subsection: FormSubsectionRecord | null,
-  ) => {
-    const questions = subsection ? subsection.questions : section.questions;
-    const startIdx = rows.length;
-    questions.forEach((question) => {
-      sr += 1;
-      rows.push({
-        sr,
-        sectionTitle: section.title,
-        subsectionTitle: subsection?.title ?? null,
-        question,
-        isFirstInSection: false,
-        sectionRowCount: 0,
-      });
-    });
-    if (rows.length > startIdx) {
-      rows[startIdx].isFirstInSection = true;
-      for (let i = startIdx; i < rows.length; i++) {
-        rows[i].sectionRowCount = rows.length - startIdx;
-      }
-    }
-  };
-
-  rootLayout.forEach((item) => {
-    if (item.kind === "section") {
-      const section = data.sections.find((s) => s.id === item.id);
-      if (!section) return;
-      const startIdx = rows.length;
-      section.subsections.forEach((sub) => collectQuestions(section, sub));
-      collectQuestions(section, null);
-      if (rows.length > startIdx) {
-        rows[startIdx].isFirstInSection = true;
-        for (let i = startIdx; i < rows.length; i++) {
-          rows[i].sectionRowCount = rows.length - startIdx;
-        }
-      }
-    } else {
-      const question = data.rootQuestions.find((q) => q.id === item.id);
-      if (question) {
-        sr += 1;
-        rows.push({
-          sr,
-          sectionTitle: null,
-          subsectionTitle: null,
-          question,
-          isFirstInSection: true,
-          sectionRowCount: 1,
-        });
-      }
-    }
-  });
-
-  return rows;
+  return buildFormTableRows(data.sections, data.rootQuestions);
 }
 
 function buildInitialDrafts(
@@ -340,9 +273,6 @@ export default function DirectAssessmentSpreadsheet({
               <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Sr.
               </th>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
-                Section
-              </th>
               <th className="min-w-[260px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Key Performance Indicators (KPIs)
               </th>
@@ -392,7 +322,7 @@ export default function DirectAssessmentSpreadsheet({
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4 + data.employees.length}
+                  colSpan={3 + data.employees.length}
                   className="bg-slate-50 px-3 py-8 text-center text-sm text-slate-500 dark:bg-slate-800/30 dark:text-slate-400"
                 >
                   No questions were found for this form template.
@@ -405,36 +335,29 @@ export default function DirectAssessmentSpreadsheet({
                 const isEvenRow = rowIdx % 2 === 0;
 
                 return (
-                  <tr
-                    key={question.id}
-                    className={cn(
-                      "align-top border-b border-slate-100 dark:border-slate-700/40",
-                      isEvenRow
-                        ? "bg-white dark:bg-slate-900/40"
-                        : "bg-slate-50/60 dark:bg-slate-800/20",
-                    )}
-                  >
-                    <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40">
-                      {row.sr}
-                    </td>
-                    {row.isFirstInSection ? (
-                      <td
-                        className="max-w-[180px] border-r border-slate-100 bg-amber-50/80 px-3 py-2.5 align-top dark:border-slate-700/40 dark:bg-amber-950/20"
-                        rowSpan={row.sectionRowCount}
-                      >
-                        {row.sectionTitle ? (
-                          <span
-                            className="line-clamp-3 font-semibold text-amber-800 dark:text-amber-200"
-                            title={row.sectionTitle}
-                          >
-                            {row.sectionTitle}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
+                  <Fragment key={question.id}>
+                    {row.isFirstInSection && row.sectionTitle ? (
+                      <tr className="bg-amber-50/80 dark:bg-amber-950/20">
+                        <td
+                          colSpan={3 + data.employees.length}
+                          className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200"
+                        >
+                          {formatSectionLabel(row)}
+                        </td>
+                      </tr>
                     ) : null}
-                    <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+                    <tr
+                      className={cn(
+                        "align-top border-b border-slate-100 dark:border-slate-700/40",
+                        isEvenRow
+                          ? "bg-white dark:bg-slate-900/40"
+                          : "bg-slate-50/60 dark:bg-slate-800/20",
+                      )}
+                    >
+                      <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40">
+                        {row.sr}
+                      </td>
+                      <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
                       {row.subsectionTitle ? (
                         <span className="mb-1 block text-xs font-medium text-amber-600 dark:text-amber-400/70">
                           {row.subsectionTitle}
@@ -490,7 +413,8 @@ export default function DirectAssessmentSpreadsheet({
                         </td>
                       );
                     })}
-                  </tr>
+                    </tr>
+                  </Fragment>
                 );
               })
             )}

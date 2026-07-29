@@ -41,7 +41,7 @@ export default function EligibilityStatusBanner({
   return (
     <div
       className={cn(
-        "flex items-start gap-2.5 rounded-lg border border-rose-300 bg-rose-100 px-4 py-3 dark:border-rose-800 dark:bg-rose-950/40",
+        "no-print flex items-start gap-2.5 rounded-lg border border-rose-300 bg-rose-100 px-4 py-3 dark:border-rose-800 dark:bg-rose-950/40",
         className,
       )}
     >

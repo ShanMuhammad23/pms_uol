@@ -17,15 +17,19 @@ import type {
   EmployeeFormAnswerInput,
 } from "@/types/employee-forms";
 import {
-  buildRootLayoutOrderFromRecord,
   flattenAllQuestions,
-  type FormSectionRecord,
-  type FormSubsectionRecord,
   type QuestionRecord,
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
+import {
+  buildFormTableRows,
+  formatSectionLabel,
+} from "@/app/helpers/form-table-rows";
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
+import PrintButton from "@/app/components/forms/PrintButton";
+import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
+import PrintFooter from "@/app/components/print/PrintFooter";
 
 interface EmployeeFormFillProps {
   templateId: number;
@@ -374,76 +378,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   }
 
   const { template } = data;
-  const rootLayout = buildRootLayoutOrderFromRecord(
-    template.sections,
-    template.questions,
-  );
-
-  type TableRow = {
-    sr: number;
-    sectionTitle: string | null;
-    subsectionTitle: string | null;
-    question: QuestionRecord;
-    isFirstInSection: boolean;
-    sectionRowCount: number;
-  };
-
-  const rows: TableRow[] = [];
-  let sr = 0;
-
-  const collectQuestions = (
-    section: FormSectionRecord,
-    subsection: FormSubsectionRecord | null,
-  ) => {
-    const questions = subsection ? subsection.questions : section.questions;
-    const startIdx = rows.length;
-    questions.forEach((question) => {
-      sr += 1;
-      rows.push({
-        sr,
-        sectionTitle: section.title,
-        subsectionTitle: subsection?.title ?? null,
-        question,
-        isFirstInSection: false,
-        sectionRowCount: 0,
-      });
-    });
-    if (rows.length > startIdx) {
-      rows[startIdx].isFirstInSection = true;
-      for (let i = startIdx; i < rows.length; i++) {
-        rows[i].sectionRowCount = rows.length - startIdx;
-      }
-    }
-  };
-
-  rootLayout.forEach((item) => {
-    if (item.kind === "section") {
-      const section = template.sections.find((s) => s.id === item.id);
-      if (!section) return;
-      const startIdx = rows.length;
-      section.subsections.forEach((sub) => collectQuestions(section, sub));
-      collectQuestions(section, null);
-      if (rows.length > startIdx) {
-        rows[startIdx].isFirstInSection = true;
-        for (let i = startIdx; i < rows.length; i++) {
-          rows[i].sectionRowCount = rows.length - startIdx;
-        }
-      }
-    } else {
-      const question = template.questions.find((q) => q.id === item.id);
-      if (question) {
-        sr += 1;
-        rows.push({
-          sr,
-          sectionTitle: null,
-          subsectionTitle: null,
-          question,
-          isFirstInSection: true,
-          sectionRowCount: 1,
-        });
-      }
-    }
-  });
+  const rows = buildFormTableRows(template.sections, template.questions);
 
   const statusLabel =
     data.status === "SUBMITTED"
@@ -454,12 +389,21 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
-      {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+      <PrintDocumentHeader
+        title={template.title}
+        metaItems={[
+          { label: "Status", value: statusLabel },
+          { label: "Score", value: `${displayedRawScore} / ${maxRawScore}` },
+          { label: "Manager 1", value: data.headName ?? "N/A" },
+          { label: "Manager 2", value: data.manager2Name ?? "N/A" },
+        ]}
+      />
+      {formError ? <p className="no-print text-sm text-red-600">{formError}</p> : null}
       {successMessage ? (
-        <p className="text-sm text-emerald-600">{successMessage}</p>
+        <p className="no-print text-sm text-emerald-600">{successMessage}</p>
       ) : null}
 
-      <div>
+      <div className="no-print">
         <h2 className="text-xl font-semibold text-text-primary">
           {template.title}
         </h2>
@@ -475,7 +419,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         />
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="no-print grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Status</p>
           <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
@@ -488,10 +432,22 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
             {displayedRawScore} / {maxRawScore}
           </p>
         </div>
+        <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Manager 1</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+            {data?.headName ?? "N/A"}
+          </p>
+        </div>
+        <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Manager 2</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+            {data?.manager2Name ?? "N/A"}
+          </p>
+        </div>
       </div>
 
       <div className="min-w-0 max-w-full overflow-x-hidden rounded-md border border-slate-300 shadow-md shadow-slate-200/50 dark:border-slate-700 dark:shadow-slate-900/30 bg-white dark:bg-slate-900">
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
+        <div className="no-print flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
           <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
           Scroll horizontally to view all columns
         </div>
@@ -499,22 +455,22 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-800 dark:bg-slate-950/80">
-                <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Sr. No.
                 </th>
-                <th className="min-w-[260px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                <th className="min-w-[260px] print-col-large border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Key Performance Indicators (KPIs)
                 </th>
-                <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Weight
                 </th>
-                <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
+                <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
                   Self Score
                 </th>
-                <th className="min-w-[220px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
+                <th className="min-w-[220px] print-col-largest border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Remarks
                 </th>
-                <th className="min-w-[200px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:text-slate-300">
+                <th className="no-print min-w-[200px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:text-slate-300">
                   Attachments
                 </th>
               </tr>
@@ -546,7 +502,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-amber-50/80 dark:bg-amber-950/20">
                           <td colSpan={6} className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200">
-                            {row.sectionTitle}
+                            {formatSectionLabel(row)}
                           </td>
                         </tr>
                       ) : null}
@@ -745,7 +701,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
       ) : null}
 
       {!isReadOnly ? (
-        <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="no-print flex flex-wrap items-center justify-end gap-3">
           <Button
             type="button"
             variant="outline"
@@ -765,7 +721,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
           </Button>
         </div>
       ) : (
-        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+        <p className="no-print text-xs text-emerald-700 dark:text-emerald-300">
           {data && !data.selfAssessmentEnabled
             ? "Self-assessment is not enabled for this form. It will be reviewed directly by your reporting head."
             : data?.status === "SUBMITTED"
@@ -773,6 +729,8 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
               : "Read-only"}
         </p>
       )}
+
+      <PrintFooter />
 
       <AnimatePresence>
         {thankYouOpen && submittedScore ? (

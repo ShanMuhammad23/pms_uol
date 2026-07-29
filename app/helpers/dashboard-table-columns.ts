@@ -1,7 +1,7 @@
 import {
   getEligibilityShortLabel,
   getSubmissionApplicableDurationFactor,
-  getSubmissionEligibilityStatus,
+  getSubmissionEligibilityDisplayStatus,
 } from "@/app/helpers/dashboard-eligibility";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
@@ -23,7 +23,6 @@ export type DashboardTableColumnId =
   | "qualificationCountry"
   | "status"
   | "eligible"
-  | "assessmentEligible"
   | "applicableDuration"
   | "scoreO"
   | "creditHrsErpAdj"
@@ -97,7 +96,6 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
     label: "Performance",
     columnIds: [
       "eligible",
-      "assessmentEligible",
       "applicableDuration",
       "scoreO",
       "creditHrsErpAdj",
@@ -355,15 +353,10 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   eligible: {
     id: "eligible",
     label: "Eligible?",
-    getValue: (row) =>
-      getEligibilityShortLabel(getSubmissionEligibilityStatus(row)),
-  },
-  assessmentEligible: {
-    id: "assessmentEligible",
-    label: "Assess Eligible?",
     align: "center",
     width: 90,
-    getValue: (row) => (row.assessmentEligibility ? "Yes" : "No"),
+    getValue: (row) =>
+      getEligibilityShortLabel(getSubmissionEligibilityDisplayStatus(row)),
   },
   applicableDuration: {
     id: "applicableDuration",
@@ -433,14 +426,14 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   normalizedScore: {
     id: "normalizedScore",
-    label: "Norm. Score",
+    label: "Norm. Score (100)",
     align: "center",
     width: 80,
     wrap: true,
     getValue: (row) => {
       const pct = getNormalizedScorePercent(row);
       if (pct === null) return "—";
-      return `${formatNumber(pct)}\u00A0\u002F₁₀₀`;
+      return `${formatNumber(pct)}`;
     },
   },
   ratingN: {
@@ -559,7 +552,6 @@ export const HEAD_DASHBOARD_TABLE_COLUMN_IDS = [
   "qualificationCountry",
   "status",
   "eligible",
-  "assessmentEligible",
   "applicableDuration",
   "scoreO",
 ] as const satisfies readonly DashboardTableColumnId[];

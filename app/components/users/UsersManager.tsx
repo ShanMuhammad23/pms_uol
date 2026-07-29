@@ -6,6 +6,7 @@ import { Plus, Table2, Users } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { EditUserModal } from "@/app/components/users/EditUserModal";
+import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
 import { UsersListingTable } from "@/app/components/users/UsersListingTable";
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { queryKeys } from "@/app/queries/keys";
@@ -436,31 +437,23 @@ export default function UsersManager() {
             <label htmlFor="user-head" className="mb-1.5 block text-sm font-medium text-text-primary">
               Manager 1
             </label>
-            <select
+            <SearchableManagerSelect
               id="user-head"
               value={form.headId}
-              onChange={(event) =>
-                setForm((current) => {
-                  const nextHeadId = event.target.value;
-                  return {
-                    ...current,
-                    headId: nextHeadId,
-                    manager2Id:
-                      current.manager2Id === nextHeadId
-                        ? ""
-                        : current.manager2Id,
-                  };
-                })
+              options={headOptions}
+              onChange={(next) =>
+                setForm((current) => ({
+                  ...current,
+                  headId: next,
+                  manager2Id:
+                    current.manager2Id === next
+                      ? ""
+                      : current.manager2Id,
+                }))
               }
+              disabled={isSubmitting}
               className={inputClassName}
-            >
-              <option value="">None</option>
-              {headOptions.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.firstName} {user.lastName} ({user.employeeId})
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div>
@@ -470,24 +463,19 @@ export default function UsersManager() {
             >
               Manager 2
             </label>
-            <select
+            <SearchableManagerSelect
               id="user-manager-2"
               value={form.manager2Id}
-              onChange={(event) =>
+              options={manager2Options}
+              onChange={(next) =>
                 setForm((current) => ({
                   ...current,
-                  manager2Id: event.target.value,
+                  manager2Id: next,
                 }))
               }
+              disabled={isSubmitting}
               className={inputClassName}
-            >
-              <option value="">None</option>
-              {manager2Options.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.firstName} {user.lastName} ({user.employeeId})
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div className="flex items-end">

@@ -26,10 +26,24 @@ export function getSubmissionEligibilityStatus(
 /** Short labels for the staff listing Eligible? column. */
 export function getEligibilityShortLabel(
   status: EligibilityStatus,
-): "Full" | "Partial" | "Not" {
+): "Full" | "Partial" | "No" | "N/A" {
   if (status === "Fully Eligible") return "Full";
   if (status === "Partially Eligible") return "Partial";
-  return "Not";
+  if (status === "Ineligible") return "N/A";
+  return "No";
+}
+
+/**
+ * Returns the eligibility status used for display in the consolidated
+ * Eligible? column. When an employee has been manually marked as
+ * ineligible (assessmentEligibility === false), the status is "Ineligible"
+ * regardless of the duration-based calculation.
+ */
+export function getSubmissionEligibilityDisplayStatus(
+  submission: FormSubmissionListItem,
+): EligibilityStatus {
+  if (!submission.assessmentEligibility) return "Ineligible";
+  return getSubmissionEligibilityStatus(submission);
 }
 
 export function getSubmissionApplicableDurationFactor(
@@ -57,10 +71,11 @@ export function buildEligibilityData(
     "Fully Eligible": 0,
     "Partially Eligible": 0,
     "Not Eligible": 0,
+    Ineligible: 0,
   };
 
   submissions.forEach((submission) => {
-    counts[getSubmissionEligibilityStatus(submission)] += 1;
+    counts[getSubmissionEligibilityDisplayStatus(submission)] += 1;
   });
 
   return (Object.keys(counts) as EligibilityStatus[]).map((name) => ({

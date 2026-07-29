@@ -43,6 +43,8 @@ export interface EmployeeFormDetail {
   selfAssessmentEnabled: boolean;
   assessmentEligibility: boolean;
   ineligibilityReason: string | null;
+  headName: string | null;
+  manager2Name: string | null;
 }
 
 export interface EmployeeFormAnswerInput {

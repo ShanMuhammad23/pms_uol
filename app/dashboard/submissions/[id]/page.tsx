@@ -24,7 +24,7 @@ export default async function SubmissionDetailPage({
     <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden text-text-primary">
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-1 text-xs text-foreground/70 hover:text-text-primary"
+        className="no-print inline-flex items-center gap-1 text-xs text-foreground/70 hover:text-text-primary"
       >
         <ArrowLeft className="size-3.5" />
         Back
