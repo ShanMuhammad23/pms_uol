@@ -272,6 +272,9 @@ export function ColumnManagementPanel({
                       className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700 dark:text-slate-300"
                       title={col.label}
                     >
+                      <span className="mr-1 text-[12px] font-semibold text-orange-600 dark:text-slate-500 tabular-nums">
+                        {index + 1}.
+                      </span>
                       {col.label}
                     </span>
 

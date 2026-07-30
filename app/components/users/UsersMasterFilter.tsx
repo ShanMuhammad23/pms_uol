@@ -7,6 +7,7 @@ import {
   MultiSelectFilterDropdown,
   type MultiSelectOption,
 } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import { NumericRangeFilterControls } from "@/app/components/common/NumericRangeFilterControls";
 import {
   USERS_MASTER_FILTER_MULTI_COLUMNS,
   USERS_MASTER_FILTER_TEXT_COLUMNS,
@@ -16,6 +17,7 @@ import {
   type UsersMasterFilterState,
   type UsersMasterFilterTextColumnId,
 } from "@/app/helpers/users-master-filters";
+import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
 import type { UserRecord } from "@/types/users";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,10 @@ interface UsersMasterFilterProps {
   onMultiChange: (
     columnId: (typeof USERS_MASTER_FILTER_MULTI_COLUMNS)[number]["id"],
     next: UsersMasterFilterMultiSelection,
+  ) => void;
+  onNumericChange?: (
+    columnId: (typeof USERS_MASTER_FILTER_MULTI_COLUMNS)[number]["id"],
+    filter: NumericRangeFilter | undefined,
   ) => void;
   onClearAll: () => void;
 }
@@ -67,6 +73,7 @@ export function UsersMasterFilter({
   filters,
   onTextChange,
   onMultiChange,
+  onNumericChange,
   onClearAll,
 }: UsersMasterFilterProps) {
   const [open, setOpen] = useState(false);
@@ -163,17 +170,25 @@ export function UsersMasterFilter({
                   const options = optionsByColumn.get(column.id) ?? [];
 
                   return (
-                    <MultiSelectFilterDropdown
-                      key={column.id}
-                      label={column.label}
-                      options={options}
-                      selectedValues={filters.multi[column.id] ?? null}
-                      onChange={(next) => onMultiChange(column.id, next)}
-                      placeholder="All"
-                      searchable={options.length > 8}
-                      quiet
-                      className="min-w-0 flex-none"
-                    />
+                    <div key={column.id} className="space-y-1.5">
+                      <MultiSelectFilterDropdown
+                        label={column.label}
+                        options={options}
+                        selectedValues={filters.multi[column.id] ?? null}
+                        onChange={(next) => onMultiChange(column.id, next)}
+                        placeholder="All"
+                        searchable={options.length > 8}
+                        quiet
+                        className="min-w-0 flex-none"
+                      />
+                      {column.numeric && onNumericChange ? (
+                        <NumericRangeFilterControls
+                          filter={filters.numeric[column.id]}
+                          onChange={(next) => onNumericChange(column.id, next)}
+                          variant="panel"
+                        />
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>

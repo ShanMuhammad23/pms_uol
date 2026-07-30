@@ -4,6 +4,12 @@ import {
   type UsersTableColumnDef,
   type UsersTableColumnId,
 } from "@/app/helpers/users-table-columns";
+import {
+  hasNumericRange,
+  matchesNumericRange,
+  parseNumericCell,
+  type NumericRangeFilter,
+} from "@/app/helpers/numeric-range-filter";
 import type { UserRecord } from "@/types/users";
 
 /** Columns excluded from the master filter entirely. */
@@ -40,11 +46,13 @@ export type UsersMasterFilterMultiSelection = string[] | null;
 export type UsersMasterFilterState = {
   text: Partial<Record<UsersMasterFilterTextColumnId, string>>;
   multi: Partial<Record<UsersTableColumnId, UsersMasterFilterMultiSelection>>;
+  numeric: Partial<Record<UsersTableColumnId, NumericRangeFilter>>;
 };
 
 export const EMPTY_USERS_MASTER_FILTER_STATE: UsersMasterFilterState = {
   text: {},
   multi: {},
+  numeric: {},
 };
 
 export const USERS_MASTER_FILTER_TEXT_COLUMNS: UsersTableColumnDef[] =
@@ -57,6 +65,13 @@ export const USERS_MASTER_FILTER_MULTI_COLUMNS: UsersTableColumnDef[] =
     (column) =>
       !MASTER_FILTER_EXCLUDED_IDS.has(column.id) &&
       !MASTER_FILTER_TEXT_ID_SET.has(column.id),
+  );
+
+export const USERS_MASTER_FILTER_NUMERIC_COLUMNS: UsersTableColumnDef[] =
+  USERS_TABLE_COLUMNS.filter(
+    (column) =>
+      !MASTER_FILTER_EXCLUDED_IDS.has(column.id) &&
+      column.numeric === true,
   );
 
 export function isUsersMasterFilterTextColumn(
@@ -127,6 +142,23 @@ export function matchesUsersMasterFiltersExcluding(
     }
 
     if (!selected.includes(column.getValue(user))) {
+      return false;
+    }
+  }
+
+  for (const column of USERS_MASTER_FILTER_NUMERIC_COLUMNS) {
+    if (excludeColumnId === column.id) {
+      continue;
+    }
+
+    const range = filters.numeric[column.id];
+    if (!hasNumericRange(range)) {
+      continue;
+    }
+
+    const cellValue = column.getValue(user);
+    const numValue = parseNumericCell(cellValue);
+    if (numValue === null || !matchesNumericRange(numValue, range!)) {
       return false;
     }
   }
@@ -223,7 +255,15 @@ export function isUsersColumnFilterActive(
   }
 
   const selected = filters.multi[columnId];
-  return selected !== undefined && selected !== null;
+  if (selected !== undefined && selected !== null) {
+    return true;
+  }
+
+  if (hasNumericRange(filters.numeric[columnId])) {
+    return true;
+  }
+
+  return false;
 }
 
 export function countActiveUsersMasterFilters(
@@ -239,5 +279,9 @@ export function countActiveUsersMasterFilters(
     return selected !== undefined && selected !== null ? count + 1 : count;
   }, 0);
 
-  return textCount + multiCount;
+  const numericCount = USERS_MASTER_FILTER_NUMERIC_COLUMNS.reduce((count, column) => {
+    return hasNumericRange(filters.numeric[column.id]) ? count + 1 : count;
+  }, 0);
+
+  return textCount + multiCount + numericCount;
 }

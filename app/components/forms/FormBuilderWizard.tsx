@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/app/components/auth/Button";
 import FormEmployeeAssignment from "./FormEmployeeAssignment";
+import FormTemplateView from "./FormTemplateView";
 import {
   createFormTemplate,
   FormTemplateRequestError,
@@ -14,9 +15,13 @@ import {
 import type {
   AppraisalCycleRecord,
   FormSectionInput,
+  FormSectionRecord,
+  FormSubsectionRecord,
   FormTemplateInput,
   FormTemplateRecord,
   QuestionInput,
+  QuestionOptionRecord,
+  QuestionRecord,
 } from "@/types/forms";
 import {
   countAllQuestions,
@@ -56,6 +61,66 @@ import {
 interface QuestionLocation {
   sectionClientId: string | null;
   subsectionClientId: string | null;
+  insertIndex?: number;
+}
+
+function draftToTemplateRecord(
+  title: string,
+  description: string,
+  selfAssessmentEnabled: boolean,
+  sections: FormSectionInput[],
+  questions: QuestionInput[],
+): FormTemplateRecord {
+  let idCounter = 1;
+  const nextId = () => idCounter++;
+
+  const mapQuestion = (q: QuestionInput): QuestionRecord => ({
+    id: q.id ?? nextId(),
+    questionText: q.questionText,
+    inputType: q.inputType,
+    isRequired: q.isRequired,
+    sortOrder: q.sortOrder,
+    selfAssessmentEnabled: q.selfAssessmentEnabled,
+    hodAssessmentEnabled: q.hodAssessmentEnabled,
+    totalMarks: q.totalMarks,
+    options: q.options.map((o): QuestionOptionRecord => ({
+      id: o.id ?? nextId(),
+      optionLabel: o.optionLabel,
+      pointsAssigned: o.pointsAssigned,
+      sortOrder: o.sortOrder,
+    })),
+  });
+
+  const recordSections: FormSectionRecord[] = sections.map((s) => ({
+    id: s.id ?? nextId(),
+    title: s.title,
+    sortOrder: s.sortOrder,
+    subsections: s.subsections.map((sub): FormSubsectionRecord => ({
+      id: sub.id ?? nextId(),
+      title: sub.title,
+      sortOrder: sub.sortOrder,
+      questions: sub.questions.map(mapQuestion),
+    })),
+    questions: s.questions.map(mapQuestion),
+  }));
+
+  const recordQuestions: QuestionRecord[] = questions.map(mapQuestion);
+
+  return {
+    id: 0,
+    title,
+    description: description || null,
+    cycleId: 0,
+    fiscalYear: 0,
+    targetCategory: null,
+    targetSubCategory: null,
+    selfAssessmentEnabled,
+    sections: recordSections,
+    questions: recordQuestions,
+    incrementMatrices: [],
+    createdAt: "",
+    updatedAt: "",
+  };
 }
 
 const STEPS = [
@@ -192,6 +257,46 @@ function ModernFormDesignStep({
     }
   }, [errors, sections]);
 
+  useEffect(() => {
+    const handleDragStart = () => setDraggingId("active");
+    const handleDragEnd = () => {
+      setDraggingId(null);
+      setDragOverTarget(null);
+    };
+    document.addEventListener("dragstart", handleDragStart);
+    document.addEventListener("dragend", handleDragEnd);
+    return () => {
+      document.removeEventListener("dragstart", handleDragStart);
+      document.removeEventListener("dragend", handleDragEnd);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!draggingId || !scrollContainerRef.current) return;
+    let animationId: number;
+    let lastClientY = 0;
+    const handleDragOver = (e: DragEvent) => { lastClientY = e.clientY; };
+    const autoScroll = () => {
+      if (!scrollContainerRef.current) return;
+      const rect = scrollContainerRef.current.getBoundingClientRect();
+      const scrollZone = 80;
+      if (lastClientY > 0 && lastClientY < rect.top + scrollZone) {
+        const speed = (rect.top + scrollZone - lastClientY) / scrollZone;
+        scrollContainerRef.current.scrollTop -= Math.max(1, speed * 8);
+      } else if (lastClientY > rect.bottom - scrollZone && lastClientY < rect.bottom) {
+        const speed = (lastClientY - (rect.bottom - scrollZone)) / scrollZone;
+        scrollContainerRef.current.scrollTop += Math.max(1, speed * 8);
+      }
+      animationId = requestAnimationFrame(autoScroll);
+    };
+    animationId = requestAnimationFrame(autoScroll);
+    window.addEventListener("dragover", handleDragOver);
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener("dragover", handleDragOver);
+    };
+  }, [draggingId]);
+
   const toggleSection = (clientId: string) => {
     setExpandedSections(prev => {
       const next = new Set(prev);
@@ -281,30 +386,25 @@ function ModernFormDesignStep({
 
   const moveQuestion = useCallback(
     (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => {
-      if (
-        source.sectionClientId === target.sectionClientId &&
-        source.subsectionClientId === target.subsectionClientId
-      ) {
-        return;
-      }
-
       let movedQuestion: QuestionInput | null = null;
+      let sourceIdx = -1;
       let nextSections = [...sections];
       let nextQuestions = [...questions];
 
+      // Step 1: Extract question from source and record original index
       if (source.sectionClientId === null) {
-        const idx = nextQuestions.findIndex(q => q.clientId === questionClientId);
-        if (idx >= 0) {
-          movedQuestion = nextQuestions[idx];
+        sourceIdx = nextQuestions.findIndex(q => q.clientId === questionClientId);
+        if (sourceIdx >= 0) {
+          movedQuestion = nextQuestions[sourceIdx];
           nextQuestions = nextQuestions.filter(q => q.clientId !== questionClientId);
         }
       } else {
         nextSections = nextSections.map(s => {
           if (s.clientId !== source.sectionClientId) return s;
           if (source.subsectionClientId === null) {
-            const idx = s.questions.findIndex(q => q.clientId === questionClientId);
-            if (idx >= 0) {
-              movedQuestion = s.questions[idx];
+            sourceIdx = s.questions.findIndex(q => q.clientId === questionClientId);
+            if (sourceIdx >= 0) {
+              movedQuestion = s.questions[sourceIdx];
               return {
                 ...s,
                 questions: s.questions
@@ -317,9 +417,9 @@ function ModernFormDesignStep({
               ...s,
               subsections: s.subsections.map(sub => {
                 if (sub.clientId !== source.subsectionClientId) return sub;
-                const idx = sub.questions.findIndex(q => q.clientId === questionClientId);
-                if (idx >= 0) {
-                  movedQuestion = sub.questions[idx];
+                sourceIdx = sub.questions.findIndex(q => q.clientId === questionClientId);
+                if (sourceIdx >= 0) {
+                  movedQuestion = sub.questions[sourceIdx];
                   return {
                     ...sub,
                     questions: sub.questions
@@ -338,24 +438,53 @@ function ModernFormDesignStep({
       if (!movedQuestion) return;
       const moved = movedQuestion;
 
+      // Step 2: Compute insert index (default to end if not specified)
+      const isSameList =
+        source.sectionClientId === target.sectionClientId &&
+        source.subsectionClientId === target.subsectionClientId;
+
+      let insertIdx = target.insertIndex;
+      if (insertIdx === undefined) {
+        if (target.sectionClientId === null) {
+          insertIdx = nextQuestions.length;
+        } else {
+          const targetSection = nextSections.find(s => s.clientId === target.sectionClientId);
+          if (target.subsectionClientId === null) {
+            insertIdx = targetSection?.questions.length ?? 0;
+          } else {
+            const targetSub = targetSection?.subsections.find(sub => sub.clientId === target.subsectionClientId);
+            insertIdx = targetSub?.questions.length ?? 0;
+          }
+        }
+      } else if (isSameList && sourceIdx >= 0 && sourceIdx < insertIdx) {
+        insertIdx = insertIdx - 1;
+      }
+
+      // Step 3: Insert at target position
       if (target.sectionClientId === null) {
-        nextQuestions = [...nextQuestions, { ...moved, sortOrder: nextQuestions.length }];
+        const newQuestions = [...nextQuestions];
+        newQuestions.splice(insertIdx, 0, { ...moved, sortOrder: insertIdx });
+        nextQuestions = newQuestions.map((q, i) => ({ ...q, sortOrder: i }));
       } else {
         nextSections = nextSections.map(s => {
           if (s.clientId !== target.sectionClientId) return s;
           if (target.subsectionClientId === null) {
+            const newQs = [...s.questions];
+            newQs.splice(insertIdx, 0, { ...moved, sortOrder: insertIdx });
             return {
               ...s,
-              questions: [...s.questions, { ...moved, sortOrder: s.questions.length }],
+              questions: newQs.map((q, i) => ({ ...q, sortOrder: i })),
             };
           }
           return {
             ...s,
             subsections: s.subsections.map(sub => {
               if (sub.clientId !== target.subsectionClientId) return sub;
+              const newQs = [...sub.questions];
+              newQs.splice(insertIdx, 0, { ...moved, sortOrder: insertIdx });
               return {
                 ...sub,
-                questions: [...sub.questions, { ...moved, sortOrder: sub.questions.length }],
+                questions: newQs.map((q, i) => ({ ...q, sortOrder: i })),
               };
             }),
           };
@@ -372,6 +501,10 @@ function ModernFormDesignStep({
   const rootLayout = useMemo(
     () => buildRootLayoutOrder(sections, questions),
     [sections, questions],
+  );
+  const previewTemplate = useMemo(
+    () => draftToTemplateRecord(title, description, selfAssessmentEnabled, sections, questions),
+    [title, description, selfAssessmentEnabled, sections, questions],
   );
 
   return (
@@ -637,6 +770,13 @@ function ModernFormDesignStep({
                             ),
                           );
                         }}
+                        onDropQuestion={(dragData, insertIndex) => {
+                          moveQuestion(dragData.questionClientId, dragData.source, {
+                            sectionClientId: null,
+                            subsectionClientId: null,
+                            insertIndex,
+                          });
+                        }}
                         formSelfAssessmentEnabled={selfAssessmentEnabled}
                       />
                     );
@@ -657,7 +797,7 @@ function ModernFormDesignStep({
                     setDragOverTarget(null);
                     try {
                       const data = JSON.parse(e.dataTransfer.getData("application/json"));
-                      moveQuestion(data.questionClientId, data.source, { sectionClientId: null, subsectionClientId: null });
+                      moveQuestion(data.questionClientId, data.source, { sectionClientId: null, subsectionClientId: null, insertIndex: questions.length });
                     } catch { /* ignore */ }
                   }}
                   className={cn(
@@ -672,61 +812,7 @@ function ModernFormDesignStep({
               )}
             </div>
           ) : (
-            <div className="mx-auto max-w-2xl">
-              {/* Simple Preview */}
-              <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                  {title || "Untitled Form"}
-                </h1>
-                {description && (
-                  <p className="mt-2 text-slate-600 dark:text-slate-400">{description}</p>
-                )}
-                <div className="mt-8 space-y-6">
-                  {rootLayout.map((item) => {
-                    if (item.kind === "section") {
-                      const section = sections.find(
-                        (currentSection) => currentSection.clientId === item.clientId,
-                      );
-                      if (!section) {
-                        return null;
-                      }
-
-                      return (
-                        <div key={section.clientId} className="space-y-4">
-                          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                            {section.title || "Untitled Section"}
-                          </h2>
-                          {section.questions.map((question) => (
-                            <div key={question.clientId} className="rounded-lg border border-slate-100 p-4 dark:border-slate-800">
-                              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                {question.questionText || "Untitled Question"}
-                              </p>
-                              <div className="mt-2 h-8 rounded border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" />
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }
-
-                    const question = questions.find(
-                      (currentQuestion) => currentQuestion.clientId === item.clientId,
-                    );
-                    if (!question) {
-                      return null;
-                    }
-
-                    return (
-                      <div key={question.clientId} className="rounded-lg border border-slate-100 p-4 dark:border-slate-800">
-                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                          {question.questionText || "Untitled Question"}
-                        </p>
-                        <div className="mt-2 h-8 rounded border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            <FormTemplateView template={previewTemplate} />
           )}
         </div>
 
@@ -883,7 +969,7 @@ function SectionCard({
               setSectionDragOver(false);
               try {
                 const data = JSON.parse(e.dataTransfer.getData("application/json"));
-                onMoveQuestion(data.questionClientId, data.source, { sectionClientId: section.clientId, subsectionClientId: null });
+                onMoveQuestion(data.questionClientId, data.source, { sectionClientId: section.clientId, subsectionClientId: null, insertIndex: section.questions.length });
               } catch { /* ignore */ }
             }}
             className={cn(
@@ -901,6 +987,13 @@ function SectionCard({
                 sourceLocation={{ sectionClientId: section.clientId, subsectionClientId: null }}
                 onRemove={() => onRemoveQuestion(question.clientId)}
                 onChange={(updates) => onUpdateQuestion(question.clientId, updates)}
+                onDropQuestion={(dragData, insertIndex) => {
+                  onMoveQuestion(dragData.questionClientId, dragData.source, {
+                    sectionClientId: section.clientId,
+                    subsectionClientId: null,
+                    insertIndex,
+                  });
+                }}
                 compact
                 formSelfAssessmentEnabled={formSelfAssessmentEnabled}
               />
@@ -937,6 +1030,7 @@ function QuestionCard({
   sourceLocation,
   onRemove,
   onChange,
+  onDropQuestion,
   compact = false,
   formSelfAssessmentEnabled = true,
 }: {
@@ -947,6 +1041,7 @@ function QuestionCard({
   sourceLocation: QuestionLocation;
   onRemove: () => void;
   onChange: (updates: Partial<QuestionInput>) => void;
+  onDropQuestion?: (dragData: { questionClientId: string; source: QuestionLocation }, insertIndex: number) => void;
   compact?: boolean;
   formSelfAssessmentEnabled?: boolean;
 }) {
@@ -955,6 +1050,13 @@ function QuestionCard({
   const marksError = errors[`${errorPrefix}-marks`];
   const hasError = textError || typeError || marksError;
   const showOptions = questionNeedsOptions(question.inputType);
+  const [dragOverPos, setDragOverPos] = useState<"before" | "after" | null>(null);
+
+  useEffect(() => {
+    const handleDragEnd = () => setDragOverPos(null);
+    document.addEventListener("dragend", handleDragEnd);
+    return () => document.removeEventListener("dragend", handleDragEnd);
+  }, []);
 
   const handleNoMarksChange = (checked: boolean) => {
     onChange({
@@ -964,12 +1066,49 @@ function QuestionCard({
   };
 
   return (
-    <div className={cn(
+    <div
+      onDragOver={(e) => {
+        if (!onDropQuestion) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const rect = e.currentTarget.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        setDragOverPos(e.clientY < midpoint ? "before" : "after");
+      }}
+      onDragLeave={(e) => {
+        if (!onDropQuestion) return;
+        const relatedTarget = e.relatedTarget as Node | null;
+        if (relatedTarget && e.currentTarget.contains(relatedTarget)) return;
+        setDragOverPos(null);
+      }}
+      onDrop={(e) => {
+        if (!onDropQuestion) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        const isAfter = e.clientY >= midpoint;
+        const insertIndex = isAfter ? index + 1 : index;
+        setDragOverPos(null);
+        try {
+          const data = JSON.parse(e.dataTransfer.getData("application/json"));
+          onDropQuestion(data, insertIndex);
+        } catch { /* ignore */ }
+      }}
+      className={cn(
       "group relative rounded-lg border p-3 transition-all shadow-sm",
       hasError
         ? "border-red-300 bg-red-50/60 dark:border-red-700/50 dark:bg-red-950/20"
-        : "border-teal-200 bg-teal-50/50 hover:border-teal-300 hover:shadow-md hover:shadow-teal-100/40 dark:border-teal-500/25 dark:bg-teal-950/30 dark:hover:border-teal-400/35"
+        : "border-teal-200 bg-teal-50/50 hover:border-teal-300 hover:shadow-md hover:shadow-teal-100/40 dark:border-teal-500/25 dark:bg-teal-950/30 dark:hover:border-teal-400/35",
+      dragOverPos === "before" && "rounded-t-none border-t-2 border-t-primary",
+      dragOverPos === "after" && "rounded-b-none border-b-2 border-b-primary",
     )}>
+      {dragOverPos === "before" && (
+        <div className="pointer-events-none absolute -top-0.5 left-2 right-2 h-0.5 rounded-full bg-primary z-20" />
+      )}
+      {dragOverPos === "after" && (
+        <div className="pointer-events-none absolute -bottom-0.5 left-2 right-2 h-0.5 rounded-full bg-primary z-20" />
+      )}
       <div className="flex items-start gap-2">
         <div
           draggable

@@ -90,27 +90,11 @@ html {
 }
 
 /* ==========================================================================
-   Print System — A4 optimised, professional document layout
+   Print System — professional document layout (printer settings via browser)
    ========================================================================== */
 
-/* Default: A4 Portrait. Override with .print-landscape on <html> or <body> */
-@page {
-  margin: 12mm;
-  size: A4 portrait;
-}
-
-/* Named page for landscape orientation */
-@page landscape {
-  size: A4 landscape;
-}
-
-/* When .print-landscape is set on <html>, switch to landscape */
-html.print-landscape {
-  --print-orientation: landscape;
-}
-html.print-landscape body {
-  page: landscape;
-}
+/* No @page rules — let the browser's native print dialog control paper size,
+   orientation, margins, scale, and all other printer-specific settings. */
 
 @media print {
   /* ---- Global resets ---- */

@@ -18,6 +18,9 @@ import {
 import { fetchUsers } from "@/lib/queries/users-client";
 import type { UserRecord } from "@/types/users";
 import { cn } from "@/lib/utils";
+import PrintButton from "@/app/components/forms/PrintButton";
+import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
+import PrintFooter from "@/app/components/print/PrintFooter";
 
 const PAGE_SIZE = 50;
 
@@ -322,19 +325,33 @@ export default function DirectScoreEntryAssignment() {
 
   return (
     <div className="flex flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
-      <div className="shrink-0 px-5 pt-4">
-        <h2 className="text-base font-semibold text-text-primary">Direct Score Entry</h2>
-        <p className="mt-0.5 text-sm text-foreground/70">
-          Select employees to mark for direct score entry. Their Score (O) will be
-          adjusted manually from the main dashboard by HR, Board, and Super Admin.
-          These employees will not fill any form or go through self-assessment or
-          manager review.
-        </p>
+      <PrintDocumentHeader
+        title="Direct Score Entry Assignment"
+        metaItems={[
+          { label: "Total Employees", value: String(allUsers.length) },
+          { label: "Assigned", value: String(assignedEmployees?.length ?? 0) },
+        ]}
+      />
+      <div className="no-print shrink-0 px-5 pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-text-primary">Direct Score Entry</h2>
+            <p className="mt-0.5 text-sm text-foreground/70">
+              Select employees to mark for direct score entry. Their Score (O) will be
+              adjusted manually from the main dashboard by HR, Board, and Super Admin.
+              These employees will not fill any form or go through self-assessment or
+              manager review.
+            </p>
+          </div>
+          <PrintButton
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+          />
+        </div>
       </div>
 
       {message ? (
         <div
-          className={`mx-5 mt-3 shrink-0 rounded-lg border px-3 py-2 text-sm ${
+          className={`no-print mx-5 mt-3 shrink-0 rounded-lg border px-3 py-2 text-sm ${
             isError
               ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300"
               : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300"
@@ -345,7 +362,7 @@ export default function DirectScoreEntryAssignment() {
       ) : null}
 
       {/* Master Filters */}
-      <div className="mt-3 shrink-0 border-y border-slate-200/80 bg-slate-50/90 dark:border-white/5 dark:bg-slate-950/40">
+      <div className="no-print mt-3 shrink-0 border-y border-slate-200/80 bg-slate-50/90 dark:border-white/5 dark:bg-slate-950/40">
         <div className="flex items-center justify-between gap-3 px-5 py-2">
           <button
             type="button"
@@ -413,7 +430,7 @@ export default function DirectScoreEntryAssignment() {
       </div>
 
       {/* Toolbar: search + count + assign button */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-5 py-2">
+      <div className="no-print flex shrink-0 flex-wrap items-center justify-between gap-3 px-5 py-2">
         <div className="min-w-0 flex-1">
           <div className="relative max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -466,7 +483,7 @@ export default function DirectScoreEntryAssignment() {
             <tr>
               <th
                 className={cn(
-                  "sticky left-0 top-0 z-40 border-b border-slate-200 bg-slate-50 px-3 py-3 dark:border-white/10 dark:bg-slate-900",
+                  "no-print sticky left-0 top-0 z-40 border-b border-slate-200 bg-slate-50 px-3 py-3 dark:border-white/10 dark:bg-slate-900",
                   STICKY_SHADOW_LEFT,
                 )}
               >
@@ -515,7 +532,7 @@ export default function DirectScoreEntryAssignment() {
                   >
                     <td
                       className={cn(
-                        "sticky left-0 z-20 border-b border-slate-100 px-3 py-1.5 dark:border-white/[0.03]",
+                        "no-print sticky left-0 z-20 border-b border-slate-100 px-3 py-1.5 dark:border-white/[0.03]",
                         STICKY_SHADOW_LEFT,
                         isSelected
                           ? "bg-amber-50/60 dark:bg-amber-500/5"
@@ -566,7 +583,7 @@ export default function DirectScoreEntryAssignment() {
 
       {/* Pagination */}
       {totalCount > 0 ? (
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-2 dark:border-white/5">
+        <div className="no-print flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-2 dark:border-white/5">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Showing {rangeStart}–{rangeEnd} of {totalCount}
           </p>
@@ -602,6 +619,7 @@ export default function DirectScoreEntryAssignment() {
           <span className="font-semibold text-text-primary">{assignedEmployees?.length ?? 0}</span> employee(s) currently marked for direct score entry.
         </p>
       </div>
+      <PrintFooter />
     </div>
   );
 }
