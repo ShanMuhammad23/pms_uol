@@ -2,6 +2,16 @@ import type {
   FormSubmissionDetail,
   FormSubmissionListItem,
 } from "@/types/form-submissions";
+import type {
+  DashboardFilterParams,
+  DashboardOverviewCounts,
+  FormSubmissionsPageResponse,
+  FormSubmissionsQueryParams,
+} from "@/types/dashboard-api";
+import {
+  buildFormSubmissionsSearchParams,
+  buildOverviewSearchParams,
+} from "@/lib/dashboard/filter-params";
 
 async function parseResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
@@ -13,16 +23,48 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export async function fetchFormSubmissions(): Promise<FormSubmissionListItem[]> {
-  const response = await fetch("/api/submissions", { cache: "no-store" });
-  return parseResponse<FormSubmissionListItem[]>(response);
+export async function fetchFormSubmissionsPage(
+  query: FormSubmissionsQueryParams,
+): Promise<FormSubmissionsPageResponse> {
+  const params = buildFormSubmissionsSearchParams(query);
+  const response = await fetch(`/api/submissions?${params.toString()}`, {
+    cache: "no-store",
+  });
+  return parseResponse<FormSubmissionsPageResponse>(response);
 }
 
-/** Slim rows for filters, stats cards, and charts — not the staff listing. */
-export async function fetchDashboardOverview(): Promise<FormSubmissionListItem[]> {
-  const response = await fetch("/api/submissions/overview", { cache: "no-store" });
-  return parseResponse<FormSubmissionListItem[]>(response);
+/** Legacy full-ish listing for non-dashboard pages (capped). Prefer fetchFormSubmissionsPage. */
+export async function fetchFormSubmissions(): Promise<FormSubmissionListItem[]> {
+  const response = await fetchFormSubmissionsPage({
+    page: 1,
+    pageSize: 5000,
+    filters: {
+      searchQuery: "",
+      category0EntityIds: null,
+      category1EntityIds: null,
+      category2EntityIds: null,
+      roleCategories: null,
+      designations: null,
+      formStates: null,
+    },
+    masterFilters: { text: {}, multi: {}, numeric: {} },
+  });
+  return response.items;
 }
+
+/** Aggregated counts for filters, workflow stats, and charts. */
+export async function fetchDashboardOverview(
+  filters: DashboardFilterParams,
+): Promise<DashboardOverviewCounts> {
+  const params = buildOverviewSearchParams(filters);
+  const query = params.toString();
+  const response = await fetch(
+    `/api/submissions/overview${query ? `?${query}` : ""}`,
+    { cache: "no-store" },
+  );
+  return parseResponse<DashboardOverviewCounts>(response);
+}
+
 
 export async function fetchFormSubmission(
   id: number,

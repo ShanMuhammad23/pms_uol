@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/app/queries/keys";
+import {
+  cancelStaffListingQueries,
+  getStaffListingSnapshots,
+  patchStaffListingCaches,
+  restoreStaffListingSnapshots,
+} from "@/app/helpers/dashboard-listing-cache";
 import { updateSubmissionRemarks } from "@/lib/queries/form-submissions-client";
-import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 
 export type RemarksField = "remarksEvaluation" | "remarksCompensation";
@@ -53,25 +57,18 @@ export function InlineRemarksCell({
       updateSubmissionRemarks(submissionId, field, nextValue),
     onMutate: async (nextValue) => {
       setError(null);
-      await queryClient.cancelQueries({ queryKey: queryKeys.formSubmissions });
+      await cancelStaffListingQueries(queryClient);
+      const snapshots = getStaffListingSnapshots(queryClient);
 
-      const previous = queryClient.getQueryData<FormSubmissionListItem[]>(
-        queryKeys.formSubmissions,
+      patchStaffListingCaches(queryClient, (row) =>
+        row.id === submissionId ? { ...row, [field]: nextValue } : row,
       );
 
-      queryClient.setQueryData<FormSubmissionListItem[]>(
-        queryKeys.formSubmissions,
-        (current) =>
-          current?.map((row) =>
-            row.id === submissionId ? { ...row, [field]: nextValue } : row,
-          ),
-      );
-
-      return { previous };
+      return { snapshots };
     },
     onError: (mutationError, _nextValue, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKeys.formSubmissions, context.previous);
+      if (context?.snapshots) {
+        restoreStaffListingSnapshots(queryClient, context.snapshots);
       }
       setError(
         mutationError instanceof Error
@@ -81,12 +78,8 @@ export function InlineRemarksCell({
       setEditing(true);
     },
     onSuccess: (result) => {
-      queryClient.setQueryData<FormSubmissionListItem[]>(
-        queryKeys.formSubmissions,
-        (current) =>
-          current?.map((row) =>
-            row.id === result.id ? { ...row, [field]: result[field] } : row,
-          ),
+      patchStaffListingCaches(queryClient, (row) =>
+        row.id === result.id ? { ...row, [field]: result[field] } : row,
       );
       setEditing(false);
     },

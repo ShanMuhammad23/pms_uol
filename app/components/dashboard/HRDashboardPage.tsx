@@ -50,11 +50,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     entitiesLoading,
     designationsLoading,
     overviewLoading,
-    submissionsLoading,
-    submissionsError,
+    filterParams,
     performanceMatrixLoading,
-    filteredSubmissions,
-    submissions,
     activeFilters,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,
@@ -72,7 +69,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     boardApprovalStats,
     filteredCalibrationData,
     ratingQuartileMatrix,
-    chartSubmissions,
+    chartSubmissionsCount,
     matrixForDistribution,
   } = useDashboardPage();
 
@@ -197,7 +194,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
                   <DashboardPrimaryCharts
                     calibrationData={filteredCalibrationData}
                     ratingQuartileMatrix={ratingQuartileMatrix}
-                    employeeCount={chartSubmissions.length}
+                    employeeCount={chartSubmissionsCount}
                     performanceMatrixLoading={performanceMatrixLoading}
                     role={role}
                   />
@@ -208,10 +205,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
         )}
 
         <DashboardSubmissionsTable
-          submissions={filteredSubmissions}
-          allSubmissions={submissions}
-          isLoading={submissionsLoading}
-          error={submissionsError}
+          filterParams={filterParams}
           onClearAllFilters={clearAllFilters}
           allowedColumnIds={isHead ? HEAD_DASHBOARD_TABLE_COLUMN_IDS : undefined}
           role={role}

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start --port 3005",
+    "start": "NODE_OPTIONS='--no-network-family-autoselection' next start --port 3005",
     "lint": "eslint",
     "db:migrate:form-sections": "node scripts/migrate-form-sections.mjs",
     "db:migrate:form-engine": "node scripts/migrate-form-engine.mjs",
