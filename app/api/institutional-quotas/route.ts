@@ -44,9 +44,9 @@ export async function GET(request: Request) {
       );
     }
 
-    console.error("Failed to load institutional quota chart rows:", error);
+    console.error("Failed to load quota chart rows:", error);
     return NextResponse.json(
-      { error: "Failed to load institutional quotas." },
+      { error: "Failed to load quotas." },
       { status: 500 },
     );
   }

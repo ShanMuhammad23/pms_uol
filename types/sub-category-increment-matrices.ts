@@ -1,10 +1,7 @@
-import type { EmployeeCategory, SubCategory } from "@/types/forms";
-
 export interface SubCategoryIncrementMatrixRecord {
   id: number;
   financialYearId: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  matrixLabel: string;
   performanceLevelId: number;
   performanceLevelName: string;
   performanceQuartileId: number;
@@ -16,17 +13,24 @@ export interface SubCategoryIncrementMatrixRecord {
 
 export interface CreateSubCategoryIncrementMatrixInput {
   financialYearId: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  matrixLabel: string;
   performanceLevelId: number;
   performanceQuartileId: number;
   incrementPercentage: number;
 }
 
 export interface UpdateSubCategoryIncrementMatrixInput {
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  matrixLabel: string;
   performanceLevelId: number;
   performanceQuartileId: number;
   incrementPercentage: number;
+}
+
+export interface IncrementMatrixAssignmentRecord {
+  employeeId: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  matrixLabel: string;
+  financialYearId: number;
 }

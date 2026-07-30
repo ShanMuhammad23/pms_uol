@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/app/components/auth/Button";
-import CategoryAssignmentStep from "./steps/CategoryAssignmentStep";
+import FormEmployeeAssignment from "./FormEmployeeAssignment";
 import {
   createFormTemplate,
   FormTemplateRequestError,
@@ -13,15 +13,12 @@ import {
 } from "@/lib/queries/forms-client";
 import type {
   AppraisalCycleRecord,
-  EmployeeCategory,
   FormSectionInput,
   FormTemplateInput,
   FormTemplateRecord,
   QuestionInput,
-  SubCategory,
 } from "@/types/forms";
 import {
-  CATEGORY_SUB_MAP,
   countAllQuestions,
   createClientId,
   createEmptyQuestion,
@@ -49,7 +46,6 @@ import {
   ChevronDown,
   Settings2,
   Eye,
-  Save,
   ArrowLeft,
   FileText,
   Layers,
@@ -57,9 +53,14 @@ import {
   X
 } from "lucide-react";
 
+interface QuestionLocation {
+  sectionClientId: string | null;
+  subsectionClientId: string | null;
+}
+
 const STEPS = [
   { id: "design" as const, label: "Design", icon: LayoutTemplate, description: "Build your form structure" },
-  { id: "category" as const, label: "Assign", icon: Users, description: "Set target audience" },
+  { id: "assign" as const, label: "Assign", icon: Users, description: "Assign form to employees" },
 ] as const;
 
 interface FormBuilderWizardProps {
@@ -67,6 +68,7 @@ interface FormBuilderWizardProps {
   initialData?: FormTemplateRecord;
   appraisalCycles?: AppraisalCycleRecord[];
   appraisalCount?: number;
+  copyMode?: boolean;
 }
 
 function mapRecordToState(record: FormTemplateRecord) {
@@ -90,9 +92,8 @@ function mapRecordToState(record: FormTemplateRecord) {
   return {
     title: record.title,
     description: record.description ?? "",
-    targetCategory: record.targetCategory,
-    targetSubCategory: record.targetSubCategory,
     cycleId: record.cycleId,
+    selfAssessmentEnabled: record.selfAssessmentEnabled,
     sections: normalized.sections,
     questions: normalized.questions,
   };
@@ -150,27 +151,33 @@ function validateQuestionFields(
 interface ModernFormDesignStepProps {
   title: string;
   description: string;
+  selfAssessmentEnabled: boolean;
   sections: FormSectionInput[];
   questions: QuestionInput[];
   errors: Record<string, string>;
   onTitleChange: (title: string) => void;
   onDescriptionChange: (description: string) => void;
+  onSelfAssessmentEnabledChange: (enabled: boolean) => void;
   onStructureChange: (sections: FormSectionInput[], questions: QuestionInput[]) => void;
 }
 
 function ModernFormDesignStep({
   title,
   description,
+  selfAssessmentEnabled,
   sections,
   questions,
   errors,
   onTitleChange,
   onDescriptionChange,
+  onSelfAssessmentEnabledChange,
   onStructureChange,
 }: ModernFormDesignStepProps) {
   const [activePanel, setActivePanel] = useState<"builder" | "preview">("builder");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-expand sections that have errors
@@ -248,29 +255,6 @@ function ModernFormDesignStep({
     );
   };
 
-  const addSubsection = (sectionClientId: string) => {
-    commitStructure(
-      sections.map(s => {
-        if (s.clientId === sectionClientId) {
-          return {
-            ...s,
-            subsections: [
-              ...s.subsections,
-              {
-                clientId: createClientId(),
-                title: "",
-                sortOrder: s.subsections.length,
-                questions: [],
-              }
-            ]
-          };
-        }
-        return s;
-      }),
-      questions,
-    );
-  };
-
   const removeQuestion = (sectionClientId: string | null, questionClientId: string) => {
     if (sectionClientId) {
       commitStructure(
@@ -295,6 +279,94 @@ function ModernFormDesignStep({
     }
   };
 
+  const moveQuestion = useCallback(
+    (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => {
+      if (
+        source.sectionClientId === target.sectionClientId &&
+        source.subsectionClientId === target.subsectionClientId
+      ) {
+        return;
+      }
+
+      let movedQuestion: QuestionInput | null = null;
+      let nextSections = [...sections];
+      let nextQuestions = [...questions];
+
+      if (source.sectionClientId === null) {
+        const idx = nextQuestions.findIndex(q => q.clientId === questionClientId);
+        if (idx >= 0) {
+          movedQuestion = nextQuestions[idx];
+          nextQuestions = nextQuestions.filter(q => q.clientId !== questionClientId);
+        }
+      } else {
+        nextSections = nextSections.map(s => {
+          if (s.clientId !== source.sectionClientId) return s;
+          if (source.subsectionClientId === null) {
+            const idx = s.questions.findIndex(q => q.clientId === questionClientId);
+            if (idx >= 0) {
+              movedQuestion = s.questions[idx];
+              return {
+                ...s,
+                questions: s.questions
+                  .filter(q => q.clientId !== questionClientId)
+                  .map((q, i) => ({ ...q, sortOrder: i })),
+              };
+            }
+          } else {
+            return {
+              ...s,
+              subsections: s.subsections.map(sub => {
+                if (sub.clientId !== source.subsectionClientId) return sub;
+                const idx = sub.questions.findIndex(q => q.clientId === questionClientId);
+                if (idx >= 0) {
+                  movedQuestion = sub.questions[idx];
+                  return {
+                    ...sub,
+                    questions: sub.questions
+                      .filter(q => q.clientId !== questionClientId)
+                      .map((q, i) => ({ ...q, sortOrder: i })),
+                  };
+                }
+                return sub;
+              }),
+            };
+          }
+          return s;
+        });
+      }
+
+      if (!movedQuestion) return;
+      const moved = movedQuestion;
+
+      if (target.sectionClientId === null) {
+        nextQuestions = [...nextQuestions, { ...moved, sortOrder: nextQuestions.length }];
+      } else {
+        nextSections = nextSections.map(s => {
+          if (s.clientId !== target.sectionClientId) return s;
+          if (target.subsectionClientId === null) {
+            return {
+              ...s,
+              questions: [...s.questions, { ...moved, sortOrder: s.questions.length }],
+            };
+          }
+          return {
+            ...s,
+            subsections: s.subsections.map(sub => {
+              if (sub.clientId !== target.subsectionClientId) return sub;
+              return {
+                ...sub,
+                questions: [...sub.questions, { ...moved, sortOrder: sub.questions.length }],
+              };
+            }),
+          };
+        });
+      }
+
+      commitStructure(nextSections, nextQuestions);
+    },
+    [sections, questions, commitStructure],
+  );
+
   const totalQuestions = countAllQuestions(sections, questions);
   const hasErrors = Object.keys(errors).length > 0;
   const rootLayout = useMemo(
@@ -303,19 +375,38 @@ function ModernFormDesignStep({
   );
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      {/* Left Sidebar - Sticky Tools */}
-      <div className="flex w-72 flex-col border-r border-slate-200 bg-slate-50/80 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/50">
-        <div className="border-b border-slate-200 p-4 dark:border-slate-800">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      {/* Top: Form Settings Panel */}
+      <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/50">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((prev) => !prev)}
+          aria-expanded={settingsOpen}
+          aria-controls="form-settings-content"
+          className="flex w-full items-center justify-between border-b border-slate-200 px-4 py-2.5 transition-colors hover:bg-slate-100/60 dark:border-slate-800 dark:hover:bg-slate-800/40"
+        >
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
             <Settings2 className="h-4 w-4" />
             Form Settings
+            {!settingsOpen && title ? (
+              <span className="ml-2 truncate text-xs font-normal text-slate-400 dark:text-slate-500">
+                {title}
+              </span>
+            ) : null}
           </h3>
-        </div>
-        
-        <div className="flex-1 space-y-6 overflow-y-auto p-4">
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-slate-400 transition-transform duration-200",
+              settingsOpen && "rotate-180",
+            )}
+          />
+        </button>
+
+        {settingsOpen ? (
+        <>
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* Title Field */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Form Title
             </label>
@@ -325,7 +416,7 @@ function ModernFormDesignStep({
               onChange={(e) => onTitleChange(e.target.value)}
               placeholder="Enter form title..."
               className={cn(
-                "w-full rounded-lg border bg-white px-3 py-2.5 text-sm outline-none transition-all placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900",
+                "w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900",
                 errors.title
                   ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 dark:border-red-800"
                   : "border-slate-200 focus:border-primary focus:ring-primary/20 dark:border-slate-700"
@@ -339,7 +430,7 @@ function ModernFormDesignStep({
           </div>
 
           {/* Description Field */}
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:col-span-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Description
             </label>
@@ -347,48 +438,55 @@ function ModernFormDesignStep({
               value={description}
               onChange={(e) => onDescriptionChange(e.target.value)}
               placeholder="Optional description..."
-              rows={3}
-              className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
+              rows={2}
+              className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
             />
           </div>
 
-          {/* Stats Card */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Total Questions</span>
-              <span className="text-lg font-bold text-primary">{totalQuestions}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Sections</span>
-              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{sections.length}</span>
+          {/* Assessment Settings info */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Assessment
+            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-snug text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              Self-assessment is configured per employee during assignment.
             </div>
           </div>
+        </div>
 
-          {/* Quick Actions - Always Visible */}
-          <div className="sticky top-0 space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Quick Add
-            </label>
+        {/* Stats + Quick Actions Bar */}
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-2.5 dark:border-slate-800">
+          <div className="flex items-center gap-4 rounded-md border border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Questions: <span className="font-bold text-primary">{totalQuestions}</span>
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Sections: <span className="font-semibold text-slate-700 dark:text-slate-300">{sections.length}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
             <button
               onClick={addSection}
-              className="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Add Section
             </button>
             <button
               onClick={addStandaloneQuestion}
-              className="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
             >
-              <HelpCircle className="h-4 w-4" />
-              Add Standalone Question
+              <HelpCircle className="h-3.5 w-3.5" />
+              Add Question
             </button>
           </div>
         </div>
+        </>
+        ) : null}
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex flex-1 flex-col bg-slate-50/50 dark:bg-slate-950/50">
+      {/* Main Content Area - Full Width */}
+      <div className="flex min-h-0 flex-1 flex-col bg-slate-50/50 dark:bg-slate-950/50">
         {/* Toolbar */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-white/80 px-6 py-3 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
           <div className="flex items-center gap-4">
@@ -433,10 +531,10 @@ function ModernFormDesignStep({
           className="flex-1 overflow-y-auto p-6"
         >
           {activePanel === "builder" ? (
-            <div className="mx-auto max-w-3xl space-y-4">
+            <div className=" space-y-4">
               {/* Empty State */}
               {sections.length === 0 && questions.length === 0 && (
-                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-16 text-center dark:border-slate-800">
+                <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-16 text-center dark:border-slate-800">
                   <div className="mb-4 rounded-full bg-slate-100 p-4 dark:bg-slate-800">
                     <FileText className="h-8 w-8 text-slate-400" />
                   </div>
@@ -487,8 +585,8 @@ function ModernFormDesignStep({
                           onUpdate={(updates) => updateSection(section.clientId, updates)}
                           onRemove={() => removeSection(section.clientId)}
                           onAddQuestion={() => addQuestionToSection(section.clientId)}
-                          onAddSubsection={() => addSubsection(section.clientId)}
                           onRemoveQuestion={(qId) => removeQuestion(section.clientId, qId)}
+                          onMoveQuestion={moveQuestion}
                           onUpdateQuestion={(qId, updates) => {
                             commitStructure(
                               sections.map((currentSection) => {
@@ -507,6 +605,7 @@ function ModernFormDesignStep({
                               questions,
                             );
                           }}
+                          formSelfAssessmentEnabled={selfAssessmentEnabled}
                         />
                       );
                     }
@@ -526,6 +625,7 @@ function ModernFormDesignStep({
                         index={questionIndex}
                         errorPrefix={`question-${questionIndex}`}
                         errors={errors}
+                        sourceLocation={{ sectionClientId: null, subsectionClientId: null }}
                         onRemove={() => removeQuestion(null, question.clientId)}
                         onChange={(updates) => {
                           commitStructure(
@@ -537,16 +637,44 @@ function ModernFormDesignStep({
                             ),
                           );
                         }}
+                        formSelfAssessmentEnabled={selfAssessmentEnabled}
                       />
                     );
                   })}
+                </div>
+              )}
+
+              {sections.length > 0 && (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    setDragOverTarget("root");
+                  }}
+                  onDragLeave={() => setDragOverTarget(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOverTarget(null);
+                    try {
+                      const data = JSON.parse(e.dataTransfer.getData("application/json"));
+                      moveQuestion(data.questionClientId, data.source, { sectionClientId: null, subsectionClientId: null });
+                    } catch { /* ignore */ }
+                  }}
+                  className={cn(
+                    "rounded-md border-2 border-dashed py-4 text-center text-xs transition-all",
+                    dragOverTarget === "root"
+                      ? "border-indigo-400 bg-indigo-50 text-indigo-600 dark:border-indigo-400 dark:bg-indigo-950/40 dark:text-indigo-300"
+                      : "border-indigo-200 text-indigo-400 dark:border-indigo-600/30 dark:text-indigo-500"
+                  )}
+                >
+                  Drop here to move question to root level
                 </div>
               )}
             </div>
           ) : (
             <div className="mx-auto max-w-2xl">
               {/* Simple Preview */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                   {title || "Untitled Form"}
                 </h1>
@@ -642,9 +770,10 @@ function SectionCard({
   onUpdate,
   onRemove,
   onAddQuestion,
-  onAddSubsection,
   onRemoveQuestion,
+  onMoveQuestion,
   onUpdateQuestion,
+  formSelfAssessmentEnabled = true,
 }: {
   section: FormSectionInput;
   index: number;
@@ -654,30 +783,32 @@ function SectionCard({
   onUpdate: (updates: Partial<FormSectionInput>) => void;
   onRemove: () => void;
   onAddQuestion: () => void;
-  onAddSubsection: () => void;
   onRemoveQuestion: (qId: string) => void;
+  onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
   onUpdateQuestion: (qId: string, updates: Partial<QuestionInput>) => void;
+  formSelfAssessmentEnabled?: boolean;
 }) {
+  const [sectionDragOver, setSectionDragOver] = useState(false);
   const hasTitleError = errors[`section-${index}-title`];
   const hasAnyError = Object.keys(errors).some(k => k.startsWith(`section-${index}`));
 
   return (
     <div className={cn(
-      "group rounded-xl border bg-white transition-all dark:bg-slate-900",
-      hasAnyError 
-        ? "border-red-200 shadow-sm shadow-red-100 dark:border-red-900/50 dark:shadow-red-900/10"
-        : "border-slate-200 shadow-sm hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700"
+      "group rounded-md border transition-all shadow-sm",
+      hasAnyError
+        ? "border-red-400 bg-red-50 shadow-red-200/40 dark:border-red-600/50 dark:bg-red-950/30 dark:shadow-red-900/20"
+        : "border-indigo-200 bg-indigo-50/80 shadow-indigo-100/60 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/40 dark:border-indigo-500/30 dark:bg-indigo-950/40 dark:shadow-indigo-900/10 dark:hover:border-indigo-400/40"
     )}>
       {/* Section Header */}
       <div 
-        className="flex items-center gap-3 p-4 cursor-pointer"
+        className="flex items-center gap-3 p-4 cursor-pointer rounded-t-xl"
         onClick={onToggle}
       >
         <div className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-colors",
           hasAnyError
-            ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
-            : "bg-primary/10 text-primary dark:bg-primary/20"
+            ? "bg-red-200 text-red-700 dark:bg-red-800/40 dark:text-red-300"
+            : "bg-indigo-200 text-indigo-700 dark:bg-indigo-800/50 dark:text-indigo-300"
         )}>
           {index + 1}
         </div>
@@ -691,41 +822,40 @@ function SectionCard({
               onClick={(e) => e.stopPropagation()}
               placeholder="Section Title"
               className={cn(
-                "w-full bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400",
-                hasTitleError ? "text-red-600 placeholder:text-red-300" : "text-slate-900 dark:text-slate-100"
+                "w-full bg-transparent text-sm font-semibold outline-none",
+                hasTitleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-indigo-900 placeholder:text-indigo-400 dark:text-indigo-100 dark:placeholder:text-indigo-400"
               )}
             />
           ) : (
             <h4 className={cn(
               "truncate text-sm font-semibold",
-              hasTitleError ? "text-red-600" : "text-slate-900 dark:text-slate-100"
+              hasTitleError ? "text-red-700 dark:text-red-400" : "text-indigo-900 dark:text-indigo-100"
             )}>
               {section.title || `Section ${index + 1}`}
             </h4>
           )}
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-indigo-600/70 dark:text-indigo-300/70">
             {section.questions.length} question{section.questions.length !== 1 ? "s" : ""}
-            {section.subsections.length > 0 && ` · ${section.subsections.length} subsection${section.subsections.length !== 1 ? "s" : ""}`}
           </p>
         </div>
 
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             onClick={(e) => { e.stopPropagation(); onAddQuestion(); }}
-            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-800"
+            className="rounded p-1.5 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-800/40 dark:hover:text-indigo-200"
             title="Add question"
           >
             <Plus className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+            className="rounded p-1.5 text-indigo-400 hover:bg-red-100 hover:text-red-600 dark:text-indigo-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
             title="Delete section"
           >
             <Trash2 className="h-4 w-4" />
           </button>
           <ChevronDown className={cn(
-            "h-4 w-4 text-slate-400 transition-transform",
+            "h-4 w-4 text-indigo-400 dark:text-indigo-400 transition-transform",
             isExpanded && "rotate-180"
           )} />
         </div>
@@ -733,15 +863,34 @@ function SectionCard({
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+        <div className="border-t border-indigo-100 bg-white/60 p-4 dark:border-indigo-500/20 dark:bg-slate-900/40">
           {hasTitleError && (
             <p className="mb-3 flex items-center gap-1 text-xs text-red-500">
               <AlertCircle className="h-3 w-3" /> {hasTitleError}
             </p>
           )}
 
-          {/* Section Questions */}
-          <div className="space-y-3">
+          {/* Section Questions - Drop Target */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              setSectionDragOver(true);
+            }}
+            onDragLeave={() => setSectionDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setSectionDragOver(false);
+              try {
+                const data = JSON.parse(e.dataTransfer.getData("application/json"));
+                onMoveQuestion(data.questionClientId, data.source, { sectionClientId: section.clientId, subsectionClientId: null });
+              } catch { /* ignore */ }
+            }}
+            className={cn(
+              "space-y-3 rounded-lg transition-all",
+              sectionDragOver && "ring-2 ring-primary/40 bg-primary/5"
+            )}
+          >
             {section.questions.map((question, qIdx) => (
               <QuestionCard
                 key={question.clientId}
@@ -749,15 +898,17 @@ function SectionCard({
                 index={qIdx}
                 errorPrefix={`section-${index}-question-${qIdx}`}
                 errors={errors}
+                sourceLocation={{ sectionClientId: section.clientId, subsectionClientId: null }}
                 onRemove={() => onRemoveQuestion(question.clientId)}
                 onChange={(updates) => onUpdateQuestion(question.clientId, updates)}
                 compact
+                formSelfAssessmentEnabled={formSelfAssessmentEnabled}
               />
             ))}
             
             {section.questions.length === 0 && (
-              <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center dark:border-slate-800">
-                <p className="text-xs text-slate-400 dark:text-slate-500">No questions yet</p>
+              <div className="rounded-lg border border-dashed border-indigo-200 py-6 text-center dark:border-indigo-500/30">
+                <p className="text-xs text-indigo-400 dark:text-indigo-400/70">No questions yet — drag here or click Add Question</p>
               </div>
             )}
           </div>
@@ -766,17 +917,10 @@ function SectionCard({
           <div className="mt-4 flex gap-2">
             <button
               onClick={onAddQuestion}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary"
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-indigo-300 px-3 py-2 text-xs font-medium text-indigo-600 transition-all hover:border-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:border-indigo-400 dark:hover:bg-indigo-900/30"
             >
               <Plus className="h-3.5 w-3.5" />
               Add Question
-            </button>
-            <button
-              onClick={onAddSubsection}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary"
-            >
-              <Layers className="h-3.5 w-3.5" />
-              Add Subsection
             </button>
           </div>
         </div>
@@ -790,17 +934,21 @@ function QuestionCard({
   index,
   errorPrefix,
   errors,
+  sourceLocation,
   onRemove,
   onChange,
   compact = false,
+  formSelfAssessmentEnabled = true,
 }: {
   question: QuestionInput;
   index: number;
   errorPrefix: string;
   errors: Record<string, string>;
+  sourceLocation: QuestionLocation;
   onRemove: () => void;
   onChange: (updates: Partial<QuestionInput>) => void;
   compact?: boolean;
+  formSelfAssessmentEnabled?: boolean;
 }) {
   const textError = errors[errorPrefix];
   const typeError = errors[`${errorPrefix}-type`];
@@ -817,13 +965,27 @@ function QuestionCard({
 
   return (
     <div className={cn(
-      "group relative rounded-lg border bg-slate-50/50 p-3 transition-all dark:bg-slate-800/50",
+      "group relative rounded-lg border p-3 transition-all shadow-sm",
       hasError
-        ? "border-red-200 dark:border-red-800"
-        : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
+        ? "border-red-300 bg-red-50/60 dark:border-red-700/50 dark:bg-red-950/20"
+        : "border-teal-200 bg-teal-50/50 hover:border-teal-300 hover:shadow-md hover:shadow-teal-100/40 dark:border-teal-500/25 dark:bg-teal-950/30 dark:hover:border-teal-400/35"
     )}>
       <div className="flex items-start gap-2">
-        <div className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData("application/json", JSON.stringify({
+              questionClientId: question.clientId,
+              source: sourceLocation,
+            }));
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          className="mt-1 flex cursor-grab items-center text-teal-300 hover:text-teal-600 active:cursor-grabbing dark:text-teal-600 dark:hover:text-teal-300"
+          title="Drag to move question"
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
+        <div className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-teal-200 text-[10px] font-bold text-teal-800 dark:bg-teal-800/50 dark:text-teal-200">
           {index + 1}
         </div>
         
@@ -835,8 +997,8 @@ function QuestionCard({
               onChange={(e) => onChange({ questionText: e.target.value })}
               placeholder="Enter question text..."
               className={cn(
-                "flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400",
-                textError ? "text-red-600 placeholder:text-red-300" : "text-slate-900 dark:text-slate-100"
+                "flex-1 bg-transparent text-sm outline-none",
+                textError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-teal-900 placeholder:text-teal-400 dark:text-teal-50 dark:placeholder:text-teal-500"
               )}
             />
             {!question.noMarks && (
@@ -847,21 +1009,20 @@ function QuestionCard({
                 onChange={(e) => onChange({ totalMarks: Number(e.target.value) })}
                 placeholder="Marks"
                 className={cn(
-                  "w-20 rounded border bg-white px-2 py-1 text-right text-xs outline-none dark:bg-slate-900",
+                  "w-20 rounded border px-2 py-1 text-right text-xs outline-none bg-white/70 dark:bg-slate-900/50",
                   marksError
-                    ? "border-red-300 text-red-600 dark:border-red-800"
-                    : "border-slate-200 dark:border-slate-700"
+                    ? "border-red-400 text-red-700 dark:border-red-700 dark:text-red-400"
+                    : "border-teal-200 text-teal-800 dark:border-teal-600/40 dark:text-teal-100"
                 )}
               />
             )}
           </div>
 
           <div className={cn(
-            "grid gap-2",
-            compact ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            "flex flex-wrap items-end gap-3",
           )}>
-            <div>
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="w-40 shrink-0">
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
                 Question Type
               </label>
               <select
@@ -870,10 +1031,10 @@ function QuestionCard({
                   onChange(applyQuestionInputTypeChange(question, e.target.value as QuestionInput["inputType"]))
                 }
                 className={cn(
-                  "h-8 w-full rounded border bg-white px-2 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 dark:bg-slate-900",
+                  "h-8 w-full rounded border px-2 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-200/40 bg-white/70 dark:bg-slate-900/50 dark:focus:ring-teal-700/30",
                   typeError
-                    ? "border-red-300 dark:border-red-800"
-                    : "border-slate-200 dark:border-slate-700"
+                    ? "border-red-400 dark:border-red-700"
+                    : "border-teal-200 dark:border-teal-600/40"
                 )}
               >
                 {FIELD_TYPES.map((type) => (
@@ -884,40 +1045,41 @@ function QuestionCard({
               </select>
             </div>
 
-            <div className="flex flex-wrap items-end gap-3 sm:col-span-2">
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
                 <input
                   type="checkbox"
                   checked={question.isRequired}
                   onChange={(e) => onChange({ isRequired: e.target.checked })}
-                  className="size-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
                 />
                 Required
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
                 <input
                   type="checkbox"
                   checked={question.selfAssessmentEnabled}
                   onChange={(e) => onChange({ selfAssessmentEnabled: e.target.checked })}
-                  className="size-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  disabled={!formSelfAssessmentEnabled}
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 disabled:opacity-40 dark:border-teal-500 dark:text-teal-400"
                 />
                 Self Assessment
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
                 <input
                   type="checkbox"
                   checked={question.hodAssessmentEnabled}
                   onChange={(e) => onChange({ hodAssessmentEnabled: e.target.checked })}
-                  className="size-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
                 />
                 HOD Assessment
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
                 <input
                   type="checkbox"
                   checked={question.noMarks}
                   onChange={(e) => handleNoMarksChange(e.target.checked)}
-                  className="size-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
                 />
                 No Marks
               </label>
@@ -947,7 +1109,7 @@ function QuestionCard({
                   <div className={cn(
                     "h-3.5 w-3.5 border",
                     question.inputType === "CHECKBOX" ? "rounded-sm" : "rounded-full",
-                    "border-slate-300 dark:border-slate-600"
+                    "border-teal-300 dark:border-teal-600"
                   )} />
                   <input
                     type="text"
@@ -958,7 +1120,7 @@ function QuestionCard({
                       onChange({ options: newOptions });
                     }}
                     placeholder={`Option ${oIdx + 1}`}
-                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-slate-400 dark:text-slate-300"
+                    className="flex-1 bg-transparent text-xs outline-none text-teal-900 placeholder:text-teal-400 dark:text-teal-100 dark:placeholder:text-teal-500"
                   />
                   <input
                     type="number"
@@ -973,7 +1135,7 @@ function QuestionCard({
                       onChange({ options: newOptions });
                     }}
                     placeholder="Pts"
-                    className="w-14 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs outline-none dark:border-slate-700 dark:bg-slate-900"
+                    className="w-14 rounded border border-teal-200 bg-white/70 px-1.5 py-0.5 text-right text-xs outline-none dark:border-teal-600/40 dark:bg-slate-900/50"
                   />
                   <button
                     type="button"
@@ -981,7 +1143,7 @@ function QuestionCard({
                       const newOptions = question.options.filter((_, i) => i !== oIdx);
                       onChange({ options: newOptions });
                     }}
-                    className="text-slate-400 hover:text-red-500"
+                    className="text-teal-400 hover:text-red-600 dark:text-teal-500 dark:hover:text-red-400"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -1001,7 +1163,7 @@ function QuestionCard({
         <button
           type="button"
           onClick={onRemove}
-          className="mt-1 opacity-0 transition-opacity group-hover:opacity-100 text-slate-400 hover:text-red-500"
+          className="mt-1 opacity-0 transition-opacity group-hover:opacity-100 text-teal-400 hover:text-red-600 dark:text-teal-500 dark:hover:text-red-400"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -1017,45 +1179,73 @@ export default function FormBuilderWizard({
   initialData,
   appraisalCycles = [],
   appraisalCount = 0,
+  copyMode = false,
 }: FormBuilderWizardProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const initialState = initialData ? mapRecordToState(initialData) : null;
 
   const [step, setStep] = useState(0);
-  const [title, setTitle] = useState(initialState?.title ?? "");
+  const [title, setTitle] = useState(
+    copyMode && initialState
+      ? `${initialState.title} (Copy)`
+      : initialState?.title ?? "",
+  );
   const [description, setDescription] = useState(initialState?.description ?? "");
+  const [selfAssessmentEnabled, setSelfAssessmentEnabled] = useState(initialState?.selfAssessmentEnabled ?? true);
   const [sections, setSections] = useState<FormSectionInput[]>(
-    initialState?.sections ?? [],
+    initialState?.sections.map((section) => ({
+      ...section,
+      id: copyMode ? undefined : section.id,
+      subsections: section.subsections.map((sub) => ({
+        ...sub,
+        id: copyMode ? undefined : sub.id,
+        questions: sub.questions.map((q) => ({
+          ...q,
+          id: copyMode ? undefined : q.id,
+          options: q.options.map((o) => ({
+            ...o,
+            id: copyMode ? undefined : o.id,
+          })),
+        })),
+      })),
+      questions: section.questions.map((q) => ({
+        ...q,
+        id: copyMode ? undefined : q.id,
+        options: q.options.map((o) => ({
+          ...o,
+          id: copyMode ? undefined : o.id,
+        })),
+      })),
+    })) ?? [],
   );
   const [questions, setQuestions] = useState<QuestionInput[]>(
-    initialState?.questions ?? [],
+    initialState?.questions.map((q) => ({
+      ...q,
+      id: copyMode ? undefined : q.id,
+      options: q.options.map((o) => ({
+        ...o,
+        id: copyMode ? undefined : o.id,
+      })),
+    })) ?? [],
   );
   const [cycleId, setCycleId] = useState<number | "">(
-    initialState?.cycleId ?? pickDefaultAppraisalCycleId(appraisalCycles),
-  );
-  const [targetCategory, setTargetCategory] = useState<EmployeeCategory | "">(
-    initialState?.targetCategory ?? "",
-  );
-  const [targetSubCategory, setTargetSubCategory] = useState<SubCategory | "">(
-    initialState?.targetSubCategory ?? "",
+    copyMode
+      ? pickDefaultAppraisalCycleId(appraisalCycles)
+      : initialState?.cycleId ?? pickDefaultAppraisalCycleId(appraisalCycles),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [duplicateFormId, setDuplicateFormId] = useState<number | null>(null);
+  const [savedTemplateId, setSavedTemplateId] = useState<number | null>(templateId ?? null);
 
   const payload = useMemo<FormTemplateInput | null>(() => {
-    if (!targetCategory || !targetSubCategory) {
-      return null;
-    }
-
     const normalized = normalizeRootFormStructure(sections, questions);
 
     return {
       title: title.trim(),
       description: description.trim(),
-      targetCategory,
-      targetSubCategory,
+      selfAssessmentEnabled,
       sections: normalized.sections,
       questions: normalized.questions,
       ...(cycleId ? { cycleId } : {}),
@@ -1063,8 +1253,7 @@ export default function FormBuilderWizard({
   }, [
     title,
     description,
-    targetCategory,
-    targetSubCategory,
+    selfAssessmentEnabled,
     sections,
     questions,
     cycleId,
@@ -1079,9 +1268,9 @@ export default function FormBuilderWizard({
     },
     onSuccess: async (template: FormTemplateRecord) => {
       await queryClient.invalidateQueries({ queryKey: ["form-templates"] });
-      const viewId = templateId ?? template.id;
-      router.push(`/dashboard/forms/${viewId}/view`);
-      router.refresh();
+      const nextId = templateId ?? template.id;
+      setSavedTemplateId(nextId);
+      setStep(1);
     },
     onError: (error: Error) => {
       if (error instanceof FormTemplateRequestError) {
@@ -1118,21 +1307,6 @@ export default function FormBuilderWizard({
           nextErrors,
         );
       });
-
-      section.subsections.forEach((subsection, subsectionIndex) => {
-        if (!subsection.title.trim()) {
-          nextErrors[`section-${sectionIndex}-sub-${subsectionIndex}-title`] =
-            "Subsection title is required.";
-        }
-
-        subsection.questions.forEach((question, questionIndex) => {
-          validateQuestionFields(
-            question,
-            `section-${sectionIndex}-sub-${subsectionIndex}-question-${questionIndex}`,
-            nextErrors,
-          );
-        });
-      });
     });
 
     questions.forEach((question, index) => {
@@ -1143,41 +1317,14 @@ export default function FormBuilderWizard({
     return Object.keys(nextErrors).length === 0;
   };
 
-  const validateCategoryStep = () => {
-    const nextErrors: Record<string, string> = {};
-
-    if (
-      appraisalCycles.length > 0 &&
-      !cycleId
-    ) {
-      nextErrors.cycleId = "Appraisal cycle is required.";
-    }
-
-    if (!targetCategory) {
-      nextErrors.targetCategory = "Employee category is required.";
-    }
-
-    if (!targetSubCategory) {
-      nextErrors.targetSubCategory = "Sub-category is required.";
-    }
-
-    if (
-      targetCategory &&
-      targetSubCategory &&
-      !CATEGORY_SUB_MAP[targetCategory].includes(targetSubCategory)
-    ) {
-      nextErrors.targetSubCategory =
-        "Selected sub-category does not belong to the chosen category.";
-    }
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
   const goNext = () => {
     setSubmitError(null);
     setDuplicateFormId(null);
     if (step === 0 && !validateDesignStep()) {
+      return;
+    }
+    if (step === 0 && payload) {
+      saveMutation.mutate(payload);
       return;
     }
     setStep((current) => Math.min(current + 1, STEPS.length - 1));
@@ -1190,18 +1337,12 @@ export default function FormBuilderWizard({
     setStep((current) => Math.max(current - 1, 0));
   };
 
-  const handleSubmit = () => {
-    setSubmitError(null);
-    setDuplicateFormId(null);
-    if (!validateCategoryStep() || !payload) {
-      return;
+  const handleFinish = () => {
+    if (savedTemplateId) {
+      window.location.href = `/dashboard/forms/${savedTemplateId}/view?t=${Date.now()}`;
+    } else {
+      window.location.href = "/dashboard/forms";
     }
-    saveMutation.mutate(payload);
-  };
-
-  const handleCategoryChange = (category: EmployeeCategory) => {
-    setTargetCategory(category);
-    setTargetSubCategory("");
   };
 
   const handleStructureChange = (
@@ -1285,7 +1426,7 @@ export default function FormBuilderWizard({
           )}
           
           {step < STEPS.length - 1 ? (
-            <Button type="button" fullWidth={false} onClick={goNext} className="h-9 px-4">
+            <Button type="button" fullWidth={false} onClick={goNext} isLoading={saveMutation.isPending} className="h-9 px-4">
               Continue
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -1293,12 +1434,11 @@ export default function FormBuilderWizard({
             <Button
               type="button"
               fullWidth={false}
-              isLoading={saveMutation.isPending}
-              onClick={handleSubmit}
+              onClick={handleFinish}
               className="h-9 px-4"
             >
-              <Save className="h-4 w-4" />
-              {templateId ? "Update Form" : "Publish Form"}
+              <CheckCircle2 className="h-4 w-4" />
+              Finish
             </Button>
           )}
         </div>
@@ -1320,34 +1460,31 @@ export default function FormBuilderWizard({
           <ModernFormDesignStep
             title={title}
             description={description}
+            selfAssessmentEnabled={selfAssessmentEnabled}
             sections={sections}
             questions={questions}
             errors={errors}
             onTitleChange={setTitle}
             onDescriptionChange={setDescription}
+            onSelfAssessmentEnabledChange={setSelfAssessmentEnabled}
             onStructureChange={handleStructureChange}
           />
         ) : (
-          <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto rounded-2xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
-            <div className="w-full max-w-2xl">
-              <CategoryAssignmentStep
-                appraisalCycles={appraisalCycles}
-                cycleId={cycleId}
-                targetCategory={targetCategory}
-                targetSubCategory={targetSubCategory}
-                errors={errors}
-                onCycleChange={setCycleId}
-                onCategoryChange={handleCategoryChange}
-                onSubCategoryChange={setTargetSubCategory}
-              />
-            </div>
+          <div className="flex h-full min-h-0 flex-col overflow-hidden">
+            {savedTemplateId ? (
+              <FormEmployeeAssignment templateId={savedTemplateId} templateTitle={title} />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                Saving form...
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Global Error Toast */}
       {submitError && (
-        <div className="absolute bottom-6 right-6 z-50 max-w-sm rounded-xl border border-red-200 bg-white px-4 py-3 shadow-lg dark:border-red-900 dark:bg-slate-900">
+        <div className="absolute bottom-6 right-6 z-50 max-w-sm rounded-md border border-red-200 bg-white px-4 py-3 shadow-lg dark:border-red-900 dark:bg-slate-900">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
             <div className="min-w-0 flex-1">

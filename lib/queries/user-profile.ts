@@ -38,6 +38,44 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile>
   const orgIdColumn = useEntity ? "u.entity_id" : "u.department_id";
   const orgTable = useEntity ? "entities" : "departments";
 
+  const designationResult = await db.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'designation'
+      ) AS exists
+    `,
+  );
+  const hasDesignation = designationResult.rows[0]?.exists ?? false;
+
+  const dojResult = await db.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'date_of_joining'
+      ) AS exists
+    `,
+  );
+  const hasDoj = dojResult.rows[0]?.exists ?? false;
+
+  const qualTableResult = await db.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'employee_qualifications'
+      ) AS exists
+    `,
+  );
+  const hasQualTable = qualTableResult.rows[0]?.exists ?? false;
+
   const result = await db.query<{
     employee_id: string;
     email: string;
@@ -46,7 +84,15 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile>
     system_role: string;
     emp_category: string;
     emp_sub_category: string;
+    designation: string | null;
+    date_of_joining: string | null;
+    qualification: string | null;
+    qualification_year: string | null;
+    qualification_subject: string | null;
+    qualification_institute: string | null;
+    qualification_country: string | null;
     entity_name: string | null;
+    parent_entity_name: string | null;
     is_active: boolean;
   }>(
     `
@@ -58,10 +104,20 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile>
         u.system_role,
         u.emp_category,
         u.emp_sub_category,
+        ${hasDesignation ? "u.designation" : "NULL::text AS designation"},
+        ${hasDoj ? "u.date_of_joining::text" : "NULL::text"} AS date_of_joining,
+        ${hasQualTable ? "eq.qualification" : "NULL::text"} AS qualification,
+        ${hasQualTable ? "eq.year::text" : "NULL::text"} AS qualification_year,
+        ${hasQualTable ? "eq.subject" : "NULL::text"} AS qualification_subject,
+        ${hasQualTable ? "eq.institute" : "NULL::text"} AS qualification_institute,
+        ${hasQualTable ? "eq.country" : "NULL::text"} AS qualification_country,
         org.name AS entity_name,
+        parent_org.name AS parent_entity_name,
         u.is_active
       FROM users u
       LEFT JOIN ${orgTable} org ON org.id = ${orgIdColumn}
+      LEFT JOIN ${orgTable} parent_org ON parent_org.id = org.parent_entity_id
+      ${hasQualTable ? "LEFT JOIN LATERAL (SELECT qualification, year, subject, institute, country FROM employee_qualifications WHERE user_id = u.id ORDER BY is_primary DESC, id ASC LIMIT 1) eq ON true" : ""}
       WHERE lower(u.email) = lower($1)
       LIMIT 1
     `,
@@ -79,7 +135,15 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile>
     lastName: row.last_name,
     emailAddress: row.email,
     entity: row.entity_name,
-    designation: formatEnumLabel(row.emp_sub_category),
+    orgLevel1: row.parent_entity_name ?? row.entity_name,
+    orgLevel2: row.parent_entity_name ? row.entity_name : null,
+    designation: row.designation ?? formatEnumLabel(row.emp_sub_category),
+    dateOfJoining: row.date_of_joining ? row.date_of_joining.slice(0, 10) : null,
+    qualification: row.qualification,
+    qualificationYear: row.qualification_year,
+    qualificationSubject: row.qualification_subject,
+    qualificationInstitute: row.qualification_institute,
+    qualificationCountry: row.qualification_country,
     mobileNumber: null,
     employmentStatus: row.is_active ? "1" : "0",
     systemRole: formatEnumLabel(row.system_role),

@@ -9,6 +9,8 @@ export interface AuthUser {
   firstName: string;
   lastName: string;
   systemRole: string;
+  designation: string | null;
+  entityId: number | null;
   isActive: boolean;
 }
 
@@ -20,6 +22,8 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
     first_name: string;
     last_name: string;
     system_role: string;
+    designation: string | null;
+    entity_id: string | null;
     is_active: boolean;
   }>(
     `
@@ -30,6 +34,8 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
         first_name,
         last_name,
         system_role,
+        designation,
+        entity_id,
         is_active
       FROM users
       WHERE lower(email) = lower($1)
@@ -50,6 +56,8 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
     firstName: row.first_name,
     lastName: row.last_name,
     systemRole: row.system_role,
+    designation: row.designation,
+    entityId: row.entity_id ? Number(row.entity_id) : null,
     isActive: row.is_active,
   };
 }

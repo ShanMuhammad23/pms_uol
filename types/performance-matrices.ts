@@ -1,6 +1,7 @@
 export interface PerformanceLevelRecord {
   id: number;
   financialYearId: number;
+  matrixLabel: string;
   name: string;
   sortOrder: number;
   createdAt: string;
@@ -24,11 +25,13 @@ export interface PerformanceLevelWithQuartiles extends PerformanceLevelRecord {
 
 export interface CreatePerformanceLevelInput {
   financialYearId: number;
+  matrixLabel: string;
   name: string;
   sortOrder?: number;
 }
 
 export interface UpdatePerformanceLevelInput {
+  matrixLabel: string;
   name: string;
   sortOrder?: number;
 }

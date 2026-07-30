@@ -20,6 +20,7 @@ interface QuestionEditorProps {
   onMoveDown: () => void;
   error?: string;
   totalMarksError?: string;
+  formSelfAssessmentEnabled?: boolean;
 }
 
 function needsOptions(inputType: QuestionInput["inputType"]): boolean {
@@ -36,6 +37,7 @@ export default function QuestionEditor({
   onMoveDown,
   error,
   totalMarksError,
+  formSelfAssessmentEnabled = true,
 }: QuestionEditorProps) {
   const showOptions = needsOptions(question.inputType);
 
@@ -93,7 +95,7 @@ export default function QuestionEditor({
   };
 
   return (
-    <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
+    <div className="rounded-md border border-slate-300/80 bg-surface p-4 dark:border-white/15">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-text-primary">
@@ -199,7 +201,8 @@ export default function QuestionEditor({
                   selfAssessmentEnabled: event.target.checked,
                 })
               }
-              className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+              disabled={!formSelfAssessmentEnabled}
+              className="size-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-40"
             />
             Self Assessment
           </label>

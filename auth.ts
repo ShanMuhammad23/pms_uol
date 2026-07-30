@@ -45,6 +45,8 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: `${user.firstName} ${user.lastName}`.trim(),
           role: user.systemRole,
+          designation: user.designation,
+          entityId: user.entityId,
         };
       },
     }),
@@ -63,10 +65,40 @@ export const authOptions: NextAuthOptions = {
       const existingUser = await getUserByEmail(email);
       return Boolean(existingUser?.isActive);
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
-        token.role = (user as { role?: string }).role;
+        // Google profile id/role are not our DB fields — hydrate from users table.
+        if (account?.provider === "google") {
+          const email = user.email?.toString().trim();
+          if (email) {
+            const dbUser = await getUserByEmail(email);
+            if (dbUser?.isActive) {
+              token.id = dbUser.id;
+              token.role = dbUser.systemRole;
+              token.designation = dbUser.designation ?? null;
+              token.entityId = dbUser.entityId ?? null;
+              token.email = dbUser.email;
+              token.name = `${dbUser.firstName} ${dbUser.lastName}`.trim();
+              return token;
+            }
+          }
+        }
+
+        token.role = user.role;
         token.id = user.id;
+        token.designation = user.designation ?? null;
+        token.entityId = user.entityId ?? null;
+      }
+
+      // Refresh role/designation/entityId from DB on every token read
+      // so that role changes take effect without requiring re-login.
+      if (token.email) {
+        const dbUser = await getUserByEmail(token.email);
+        if (dbUser?.isActive) {
+          token.role = dbUser.systemRole;
+          token.designation = dbUser.designation ?? null;
+          token.entityId = dbUser.entityId ?? null;
+        }
       }
 
       return token;
@@ -75,6 +107,11 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.role = token.role as string | undefined;
         session.user.id = token.id as string | undefined;
+        session.user.designation = token.designation as string | undefined;
+        session.user.entityId =
+          token.entityId === null || token.entityId === undefined
+            ? null
+            : Number(token.entityId);
       }
 
       return session;

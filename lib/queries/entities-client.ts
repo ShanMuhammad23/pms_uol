@@ -14,6 +14,11 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
+export async function fetchDashboardEntities(): Promise<EntityRecord[]> {
+  const response = await fetch("/api/entities");
+  return parseResponse<EntityRecord[]>(response);
+}
+
 export async function fetchEntities(): Promise<EntityRecord[]> {
   const response = await fetch("/api/admin/entities");
   return parseResponse<EntityRecord[]>(response);

@@ -119,7 +119,7 @@ export default function FormStructureEditor({
       ) : null}
 
       {!hasContent ? (
-        <div className="rounded-xl border border-dashed border-slate-300/80 px-4 py-8 text-center text-sm text-foreground/70 dark:border-white/15">
+        <div className="rounded-md border border-dashed border-slate-300/80 px-4 py-8 text-center text-sm text-foreground/70 dark:border-white/15">
           No sections or questions yet. Add a section or root-level question to
           get started.
         </div>

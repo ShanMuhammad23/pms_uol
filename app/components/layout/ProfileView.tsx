@@ -38,7 +38,7 @@ export default async function ProfileView() {
   if (!result.ok) {
     return (
       <section className="mx-auto max-w-3xl">
-        <div className="rounded-2xl border border-[#E07A5F]/30 bg-[#E07A5F]/10 p-6">
+        <div className="rounded-xl border border-[#E07A5F]/30 bg-[#E07A5F]/10 p-6">
           <h1 className="text-xl font-semibold text-text-primary">Profile Unavailable</h1>
           <p className="mt-2 text-sm text-foreground/80">{result.message}</p>
         </div>

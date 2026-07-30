@@ -2,51 +2,105 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { signOutAndRedirect } from "@/lib/queries/auth-client";
 import {
+  Building2,
+  ChevronDown,
+  ClipboardList,
   FileText,
   Grid3X3,
   LayoutDashboard,
-  List,
-  Layers,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings2,
   SquareUserRound,
-  UserRound,
   Users,
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { useSidebar } from "@/app/components/layout/sidebar-context";
+import { isEmployeeRole } from "@/lib/auth/home-path";
+import { isAdminRole } from "@/lib/auth/submission-review-roles";
+import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
+
+const ADMIN_LINKS = [
+  {
+    href: "/dashboard/forms",
+    label: "Forms",
+    icon: FileText,
+    match: (pathname: string) => pathname.startsWith("/dashboard/forms"),
+  },
+  {
+    href: "/dashboard/users",
+    label: "Users",
+    icon: Users,
+    match: (pathname: string) => pathname.startsWith("/dashboard/users"),
+  },
+  {
+    href: "/dashboard/matrices-and-cycles",
+    label: "Matrices and Cycles",
+    icon: Grid3X3,
+    match: (pathname: string) =>
+      pathname.startsWith("/dashboard/matrices-and-cycles"),
+  },
+  {
+    href: "/dashboard/entity-categories",
+    label: "Entities and Categories",
+    icon: Building2,
+    match: (pathname: string) =>
+      pathname.startsWith("/dashboard/entity-categories"),
+  },
+] as const;
 
 const Sidebar = () => {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { collapsed, toggle } = useSidebar();
   const user = session?.user;
+  const isEmployee = isEmployeeRole(user?.role);
   const isDashboard = pathname === "/dashboard";
   const isProfile = pathname === "/dashboard/profile";
-  const isForms = pathname.startsWith("/dashboard/forms");
-  const isUsers = pathname.startsWith("/dashboard/users");
-  const isSuperAdmin = user?.role === "SUPER_ADMIN";
-  const isEntityCategories = pathname === "/dashboard/entity-categories";
-  const isStaffCategories = pathname.startsWith("/dashboard/staff-categories");
-  const isMatricesAndCycles = pathname.startsWith("/dashboard/matrices-and-cycles");
+  const isMyForms = pathname.startsWith("/dashboard/my-forms");
+  const isSuperAdmin = isAdminRole(user?.role);
+  const isAdminRouteActive = ADMIN_LINKS.some((link) => link.match(pathname));
+
+  const [adminOpen, setAdminOpen] = useState(isAdminRouteActive);
+
+  useEffect(() => {
+    if (isAdminRouteActive) {
+      setAdminOpen(true);
+    }
+  }, [isAdminRouteActive]);
+
+  const roleLabel = user?.role
+    ? (USER_ROLE_LABELS as Record<string, string>)[user.role] ?? user.role
+    : null;
+  const initials = user?.name
+    ? user.name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((p) => p[0])
+        .join("")
+        .toUpperCase()
+    : "?";
 
   const navLinkClass = (active: boolean) =>
     cn(
       "sidebar-nav-link",
       collapsed && "justify-center px-0",
       active
-        ? "border-r-4 border-primary bg-primary/10"
+        ? "border-r-4 border-primary "
         : "border-primary hover:border-r-4 hover:bg-primary/10",
     );
 
   return (
     <aside
       className={cn(
-        "fixed top-0 left-0 z-40 flex h-full flex-col overflow-auto border border-r border-slate-300/80 bg-surface py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
+        "no-print fixed top-0 left-0 z-40 flex h-full flex-col overflow-auto border border-r border-slate-300/80 py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
         collapsed ? "w-[72px]" : "w-[264px]",
       )}
     >
@@ -85,122 +139,174 @@ const Sidebar = () => {
 
       <nav aria-label="Primary sidebar navigation" className="flex-1">
         <ul className="space-y-0.5 text-sm font-medium text-foreground/75">
-          <li>
-            <Link
-              href="/dashboard"
-              aria-current={isDashboard ? "page" : undefined}
-              title="Dashboard"
-              className={navLinkClass(isDashboard)}
-            >
-              <LayoutDashboard className="size-4 shrink-0" />
-              {!collapsed ? "Dashboard" : null}
-            </Link>
-          </li>
-
-          {isSuperAdmin ? (
+          {isEmployee ? (
             <li>
               <Link
-                href="/dashboard/forms"
-                aria-current={isForms ? "page" : undefined}
-                title="Forms"
-                className={navLinkClass(isForms)}
+                href="/dashboard/my-forms"
+                aria-current={isMyForms ? "page" : undefined}
+                title="My Forms"
+                className={navLinkClass(isMyForms)}
               >
-                <FileText className="size-4 shrink-0" />
-                {!collapsed ? "Forms" : null}
+                <ClipboardList className="size-4 shrink-0" />
+                {!collapsed ? "My Forms" : null}
               </Link>
             </li>
-          ) : null}
+          ) : (
+            <>
+              <li>
+                <Link
+                  href="/dashboard"
+                  aria-current={isDashboard ? "page" : undefined}
+                  title="Dashboard"
+                  className={navLinkClass(isDashboard)}
+                >
+                  <LayoutDashboard className="size-4 shrink-0" />
+                  {!collapsed ? "Dashboard" : null}
+                </Link>
+              </li>
 
-          {isSuperAdmin ? (
-            <li>
-              <Link
-                href="/dashboard/users"
-                aria-current={isUsers ? "page" : undefined}
-                title="Users"
-                className={navLinkClass(isUsers)}
-              >
-                <Users className="size-4 shrink-0" />
-                {!collapsed ? "Users" : null}
-              </Link>
-            </li>
-          ) : null}
+              <li>
+                <Link
+                  href="/dashboard/my-forms"
+                  aria-current={isMyForms ? "page" : undefined}
+                  title="My Forms"
+                  className={navLinkClass(isMyForms)}
+                >
+                  <ClipboardList className="size-4 shrink-0" />
+                  {!collapsed ? "My Forms" : null}
+                </Link>
+              </li>
 
-          {isSuperAdmin ? (
-            <li>
-              <Link
-                href="/dashboard/matrices-and-cycles"
-                aria-current={isMatricesAndCycles ? "page" : undefined}
-                title="Matrices and Cycles"
-                className={navLinkClass(isMatricesAndCycles)}
-              >
-                <Grid3X3 className="size-4 shrink-0" />
-                {!collapsed ? "Matrices and Cycles" : null}
-              </Link>
-            </li>
-          ) : null}
+              {isSuperAdmin ? (
+                <li className="pt-2">
+                  {collapsed ? (
+                    <div className="space-y-0.5 transition-all duration-300 hover:text-primary">
+                      <div
+                        className="flex justify-center py-2 text-secondary"
+                        title="Administration"
+                      >
+                        <Settings2 className="size-4" />
+                      </div>
+                      {ADMIN_LINKS.map((link) => {
+                        const Icon = link.icon;
+                        const active = link.match(pathname);
+                        return (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            aria-current={active ? "page" : undefined}
+                            title={link.label}
+                            className={navLinkClass(active)}
+                          >
+                            <Icon className="size-4 shrink-0" />
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setAdminOpen((open) => !open)}
+                        aria-expanded={adminOpen}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/50 transition hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                          isAdminRouteActive && "text-primary",
+                        )}
+                      >
+                        <Settings2 className="size-4 shrink-0" />
+                        <span className="flex-1">Administration</span>
+                        <ChevronDown
+                          className={cn(
+                            "size-4 shrink-0 transition-transform duration-200",
+                            adminOpen && "rotate-180",
+                          )}
+                        />
+                      </button>
 
-          <li>
-            <Link
-              href="/dashboard/profile"
-              aria-current={isProfile ? "page" : undefined}
-              title="Profile"
-              className={navLinkClass(isProfile)}
-            >
-              <SquareUserRound className="size-4 shrink-0" />
-              {!collapsed ? "Profile" : null}
-            </Link>
-          </li>
-
-          <li>
-            <Link
-              href="/dashboard/entity-categories"
-              aria-current={isEntityCategories ? "page" : undefined}
-              title="Entity & Categories"
-              className={navLinkClass(isEntityCategories)}
-            >
-              <List className="size-4 shrink-0" />
-              {!collapsed ? "Entity & Categories" : null}
-            </Link>
-          </li>
-
-          {isSuperAdmin ? (
-            <li>
-              <Link
-                href="/dashboard/staff-categories"
-                aria-current={isStaffCategories ? "page" : undefined}
-                title="Staff Categories"
-                className={navLinkClass(isStaffCategories)}
-              >
-                <Layers className="size-4 shrink-0" />
-                {!collapsed ? "Staff Categories" : null}
-              </Link>
-            </li>
-          ) : null}
+                      {adminOpen ? (
+                        <ul className="mt-0.5 space-y-0.5 border-l border-slate-300/60 ml-6 dark:border-white/10">
+                          {ADMIN_LINKS.map((link) => {
+                            const Icon = link.icon;
+                            const active = link.match(pathname);
+                            return (
+                              <li key={link.href}>
+                                <Link
+                                  href={link.href}
+                                  aria-current={active ? "page" : undefined}
+                                  title={link.label}
+                                  className={cn(
+                                    navLinkClass(active),
+                                    "pl-4",
+                                  )}
+                                >
+                                  <Icon className="size-4 shrink-0" />
+                                  {link.label}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : null}
+                    </div>
+                  )}
+                </li>
+              ) : null}
+            </>
+          )}
         </ul>
       </nav>
 
-      <button
-        type="button"
-        onClick={() => signOut()}
-        title={collapsed ? "Sign out" : undefined}
+      <div
         className={cn(
-          "mt-6 flex cursor-pointer items-center border-t border-slate-300/80 pt-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-white/15",
-          collapsed ? "justify-center px-2" : "justify-between px-4",
+          "mt-6 border-t border-slate-300/80 pt-4 dark:border-white/15",
+          collapsed ? "px-2" : "px-4",
         )}
       >
-        <UserRound className="size-4 shrink-0" />
-        {!collapsed ? (
-          <>
-            <div className="min-w-0 flex-1 px-2 text-left">
-              <p className="truncate text-xs font-medium text-text-primary">{user?.name}</p>
-              <p className="mt-0.5 truncate text-xs text-foreground/70">{user?.email}</p>
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+              {initials}
             </div>
-            <LogOut className="size-4 shrink-0 text-red-500" />
-          </>
+            <button
+              type="button"
+              onClick={() => void signOutAndRedirect()}
+              title="Sign out"
+              className="flex size-9 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              <LogOut className="size-4" />
+            </button>
+          </div>
         ) : (
-          <span className="sr-only">Sign out</span>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                {initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                <p className="truncate text-sm font-semibold text-text-primary">
+                  {user?.name ?? "User"}
+                </p>
+                <Link href="/dashboard/profile" className="text-xs text-white bg-secondary rounded-md px-2 py-1">Profile</Link>
+                </div>
+               
+                <p className="truncate text-xs text-foreground/60">
+                  {user?.designation ?? "—"}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOutAndRedirect()}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300/80 py-2 text-xs font-medium text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-white/15"
+            >
+              <LogOut className="size-3.5" />
+              Sign out
+            </button>
+          </div>
         )}
-      </button>
+      </div>
     </aside>
   );
 };

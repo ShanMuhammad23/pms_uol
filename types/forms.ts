@@ -75,8 +75,8 @@ export const APPRAISAL_STATUSES: AppraisalStatus[] = [
 
 export const APPRAISAL_STATUS_LABELS: Record<AppraisalStatus, string> = {
   PENDING_SELF_ASSESSMENT: "Self Assessment",
-  PENDING_HEAD_REVIEW: "Head Review",
-  PENDING_HR_CALIBRATION: "HR Calibration",
+  PENDING_HEAD_REVIEW: "Manager Review",
+  PENDING_HR_CALIBRATION: "HR Alignment",
   PENDING_BOARD_APPROVAL: "Board Approval",
   APPROVED: "Approved",
   COMPLETED: "Completed",
@@ -207,8 +207,9 @@ export interface FormTemplateInput {
   title: string;
   description: string;
   cycleId?: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  targetCategory?: EmployeeCategory;
+  targetSubCategory?: SubCategory;
+  selfAssessmentEnabled: boolean;
   sections: FormSectionInput[];
   questions: QuestionInput[];
   incrementMatrices?: IncrementMatrixInput[];
@@ -240,10 +241,12 @@ export interface FormTemplateListItem {
   description: string | null;
   cycleId: number;
   fiscalYear: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  targetCategory: EmployeeCategory | null;
+  targetSubCategory: SubCategory | null;
+  selfAssessmentEnabled: boolean;
   questionCount: number;
   appraisalCount: number;
+  assignedEmployeeCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -254,8 +257,9 @@ export interface FormTemplateRecord {
   description: string | null;
   cycleId: number;
   fiscalYear: number;
-  targetCategory: EmployeeCategory;
-  targetSubCategory: SubCategory;
+  targetCategory: EmployeeCategory | null;
+  targetSubCategory: SubCategory | null;
+  selfAssessmentEnabled: boolean;
   sections: FormSectionRecord[];
   questions: QuestionRecord[];
   incrementMatrices: IncrementMatrixInput[];

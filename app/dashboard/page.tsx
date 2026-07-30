@@ -1,96 +1,14 @@
-"use client";
+import { redirect } from "next/navigation";
+import HRDashboardPage from "@/app/components/dashboard/HRDashboardPage";
+import { getPostLoginPath, isEmployeeRole } from "@/lib/auth/home-path";
+import { requireSession } from "@/lib/auth/require-session";
 
-import { DashboardCategoryCharts } from "@/app/components/dashboard/DashboardCategoryCharts";
-import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
-import { DashboardPrimaryCharts } from "@/app/components/dashboard/DashboardPrimaryCharts";
-import { DashboardSubmissionsTable } from "@/app/components/dashboard/DashboardSubmissionsTable";
-import { DashboardWorkflowStatsRow } from "@/app/components/dashboard/DashboardWorkflowStatsRow";
-import { useDashboardPage } from "@/app/queries/dashboard";
+export default async function DashboardPage() {
+  const session = await requireSession();
 
-export default function HRDashboardPage() {
-  const {
-    isDarkMode,
-    searchQuery,
-    setSearchQuery,
-    selectedEntityId,
-    setSelectedEntityId,
-    selectedCategoryId,
-    selectedSubCategoryId,
-    setSelectedSubCategoryId,
-    selectedFormState,
-    setSelectedFormState,
-    sortedEntities,
-    staffCategories,
-    availableSubCategories,
-    entitiesLoading,
-    staffCategoriesLoading,
-    submissionsLoading,
-    submissionsError,
-    performanceMatrixLoading,
-    filteredSubmissions,
-    activeFilters,
-    handleCategoryChange,
-    clearAllFilters,
-    filterByFormState,
-    eligibilityData,
-    selfAssessmentStats,
-    managerReviewStats,
-    hrAlignmentStats,
-    filteredCalibrationData,
-    ratingQuartileMatrix,
-    themedCategoryDistribution,
-    filteredCompletionByCategory,
-    pieLabelRenderer,
-  } = useDashboardPage();
+  if (isEmployeeRole(session.user?.role)) {
+    redirect(getPostLoginPath(session.user?.role));
+  }
 
-  return (
-    <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 dark:bg-slate-950">
-      <div className="mx-auto w-full max-w-full min-w-0 px-4 sm:px-6">
-        <DashboardFilterBar
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          selectedEntityId={selectedEntityId}
-          onEntityChange={setSelectedEntityId}
-          selectedCategoryId={selectedCategoryId}
-          onCategoryChange={handleCategoryChange}
-          selectedSubCategoryId={selectedSubCategoryId}
-          onSubCategoryChange={setSelectedSubCategoryId}
-          selectedFormState={selectedFormState}
-          onFormStateChange={setSelectedFormState}
-          sortedEntities={sortedEntities}
-          staffCategories={staffCategories}
-          availableSubCategories={availableSubCategories}
-          entitiesLoading={entitiesLoading}
-          staffCategoriesLoading={staffCategoriesLoading}
-          activeFilters={activeFilters}
-          onClearAllFilters={clearAllFilters}
-        />
-
-        <DashboardWorkflowStatsRow
-          eligibilityData={eligibilityData}
-          selfAssessmentStats={selfAssessmentStats}
-          managerReviewStats={managerReviewStats}
-          hrAlignmentStats={hrAlignmentStats}
-          selectedFormState={selectedFormState}
-          onFilterByFormState={filterByFormState}
-        />
-
-        <DashboardPrimaryCharts
-          calibrationData={filteredCalibrationData}
-          ratingQuartileMatrix={ratingQuartileMatrix}
-          employeeCount={filteredSubmissions.length}
-          performanceMatrixLoading={performanceMatrixLoading}
-        />
-
-      
-
-        <DashboardSubmissionsTable
-          submissions={filteredSubmissions}
-          isLoading={submissionsLoading}
-          error={submissionsError}
-          onClearAllFilters={clearAllFilters}
-        />
-      </div>
-    </div>
-  );
+  return <HRDashboardPage role={session.user?.role ?? null} />;
 }

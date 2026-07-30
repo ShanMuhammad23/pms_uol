@@ -1,13 +1,13 @@
 export type UserRole =
   | "EMPLOYEE"
-  | "HEAD"
+  | "MANAGER"
   | "HR"
   | "BOARD"
   | "SUPER_ADMIN";
 
 export const USER_ROLES: UserRole[] = [
   "EMPLOYEE",
-  "HEAD",
+  "MANAGER",
   "HR",
   "BOARD",
   "SUPER_ADMIN",
@@ -15,7 +15,7 @@ export const USER_ROLES: UserRole[] = [
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   EMPLOYEE: "Employee",
-  HEAD: "Head",
+  MANAGER: "Manager",
   HR: "HR",
   BOARD: "Board",
   SUPER_ADMIN: "Super Admin",
@@ -32,17 +32,25 @@ export interface UserRecord {
   email: string;
   firstName: string;
   lastName: string;
+  designation: string | null;
+  roleCategory: string | null;
+  dateOfJoining: string | null;
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId: number | null;
-  staffCategoryName: string | null;
-  staffSubCategoryId: number | null;
-  staffSubCategoryName: string | null;
   entityId: number | null;
   entityName: string | null;
+  parentEntityName: string | null;
   headId: number | null;
   headName: string | null;
+  /** Manager 2 — second-level appraisal reviewer (editable per user). */
+  manager2Id: number | null;
+  manager2Name: string | null;
+  qualification: string | null;
+  qualificationYear: string | null;
+  qualificationSubject: string | null;
+  qualificationInstitute: string | null;
+  qualificationCountry: string | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -56,10 +64,9 @@ export interface CreateUserInput {
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId?: number | null;
-  staffSubCategoryId?: number | null;
   entityId?: number | null;
   headId?: number | null;
+  manager2Id?: number | null;
   isActive?: boolean;
 }
 
@@ -69,13 +76,20 @@ export interface UpdateUserInput {
   password?: string;
   firstName: string;
   lastName: string;
+  designation?: string | null;
+  roleCategory?: string | null;
+  dateOfJoining?: string | null;
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId?: number | null;
-  staffSubCategoryId?: number | null;
   entityId?: number | null;
   headId?: number | null;
+  manager2Id?: number | null;
+  qualification?: string | null;
+  qualificationYear?: number | null;
+  qualificationSubject?: string | null;
+  qualificationInstitute?: string | null;
+  qualificationCountry?: string | null;
   isActive?: boolean;
 }
 

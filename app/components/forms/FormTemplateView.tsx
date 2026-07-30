@@ -1,86 +1,33 @@
 "use client";
 
-import Link from "next/link";
-import { Pencil } from "lucide-react";
-import type { FormTemplateRecord, QuestionRecord } from "@/types/forms";
+import type { FormTemplateRecord, QuestionRecord, FieldType } from "@/types/forms";
 import {
   CATEGORY_LABELS,
   FIELD_TYPE_LABELS,
-  buildRootLayoutOrderFromRecord,
   flattenAllQuestions,
   SUB_CATEGORY_LABELS,
 } from "@/types/forms";
+import { Fragment, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import {
+  buildFormTableRows,
+  formatSectionLabel,
+} from "@/app/helpers/form-table-rows";
 
 interface FormTemplateViewProps {
   template: FormTemplateRecord;
+  headerActions?: ReactNode;
 }
 
-function QuestionCard({
-  question,
-  label,
-}: {
-  question: QuestionRecord;
-  label: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-primary">{label}</span>
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-          {FIELD_TYPE_LABELS[question.inputType]}
-        </span>
-        {question.isRequired ? (
-          <span className="text-[11px] text-foreground/60">Required</span>
-        ) : null}
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-white/10 dark:text-slate-300">
-          {question.totalMarks} marks
-        </span>
-        {question.selfAssessmentEnabled ? (
-          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
-            Self Assessment
-          </span>
-        ) : null}
-        {question.hodAssessmentEnabled ? (
-          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-            HOD Assessment
-          </span>
-        ) : null}
-      </div>
-      <p className="mt-2 text-sm font-medium text-text-primary">
-        {question.questionText}
-      </p>
-      {question.options.length > 0 ? (
-        <ul className="mt-3 space-y-1.5">
-          {question.options.map((option) => (
-            <li
-              key={option.id}
-              className="flex items-center justify-between rounded-lg border border-slate-300/60 px-3 py-2 text-xs dark:border-white/10"
-            >
-              <span className="text-text-primary">{option.optionLabel}</span>
-              <span className="text-foreground/70">
-                {option.pointsAssigned} pts
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
-export default function FormTemplateView({ template }: FormTemplateViewProps) {
+export default function FormTemplateView({ template, headerActions }: FormTemplateViewProps) {
   const allQuestions = flattenAllQuestions(template);
-  const rootLayout = buildRootLayoutOrderFromRecord(
-    template.sections,
-    template.questions,
-  );
-  let questionCounter = 0;
+  const rows = buildFormTableRows(template.sections, template.questions);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-text-primary">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-4 no-print">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold break-words text-text-primary">
             {template.title}
           </h2>
           {template.description ? (
@@ -89,110 +36,170 @@ export default function FormTemplateView({ template }: FormTemplateViewProps) {
             </p>
           ) : null}
         </div>
-
-        <Link
-          href={`/dashboard/forms/${template.id}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-        >
-          <Pencil className="size-3.5" />
-          Edit Form
-        </Link>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Category</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
-            {CATEGORY_LABELS[template.targetCategory]}
-          </p>
-          <p className="text-xs text-foreground/70">
-            {SUB_CATEGORY_LABELS[template.targetSubCategory]}
-          </p>
-        </div>
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Appraisal Cycle</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
-            FY {template.fiscalYear}
-          </p>
-        </div>
-        <div className="rounded-xl border border-slate-300/80 bg-surface p-4 dark:border-white/15">
-          <p className="text-xs font-medium text-foreground/70">Questions</p>
-          <p className="mt-1 text-sm font-semibold text-text-primary">
-            {allQuestions.length}
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-900/30 dark:text-indigo-100">
+            <span className="text-indigo-600 dark:text-indigo-300">Category</span>
+            <span className="font-medium text-text-primary">
+              {template.targetCategory ? CATEGORY_LABELS[template.targetCategory] : "Unassigned"}
+              {template.targetSubCategory ? ` · ${SUB_CATEGORY_LABELS[template.targetSubCategory]}` : ""}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-900/30 dark:text-emerald-100">
+            <span className="text-emerald-600 dark:text-emerald-300">Appraisal Cycle</span>
+            <span className="font-medium text-text-primary">FY {template.fiscalYear}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/30 dark:text-amber-100">
+            <span className="text-amber-600 dark:text-amber-300">Questions</span>
+            <span className="font-medium text-text-primary">{allQuestions.length}</span>
+          </span>
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs text-sky-800 dark:border-sky-500/30 dark:bg-sky-900/30 dark:text-sky-100"
+          >
+            <span className="text-sky-600 dark:text-sky-300">
+              Self Assessment
+            </span>
+            <span className="font-medium text-text-primary">
+              Per-Employee
+            </span>
+          </span>
+          {headerActions}
         </div>
       </div>
 
-      <div className="space-y-6">
-        <h3 className="text-sm font-semibold text-text-primary">Form Structure</h3>
-
-        {rootLayout.map((item) => {
-          if (item.kind === "section") {
-            const section = template.sections.find(
-              (currentSection) => currentSection.id === item.id,
-            );
-            if (!section) {
-              return null;
-            }
-
-            return (
-              <div key={section.id} className="space-y-4">
-                <h4 className="text-base font-semibold text-text-primary">
-                  {section.title}
-                </h4>
-
-                {section.subsections.map((subsection) => (
-                  <div key={subsection.id} className="space-y-3 pl-4">
-                    <h5 className="text-sm font-medium text-foreground/80">
-                      {subsection.title}
-                    </h5>
-                    {subsection.questions.map((question) => {
-                      questionCounter += 1;
-                      return (
-                        <QuestionCard
-                          key={question.id}
-                          question={question}
-                          label={`Q${questionCounter}`}
-                        />
-                      );
-                    })}
-                  </div>
-                ))}
-
-                {section.questions.map((question) => {
-                  questionCounter += 1;
+      <div className="my-6">
+        <div className="form-template-table-wrapper rounded-lg border border-indigo-200 dark:border-indigo-500/30 overflow-auto max-h-[70vh] shadow-sm shadow-indigo-100/40 dark:shadow-indigo-900/10 no-print-overflow">
+          <table className="form-template-table w-full">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-indigo-600 dark:bg-indigo-800/80">
+                <th className="print-col-minimal border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Sr
+                </th>
+                <th className="min-w-[280px] print-col-largest border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Key Performance Indicators (KPIs)
+                </th>
+                <th className="print-col-minimal whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Weight
+                </th>
+                <th className="print-col-small whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Field Type
+                </th>
+                <th className="print-col-minimal whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Required
+                </th>
+                <th className="print-col-small whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  Self Assessment
+                </th>
+                <th className="print-col-small whitespace-nowrap border-r border-indigo-500/30 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                  HOD Assessment
+                </th>
+                
+              </tr>
+            </thead>
+            <tbody className="text-sm">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-indigo-400 dark:text-indigo-400/70 bg-indigo-50/50 dark:bg-indigo-950/20">
+                    No questions defined.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, rowIdx) => {
+                  const { question } = row;
+                  const isEvenRow = rowIdx % 2 === 0;
                   return (
-                    <QuestionCard
-                      key={question.id}
-                      question={question}
-                      label={`Q${questionCounter}`}
-                    />
+                    <Fragment key={question.id}>
+                      {row.isFirstInSection && row.sectionTitle ? (
+                        <tr className="bg-indigo-100/70 dark:bg-indigo-900/30">
+                          <td colSpan={7} className="px-4 py-2 text-sm font-bold text-indigo-800 dark:text-indigo-200">
+                            {formatSectionLabel(row)}
+                          </td>
+                        </tr>
+                      ) : null}
+                    <tr className={cn(
+                      "align-top border-b border-indigo-100 dark:border-indigo-500/15",
+                      isEvenRow
+                        ? "bg-white dark:bg-slate-900/40"
+                        : "bg-indigo-50/40 dark:bg-indigo-950/20"
+                    )}>
+                      <td className="border-r border-indigo-100 px-3 py-2.5 text-center tabular-nums text-indigo-600 dark:border-indigo-500/15 dark:text-indigo-300">
+                        {row.sr}
+                      </td>
+                      <td className="border-r border-indigo-100 px-3 py-2.5 dark:border-indigo-500/15">
+                        {row.subsectionTitle ? (
+                          <span className="mb-1 block text-xs font-medium text-indigo-500 dark:text-indigo-400/70">
+                            {row.subsectionTitle}
+                          </span>
+                        ) : null}
+                        <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">{question.questionText}</p>
+                        {question.options.length > 0 ? (
+                          <ul className="mt-1.5 space-y-0.5">
+                            {question.options.map((option) => (
+                              <li key={option.id} className="max-w-[400px] break-words text-[11px] text-slate-600 dark:text-slate-400">
+                                <span className="text-teal-600 dark:text-teal-400">•</span> {option.optionLabel} <span className="text-slate-400">({option.pointsAssigned} pts)</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-right tabular-nums font-semibold text-teal-700 dark:border-indigo-500/15 dark:text-teal-300">
+                        {question.totalMarks}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-xs text-slate-700 dark:border-indigo-500/15 dark:text-slate-300">
+                        {FIELD_TYPE_LABELS[question.inputType]}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
+                        {question.isRequired ? (
+                          <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                            Yes
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/40 dark:text-slate-400">
+                            No
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
+                        {question.selfAssessmentEnabled ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                            Enabled
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/40 dark:text-slate-400">
+                            Disabled
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
+                        {question.hodAssessmentEnabled ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                            Enabled
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/40 dark:text-slate-400">
+                            Disabled
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    </Fragment>
                   );
-                })}
-              </div>
-            );
-          }
-
-          const question = template.questions.find(
-            (currentQuestion) => currentQuestion.id === item.id,
-          );
-          if (!question) {
-            return null;
-          }
-
-          questionCounter += 1;
-          return (
-            <QuestionCard
-              key={question.id}
-              question={question}
-              label={`Q${questionCounter}`}
-            />
-          );
-        })}
-
-        {allQuestions.length === 0 ? (
-          <p className="text-sm text-foreground/70">No questions defined.</p>
-        ) : null}
+                })
+              )}
+            </tbody>
+            {rows.length > 0 ? (
+              <tfoot>
+                <tr className="bg-indigo-600 dark:bg-indigo-800/80">
+                  <td colSpan={6} className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-indigo-50 dark:text-indigo-100">
+                    Total
+                  </td>
+                  <td className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
+                    {allQuestions.reduce((sum, q) => sum + q.totalMarks, 0)}
+                  </td>
+                </tr>
+              </tfoot>
+            ) : null}
+          </table>
+        </div>
       </div>
     </div>
   );

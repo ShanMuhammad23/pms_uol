@@ -6,17 +6,18 @@ import {
   Briefcase,
   Building2,
   ChevronDown,
-  Hash,
+  IdCard,
   RotateCcw,
-  Search,
-  Users,
+  Tags,
 } from "lucide-react";
+import { Category0DistributionBar } from "@/app/components/dashboard/Category0DistributionBar";
 import { FilterChip, type FilterChipColor } from "@/app/components/dashboard/FilterChip";
+import {
+  MultiSelectFilterDropdown,
+  type MultiSelectOption,
+} from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
-import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
-import type { FormState } from "@/app/helpers/dashboard-types";
-import type { EntityRecord } from "@/types/entities";
-import type { StaffCategoryWithSubCategories } from "@/types/staff-categories";
+import { ENTITY_FILTER_LEVELS } from "@/app/helpers/dashboard-entity-filters";
 import { cn } from "@/lib/utils";
 
 export interface ActiveFilter {
@@ -26,45 +27,74 @@ export interface ActiveFilter {
 }
 
 interface DashboardFilterBarProps {
-  searchQuery: string;
-  onSearchQueryChange: (value: string) => void;
-  selectedEntityId: number | "ALL";
-  onEntityChange: (value: number | "ALL") => void;
-  selectedCategoryId: number | "ALL";
-  onCategoryChange: (value: number | "ALL") => void;
-  selectedSubCategoryId: number | "ALL";
-  onSubCategoryChange: (value: number | "ALL") => void;
-  selectedFormState: FormState | "ALL";
-  onFormStateChange: (value: FormState | "ALL") => void;
-  sortedEntities: EntityRecord[];
-  staffCategories: StaffCategoryWithSubCategories[];
-  availableSubCategories: StaffCategoryWithSubCategories["subCategories"];
+  selectedCategory0EntityIds: string[] | null;
+  onCategory0EntityChange: (value: string[] | null) => void;
+  selectedCategory1EntityIds: string[] | null;
+  onCategory1EntityChange: (value: string[] | null) => void;
+  selectedCategory2EntityIds: string[] | null;
+  onCategory2EntityChange: (value: string[] | null) => void;
+  category0Options: MultiSelectOption[];
+  category0DistributionOptions: MultiSelectOption[];
+  onCategory0DistributionSelect: (value: string) => void;
+  category1Options: MultiSelectOption[];
+  category2Options: MultiSelectOption[];
+  selectedRoleCategories: string[] | null;
+  onRoleCategoryChange: (value: string[] | null) => void;
+  roleCategoryOptions: MultiSelectOption[];
+  selectedDesignations: string[] | null;
+  onDesignationChange: (value: string[] | null) => void;
+  designationOptions: MultiSelectOption[];
+  designationsLoading: boolean;
+  selectedFormStates?: string[] | null;
+  onFormStateChange?: (value: string[] | null) => void;
+  formStateOptions?: MultiSelectOption[];
+  /** When false, hides the Form Status dropdown (e.g. users page). Defaults to true. */
+  showFormStatus?: boolean;
   entitiesLoading: boolean;
-  staffCategoriesLoading: boolean;
   activeFilters: ActiveFilter[];
   onClearAllFilters: () => void;
 }
 
 export function DashboardFilterBar({
-  searchQuery,
-  onSearchQueryChange,
-  selectedEntityId,
-  onEntityChange,
-  selectedCategoryId,
-  onCategoryChange,
-  selectedSubCategoryId,
-  onSubCategoryChange,
-  selectedFormState,
+  selectedCategory0EntityIds,
+  onCategory0EntityChange,
+  selectedCategory1EntityIds,
+  onCategory1EntityChange,
+  selectedCategory2EntityIds,
+  onCategory2EntityChange,
+  category0Options,
+  category0DistributionOptions,
+  onCategory0DistributionSelect,
+  category1Options,
+  category2Options,
+  selectedRoleCategories,
+  onRoleCategoryChange,
+  roleCategoryOptions,
+  selectedDesignations,
+  onDesignationChange,
+  designationOptions,
+  designationsLoading,
+  selectedFormStates = null,
   onFormStateChange,
-  sortedEntities,
-  staffCategories,
-  availableSubCategories,
+  formStateOptions = [],
+  showFormStatus = true,
   entitiesLoading,
-  staffCategoriesLoading,
   activeFilters,
   onClearAllFilters,
 }: DashboardFilterBarProps) {
   const [filtersVisible, setFiltersVisible] = useState(true);
+
+  const entitySelections = [
+    selectedCategory0EntityIds,
+    selectedCategory1EntityIds,
+    selectedCategory2EntityIds,
+  ];
+  const entityOptions = [category0Options, category1Options, category2Options];
+  const entityHandlers = [
+    onCategory0EntityChange,
+    onCategory1EntityChange,
+    onCategory2EntityChange,
+  ];
 
   return (
     <motion.div
@@ -74,12 +104,17 @@ export function DashboardFilterBar({
       transition={{ delay: 0.55 }}
       className="mb-6 space-y-4"
     >
-      <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
-        <div className="flex items-center justify-end px-4 py-2">
+      <div className="rounded-md border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
+        <div className="flex items-center gap-3 px-4 py-2">
+          <Category0DistributionBar
+            options={category0DistributionOptions}
+            selectedValues={selectedCategory0EntityIds}
+            onSelect={onCategory0DistributionSelect}
+          />
           <button
             type="button"
             onClick={() => setFiltersVisible((prev) => !prev)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             aria-label={filtersVisible ? "Hide filters" : "Show filters"}
             aria-expanded={filtersVisible}
             title={filtersVisible ? "Hide filters" : "Show filters"}
@@ -104,148 +139,63 @@ export function DashboardFilterBar({
               className="overflow-hidden"
             >
               <div className="border-t border-slate-200 px-4 pb-4 pt-3 dark:border-white/10">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Search
-                    </label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Name, ID, or email..."
-                        value={searchQuery}
-                        onChange={(e) => onSearchQueryChange(e.target.value)}
-                        className={cn(
-                          "w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-white",
-                        )}
-                      />
-                    </div>
-                  </div>
+                <div
+                  className={cn(
+                    "grid gap-3",
+                    showFormStatus && onFormStateChange
+                      ? "grid-cols-[repeat(6,minmax(0,1fr))]"
+                      : "grid-cols-[repeat(5,minmax(0,1fr))]",
+                  )}
+                >
+                  {ENTITY_FILTER_LEVELS.map((level, index) => (
+                    <MultiSelectFilterDropdown
+                      key={level.label}
+                      label={level.label}
+                      icon={Building2}
+                      options={entityOptions[index]}
+                      selectedValues={entitySelections[index]}
+                      onChange={entityHandlers[index]}
+                      disabled={
+                        entitiesLoading ||
+                        (index === 1 && selectedCategory0EntityIds?.length === 0) ||
+                        (index === 2 && selectedCategory1EntityIds?.length === 0)
+                      }
+                      placeholder={`All`}
+                      searchable={entityOptions[index].length > 8}
+                    />
+                  ))}
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Entity
-                    </label>
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={selectedEntityId === "ALL" ? "ALL" : String(selectedEntityId)}
-                        onChange={(e) =>
-                          onEntityChange(e.target.value === "ALL" ? "ALL" : Number(e.target.value))
-                        }
-                        disabled={entitiesLoading}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "disabled:cursor-not-allowed disabled:opacity-50",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Entities</option>
-                        {sortedEntities.map((entity) => (
-                          <option key={entity.id} value={entity.id}>
-                            {entity.parentName
-                              ? `${entity.name} (${entity.parentName})`
-                              : entity.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
+                  <MultiSelectFilterDropdown
+                    label="Role Category"
+                    icon={Tags}
+                    options={roleCategoryOptions}
+                    selectedValues={selectedRoleCategories}
+                    onChange={onRoleCategoryChange}
+                    placeholder="All"
+                    searchable={roleCategoryOptions.length > 8}
+                  />
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Category
-                    </label>
-                    <div className="relative">
-                      <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={selectedCategoryId === "ALL" ? "ALL" : String(selectedCategoryId)}
-                        onChange={(e) =>
-                          onCategoryChange(e.target.value === "ALL" ? "ALL" : Number(e.target.value))
-                        }
-                        disabled={staffCategoriesLoading}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "disabled:cursor-not-allowed disabled:opacity-50",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Categories</option>
-                        {staffCategories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
+                  <MultiSelectFilterDropdown
+                    label="Designation"
+                    icon={IdCard}
+                    options={designationOptions}
+                    selectedValues={selectedDesignations}
+                    onChange={onDesignationChange}
+                    disabled={designationsLoading}
+                    placeholder="All"
+                    searchable
+                  />
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Sub-Category
-                    </label>
-                    <div className="relative">
-                      <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={
-                          selectedSubCategoryId === "ALL" ? "ALL" : String(selectedSubCategoryId)
-                        }
-                        onChange={(e) =>
-                          onSubCategoryChange(
-                            e.target.value === "ALL" ? "ALL" : Number(e.target.value),
-                          )
-                        }
-                        disabled={staffCategoriesLoading || selectedCategoryId === "ALL"}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "disabled:cursor-not-allowed disabled:opacity-50",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Sub-Categories</option>
-                        {availableSubCategories.map((subCategory) => (
-                          <option key={subCategory.id} value={subCategory.id}>
-                            {subCategory.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Form Status
-                    </label>
-                    <div className="relative">
-                      <Briefcase className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={selectedFormState}
-                        onChange={(e) => onFormStateChange(e.target.value as FormState | "ALL")}
-                        className={cn(
-                          "w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-700",
-                          "outline-none transition-all focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20",
-                          "dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
-                        )}
-                      >
-                        <option value="ALL">All Statuses</option>
-                        {Object.entries(FORM_STATE_CONFIG).map(([key, config]) => (
-                          <option key={key} value={key}>
-                            {config.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
+                  {showFormStatus && onFormStateChange ? (
+                    <MultiSelectFilterDropdown
+                      label="Form Status"
+                      icon={Briefcase}
+                      options={formStateOptions}
+                      selectedValues={selectedFormStates}
+                      onChange={onFormStateChange}
+                      placeholder="All"
+                    />
+                  ) : null}
                 </div>
               </div>
             </motion.div>

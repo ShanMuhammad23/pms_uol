@@ -37,12 +37,20 @@ export const FORM_STATE_CONFIG: Record<
     phase: 1,
   },
   PENDING_HR_CALIBRATION: {
-    label: "HR Calibration",
+    label: "HR Alignment",
     color: "text-orange-700",
     bg: "bg-orange-50",
     border: "border-orange-200",
     icon: Scale,
     phase: 2,
+  },
+  PENDING_BOARD_APPROVAL: {
+    label: "Board Approval",
+    color: "text-violet-700",
+    bg: "bg-violet-50",
+    border: "border-violet-200",
+    icon: Gavel,
+    phase: 3,
   },
   APPROVED: {
     label: "Approved",
@@ -50,7 +58,7 @@ export const FORM_STATE_CONFIG: Record<
     bg: "bg-emerald-50",
     border: "border-emerald-200",
     icon: CheckCircle2,
-    phase: 3,
+    phase: 4,
   },
 };
 
@@ -61,13 +69,7 @@ export const APPRAISAL_STATE_CONFIG: Record<
   PENDING_SELF_ASSESSMENT: FORM_STATE_CONFIG.PENDING_SELF_ASSESSMENT,
   PENDING_HEAD_REVIEW: FORM_STATE_CONFIG.PENDING_HEAD_REVIEW,
   PENDING_HR_CALIBRATION: FORM_STATE_CONFIG.PENDING_HR_CALIBRATION,
-  PENDING_BOARD_APPROVAL: {
-    label: "Board Approval",
-    color: "text-violet-700",
-    bg: "bg-violet-50",
-    border: "border-violet-200",
-    icon: Gavel,
-  },
+  PENDING_BOARD_APPROVAL: FORM_STATE_CONFIG.PENDING_BOARD_APPROVAL,
   APPROVED: FORM_STATE_CONFIG.APPROVED,
   COMPLETED: {
     label: "Completed",

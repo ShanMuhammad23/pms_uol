@@ -5,6 +5,8 @@ export interface EntityRecord {
   categoryCode: string;
   parentEntityId: number | null;
   parentName: string | null;
+  /** Users with users.entity_id pointing at this entity. */
+  staffCount: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -19,6 +19,11 @@ export async function fetchFinancialYears(): Promise<FinancialYearRecord[]> {
   return parseResponse<FinancialYearRecord[]>(response);
 }
 
+export async function fetchDashboardFinancialYears(): Promise<FinancialYearRecord[]> {
+  const response = await fetch("/api/financial-years");
+  return parseResponse<FinancialYearRecord[]>(response);
+}
+
 export async function createFinancialYear(
   input: CreateFinancialYearInput,
 ): Promise<FinancialYearRecord> {

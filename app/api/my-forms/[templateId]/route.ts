@@ -72,6 +72,10 @@ export async function PUT(request: Request, context: RouteContext) {
     return NextResponse.json(detail);
   } catch (error) {
     if (error instanceof EmployeeFormError) {
+      console.error("[my-forms PUT] EmployeeFormError:", error.message, {
+        userId,
+        templateId,
+      });
       return NextResponse.json(
         { error: error.message },
         { status: error.statusCode },

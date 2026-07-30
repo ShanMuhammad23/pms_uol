@@ -137,7 +137,7 @@ export function BrandingPanel() {
               key={title}
               variants={itemVariants}
               whileHover={{ x: 6, transition: { duration: 0.25, ease: [0.23, 1, 0.32, 1] } }}
-              className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm transition-colors hover:border-amber-500/20 hover:bg-white/[0.04]"
+              className="group relative overflow-hidden rounded-md border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm transition-colors hover:border-amber-500/20 hover:bg-white/[0.04]"
             >
               {/* Subtle top accent per card */}
               <div className="absolute left-0 top-0 h-px w-0 bg-gradient-to-r from-amber-500/50 to-transparent transition-all duration-500 group-hover:w-full" />

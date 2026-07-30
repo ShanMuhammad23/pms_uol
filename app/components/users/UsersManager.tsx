@@ -1,17 +1,31 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Pencil, Plus, Table2, Trash2, Users, X } from "lucide-react";
+import { Plus, Table2, Users } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
+import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
+import { EditUserModal } from "@/app/components/users/EditUserModal";
+import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
+import { UsersListingTable } from "@/app/components/users/UsersListingTable";
+import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
+import { queryKeys } from "@/app/queries/keys";
+import {
+  useEntitiesQuery,
+  useUniqueDesignationsQuery,
+} from "@/app/queries/organization";
+import { useUsersOverviewQuery } from "@/app/queries/users";
+import { useUsersPageFilters } from "@/app/queries/users-filters";
 import {
   createUser,
   deleteUser,
-  fetchEntities,
-  fetchStaffCategoriesForUsers,
-  fetchUsers,
   updateUser,
 } from "@/lib/queries/users-client";
+import {
+  assignFormTemplateToEmployees,
+  unassignFormTemplateFromEmployees,
+} from "@/lib/queries/forms-client";
+import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
 import {
   USER_ROLE_LABELS,
   USER_ROLES,
@@ -37,10 +51,9 @@ interface UserFormState {
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId: string;
-  staffSubCategoryId: string;
   entityId: string;
   headId: string;
+  manager2Id: string;
   isActive: boolean;
 }
 
@@ -53,10 +66,9 @@ const emptyForm: UserFormState = {
   systemRole: "EMPLOYEE",
   empCategory: "ADMINISTRATION",
   empSubCategory: "SYSTEM_ADMIN",
-  staffCategoryId: "",
-  staffSubCategoryId: "",
   entityId: "",
   headId: "",
+  manager2Id: "",
   isActive: true,
 };
 
@@ -67,57 +79,58 @@ export default function UsersManager() {
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
   const [activeTab, setActiveTab] = useState<UserSectionTab>("list");
 
-  const { data: entities, isLoading: entitiesLoading } = useQuery({
-    queryKey: ["entities"],
-    queryFn: fetchEntities,
-  });
-  const { data: staffCategories = [], isLoading: staffCategoriesLoading } = useQuery({
-    queryKey: ["staff-categories-for-users"],
-    queryFn: fetchStaffCategoriesForUsers,
-  });
+  const { data: entities = [], isLoading: entitiesLoading } = useEntitiesQuery();
+  const { data: designations = [], isLoading: designationsLoading } =
+    useUniqueDesignationsQuery();
 
   const {
-    data: users,
-    isLoading: usersLoading,
+    data: users = [],
+    isLoading: overviewLoading,
     error,
-  } = useQuery({
-    queryKey: ["users"],
-    queryFn: fetchUsers,
+  } = useUsersOverviewQuery();
+
+  const {
+    selectedCategory0EntityIds,
+    selectedCategory1EntityIds,
+    selectedCategory2EntityIds,
+    selectedRoleCategories,
+    selectedDesignations,
+    category0Options,
+    category0DistributionOptions,
+    category1Options,
+    category2Options,
+    roleCategoryOptions,
+    designationOptions,
+    filteredUsers,
+    activeFilters,
+    handleCategory0EntityChange,
+    handleCategory0DistributionSelect,
+    handleCategory1EntityChange,
+    handleCategory2EntityChange,
+    handleRoleCategoryChange,
+    handleDesignationChange,
+    clearAllFilters,
+  } = useUsersPageFilters({
+    users,
+    entities,
+    designations,
   });
 
-  const selectedStaffCategory = useMemo(
-    () =>
-      staffCategories.find(
-        (staffCategory) => String(staffCategory.id) === form.staffCategoryId,
-      ),
-    [staffCategories, form.staffCategoryId],
-  );
-  const subCategoryOptions = selectedStaffCategory?.subCategories ?? [];
-
   const headOptions = useMemo(() => {
-    if (!users) {
-      return [];
-    }
+    return users;
+  }, [users]);
 
-    return users.filter((user) => !editingUser || user.id !== editingUser.id);
-  }, [users, editingUser]);
-
-  const categoryStats = useMemo(() => {
-    return staffCategories.map((category) => ({
-      category: category.id,
-      label: category.name,
-      count:
-        users?.filter((user) => user.staffCategoryId === category.id).length ?? 0,
-    }));
-  }, [staffCategories, users]);
+  const manager2Options = useMemo(() => {
+    if (!form.headId) return headOptions;
+    return headOptions.filter((user) => String(user.id) !== form.headId);
+  }, [headOptions, form.headId]);
 
   const resetForm = () => {
     setForm(emptyForm);
-    setEditingUser(null);
   };
 
   const invalidateList = () => {
-    queryClient.invalidateQueries({ queryKey: ["users"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.users });
   };
 
   const createMutation = useMutation({
@@ -136,20 +149,51 @@ export default function UsersManager() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       id,
       input,
+      templateIds,
+      employeeId,
     }: {
       id: number;
       input: Parameters<typeof updateUser>[1];
-    }) => updateUser(id, input),
+      templateIds?: number[];
+      employeeId: string;
+    }) => {
+      const updatedUser = await updateUser(id, input);
+
+      if (templateIds !== undefined) {
+        const assigned = await fetchEmployeeAssignedForms(employeeId);
+        const currentIds = new Set(assigned.forms.map((f) => f.templateId));
+        const targetIds = new Set(templateIds);
+
+        const toAssign = templateIds.filter((tid) => !currentIds.has(tid));
+        const toUnassign = [...currentIds].filter((tid) => !targetIds.has(tid));
+
+        for (const tid of toAssign) {
+          await assignFormTemplateToEmployees(tid, [employeeId]);
+        }
+        for (const tid of toUnassign) {
+          await unassignFormTemplateFromEmployees(tid, [employeeId]);
+        }
+      }
+
+      return updatedUser;
+    },
     onSuccess: (user) => {
       setFormMessage({
         tone: "success",
         text: `User "${user.firstName} ${user.lastName}" updated successfully.`,
       });
-      resetForm();
+      setEditingUser(null);
       invalidateList();
+      invalidateStaffListingQueries(queryClient);
+      void queryClient.invalidateQueries({
+        queryKey: ["employee-assigned-forms"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["form-templates"],
+      });
     },
     onError: (mutationError: Error) => {
       setFormMessage({ tone: "error", text: mutationError.message });
@@ -164,7 +208,7 @@ export default function UsersManager() {
         text: "User deleted successfully.",
       });
       if (editingUser) {
-        resetForm();
+        setEditingUser(null);
       }
       invalidateList();
     },
@@ -173,82 +217,31 @@ export default function UsersManager() {
     },
   });
 
-  const isSubmitting = createMutation.isPending || updateMutation.isPending;
-  const isLoading = entitiesLoading || usersLoading || staffCategoriesLoading;
+  const isSubmitting = createMutation.isPending;
+  const filtersReady = !entitiesLoading && !overviewLoading;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormMessage(null);
-    const staffCategory = staffCategories.find(
-      (item) => String(item.id) === form.staffCategoryId,
-    );
-    const staffSubCategory = staffCategory?.subCategories.find(
-      (item) => String(item.id) === form.staffSubCategoryId,
-    );
 
-    if (!staffCategory || !staffSubCategory) {
-      setFormMessage({
-        tone: "error",
-        text: "Please select a valid staff category and sub-category.",
-      });
-      return;
-    }
-
-    const payload = {
+    createMutation.mutate({
       employeeId: form.employeeId.trim(),
       email: form.email.trim(),
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       systemRole: form.systemRole,
-      // Legacy enum fields retained for backward compatibility until DB enum migration is removed.
       empCategory: "ADMINISTRATION",
       empSubCategory: "SYSTEM_ADMIN",
-      staffCategoryId: form.staffCategoryId ? Number(form.staffCategoryId) : null,
-      staffSubCategoryId: form.staffSubCategoryId
-        ? Number(form.staffSubCategoryId)
-        : null,
       entityId: form.entityId ? Number(form.entityId) : null,
       headId: form.headId ? Number(form.headId) : null,
+      manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
       isActive: form.isActive,
-    };
-
-    if (editingUser) {
-      updateMutation.mutate({
-        id: editingUser.id,
-        input: {
-          ...payload,
-          ...(form.password ? { password: form.password } : {}),
-        },
-      });
-      return;
-    }
-
-    createMutation.mutate({
-      ...payload,
       password: form.password,
     });
   };
 
   const handleEdit = (user: UserRecord) => {
-    setActiveTab("list");
     setEditingUser(user);
-    setForm({
-      employeeId: user.employeeId,
-      email: user.email,
-      password: "",
-      firstName: user.firstName,
-      lastName: user.lastName,
-      systemRole: user.systemRole,
-      empCategory: user.empCategory,
-      empSubCategory: user.empSubCategory,
-      staffCategoryId: user.staffCategoryId ? String(user.staffCategoryId) : "",
-      staffSubCategoryId: user.staffSubCategoryId
-        ? String(user.staffSubCategoryId)
-        : "",
-      entityId: user.entityId ? String(user.entityId) : "",
-      headId: user.headId ? String(user.headId) : "",
-      isActive: user.isActive,
-    });
     setFormMessage(null);
   };
 
@@ -266,7 +259,7 @@ export default function UsersManager() {
   };
 
   const handleCancelEdit = () => {
-    resetForm();
+    setEditingUser(null);
     setFormMessage(null);
   };
 
@@ -282,36 +275,23 @@ export default function UsersManager() {
   };
 
   const renderFormCard = () => (
-    <div className="rounded-xl border border-slate-300/80 p-6 dark:border-white/15">
+    <div className="rounded-md border border-slate-300/80 p-6 dark:border-white/15">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-text-primary">
-            {editingUser ? "Edit User" : "Add User"}
-          </h2>
+          <h2 className="text-lg font-semibold text-text-primary">Add User</h2>
           <p className="mt-1 text-sm text-foreground/70">
-            Manage employee accounts, roles, categories, and reporting lines.
+            Create employee accounts with roles, categories, and reporting lines.
           </p>
         </div>
-
-        {editingUser ? (
-          <button
-            type="button"
-            onClick={handleCancelEdit}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-          >
-            <X className="size-3.5" />
-            Cancel
-          </button>
-        ) : null}
       </div>
 
       <AnimatePresence>
-        {formMessage ? (
+        {formMessage && !editingUser ? (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className={`mt-4 overflow-hidden rounded-xl border px-4 py-3 text-sm font-medium ${
+            className={`mt-4 overflow-hidden rounded-md border px-4 py-3 text-sm font-medium ${
               formMessage.tone === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300"
                 : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/30 dark:bg-red-950/20 dark:text-red-300"
@@ -369,9 +349,8 @@ export default function UsersManager() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, password: event.target.value }))
               }
-              required={!editingUser}
-              minLength={editingUser ? undefined : 8}
-              placeholder={editingUser ? "Leave blank to keep current password" : ""}
+              required
+              minLength={8}
               className={inputClassName}
             />
           </div>
@@ -434,61 +413,6 @@ export default function UsersManager() {
           </div>
 
           <div>
-            <label htmlFor="user-staff-category" className="mb-1.5 block text-sm font-medium text-text-primary">
-              Staff Category
-            </label>
-            <select
-              id="user-staff-category"
-              value={form.staffCategoryId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  staffCategoryId: event.target.value,
-                  staffSubCategoryId: "",
-                }))
-              }
-              required
-              className={inputClassName}
-            >
-              <option value="" disabled>
-                Select category
-              </option>
-              {staffCategories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="user-staff-sub-category" className="mb-1.5 block text-sm font-medium text-text-primary">
-              Staff Sub-Category
-            </label>
-            <select
-              id="user-staff-sub-category"
-              value={form.staffSubCategoryId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  staffSubCategoryId: event.target.value,
-                }))
-              }
-              required
-              className={inputClassName}
-            >
-              <option value="" disabled>
-                Select sub-category
-              </option>
-              {subCategoryOptions.map((subCategory) => (
-                <option key={subCategory.id} value={subCategory.id}>
-                  {subCategory.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
             <label htmlFor="user-entity" className="mb-1.5 block text-sm font-medium text-text-primary">
               Entity
             </label>
@@ -511,23 +435,47 @@ export default function UsersManager() {
 
           <div>
             <label htmlFor="user-head" className="mb-1.5 block text-sm font-medium text-text-primary">
-              Reporting Head
+              Manager 1
             </label>
-            <select
+            <SearchableManagerSelect
               id="user-head"
               value={form.headId}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, headId: event.target.value }))
+              options={headOptions}
+              onChange={(next) =>
+                setForm((current) => ({
+                  ...current,
+                  headId: next,
+                  manager2Id:
+                    current.manager2Id === next
+                      ? ""
+                      : current.manager2Id,
+                }))
               }
+              disabled={isSubmitting}
               className={inputClassName}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="user-manager-2"
+              className="mb-1.5 block text-sm font-medium text-text-primary"
             >
-              <option value="">None</option>
-              {headOptions.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.firstName} {user.lastName} ({user.employeeId})
-                </option>
-              ))}
-            </select>
+              Manager 2
+            </label>
+            <SearchableManagerSelect
+              id="user-manager-2"
+              value={form.manager2Id}
+              options={manager2Options}
+              onChange={(next) =>
+                setForm((current) => ({
+                  ...current,
+                  manager2Id: next,
+                }))
+              }
+              disabled={isSubmitting}
+              className={inputClassName}
+            />
           </div>
 
           <div className="flex items-end">
@@ -550,17 +498,8 @@ export default function UsersManager() {
           disabled={isSubmitting}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
         >
-          {editingUser ? (
-            <>
-              <Pencil className="size-4" />
-              Update User
-            </>
-          ) : (
-            <>
-              <Plus className="size-4" />
-              Add User
-            </>
-          )}
+          <Plus className="size-4" />
+          Add User
         </button>
       </form>
     </div>
@@ -599,22 +538,28 @@ export default function UsersManager() {
         </nav>
       </div>
 
-      {activeTab === "add" || editingUser ? renderFormCard() : null}
+      {activeTab === "add" ? renderFormCard() : null}
 
-      {activeTab === "list" && isLoading ? (
-        <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+      {activeTab === "list" && formMessage?.tone === "success" ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-300">
+          {formMessage.text}
+        </div>
+      ) : null}
+
+      {activeTab === "list" && !filtersReady ? (
+        <div className="rounded-md border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
           Loading users...
         </div>
       ) : null}
 
       {activeTab === "list" && error ? (
-        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+        <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           Failed to load users.
         </div>
       ) : null}
 
-      {activeTab === "list" && !isLoading && !error && (!users || users.length === 0) ? (
-        <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
+      {activeTab === "list" && filtersReady && !error && users.length === 0 ? (
+        <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
           <Users className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">No users yet</p>
           <p className="mt-1 text-sm text-foreground/70">
@@ -623,105 +568,65 @@ export default function UsersManager() {
         </div>
       ) : null}
 
-      {activeTab === "list" && !isLoading && !error && users && users.length > 0 ? (
+      {activeTab === "list" && filtersReady && !error && users.length > 0 ? (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {categoryStats.map((stat) => (
-              <div
-                key={stat.category}
-                className="rounded-xl border border-slate-300/80 p-4 dark:border-white/15"
-              >
-                <p className="text-xs font-medium uppercase tracking-wide text-foreground/70">
-                  {stat.label}
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-text-primary">
-                  {stat.count}
-                </p>
-                <p className="mt-1 text-xs text-foreground/70">
-                  {stat.count === 1 ? "Employee" : "Employees"}
-                </p>
-              </div>
-            ))}
-          </div>
+          <DashboardFilterBar
+            selectedCategory0EntityIds={selectedCategory0EntityIds}
+            onCategory0EntityChange={handleCategory0EntityChange}
+            selectedCategory1EntityIds={selectedCategory1EntityIds}
+            onCategory1EntityChange={handleCategory1EntityChange}
+            selectedCategory2EntityIds={selectedCategory2EntityIds}
+            onCategory2EntityChange={handleCategory2EntityChange}
+            category0Options={category0Options}
+            category0DistributionOptions={category0DistributionOptions}
+            onCategory0DistributionSelect={handleCategory0DistributionSelect}
+            category1Options={category1Options}
+            category2Options={category2Options}
+            selectedRoleCategories={selectedRoleCategories}
+            onRoleCategoryChange={handleRoleCategoryChange}
+            roleCategoryOptions={roleCategoryOptions}
+            selectedDesignations={selectedDesignations}
+            onDesignationChange={handleDesignationChange}
+            designationOptions={designationOptions}
+            designationsLoading={designationsLoading || overviewLoading}
+            entitiesLoading={entitiesLoading || overviewLoading}
+            activeFilters={activeFilters}
+            onClearAllFilters={clearAllFilters}
+            showFormStatus={false}
+          />
 
-          <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
-            <table className="min-w-full text-sm">
-              <thead className="bg-primary/5">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Employee</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Role</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Category</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Entity</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Head</th>
-                  <th className="px-4 py-3 text-left font-semibold text-text-primary">Status</th>
-                  <th className="px-4 py-3 text-right font-semibold text-text-primary">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="border-t border-slate-300/80 dark:border-white/15"
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-text-primary">
-                        {user.firstName} {user.lastName}
-                      </p>
-                      <p className="mt-0.5 text-xs text-foreground/70">{user.employeeId}</p>
-                      <p className="text-xs text-foreground/70">{user.email}</p>
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {USER_ROLE_LABELS[user.systemRole]}
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {user.staffCategoryName ?? user.empCategory}
-                      <span className="block text-xs text-foreground/70">
-                        {user.staffSubCategoryName ?? user.empSubCategory}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {user.entityName ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-text-primary">
-                      {user.headName ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          user.isActive
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                            : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-foreground/70"
-                        }`}
-                      >
-                        {user.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(user)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
-                        >
-                          <Pencil className="size-3.5" />
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(user)}
-                          disabled={deleteMutation.isPending}
-                          className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
-                        >
-                          <Trash2 className="size-3.5" />
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <UsersListingTable
+            users={filteredUsers}
+            allUsers={users}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            deletePending={deleteMutation.isPending}
+            onClearAllFilters={clearAllFilters}
+          />
+
+          <EditUserModal
+            open={editingUser != null}
+            user={editingUser}
+            users={users}
+            entities={entities}
+            isSubmitting={updateMutation.isPending}
+            errorMessage={
+              editingUser && formMessage?.tone === "error"
+                ? formMessage.text
+                : null
+            }
+            onClose={handleCancelEdit}
+            onSubmit={(input, templateIds) => {
+              if (!editingUser) return;
+              setFormMessage(null);
+              updateMutation.mutate({
+                id: editingUser.id,
+                input,
+                templateIds,
+                employeeId: editingUser.employeeId,
+              });
+            }}
+          />
         </div>
       ) : null}
     </div>

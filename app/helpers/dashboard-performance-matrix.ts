@@ -16,6 +16,7 @@ function createMockPerformanceMatrix(): PerformanceLevelWithQuartiles[] {
     return {
       id: levelId,
       financialYearId: 1,
+      matrixLabel: "Default",
       name: levelDef.name,
       sortOrder: levelDef.sortOrder,
       createdAt: "",

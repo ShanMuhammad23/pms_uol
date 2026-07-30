@@ -31,6 +31,40 @@ function parseOptionalId(value: unknown): number | null | undefined {
   return id;
 }
 
+function parseOptionalString(value: unknown): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseOptionalYear(value: unknown): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  const year = Number(value);
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) {
+    return Number.NaN;
+  }
+
+  return year;
+}
+
 function validateSharedFields(body: CreateUserInput | UpdateUserInput): string | null {
   if (!body.employeeId || typeof body.employeeId !== "string" || !body.employeeId.trim()) {
     return "Employee ID is required.";
@@ -81,16 +115,6 @@ function validateSharedFields(body: CreateUserInput | UpdateUserInput): string |
   }
 
   const entityId = parseOptionalId(body.entityId);
-  const staffCategoryId = parseOptionalId(body.staffCategoryId);
-  if (staffCategoryId !== undefined && Number.isNaN(staffCategoryId)) {
-    return "staffCategoryId must be a positive integer or null.";
-  }
-
-  const staffSubCategoryId = parseOptionalId(body.staffSubCategoryId);
-  if (staffSubCategoryId !== undefined && Number.isNaN(staffSubCategoryId)) {
-    return "staffSubCategoryId must be a positive integer or null.";
-  }
-
   if (entityId !== undefined && Number.isNaN(entityId)) {
     return "Entity id must be a positive integer or null.";
   }
@@ -98,6 +122,24 @@ function validateSharedFields(body: CreateUserInput | UpdateUserInput): string |
   const headId = parseOptionalId(body.headId);
   if (headId !== undefined && Number.isNaN(headId)) {
     return "Head id must be a positive integer or null.";
+  }
+
+  const manager2Id = parseOptionalId(body.manager2Id);
+  if (manager2Id !== undefined && Number.isNaN(manager2Id)) {
+    return "Manager 2 id must be a positive integer or null.";
+  }
+
+  if ("dateOfJoining" in body && body.dateOfJoining != null && body.dateOfJoining !== "") {
+    if (typeof body.dateOfJoining !== "string" || Number.isNaN(Date.parse(body.dateOfJoining))) {
+      return "Date of joining must be a valid date.";
+    }
+  }
+
+  if ("qualificationYear" in body) {
+    const year = parseOptionalYear(body.qualificationYear);
+    if (year !== undefined && Number.isNaN(year)) {
+      return "Qualification year must be a valid year.";
+    }
   }
 
   return null;
@@ -158,32 +200,53 @@ export function normalizeUserInput(
   email: string;
   firstName: string;
   lastName: string;
+  designation: string | null | undefined;
+  roleCategory: string | null | undefined;
+  dateOfJoining: string | null | undefined;
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
-  staffCategoryId: number | null;
-  staffSubCategoryId: number | null;
   entityId: number | null;
   headId: number | null;
+  manager2Id: number | null;
+  qualification: string | null | undefined;
+  qualificationYear: number | null | undefined;
+  qualificationSubject: string | null | undefined;
+  qualificationInstitute: string | null | undefined;
+  qualificationCountry: string | null | undefined;
   isActive: boolean;
 } {
   const entityId = parseOptionalId(body.entityId);
-  const staffCategoryId = parseOptionalId(body.staffCategoryId);
-  const staffSubCategoryId = parseOptionalId(body.staffSubCategoryId);
   const headId = parseOptionalId(body.headId);
+  const manager2Id = parseOptionalId(body.manager2Id);
+  const updateBody = body as UpdateUserInput;
+
+  const dateOfJoining =
+    updateBody.dateOfJoining === undefined
+      ? undefined
+      : updateBody.dateOfJoining === null || updateBody.dateOfJoining === ""
+        ? null
+        : updateBody.dateOfJoining.slice(0, 10);
 
   return {
     employeeId: body.employeeId.trim(),
     email: body.email.trim().toLowerCase(),
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
+    designation: parseOptionalString(updateBody.designation),
+    roleCategory: parseOptionalString(updateBody.roleCategory),
+    dateOfJoining,
     systemRole: body.systemRole,
     empCategory: body.empCategory.trim(),
     empSubCategory: body.empSubCategory.trim(),
-    staffCategoryId: staffCategoryId ?? null,
-    staffSubCategoryId: staffSubCategoryId ?? null,
     entityId: entityId ?? null,
     headId: headId ?? null,
+    manager2Id: manager2Id ?? null,
+    qualification: parseOptionalString(updateBody.qualification),
+    qualificationYear: parseOptionalYear(updateBody.qualificationYear),
+    qualificationSubject: parseOptionalString(updateBody.qualificationSubject),
+    qualificationInstitute: parseOptionalString(updateBody.qualificationInstitute),
+    qualificationCountry: parseOptionalString(updateBody.qualificationCountry),
     isActive: body.isActive ?? true,
   };
 }

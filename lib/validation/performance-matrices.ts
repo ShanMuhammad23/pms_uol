@@ -25,6 +25,9 @@ export function validateCreatePerformanceLevelInput(
   if (!input.name || typeof input.name !== "string" || !input.name.trim()) {
     return "Level name is required.";
   }
+  if (!input.matrixLabel || typeof input.matrixLabel !== "string" || !input.matrixLabel.trim()) {
+    return "Matrix label is required.";
+  }
 
   if (input.name.trim().length > 100) {
     return "Level name must be 100 characters or fewer.";
@@ -51,6 +54,9 @@ export function validateUpdatePerformanceLevelInput(
 
   if (!input.name || typeof input.name !== "string" || !input.name.trim()) {
     return "Level name is required.";
+  }
+  if (!input.matrixLabel || typeof input.matrixLabel !== "string" || !input.matrixLabel.trim()) {
+    return "Matrix label is required.";
   }
 
   if (input.name.trim().length > 100) {

@@ -16,28 +16,85 @@ interface UserRow {
   email: string;
   first_name: string;
   last_name: string;
+  designation: string | null;
+  role_category: string | null;
+  date_of_joining: string | null;
   system_role: UserRecord["systemRole"];
   emp_category: UserRecord["empCategory"];
   emp_sub_category: UserRecord["empSubCategory"];
-  staff_category_id: number | null;
-  staff_category_name: string | null;
-  staff_sub_category_id: number | null;
-  staff_sub_category_name: string | null;
   entity_id: number | null;
   entity_name: string | null;
+  parent_entity_name: string | null;
   department_id?: number | null;
   department_name?: string | null;
   head_id: string | null;
   head_name: string | null;
+  manager_2_id: string | null;
+  manager_2_name: string | null;
+  qualification: string | null;
+  qualification_year: string | null;
+  qualification_subject: string | null;
+  qualification_institute: string | null;
+  qualification_country: string | null;
   is_active: boolean;
   created_at: string;
 }
 
 type UserOrgMode = "entity" | "department";
-type UserStaffMode = "dynamic" | "legacy";
 
 let cachedUserOrgMode: UserOrgMode | null = null;
-let cachedUserStaffMode: UserStaffMode | null = null;
+let cachedExcelColumns: boolean | null = null;
+let cachedQualificationsTable: boolean | null = null;
+let manager2ColumnEnsured = false;
+
+export async function ensureManager2Column(): Promise<void> {
+  if (manager2ColumnEnsured) {
+    return;
+  }
+
+  await db.query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL`,
+  );
+
+  manager2ColumnEnsured = true;
+}
+
+async function hasExcelSheetColumns(): Promise<boolean> {
+  if (cachedExcelColumns !== null) {
+    return cachedExcelColumns;
+  }
+
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'users'
+         AND column_name = 'designation'
+     ) AS exists`,
+  );
+
+  cachedExcelColumns = Boolean(result.rows[0]?.exists);
+  return cachedExcelColumns;
+}
+
+async function hasQualificationsTable(): Promise<boolean> {
+  if (cachedQualificationsTable !== null) {
+    return cachedQualificationsTable;
+  }
+
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = 'employee_qualifications'
+     ) AS exists`,
+  );
+
+  cachedQualificationsTable = Boolean(result.rows[0]?.exists);
+  return cachedQualificationsTable;
+}
 
 async function getUserOrgMode(): Promise<UserOrgMode> {
   if (cachedUserOrgMode) {
@@ -63,46 +120,47 @@ async function getUserOrgMode(): Promise<UserOrgMode> {
   return cachedUserOrgMode;
 }
 
-async function getUserStaffMode(): Promise<UserStaffMode> {
-  if (cachedUserStaffMode) {
-    return cachedUserStaffMode;
-  }
-
-  const result = await db.query<{ exists: boolean }>(
-    `
-      SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'users'
-          AND column_name = 'staff_sub_category_id'
-      ) AS exists
-    `,
-  );
-
-  cachedUserStaffMode = result.rows[0]?.exists ? "dynamic" : "legacy";
-  return cachedUserStaffMode;
-}
-
-function buildUserSelect(mode: UserOrgMode, staffMode: UserStaffMode): string {
+function buildUserSelect(
+  mode: UserOrgMode,
+  excelReady: boolean,
+  qualsReady: boolean,
+): string {
   const orgIdColumn = mode === "entity" ? "u.entity_id" : "u.department_id";
   const orgJoinTable = mode === "entity" ? "entities" : "departments";
-  const staffSelect =
-    staffMode === "dynamic"
-      ? `u.staff_category_id,
-         sc.name AS staff_category_name,
-         u.staff_sub_category_id,
-         ssc.name AS staff_sub_category_name`
-      : `NULL::int AS staff_category_id,
-         NULL::text AS staff_category_name,
-         NULL::int AS staff_sub_category_id,
-         NULL::text AS staff_sub_category_name`;
-  const staffJoin =
-    staffMode === "dynamic"
-      ? `
-    LEFT JOIN staff_categories sc ON sc.id = u.staff_category_id
-    LEFT JOIN staff_sub_categories ssc ON ssc.id = u.staff_sub_category_id`
+  const parentEntityJoin =
+    mode === "entity"
+      ? "LEFT JOIN entities parent_ent ON parent_ent.id = org.parent_entity_id"
       : "";
+  const excelSelect = excelReady
+    ? `u.designation,
+       u.role_category,
+       u.date_of_joining::text AS date_of_joining,`
+    : `NULL::text AS designation,
+       NULL::text AS role_category,
+       NULL::text AS date_of_joining,`;
+  const qualSelect = qualsReady
+    ? `qual.qualification,
+       qual.year::text AS qualification_year,
+       qual.subject AS qualification_subject,
+       qual.institute AS qualification_institute,
+       qual.country AS qualification_country,`
+    : `NULL::text AS qualification,
+       NULL::text AS qualification_year,
+       NULL::text AS qualification_subject,
+       NULL::text AS qualification_institute,
+       NULL::text AS qualification_country,`;
+  const qualJoin = qualsReady
+    ? `
+    LEFT JOIN LATERAL (
+      SELECT eq.qualification, eq.year, eq.subject, eq.institute, eq.country
+      FROM employee_qualifications eq
+      WHERE eq.user_id = u.id
+      ORDER BY eq.is_primary DESC, eq.year DESC NULLS LAST, eq.id DESC
+      LIMIT 1
+    ) qual ON TRUE`
+    : "";
+  const parentEntitySelect =
+    mode === "entity" ? "parent_ent.name AS parent_entity_name," : "NULL::text AS parent_entity_name,";
 
   return `
     SELECT
@@ -111,20 +169,26 @@ function buildUserSelect(mode: UserOrgMode, staffMode: UserStaffMode): string {
       u.email,
       u.first_name,
       u.last_name,
+      ${excelSelect}
       u.system_role,
       u.emp_category,
       u.emp_sub_category,
-      ${staffSelect},
       ${orgIdColumn} AS entity_id,
       org.name AS entity_name,
+      ${parentEntitySelect}
       u.head_id,
       CONCAT(h.first_name, ' ', h.last_name) AS head_name,
+      u.manager_2_id,
+      CONCAT(m2.first_name, ' ', m2.last_name) AS manager_2_name,
+      ${qualSelect}
       u.is_active,
       u.created_at::text
     FROM users u
-    ${staffJoin}
     LEFT JOIN ${orgJoinTable} org ON org.id = ${orgIdColumn}
+    ${parentEntityJoin}
     LEFT JOIN users h ON h.id = u.head_id
+    LEFT JOIN users m2 ON m2.id = u.manager_2_id
+    ${qualJoin}
   `;
 }
 
@@ -145,17 +209,24 @@ function mapUserRow(row: UserRow): UserRecord {
     email: row.email,
     firstName: row.first_name,
     lastName: row.last_name,
+    designation: row.designation,
+    roleCategory: row.role_category,
+    dateOfJoining: row.date_of_joining,
     systemRole: row.system_role,
     empCategory: row.emp_category,
     empSubCategory: row.emp_sub_category,
-    staffCategoryId: row.staff_category_id,
-    staffCategoryName: row.staff_category_name,
-    staffSubCategoryId: row.staff_sub_category_id,
-    staffSubCategoryName: row.staff_sub_category_name,
-    entityId: row.entity_id,
+    entityId: row.entity_id != null ? Number(row.entity_id) : null,
     entityName: row.entity_name,
+    parentEntityName: row.parent_entity_name,
     headId: row.head_id ? Number(row.head_id) : null,
     headName: row.head_name,
+    manager2Id: row.manager_2_id ? Number(row.manager_2_id) : null,
+    manager2Name: row.manager_2_name,
+    qualification: row.qualification,
+    qualificationYear: row.qualification_year,
+    qualificationSubject: row.qualification_subject,
+    qualificationInstitute: row.qualification_institute,
+    qualificationCountry: row.qualification_country,
     isActive: row.is_active,
     createdAt: row.created_at,
   };
@@ -198,22 +269,36 @@ async function assertEntityExists(entityId: number | null): Promise<void> {
   }
 }
 
-async function assertValidHead(
+async function assertValidManager(
   userId: number | null,
-  headId: number | null,
+  managerId: number | null,
+  label: string,
 ): Promise<void> {
-  if (headId === null) {
+  if (managerId === null) {
     return;
   }
 
-  if (userId !== null && headId === userId) {
-    throw new UserError("A user cannot be their own head.", 400);
+  if (userId !== null && managerId === userId) {
+    throw new UserError(`A user cannot be their own ${label}.`, 400);
   }
 
-  const result = await db.query(`SELECT id FROM users WHERE id = $1`, [headId]);
+  const result = await db.query(`SELECT id FROM users WHERE id = $1`, [managerId]);
 
   if (result.rows.length === 0) {
-    throw new UserError("Head user not found.", 404);
+    throw new UserError(`${label} user not found.`, 404);
+  }
+}
+
+async function assertValidManagers(
+  userId: number | null,
+  headId: number | null,
+  manager2Id: number | null,
+): Promise<void> {
+  await assertValidManager(userId, headId, "Manager 1");
+  await assertValidManager(userId, manager2Id, "Manager 2");
+
+  if (headId !== null && manager2Id !== null && headId === manager2Id) {
+    throw new UserError("Manager 1 and Manager 2 cannot be the same person.", 400);
   }
 }
 
@@ -228,21 +313,85 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
-  const mode = await getUserOrgMode();
-  const staffMode = await getUserStaffMode();
+  await ensureManager2Column();
+
+  const [mode, excelReady, qualsReady] = await Promise.all([
+    getUserOrgMode(),
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
+  ]);
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, staffMode)}
+    `${buildUserSelect(mode, excelReady, qualsReady)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
 
   return result.rows.map(mapUserRow);
 }
 
-export async function getUserById(id: number): Promise<UserRecord | null> {
-  const mode = await getUserOrgMode();
-  const staffMode = await getUserStaffMode();
+/**
+ * Slim user rows for filter facets / head pickers (no qualifications join).
+ */
+export async function listUsersOverview(): Promise<UserRecord[]> {
+  await ensureManager2Column();
+
+  const [mode, excelReady] = await Promise.all([
+    getUserOrgMode(),
+    hasExcelSheetColumns(),
+  ]);
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, staffMode)}
+    `${buildUserSelect(mode, excelReady, false)}
+     ORDER BY u.last_name ASC, u.first_name ASC`,
+  );
+
+  return result.rows.map(mapUserRow);
+}
+
+/** Full user rows for a page of employee IDs (preserves request order). */
+export async function listUsersByEmployeeIds(
+  employeeIds: string[],
+): Promise<UserRecord[]> {
+  if (employeeIds.length === 0) {
+    return [];
+  }
+
+  const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  await ensureManager2Column();
+
+  const [mode, excelReady, qualsReady] = await Promise.all([
+    getUserOrgMode(),
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
+  ]);
+  const result = await db.query<UserRow>(
+    `${buildUserSelect(mode, excelReady, qualsReady)}
+     WHERE u.employee_id = ANY($1::text[])`,
+    [uniqueIds],
+  );
+
+  const byEmployeeId = new Map(
+    result.rows.map((row) => [row.employee_id, mapUserRow(row)]),
+  );
+
+  return uniqueIds
+    .map((employeeId) => byEmployeeId.get(employeeId))
+    .filter((user): user is UserRecord => user != null);
+}
+
+
+export async function getUserById(id: number): Promise<UserRecord | null> {
+  await ensureManager2Column();
+
+  const [mode, excelReady, qualsReady] = await Promise.all([
+    getUserOrgMode(),
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
+  ]);
+  const result = await db.query<UserRow>(
+    `${buildUserSelect(mode, excelReady, qualsReady)}
      WHERE u.id = $1`,
     [id],
   );
@@ -255,12 +404,13 @@ export async function getUserById(id: number): Promise<UserRecord | null> {
 }
 
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {
+  await ensureManager2Column();
+
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
-  const staffMode = await getUserStaffMode();
 
   await assertEntityExists(normalized.entityId);
-  await assertValidHead(null, normalized.headId);
+  await assertValidManagers(null, normalized.headId, normalized.manager2Id);
 
   const passwordHash = await bcrypt.hash(input.password, 10);
 
@@ -275,43 +425,27 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
          system_role,
          emp_category,
          emp_sub_category,
-         ${staffMode === "dynamic" ? "staff_category_id," : ""}
-         ${staffMode === "dynamic" ? "staff_sub_category_id," : ""}
          ${mode === "entity" ? "entity_id" : "department_id"},
          head_id,
+         manager_2_id,
          is_active
        )
-       VALUES (${staffMode === "dynamic" ? "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13" : "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11"})
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id`,
-      staffMode === "dynamic"
-        ? [
-            normalized.employeeId,
-            normalized.email,
-            passwordHash,
-            normalized.firstName,
-            normalized.lastName,
-            normalized.systemRole,
-            normalized.empCategory,
-            normalized.empSubCategory,
-            normalized.staffCategoryId,
-            normalized.staffSubCategoryId,
-            normalized.entityId,
-            normalized.headId,
-            normalized.isActive,
-          ]
-        : [
-            normalized.employeeId,
-            normalized.email,
-            passwordHash,
-            normalized.firstName,
-            normalized.lastName,
-            normalized.systemRole,
-            normalized.empCategory,
-            normalized.empSubCategory,
-            normalized.entityId,
-            normalized.headId,
-            normalized.isActive,
-          ],
+      [
+        normalized.employeeId,
+        normalized.email,
+        passwordHash,
+        normalized.firstName,
+        normalized.lastName,
+        normalized.systemRole,
+        normalized.empCategory,
+        normalized.empSubCategory,
+        normalized.entityId,
+        normalized.headId,
+        normalized.manager2Id,
+        normalized.isActive,
+      ],
     );
 
     const created = await getUserById(Number(result.rows[0].id));
@@ -333,8 +467,8 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
     if (isForeignKeyViolation(error)) {
       throw new UserError(
         mode === "entity"
-          ? "Invalid entity or head reference."
-          : "Invalid department or head reference.",
+          ? "Invalid entity, head, or Manager 2 reference."
+          : "Invalid department, head, or Manager 2 reference.",
         400,
       );
     }
@@ -347,115 +481,106 @@ export async function updateUser(
   id: number,
   input: UpdateUserInput,
 ): Promise<UserRecord> {
+  await ensureManager2Column();
+
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
-  const staffMode = await getUserStaffMode();
+  const [excelReady, qualsReady] = await Promise.all([
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
+  ]);
 
   await assertEntityExists(normalized.entityId);
-  await assertValidHead(id, normalized.headId);
+  await assertValidManagers(id, normalized.headId, normalized.manager2Id);
 
   const passwordHash = input.password
     ? await bcrypt.hash(input.password, 10)
     : null;
 
+  const setClauses: string[] = [
+    "employee_id = $1",
+    "email = $2",
+    "first_name = $3",
+    "last_name = $4",
+    "system_role = $5",
+    "emp_category = $6",
+    "emp_sub_category = $7",
+  ];
+  const values: unknown[] = [
+    normalized.employeeId,
+    normalized.email,
+    normalized.firstName,
+    normalized.lastName,
+    normalized.systemRole,
+    normalized.empCategory,
+    normalized.empSubCategory,
+  ];
+
+  if (passwordHash) {
+    values.push(passwordHash);
+    setClauses.push(`password_hash = $${values.length}`);
+  }
+
+  values.push(normalized.entityId);
+  setClauses.push(
+    `${mode === "entity" ? "entity_id" : "department_id"} = $${values.length}`,
+  );
+
+  values.push(normalized.headId);
+  setClauses.push(`head_id = $${values.length}`);
+
+  values.push(normalized.manager2Id);
+  setClauses.push(`manager_2_id = $${values.length}`);
+
+  values.push(normalized.isActive);
+  setClauses.push(`is_active = $${values.length}`);
+
+  if (excelReady) {
+    if (normalized.designation !== undefined) {
+      values.push(normalized.designation);
+      setClauses.push(`designation = $${values.length}`);
+    }
+    if (normalized.roleCategory !== undefined) {
+      values.push(normalized.roleCategory);
+      setClauses.push(`role_category = $${values.length}`);
+    }
+    if (normalized.dateOfJoining !== undefined) {
+      values.push(normalized.dateOfJoining);
+      setClauses.push(`date_of_joining = $${values.length}`);
+    }
+  }
+
+  values.push(id);
+
   try {
-    const result = passwordHash
-      ? await db.query(
-          `UPDATE users
-           SET employee_id = $1,
-               email = $2,
-               password_hash = $3,
-               first_name = $4,
-               last_name = $5,
-               system_role = $6,
-               emp_category = $7,
-               emp_sub_category = $8,
-               ${staffMode === "dynamic" ? "staff_category_id = $9," : ""}
-               ${staffMode === "dynamic" ? "staff_sub_category_id = $10," : ""}
-               ${mode === "entity" ? "entity_id" : "department_id"} = ${staffMode === "dynamic" ? "$11" : "$9"},
-               head_id = ${staffMode === "dynamic" ? "$12" : "$10"},
-               is_active = ${staffMode === "dynamic" ? "$13" : "$11"}
-           WHERE id = ${staffMode === "dynamic" ? "$14" : "$12"}`,
-          staffMode === "dynamic"
-            ? [
-                normalized.employeeId,
-                normalized.email,
-                passwordHash,
-                normalized.firstName,
-                normalized.lastName,
-                normalized.systemRole,
-                normalized.empCategory,
-                normalized.empSubCategory,
-                normalized.staffCategoryId,
-                normalized.staffSubCategoryId,
-                normalized.entityId,
-                normalized.headId,
-                normalized.isActive,
-                id,
-              ]
-            : [
-                normalized.employeeId,
-                normalized.email,
-                passwordHash,
-                normalized.firstName,
-                normalized.lastName,
-                normalized.systemRole,
-                normalized.empCategory,
-                normalized.empSubCategory,
-                normalized.entityId,
-                normalized.headId,
-                normalized.isActive,
-                id,
-              ],
-        )
-      : await db.query(
-          `UPDATE users
-           SET employee_id = $1,
-               email = $2,
-               first_name = $3,
-               last_name = $4,
-               system_role = $5,
-               emp_category = $6,
-               emp_sub_category = $7,
-               ${staffMode === "dynamic" ? "staff_category_id = $8," : ""}
-               ${staffMode === "dynamic" ? "staff_sub_category_id = $9," : ""}
-               ${mode === "entity" ? "entity_id" : "department_id"} = ${staffMode === "dynamic" ? "$10" : "$8"},
-               head_id = ${staffMode === "dynamic" ? "$11" : "$9"},
-               is_active = ${staffMode === "dynamic" ? "$12" : "$10"}
-           WHERE id = ${staffMode === "dynamic" ? "$13" : "$11"}`,
-          staffMode === "dynamic"
-            ? [
-                normalized.employeeId,
-                normalized.email,
-                normalized.firstName,
-                normalized.lastName,
-                normalized.systemRole,
-                normalized.empCategory,
-                normalized.empSubCategory,
-                normalized.staffCategoryId,
-                normalized.staffSubCategoryId,
-                normalized.entityId,
-                normalized.headId,
-                normalized.isActive,
-                id,
-              ]
-            : [
-                normalized.employeeId,
-                normalized.email,
-                normalized.firstName,
-                normalized.lastName,
-                normalized.systemRole,
-                normalized.empCategory,
-                normalized.empSubCategory,
-                normalized.entityId,
-                normalized.headId,
-                normalized.isActive,
-                id,
-              ],
-        );
+    const result = await db.query(
+      `UPDATE users
+       SET ${setClauses.join(",\n           ")}
+       WHERE id = $${values.length}`,
+      values,
+    );
 
     if (result.rowCount === 0) {
       throw new UserError("User not found.", 404);
+    }
+
+    if (qualsReady) {
+      const hasQualificationUpdate =
+        normalized.qualification !== undefined ||
+        normalized.qualificationYear !== undefined ||
+        normalized.qualificationSubject !== undefined ||
+        normalized.qualificationInstitute !== undefined ||
+        normalized.qualificationCountry !== undefined;
+
+      if (hasQualificationUpdate) {
+        await upsertPrimaryQualification(id, {
+          qualification: normalized.qualification ?? null,
+          year: normalized.qualificationYear ?? null,
+          subject: normalized.qualificationSubject ?? null,
+          institute: normalized.qualificationInstitute ?? null,
+          country: normalized.qualificationCountry ?? null,
+        });
+      }
     }
 
     const updated = await getUserById(id);
@@ -477,14 +602,97 @@ export async function updateUser(
     if (isForeignKeyViolation(error)) {
       throw new UserError(
         mode === "entity"
-          ? "Invalid entity or head reference."
-          : "Invalid department or head reference.",
+          ? "Invalid entity, head, or Manager 2 reference."
+          : "Invalid department, head, or Manager 2 reference.",
         400,
       );
     }
 
     throw error;
   }
+}
+
+async function upsertPrimaryQualification(
+  userId: number,
+  data: {
+    qualification: string | null;
+    year: number | null;
+    subject: string | null;
+    institute: string | null;
+    country: string | null;
+  },
+): Promise<void> {
+  const allEmpty =
+    !data.qualification &&
+    data.year == null &&
+    !data.subject &&
+    !data.institute &&
+    !data.country;
+
+  const existing = await db.query<{ id: string }>(
+    `SELECT id
+     FROM employee_qualifications
+     WHERE user_id = $1
+     ORDER BY is_primary DESC, year DESC NULLS LAST, id DESC
+     LIMIT 1`,
+    [userId],
+  );
+
+  if (allEmpty) {
+    if (existing.rows[0]) {
+      await db.query(`DELETE FROM employee_qualifications WHERE id = $1`, [
+        existing.rows[0].id,
+      ]);
+    }
+    return;
+  }
+
+  if (!data.qualification) {
+    throw new UserError("Qualification is required when saving qualification details.", 400);
+  }
+
+  if (existing.rows[0]) {
+    await db.query(
+      `UPDATE employee_qualifications
+       SET qualification = $2,
+           year = $3,
+           subject = $4,
+           institute = $5,
+           country = $6,
+           is_primary = TRUE,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [
+        existing.rows[0].id,
+        data.qualification,
+        data.year,
+        data.subject,
+        data.institute,
+        data.country,
+      ],
+    );
+    return;
+  }
+
+  await db.query(
+    `INSERT INTO employee_qualifications (
+       user_id,
+       qualification,
+       year,
+       subject,
+       institute,
+       country,
+       is_primary
+     ) VALUES ($1, $2, $3, $4, $5, $6, TRUE)`,
+    [
+      userId,
+      data.qualification,
+      data.year,
+      data.subject,
+      data.institute,
+      data.country,
+    ],
+  );
 }
 
 export async function deleteUser(id: number): Promise<void> {

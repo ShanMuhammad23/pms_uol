@@ -2,22 +2,36 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { DASHBOARD_QUERY_CACHE } from "@/app/queries/query-cache";
 import { queryKeys } from "@/app/queries/keys";
-import { fetchEntities } from "@/lib/queries/entities-client";
-import { fetchStaffCategoriesWithSubCategories } from "@/lib/queries/staff-categories-client";
+import {
+  fetchDashboardEntities,
+  fetchEntities,
+} from "@/lib/queries/entities-client";
+import { fetchUniqueDesignations } from "@/lib/queries/designations-client";
 import type { EntityRecord } from "@/types/entities";
 
 export function useEntitiesQuery() {
   return useQuery({
     queryKey: queryKeys.entities,
     queryFn: fetchEntities,
+    ...DASHBOARD_QUERY_CACHE,
   });
 }
 
-export function useStaffCategoriesWithSubCategoriesQuery() {
+export function useDashboardEntitiesQuery() {
   return useQuery({
-    queryKey: queryKeys.staffCategoriesWithSubCategories,
-    queryFn: fetchStaffCategoriesWithSubCategories,
+    queryKey: [...queryKeys.entities, "dashboard"],
+    queryFn: fetchDashboardEntities,
+    ...DASHBOARD_QUERY_CACHE,
+  });
+}
+
+export function useUniqueDesignationsQuery() {
+  return useQuery({
+    queryKey: queryKeys.designations,
+    queryFn: fetchUniqueDesignations,
+    ...DASHBOARD_QUERY_CACHE,
   });
 }
 

@@ -1,4 +1,4 @@
-import type { FormTemplateRecord } from "@/types/forms";
+import type { AppraisalStatus, FormTemplateRecord } from "@/types/forms";
 
 export type EmployeeFormStatus = "NOT_STARTED" | "DRAFT" | "SUBMITTED";
 
@@ -6,12 +6,21 @@ export interface AssignedFormListItem {
   templateId: number;
   title: string;
   description: string | null;
-  staffCategoryName: string | null;
-  staffSubCategoryName: string | null;
   questionCount: number;
-  status: EmployeeFormStatus;
+  /** Workflow status from appraisals.status (dashboard-aligned). */
+  status: AppraisalStatus;
+  selfAssessmentEnabled: boolean;
   submittedAt: string | null;
   updatedAt: string | null;
+}
+
+export interface EmployeeFormAnswerAttachment {
+  id: number;
+  questionId: number;
+  originalFilename: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  createdAt: string;
 }
 
 export interface EmployeeFormAnswerRecord {
@@ -19,6 +28,8 @@ export interface EmployeeFormAnswerRecord {
   textResponse: string | null;
   selectedOptionId: number | null;
   pointsEarned: number;
+  remarks: string | null;
+  attachments: EmployeeFormAnswerAttachment[];
 }
 
 export interface EmployeeFormDetail {
@@ -29,6 +40,11 @@ export interface EmployeeFormDetail {
   answers: EmployeeFormAnswerRecord[];
   rawScore: number;
   maxRawScore: number;
+  selfAssessmentEnabled: boolean;
+  assessmentEligibility: boolean;
+  ineligibilityReason: string | null;
+  headName: string | null;
+  manager2Name: string | null;
 }
 
 export interface EmployeeFormAnswerInput {
@@ -36,9 +52,20 @@ export interface EmployeeFormAnswerInput {
   textResponse?: string | null;
   selectedOptionId?: number | null;
   pointsEarned?: number;
+  remarks?: string | null;
 }
 
 export interface SaveEmployeeFormInput {
   answers: EmployeeFormAnswerInput[];
   submit?: boolean;
+}
+
+export interface ManagerReviewAnswerInput {
+  questionId: number;
+  pointsEarned?: number;
+  remarks?: string | null;
+}
+
+export interface SaveManagerReviewInput {
+  answers: ManagerReviewAnswerInput[];
 }

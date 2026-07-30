@@ -11,13 +11,26 @@
     "db:migrate:form-engine": "node scripts/migrate-form-engine.mjs",
     "db:migrate:sub-category-increment-matrices": "node scripts/migrate-sub-category-increment-matrices.mjs",
     "db:migrate:excel-sheet-columns": "node scripts/migrate-excel-sheet-columns.mjs",
-    "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs"
+    "db:migrate:role-category": "node scripts/migrate-role-category-column.mjs",
+    "db:migrate:manager-2": "node scripts/migrate-user-manager-2.mjs",
+    "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs",
+    "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
+    "db:update:emails-from-excel": "node scripts/update-emails-from-excel.mjs",
+    "db:seed:qualifications": "node scripts/seed-qualifications-from-excel.mjs",
+    "db:seed:nonacademic-employees": "node scripts/seed-nonacademic-employees-from-excel.mjs",
+    "db:seed:centres-blue-collar": "node scripts/seed-centres-blue-collar-from-excel.mjs",
+    "db:recompute:eligibility": "node scripts/recompute-appraisal-eligibility.mjs",
+    "db:check:duplicate-entities": "node scripts/check-duplicate-entities.mjs",
+    "db:merge:duplicate-entities": "node scripts/merge-duplicate-entities.mjs",
+    "db:normalize:entity-names": "node scripts/normalize-entity-names.mjs"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",
     "@tanstack/react-query": "^5.100.14",
     "bcryptjs": "^3.0.3",
     "framer-motion": "^12.40.0",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.17.0",
     "motion": "^12.40.0",
     "next": "16.2.7",
@@ -38,6 +51,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "xlsx": "^0.18.5"
   }
 }

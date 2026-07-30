@@ -22,7 +22,8 @@ export const ELIGIBILITY_CONFIG: Record<
 > = {
   "Fully Eligible": { light: "#059669", dark: "#34d399" },
   "Partially Eligible": { light: "#d97706", dark: "#fbbf24" },
-  "Not Eligible": { light: "#64748b", dark: "#94a3b8" },
+  "Not Eligible": { light: "#dc2626", dark: "#f87171" },
+  Ineligible: { light: "#64748b", dark: "#94a3b8" },
 };
 
 export const CATEGORY_DISTRIBUTION = [

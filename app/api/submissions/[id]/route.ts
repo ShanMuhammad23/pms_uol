@@ -1,16 +1,34 @@
 import { NextResponse } from "next/server";
-import { requireSubmissionReviewerApi } from "@/lib/auth/require-submission-reviewer";
+import {
+  assertSubmissionAccessible,
+  submissionAccessErrorResponse,
+  SubmissionAccessError,
+} from "@/lib/auth/submission-access";
+import { isHeadRole } from "@/lib/auth/home-path";
+import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
+import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-reviewer";
+import { managerCanReviewSubmission } from "@/app/helpers/manager-review";
 import {
   FormSubmissionError,
   getFormSubmissionById,
+  getFormSubmissionSummaryById,
+  updateAppraisalRemarks,
+  updateAppraisalScoreAdjustments,
+  type AppraisalRemarksField,
+  type AppraisalScoreAdjustmentField,
 } from "@/lib/queries/form-submissions";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+const REMARKS_FIELDS = [
+  "remarksEvaluation",
+  "remarksCompensation",
+] as const satisfies readonly AppraisalRemarksField[];
+
 export async function GET(_request: Request, context: RouteContext) {
-  const auth = await requireSubmissionReviewerApi();
+  const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -23,7 +41,37 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   try {
-    const submission = await getFormSubmissionById(submissionId);
+    const summary = await getFormSubmissionSummaryById(submissionId);
+
+    if (!summary) {
+      return NextResponse.json({ error: "Submission not found." }, { status: 404 });
+    }
+
+    await assertSubmissionAccessible(auth, summary);
+
+    const role = auth.user?.role;
+    const reviewerUserId = auth.user?.id ? Number(auth.user.id) : null;
+    const canEditManagerReview =
+      summary.status === "PENDING_HEAD_REVIEW" &&
+      (canReviewSubmissions(role) ||
+        (isHeadRole(role) &&
+          reviewerUserId != null &&
+          Number.isFinite(reviewerUserId) &&
+          managerCanReviewSubmission(reviewerUserId, summary)));
+
+    const canEditHrReview =
+      canReviewSubmissions(role) &&
+      summary.status !== "PENDING_SELF_ASSESSMENT";
+
+    const canEditScoreAdjustments = canReviewSubmissions(role);
+
+    const submission = await getFormSubmissionById(submissionId, {
+      reviewerUserId,
+      seedManagerAnswers: canEditManagerReview || canEditHrReview,
+      canEditManagerReview,
+      canEditHrReview,
+      canEditScoreAdjustments,
+    });
 
     if (!submission) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
@@ -31,6 +79,10 @@ export async function GET(_request: Request, context: RouteContext) {
 
     return NextResponse.json(submission);
   } catch (error) {
+    if (error instanceof SubmissionAccessError) {
+      return submissionAccessErrorResponse(error);
+    }
+
     if (error instanceof FormSubmissionError) {
       return NextResponse.json(
         { error: error.message },
@@ -41,6 +93,125 @@ export async function GET(_request: Request, context: RouteContext) {
     console.error("Failed to load form submission:", error);
     return NextResponse.json(
       { error: "Failed to load form submission." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(request: Request, context: RouteContext) {
+  const auth = await requireSubmissionAccessApi();
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const { id } = await context.params;
+  const submissionId = Number(id);
+
+  if (Number.isNaN(submissionId)) {
+    return NextResponse.json({ error: "Invalid submission id." }, { status: 400 });
+  }
+
+  try {
+    const summary = await getFormSubmissionSummaryById(submissionId);
+
+    if (!summary) {
+      return NextResponse.json({ error: "Submission not found." }, { status: 404 });
+    }
+
+    await assertSubmissionAccessible(auth, summary);
+
+    const body = (await request.json()) as Record<string, unknown>;
+
+    // Handle score adjustment fields (admin-only)
+    const SCORE_ADJ_FIELDS: AppraisalScoreAdjustmentField[] = [
+      "creditHrsErpScoreAdj",
+      "pubOricScoreAdj",
+      "qecScoreAdj",
+      "calibrationFactor",
+      "calibratedScoreNumeric",
+      "initialScoreNumeric",
+    ];
+    const scoreAdjField = SCORE_ADJ_FIELDS.find((f) => f in body);
+
+    if (scoreAdjField) {
+      if (!canReviewSubmissions(auth.user?.role)) {
+        return NextResponse.json(
+          { error: "Forbidden: admin role required to edit score adjustments." },
+          { status: 403 },
+        );
+      }
+
+      if (!summary.assessmentEligibility) {
+        return NextResponse.json(
+          { error: "Score editing is disabled: employee is not eligible for assessment." },
+          { status: 403 },
+        );
+      }
+
+      const rawValue = body[scoreAdjField];
+      const numValue =
+        rawValue === null || rawValue === undefined || rawValue === ""
+          ? null
+          : typeof rawValue === "number"
+            ? rawValue
+            : Number(rawValue);
+
+      if (numValue !== null && !Number.isFinite(numValue)) {
+        return NextResponse.json(
+          { error: `${scoreAdjField} must be a valid number or null.` },
+          { status: 400 },
+        );
+      }
+
+      const updated = await updateAppraisalScoreAdjustments(submissionId, {
+        [scoreAdjField]: numValue,
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    // Handle remarks fields
+    const field = REMARKS_FIELDS.find((candidate) => candidate in body);
+
+    if (!field) {
+      return NextResponse.json(
+        {
+          error:
+            "One of remarksEvaluation, remarksCompensation, creditHrsErpScoreAdj, pubOricScoreAdj, qecScoreAdj, calibrationFactor, or calibratedScoreNumeric is required.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const rawValue = body[field];
+    if (rawValue !== null && typeof rawValue !== "string") {
+      return NextResponse.json(
+        { error: `${field} must be a string or null.` },
+        { status: 400 },
+      );
+    }
+
+    const value =
+      typeof rawValue === "string" ? rawValue.trim() || null : null;
+
+    const updated = await updateAppraisalRemarks(submissionId, field, value);
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    if (error instanceof SubmissionAccessError) {
+      return submissionAccessErrorResponse(error);
+    }
+
+    if (error instanceof FormSubmissionError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.statusCode },
+      );
+    }
+
+    console.error("Failed to update remarks:", error);
+    return NextResponse.json(
+      { error: "Failed to update remarks." },
       { status: 500 },
     );
   }

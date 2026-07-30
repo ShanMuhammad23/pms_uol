@@ -7,7 +7,7 @@
 -- 1. EXTENSIONS & ENUMS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TYPE user_role AS ENUM ('EMPLOYEE', 'HEAD', 'HR', 'BOARD', 'SUPER_ADMIN');
+CREATE TYPE user_role AS ENUM ('EMPLOYEE', 'MANAGER', 'HR', 'BOARD', 'SUPER_ADMIN');
 CREATE TYPE employee_category AS ENUM ('ACADEMIC', 'SUPPORT_STAFF', 'BLUE_COLLAR', 'ADMINISTRATION');
 
 CREATE TYPE sub_category AS ENUM (
@@ -46,13 +46,15 @@ CREATE TABLE users (
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
     designation VARCHAR(150), -- Designation
+    role_category VARCHAR(150), -- Role Category (free text; not staff category)
     grade_group VARCHAR(50), -- Gp
     date_of_joining DATE, -- DOJ
     system_role user_role NOT NULL DEFAULT 'EMPLOYEE',
-    emp_category employee_category NOT NULL, -- Role Category (legacy enum)
+    emp_category employee_category NOT NULL, -- Legacy enum (forms routing)
     emp_sub_category sub_category NOT NULL,
     department_id INT REFERENCES departments(id) ON DELETE RESTRICT,
-    head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, 
+    head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 1
+    manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 2
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,15 +73,20 @@ CREATE TABLE appraisal_cycles (
 -- =========================================================================
 
 -- Form Layout Definition Map
+-- Forms are assigned to employees via employee_form_assignments (not by category).
+-- target_category / target_sub_category remain for legacy compatibility.
 CREATE TABLE form_templates (
     id BIGSERIAL PRIMARY KEY,
     title VARCHAR(150) NOT NULL, -- e.g., 'Annual Faculty Evaluation Form'
     description TEXT,
     cycle_id INT NOT NULL REFERENCES appraisal_cycles(id) ON DELETE CASCADE,
     
-    -- Routing Matrix Filters (Ensures right form displays for the selected tiers)
+    -- Legacy fields (forms are no longer routed by category)
     target_category employee_category NOT NULL, -- Academic | Supportive | Blue Collar
     target_sub_category sub_category NOT NULL,  -- General | Skilled | Professional
+    
+    -- When FALSE, the form skips self-assessment and goes directly to manager review
+    self_assessment_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     
     created_by BIGINT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -122,6 +129,41 @@ CREATE TABLE question_options (
     sort_order INT NOT NULL DEFAULT 0
 );
 
+-- Employee-level form assignment (many templates can be assigned per employee).
+CREATE TABLE employee_form_assignments (
+    id BIGSERIAL PRIMARY KEY,
+    employee_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+    self_assessment_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_employee_template_assignment UNIQUE (employee_id, template_id)
+);
+
+CREATE INDEX idx_employee_form_assignments_employee
+    ON employee_form_assignments(employee_id);
+
+CREATE INDEX idx_employee_form_assignments_template
+    ON employee_form_assignments(template_id);
+
+-- Direct Score Entry assignments — employees marked for direct score entry
+-- without any form assignment, self-assessment, or manager review workflow.
+-- Authorised users (HR, Board, Super Admin) can enter scores directly in the dashboard.
+CREATE TABLE direct_score_entry_assignments (
+    id BIGSERIAL PRIMARY KEY,
+    employee_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    cycle_id INT NOT NULL REFERENCES appraisal_cycles(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_direct_score_entry_assignment UNIQUE (employee_id, cycle_id)
+);
+
+CREATE INDEX idx_direct_score_entry_assignments_employee
+    ON direct_score_entry_assignments(employee_id);
+
+CREATE INDEX idx_direct_score_entry_assignments_cycle
+    ON direct_score_entry_assignments(cycle_id);
+
 -- =========================================================================
 -- CORE PROCESS ENGINE & RUNTIME DATA WORKSPACE
 -- =========================================================================
@@ -132,6 +174,7 @@ CREATE TABLE appraisals (
     cycle_id INT NOT NULL REFERENCES appraisal_cycles(id) ON DELETE RESTRICT,
     template_id BIGINT REFERENCES form_templates(id) ON DELETE SET NULL, -- Form structure context
     status appraisal_status NOT NULL DEFAULT 'PENDING_SELF_ASSESSMENT',
+    manager_level INT NOT NULL DEFAULT 1,
     
     -- Automatic aggregate tracking calculated on submission runtime
     system_raw_score INT DEFAULT 0, 
@@ -142,16 +185,19 @@ CREATE TABLE appraisals (
     -- Adjustments + normalization pipeline
     credit_hrs_erp_score_adj NUMERIC(10, 2),
     pub_oric_score_adj NUMERIC(10, 2),
+    qec_score_adj NUMERIC(10, 2),
     calibration_factor NUMERIC(10, 4),
     normalized_score NUMERIC(10, 2),
     calibrated_score_numeric NUMERIC(10, 2), 
     calibrated_rating performance_rating, -- Rating (N)
     performance_quartile_id BIGINT, -- FK added after performance_quartiles exists
 
-    -- Eligibility / evaluation remarks
+    -- Eligibility / evaluation remarks (scoped to appraisal cycle financial year)
     uol_experience_years NUMERIC(6, 2),
     is_eligible BOOLEAN,
+    eligibility_status VARCHAR(30), -- Fully Eligible | Partially Eligible | Not Eligible
     applicable_duration VARCHAR(100),
+    applicable_duration_factor NUMERIC(3, 1), -- 1 = full, 0 = none, else months/12
     remarks_evaluation TEXT,
 
     -- Compensation worksheet

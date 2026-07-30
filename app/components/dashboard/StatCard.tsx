@@ -5,7 +5,13 @@ import { motion } from "framer-motion";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { cn } from "@/lib/utils";
 
-export type StatCardTone = "navy" | "amber" | "orange" | "emerald" | "slate";
+export type StatCardTone =
+  | "navy"
+  | "amber"
+  | "orange"
+  | "violet"
+  | "emerald"
+  | "slate";
 
 interface StatCardProps {
   title: string;
@@ -35,38 +41,22 @@ export function StatCard({
 }: StatCardProps) {
   const tones = {
     navy: {
-      border: active ? "border-slate-800 dark:border-slate-600" : "border-slate-200 dark:border-slate-700",
-      bg: "bg-white dark:bg-slate-900",
-      value: "text-slate-900 dark:text-white",
-      top: "from-slate-700 via-slate-600 to-slate-700",
       badge: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
     },
     amber: {
-      border: active ? "border-amber-500 dark:border-amber-400" : "border-amber-200 dark:border-amber-800/50",
-      bg: "bg-white dark:bg-slate-900",
-      value: "text-amber-700 dark:text-amber-400",
-      top: "from-amber-600 via-amber-500 to-amber-600",
       badge: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
     },
     orange: {
-      border: active ? "border-orange-500 dark:border-orange-400" : "border-orange-200 dark:border-orange-800/50",
-      bg: "bg-white dark:bg-slate-900",
-      value: "text-orange-700 dark:text-orange-400",
-      top: "from-orange-600 via-orange-500 to-orange-600",
       badge: "bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400",
     },
+    violet: {
+      badge: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400",
+    },
     emerald: {
-      border: active ? "border-emerald-500 dark:border-emerald-400" : "border-emerald-200 dark:border-emerald-800/50",
-      bg: "bg-white dark:bg-slate-900",
-      value: "text-emerald-700 dark:text-emerald-400",
-      top: "from-emerald-600 via-emerald-500 to-emerald-600",
-      badge: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
+      badge:
+        "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
     },
     slate: {
-      border: active ? "border-slate-500 dark:border-slate-400" : "border-slate-200 dark:border-slate-700",
-      bg: "bg-white dark:bg-slate-900",
-      value: "text-slate-700 dark:text-slate-300",
-      top: "from-slate-500 via-slate-400 to-slate-500",
       badge: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
     },
   };
@@ -81,48 +71,45 @@ export function StatCard({
       whileTap={onClick ? { scale: 0.98 } : undefined}
       onClick={onClick}
       className={cn(
-        "group relative cursor-pointer overflow-hidden rounded-2xl border p-5 shadow-sm transition-all duration-300",
-        active ? "shadow-md ring-1 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950" : "hover:shadow-md",
-        t.border,
-        t.bg,
-        active && tone === "navy" && "ring-slate-400",
-        active && tone === "amber" && "ring-amber-400",
-        active && tone === "orange" && "ring-orange-400",
-        active && tone === "emerald" && "ring-emerald-400",
+        "group flex-1 relative min-w-0 cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-primary p-3 text-white shadow-sm transition-all duration-300 sm:p-4 lg:p-5 dark:border-slate-700",
+        active
+          ? "shadow-md ring-1 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950"
+          : "hover:shadow-md",
       )}
     >
-      <div className={cn("absolute left-0 right-0 top-0 h-1 bg-gradient-to-r", t.top)} />
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-base font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              {title}
-            </p>
-            <span
-              className={cn(
-                "shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums",
-                t.badge,
-              )}
-              title="Completion percentage"
-            >
-              {percentageLabel}
-            </span>
-          </div>
-          <ul className="space-y-1.5">
-            <li className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{awaitingtitle}</span>
-              <span className={cn("text-2xl font-bold tracking-tight tabular-nums", t.value)}>
-                {awaiting}
-              </span>
-            </li>
-            <li className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{completedtitle}</span>
-              <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900 dark:text-white">
-                {completed}
-              </span>
-            </li>
-          </ul>
+      <div className="min-w-0 space-y-2 sm:space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <p className="min-w-0 text-[10px] font-semibold uppercase leading-tight tracking-wider text-white sm:text-xs lg:text-sm">
+            {title}
+          </p>
+          <span
+            className={cn(
+              "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums sm:px-2 sm:text-xs",
+              t.badge,
+            )}
+            title="Completion percentage"
+          >
+            {percentageLabel}
+          </span>
         </div>
+        <ul className="space-y-1 sm:space-y-1.5">
+          <li className="flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-[10px] text-white sm:text-xs">
+              {awaitingtitle}
+            </span>
+            <span className="shrink-0 text-lg font-bold tracking-tight tabular-nums text-white sm:text-xl lg:text-2xl">
+              {awaiting}
+            </span>
+          </li>
+          <li className="flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-[10px] text-white sm:text-xs">
+              {completedtitle}
+            </span>
+            <span className="shrink-0 text-lg font-bold tracking-tight tabular-nums text-white sm:text-xl lg:text-2xl">
+              {completed}
+            </span>
+          </li>
+        </ul>
       </div>
     </motion.div>
   );

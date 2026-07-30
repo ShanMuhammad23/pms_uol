@@ -4,10 +4,9 @@ import Link from "next/link";
 import type { AppraisalCycleRecord, EmployeeCategory, SubCategory } from "@/types/forms";
 import {
   CATEGORY_LABELS,
-  CATEGORY_SUB_MAP,
-  EMPLOYEE_CATEGORIES,
   SUB_CATEGORY_LABELS,
 } from "@/types/forms";
+import FormEmployeeAssignment from "../FormEmployeeAssignment";
 
 interface CategoryAssignmentStepProps {
   appraisalCycles: AppraisalCycleRecord[];
@@ -18,6 +17,8 @@ interface CategoryAssignmentStepProps {
   onCycleChange: (cycleId: number) => void;
   onCategoryChange: (category: EmployeeCategory) => void;
   onSubCategoryChange: (subCategory: SubCategory) => void;
+  templateId?: number;
+  templateTitle: string;
 }
 
 export default function CategoryAssignmentStep({
@@ -29,12 +30,9 @@ export default function CategoryAssignmentStep({
   onCycleChange,
   onCategoryChange,
   onSubCategoryChange,
+  templateId,
+  templateTitle,
 }: CategoryAssignmentStepProps) {
-  const subCategories = targetCategory
-    ? CATEGORY_SUB_MAP[targetCategory]
-    : [];
-  const selectedCycle = appraisalCycles.find((cycle) => cycle.id === cycleId);
-
   return (
     <div className="space-y-6">
       <div>
@@ -80,81 +78,15 @@ export default function CategoryAssignmentStep({
           ) : null}
         </div>
 
-        <div>
-          <label className="mb-2 block text-sm font-medium text-text-primary">
-            Employee Category
-          </label>
-          <select
-            value={targetCategory}
-            onChange={(event) =>
-              onCategoryChange(event.target.value as EmployeeCategory)
-            }
-            className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
-          >
-            <option value="">Select category</option>
-            {EMPLOYEE_CATEGORIES.map((category) => (
-              <option key={category} value={category}>
-                {CATEGORY_LABELS[category]}
-              </option>
-            ))}
-          </select>
-          {errors.targetCategory ? (
-            <p className="mt-1 text-xs text-red-600">{errors.targetCategory}</p>
-          ) : null}
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm font-medium text-text-primary">
-            Sub-Category
-          </label>
-          <select
-            value={targetSubCategory}
-            onChange={(event) =>
-              onSubCategoryChange(event.target.value as SubCategory)
-            }
-            disabled={!targetCategory}
-            className="h-11 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15"
-          >
-            <option value="">Select sub-category</option>
-            {subCategories.map((subCategory) => (
-              <option key={subCategory} value={subCategory}>
-                {SUB_CATEGORY_LABELS[subCategory]}
-              </option>
-            ))}
-          </select>
-          {errors.targetSubCategory ? (
-            <p className="mt-1 text-xs text-red-600">
-              {errors.targetSubCategory}
-            </p>
-          ) : null}
-        </div>
+        {targetCategory && targetSubCategory ? (
+          <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-950/40">
+            <span className="text-foreground/60">Target audience:</span>{" "}
+            <span className="font-medium text-text-primary">
+              {CATEGORY_LABELS[targetCategory]} · {SUB_CATEGORY_LABELS[targetSubCategory]}
+            </span>
+          </div>
+        ) : null}
       </div>
-
-      {targetCategory && targetSubCategory ? (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-text-primary">
-          This form will be shown to{" "}
-          <span className="font-semibold">
-            {CATEGORY_LABELS[targetCategory]}
-          </span>{" "}
-          employees in the{" "}
-          <span className="font-semibold">
-            {SUB_CATEGORY_LABELS[targetSubCategory]}
-          </span>{" "}
-          sub-category
-          {selectedCycle ? (
-            <>
-              {" "}
-              during appraisal cycle{" "}
-              <span className="font-semibold">
-                FY {selectedCycle.fiscalYear}
-              </span>
-            </>
-          ) : (
-            " during the selected appraisal cycle"
-          )}
-          .
-        </div>
-      ) : null}
 
       {appraisalCycles.length === 0 ? (
         <p className="text-xs text-foreground/70">
@@ -166,6 +98,14 @@ export default function CategoryAssignmentStep({
           .
         </p>
       ) : null}
+
+      {templateId ? (
+        <FormEmployeeAssignment templateId={templateId} templateTitle={templateTitle} />
+      ) : (
+        <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm text-text-primary">
+          Employee assignment will be available after you publish this form.
+        </div>
+      )}
     </div>
   );
 }

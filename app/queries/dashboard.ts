@@ -1,12 +1,16 @@
 "use client";
 
+import { useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { useDashboardChartMetrics } from "@/app/queries/charts";
 import { useDashboardFilters } from "@/app/queries/dashboard-filters";
-import { useFormSubmissionsQuery } from "@/app/queries/forms";
 import {
-  useEntitiesQuery,
-  useSortedEntities,
-  useStaffCategoriesWithSubCategoriesQuery,
+  useDashboardOverviewQuery,
+  useFormSubmissionsQuery,
+} from "@/app/queries/forms";
+import {
+  useDashboardEntitiesQuery,
+  useUniqueDesignationsQuery,
 } from "@/app/queries/organization";
 import {
   useActiveFinancialYearId,
@@ -15,10 +19,38 @@ import {
   useMatrixForDistribution,
   usePerformanceMatrixQuery,
 } from "@/app/queries/performance";
+import { matchesSubmissionFilters, matchesSubmissionFiltersExcluding } from "@/app/helpers/dashboard-filters";
 import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
+import { submissionVisibleToHead } from "@/app/helpers/manager-review";
+import { countEligibleSubmissions } from "@/app/helpers/dashboard-workflow-stats";
+import { isHeadRole } from "@/lib/auth/home-path";
+import type { FormSubmissionListItem } from "@/types/form-submissions";
+
+function scopeSubmissionsForHead(
+  submissions: FormSubmissionListItem[],
+  viewerUserId: number | null,
+  headEntityId: number | null,
+  entities: Parameters<typeof submissionVisibleToHead>[3],
+) {
+  if (viewerUserId == null || !Number.isFinite(viewerUserId)) {
+    return submissions;
+  }
+
+  return submissions.filter((submission) =>
+    submissionVisibleToHead(viewerUserId, headEntityId, submission, entities),
+  );
+}
 
 export function useDashboardPage() {
   const isDarkMode = useIsDarkMode();
+  const { data: session } = useSession();
+  const isHead = isHeadRole(session?.user?.role);
+  const headEntityId =
+    isHead && session?.user?.entityId != null
+      ? Number(session.user.entityId)
+      : null;
+  const viewerUserId =
+    isHead && session?.user?.id != null ? Number(session.user.id) : null;
 
   const { data: financialYears } = useFinancialYearsQuery();
   const activeFinancialYearId = useActiveFinancialYearId(financialYears);
@@ -29,10 +61,16 @@ export function useDashboardPage() {
   const { data: institutionalQuotaRows } =
     useInstitutionalQuotaChartQuery(activeFinancialYearId);
 
-  const { data: staffCategories = [], isLoading: staffCategoriesLoading } =
-    useStaffCategoriesWithSubCategoriesQuery();
+  const { data: entities = [], isLoading: entitiesLoading } =
+    useDashboardEntitiesQuery();
 
-  const { data: entities = [], isLoading: entitiesLoading } = useEntitiesQuery();
+  const { data: designations = [], isLoading: designationsLoading } =
+    useUniqueDesignationsQuery();
+
+  const {
+    data: overview = [],
+    isLoading: overviewLoading,
+  } = useDashboardOverviewQuery();
 
   const {
     data: submissions = [],
@@ -40,34 +78,84 @@ export function useDashboardPage() {
     error: submissionsError,
   } = useFormSubmissionsQuery();
 
+  const scopedOverview = useMemo(
+    () =>
+      scopeSubmissionsForHead(overview, viewerUserId, headEntityId, entities),
+    [overview, viewerUserId, headEntityId, entities],
+  );
+
+  const scopedSubmissions = useMemo(
+    () =>
+      scopeSubmissionsForHead(
+        submissions,
+        viewerUserId,
+        headEntityId,
+        entities,
+      ),
+    [submissions, viewerUserId, headEntityId, entities],
+  );
+
   const matrixForDistribution = useMatrixForDistribution(performanceMatrix);
-  const sortedEntities = useSortedEntities(entities);
 
   const {
     searchQuery,
     setSearchQuery,
-    selectedEntityId,
-    setSelectedEntityId,
-    selectedCategoryId,
-    selectedSubCategoryId,
-    setSelectedSubCategoryId,
-    selectedFormState,
-    setSelectedFormState,
-    availableSubCategories,
-    filteredSubmissions,
+    selectedCategory0EntityIds,
+    selectedCategory1EntityIds,
+    selectedCategory2EntityIds,
+    selectedRoleCategories,
+    selectedDesignations,
+    selectedFormStates,
+    category0Options,
+    category0DistributionOptions,
+    category1Options,
+    category2Options,
+    roleCategoryOptions,
+    designationOptions,
+    formStateOptions,
+    filteredSubmissions: filteredOverview,
+    filterState,
     activeFilters,
-    handleCategoryChange,
+    handleCategory0EntityChange,
+    handleCategory0DistributionSelect,
+    handleCategory1EntityChange,
+    handleCategory2EntityChange,
+    handleRoleCategoryChange,
+    handleDesignationChange,
+    handleFormStateChange,
     clearAllFilters,
     filterByFormState,
   } = useDashboardFilters({
-    submissions,
-    staffCategories,
+    submissions: scopedOverview,
     entities,
+    designations,
   });
+
+  const filteredSubmissions = useMemo(() => {
+    if (scopedSubmissions.length === 0) {
+      return [];
+    }
+
+    return scopedSubmissions.filter((submission) =>
+      matchesSubmissionFilters(submission, filterState),
+    );
+  }, [scopedSubmissions, filterState]);
+
+  // Institutional Quota scales from eligible headcount ignoring workflow/form-state
+  // filters so stats-card clicks do not change quota counts on the rating curve.
+  const quotaEligibleCount = useMemo(
+    () =>
+      countEligibleSubmissions(
+        scopedOverview.filter((submission) =>
+          matchesSubmissionFiltersExcluding(submission, filterState, "formState"),
+        ),
+      ),
+    [scopedOverview, filterState],
+  );
 
   const chartMetrics = useDashboardChartMetrics({
     filteredSubmissions,
-    staffCategories,
+    quotaEligibleCount,
     isDarkMode,
     matrixForDistribution,
     institutionalQuotaRows,
@@ -77,24 +165,36 @@ export function useDashboardPage() {
     isDarkMode,
     searchQuery,
     setSearchQuery,
-    selectedEntityId,
-    setSelectedEntityId,
-    selectedCategoryId,
-    selectedSubCategoryId,
-    setSelectedSubCategoryId,
-    selectedFormState,
-    setSelectedFormState,
-    sortedEntities,
-    staffCategories,
-    availableSubCategories,
+    selectedCategory0EntityIds,
+    selectedCategory1EntityIds,
+    selectedCategory2EntityIds,
+    selectedRoleCategories,
+    selectedDesignations,
+    selectedFormStates,
+    category0Options,
+    category0DistributionOptions,
+    category1Options,
+    category2Options,
+    roleCategoryOptions,
+    designationOptions,
+    formStateOptions,
     entitiesLoading,
-    staffCategoriesLoading,
+    designationsLoading,
+    overviewLoading,
     submissionsLoading,
     submissionsError,
+    submissions: scopedSubmissions,
     performanceMatrixLoading,
+    matrixForDistribution,
     filteredSubmissions,
     activeFilters,
-    handleCategoryChange,
+    handleCategory0EntityChange,
+    handleCategory0DistributionSelect,
+    handleCategory1EntityChange,
+    handleCategory2EntityChange,
+    handleRoleCategoryChange,
+    handleDesignationChange,
+    handleFormStateChange,
     clearAllFilters,
     filterByFormState,
     ...chartMetrics,

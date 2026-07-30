@@ -15,11 +15,42 @@ interface EntityRow {
   category_code: string;
   parent_entity_id: string | null;
   parent_name: string | null;
+  staff_count: string | number | null;
   created_at: string;
   updated_at: string;
 }
 
-const ENTITY_SELECT = `
+let cachedUsersEntityColumn: boolean | null = null;
+
+async function hasUsersEntityColumn(): Promise<boolean> {
+  if (cachedUsersEntityColumn !== null) {
+    return cachedUsersEntityColumn;
+  }
+
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'users'
+         AND column_name = 'entity_id'
+     ) AS exists`,
+  );
+
+  cachedUsersEntityColumn = Boolean(result.rows[0]?.exists);
+  return cachedUsersEntityColumn;
+}
+
+async function buildEntitySelect(): Promise<string> {
+  const staffCountSelect = (await hasUsersEntityColumn())
+    ? `(
+         SELECT COUNT(*)::int
+         FROM users u
+         WHERE u.entity_id = e.id
+       ) AS staff_count`
+    : `0 AS staff_count`;
+
+  return `
   SELECT
     e.id,
     e.name,
@@ -27,12 +58,14 @@ const ENTITY_SELECT = `
     ec.code AS category_code,
     e.parent_entity_id,
     p.name AS parent_name,
+    ${staffCountSelect},
     e.created_at::text,
     e.updated_at::text
   FROM entities e
   JOIN entity_categories ec ON ec.id = e.entity_category_id
   LEFT JOIN entities p ON p.id = e.parent_entity_id
 `;
+}
 
 export class EntityError extends Error {
   constructor(
@@ -52,6 +85,7 @@ function mapEntityRow(row: EntityRow): EntityRecord {
     categoryCode: row.category_code,
     parentEntityId: row.parent_entity_id ? Number(row.parent_entity_id) : null,
     parentName: row.parent_name,
+    staffCount: Number(row.staff_count ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -130,8 +164,9 @@ async function assertValidParent(
 }
 
 export async function listEntities(): Promise<EntityRecord[]> {
+  const entitySelect = await buildEntitySelect();
   const result = await db.query<EntityRow>(
-    `${ENTITY_SELECT}
+    `${entitySelect}
      ORDER BY e.name ASC`,
   );
 
@@ -139,8 +174,9 @@ export async function listEntities(): Promise<EntityRecord[]> {
 }
 
 export async function getEntityById(id: number): Promise<EntityRecord | null> {
+  const entitySelect = await buildEntitySelect();
   const result = await db.query<EntityRow>(
-    `${ENTITY_SELECT}
+    `${entitySelect}
      WHERE e.id = $1`,
     [id],
   );
@@ -152,6 +188,34 @@ export async function getEntityById(id: number): Promise<EntityRecord | null> {
   return mapEntityRow(result.rows[0]);
 }
 
+async function assertUniqueEntityName(
+  excludeEntityId: number | null,
+  name: string,
+  entityCategoryId: number,
+  parentEntityId: number | null,
+): Promise<void> {
+  const result = await db.query<{ id: string; name: string }>(
+    `SELECT id, name
+     FROM entities
+     WHERE entity_category_id = $1
+       AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+       AND (
+         ($3::bigint IS NULL AND parent_entity_id IS NULL)
+         OR parent_entity_id = $3
+       )
+       AND ($4::bigint IS NULL OR id <> $4)
+     LIMIT 1`,
+    [entityCategoryId, name, parentEntityId, excludeEntityId],
+  );
+
+  if (result.rows.length > 0) {
+    throw new EntityError(
+      `An entity named "${result.rows[0].name}" already exists in this category with the same parent.`,
+      409,
+    );
+  }
+}
+
 export async function createEntity(
   input: CreateEntityInput,
 ): Promise<EntityRecord> {
@@ -159,6 +223,12 @@ export async function createEntity(
 
   await assertCategoryExists(normalized.entityCategoryId);
   await assertValidParent(null, normalized.parentEntityId);
+  await assertUniqueEntityName(
+    null,
+    normalized.name,
+    normalized.entityCategoryId,
+    normalized.parentEntityId,
+  );
 
   try {
     const result = await db.query<{ id: string }>(
@@ -200,6 +270,12 @@ export async function updateEntity(
 
   await assertCategoryExists(normalized.entityCategoryId);
   await assertValidParent(id, normalized.parentEntityId);
+  await assertUniqueEntityName(
+    id,
+    normalized.name,
+    normalized.entityCategoryId,
+    normalized.parentEntityId,
+  );
 
   try {
     const result = await db.query(

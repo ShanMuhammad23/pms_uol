@@ -3,10 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { ClipboardCheck, Eye } from "lucide-react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { fetchFormSubmissions } from "@/lib/queries/form-submissions-client";
 import { APPRAISAL_STATUS_LABELS } from "@/types/forms";
+import { canViewQuartile } from "@/lib/auth/submission-review-roles";
 
 export default function SubmissionsListTable() {
+  const { data: session } = useSession();
+  const showQuartile = canViewQuartile(session?.user?.role);
   const { data, isLoading, error } = useQuery({
     queryKey: ["form-submissions"],
     queryFn: fetchFormSubmissions,
@@ -14,7 +18,7 @@ export default function SubmissionsListTable() {
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
+      <div className="rounded-md border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
         Loading submissions...
       </div>
     );
@@ -22,7 +26,7 @@ export default function SubmissionsListTable() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         Failed to load submissions.
       </div>
     );
@@ -30,7 +34,7 @@ export default function SubmissionsListTable() {
 
   if (!data || data.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
+      <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
         <ClipboardCheck className="mx-auto size-8 text-foreground/50" />
         <p className="mt-3 text-sm font-medium text-text-primary">
           No submitted forms yet
@@ -43,32 +47,31 @@ export default function SubmissionsListTable() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-300/80 dark:border-white/15">
+    <div className="overflow-x-auto rounded-md border border-slate-300/80 dark:border-white/15">
       <table className="min-w-full text-sm">
         <thead className="bg-primary/5">
           <tr>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="print-col-large px-4 py-3 text-left font-semibold text-text-primary">
               Employee
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="print-col-medium px-4 py-3 text-left font-semibold text-text-primary">
               Form
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
-              Category
-            </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="print-col-small px-4 py-3 text-left font-semibold text-text-primary">
               Raw Score
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
-              Performance / Quartile
-            </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            {showQuartile ? (
+              <th className="print-col-medium px-4 py-3 text-left font-semibold text-text-primary">
+                Performance / Quartile
+              </th>
+            ) : null}
+            <th className="print-col-small px-4 py-3 text-left font-semibold text-text-primary">
               Status
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-text-primary">
+            <th className="print-col-medium px-4 py-3 text-left font-semibold text-text-primary">
               Submitted
             </th>
-            <th className="px-4 py-3 text-right font-semibold text-text-primary">
+            <th className="no-print px-4 py-3 text-right font-semibold text-text-primary">
               Action
             </th>
           </tr>
@@ -90,31 +93,29 @@ export default function SubmissionsListTable() {
               <td className="px-4 py-3 text-text-primary">
                 {submission.templateTitle ?? "—"}
               </td>
-              <td className="px-4 py-3 text-text-primary">
-                {submission.staffCategoryName ?? "—"}
-                <span className="block text-xs text-foreground/70">
-                  {submission.staffSubCategoryName ?? "—"}
-                </span>
-              </td>
               <td className="px-4 py-3 font-medium text-text-primary">
                 {submission.rawScore} / {submission.maxRawScore}
                 <span className="block text-xs font-normal text-foreground/70">
                   {submission.scorePercent}%
                 </span>
               </td>
-              <td className="px-4 py-3 text-text-primary">
-                {submission.performanceLevelName ?? "—"}
-                <span className="block text-xs text-foreground/70">
-                  {submission.quartileName ?? "No matching quartile"}
-                </span>
-              </td>
+              {showQuartile ? (
+                <td className="px-4 py-3 text-text-primary">
+                  {submission.performanceLevelName ?? "—"}
+                  <span className="block text-xs text-foreground/70">
+                    {submission.quartileName ?? "No matching quartile"}
+                  </span>
+                </td>
+              ) : null}
               <td className="px-4 py-3 text-text-primary">
                 {APPRAISAL_STATUS_LABELS[submission.status]}
               </td>
               <td className="px-4 py-3 text-text-primary">
-                {new Date(submission.submittedAt).toLocaleString()}
+                {submission.submittedAt
+                  ? new Date(submission.submittedAt).toLocaleString()
+                  : "—"}
               </td>
-              <td className="px-4 py-3">
+              <td className="no-print px-4 py-3">
                 <div className="flex justify-end">
                   <Link
                     href={`/dashboard/submissions/${submission.id}`}

@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { db } from "../db";
 import { upsertIncrementMatrices } from "./increment-matrices";
 import { getAppraisalCycleById, getDefaultAppraisalCycle, ensureDefaultAppraisalCycle } from "./appraisal-cycles";
+import { resolveEntitySubtreeIds } from "./entity-scope";
 import type {
   EmployeeCategory,
   FieldType,
@@ -22,10 +23,12 @@ interface FormTemplateListRow {
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
-  target_category: EmployeeCategory;
-  target_sub_category: SubCategory;
+  target_category: EmployeeCategory | null;
+  target_sub_category: SubCategory | null;
+  self_assessment_enabled: boolean;
   question_count: string;
   appraisal_count: string;
+  assigned_employee_count: string;
   created_at: string;
   updated_at: string;
 }
@@ -36,8 +39,9 @@ interface FormTemplateRow {
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
-  target_category: EmployeeCategory;
-  target_sub_category: SubCategory;
+  target_category: EmployeeCategory | null;
+  target_sub_category: SubCategory | null;
+  self_assessment_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -100,11 +104,15 @@ async function resolveCycleId(cycleId?: number): Promise<number> {
 
 async function checkDuplicateTarget(
   cycleId: number,
-  targetCategory: EmployeeCategory,
-  targetSubCategory: SubCategory,
+  targetCategory: EmployeeCategory | undefined,
+  targetSubCategory: SubCategory | undefined,
   excludeId?: number,
   client?: PoolClient,
 ): Promise<void> {
+  if (!targetCategory || !targetSubCategory) {
+    return;
+  }
+
   const executor = client ?? db;
   const params: Array<number | EmployeeCategory | SubCategory> = [
     cycleId,
@@ -405,6 +413,41 @@ async function syncFormStructure(
     }
   }
 
+  for (const section of input.sections) {
+    const sectionId = await upsertSection(templateId, section, null, client);
+    sectionIds.add(sectionId);
+
+    for (const question of section.questions) {
+      const qId = await syncQuestion(templateId, question, sectionId, client);
+      questionIds.add(qId);
+    }
+
+    for (const subsection of section.subsections) {
+      const subsectionId = await upsertSection(
+        templateId,
+        subsection,
+        sectionId,
+        client,
+      );
+      sectionIds.add(subsectionId);
+
+      for (const question of subsection.questions) {
+        const qId = await syncQuestion(
+          templateId,
+          question,
+          subsectionId,
+          client,
+        );
+        questionIds.add(qId);
+      }
+    }
+  }
+
+  for (const question of input.questions) {
+    const qId = await syncQuestion(templateId, question, null, client);
+    questionIds.add(qId);
+  }
+
   const existingSections = await client.query<{
     id: string;
     parent_section_id: string | null;
@@ -424,31 +467,6 @@ async function syncFormStructure(
 
   for (const row of [...subsectionsToDelete, ...topSectionsToDelete]) {
     await client.query(`DELETE FROM form_sections WHERE id = $1`, [row.id]);
-  }
-
-  for (const section of input.sections) {
-    const sectionId = await upsertSection(templateId, section, null, client);
-
-    for (const question of section.questions) {
-      await syncQuestion(templateId, question, sectionId, client);
-    }
-
-    for (const subsection of section.subsections) {
-      const subsectionId = await upsertSection(
-        templateId,
-        subsection,
-        sectionId,
-        client,
-      );
-
-      for (const question of subsection.questions) {
-        await syncQuestion(templateId, question, subsectionId, client);
-      }
-    }
-  }
-
-  for (const question of input.questions) {
-    await syncQuestion(templateId, question, null, client);
   }
 }
 
@@ -509,7 +527,7 @@ function mapQuestionRow(
     sortOrder: question.sort_order,
     selfAssessmentEnabled: question.self_assessment_enabled,
     hodAssessmentEnabled: question.hod_assessment_enabled,
-    totalMarks: question.total_marks,
+    totalMarks: Number(question.total_marks),
     sectionId: question.section_id ? Number(question.section_id) : undefined,
     options: optionsByQuestionId.get(Number(question.id)) ?? [],
   };
@@ -641,17 +659,9 @@ export async function getFormTemplateAppraisalCount(
   templateId: number,
 ): Promise<number> {
   const result = await db.query<{ count: string }>(
-    `SELECT COUNT(DISTINCT ap_linked.appraisal_id)::text AS count
-     FROM form_templates ft
-     LEFT JOIN (
-       SELECT ap.id AS appraisal_id, ft_match.id AS template_id
-       FROM appraisals ap
-       INNER JOIN users u ON u.id = ap.employee_id
-       INNER JOIN form_templates ft_match ON ft_match.cycle_id = ap.cycle_id
-         AND ft_match.target_category = u.emp_category
-         AND ft_match.target_sub_category = u.emp_sub_category
-     ) ap_linked ON ap_linked.template_id = ft.id
-     WHERE ft.id = $1`,
+    `SELECT COUNT(*)::text AS count
+     FROM appraisals
+     WHERE template_id = $1`,
     [templateId],
   );
 
@@ -668,21 +678,17 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        ac.fiscal_year,
        ft.target_category,
        ft.target_sub_category,
+       ft.self_assessment_enabled,
        COUNT(DISTINCT fq.id)::text AS question_count,
-       COUNT(DISTINCT ap_linked.appraisal_id)::text AS appraisal_count,
+       COUNT(DISTINCT ap.id)::text AS appraisal_count,
+       COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
        ft.created_at::text,
        ft.updated_at::text
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
-     LEFT JOIN (
-       SELECT ap.id AS appraisal_id, ft_match.id AS template_id
-       FROM appraisals ap
-       INNER JOIN users u ON u.id = ap.employee_id
-       INNER JOIN form_templates ft_match ON ft_match.cycle_id = ap.cycle_id
-         AND ft_match.target_category = u.emp_category
-         AND ft_match.target_sub_category = u.emp_sub_category
-     ) ap_linked ON ap_linked.template_id = ft.id
+     LEFT JOIN appraisals ap ON ap.template_id = ft.id
+     LEFT JOIN employee_form_assignments efa ON efa.template_id = ft.id
      GROUP BY ft.id, ac.fiscal_year
      ORDER BY ft.updated_at DESC`,
   );
@@ -695,8 +701,87 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
     fiscalYear: row.fiscal_year,
     targetCategory: row.target_category,
     targetSubCategory: row.target_sub_category,
+    selfAssessmentEnabled: row.self_assessment_enabled,
     questionCount: Number(row.question_count),
     appraisalCount: Number(row.appraisal_count),
+    assignedEmployeeCount: Number(row.assigned_employee_count),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function listDirectAssessmentTemplates(scope: {
+  reviewerUserId: number;
+  headEntityId: number | null;
+}): Promise<FormTemplateListItem[]> {
+  const { reviewerUserId, headEntityId } = scope;
+
+  const scopedEntityIds =
+    headEntityId != null && Number.isFinite(headEntityId)
+      ? await resolveEntitySubtreeIds(headEntityId)
+      : [];
+
+  let visibilityClause: string;
+  let visibilityParams: unknown[];
+
+  if (scopedEntityIds.length > 0) {
+    visibilityClause = `AND (
+      u.entity_id = ANY($1::bigint[])
+      OR u.head_id = $2
+      OR u.manager_2_id = $2
+    )`;
+    visibilityParams = [scopedEntityIds, reviewerUserId];
+  } else {
+    visibilityClause = `AND (
+      u.head_id = $1
+      OR u.manager_2_id = $1
+    )`;
+    visibilityParams = [reviewerUserId];
+  }
+
+  const result = await db.query<FormTemplateListRow>(
+    `SELECT
+       ft.id,
+       ft.title,
+       ft.description,
+       ft.cycle_id,
+       ac.fiscal_year,
+       ft.target_category,
+       ft.target_sub_category,
+       ft.self_assessment_enabled,
+       COUNT(DISTINCT fq.id)::text AS question_count,
+       COUNT(DISTINCT ap.id)::text AS appraisal_count,
+       COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
+       ft.created_at::text,
+       ft.updated_at::text
+     FROM form_templates ft
+     INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
+     LEFT JOIN form_questions fq ON fq.template_id = ft.id
+     LEFT JOIN appraisals ap ON ap.template_id = ft.id
+     INNER JOIN employee_form_assignments efa ON efa.template_id = ft.id
+     INNER JOIN users u ON u.id = efa.employee_id
+       AND u.is_active = TRUE
+       AND u.employee_id <> 'EMP-0001'
+       AND COALESCE(u.assessment_eligibility, true) = true
+       AND efa.self_assessment_disabled = true
+       ${visibilityClause}
+     GROUP BY ft.id, ac.fiscal_year
+     ORDER BY ft.updated_at DESC`,
+    visibilityParams,
+  );
+
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    title: row.title,
+    description: row.description,
+    cycleId: row.cycle_id,
+    fiscalYear: row.fiscal_year,
+    targetCategory: row.target_category,
+    targetSubCategory: row.target_sub_category,
+    selfAssessmentEnabled: row.self_assessment_enabled,
+    questionCount: Number(row.question_count),
+    appraisalCount: Number(row.appraisal_count),
+    assignedEmployeeCount: Number(row.assigned_employee_count),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -714,6 +799,7 @@ export async function getFormTemplateById(
        ac.fiscal_year,
        ft.target_category,
        ft.target_sub_category,
+       ft.self_assessment_enabled,
        ft.created_at::text,
        ft.updated_at::text
      FROM form_templates ft
@@ -738,6 +824,7 @@ export async function getFormTemplateById(
     fiscalYear: row.fiscal_year,
     targetCategory: row.target_category,
     targetSubCategory: row.target_sub_category,
+    selfAssessmentEnabled: row.self_assessment_enabled,
     sections: structure.sections,
     questions: structure.questions,
     incrementMatrices: await getIncrementMatricesByCycleId(row.cycle_id),
@@ -757,14 +844,6 @@ export async function createFormTemplate(
 
     const cycleId = await resolveCycleId(input.cycleId);
 
-    await checkDuplicateTarget(
-      cycleId,
-      input.targetCategory,
-      input.targetSubCategory,
-      undefined,
-      client,
-    );
-
     const templateResult = await client.query<{ id: string }>(
       `INSERT INTO form_templates (
          title,
@@ -772,15 +851,17 @@ export async function createFormTemplate(
          cycle_id,
          target_category,
          target_sub_category,
+         self_assessment_enabled,
          created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [
         input.title,
         input.description || null,
         cycleId,
-        input.targetCategory,
-        input.targetSubCategory,
+        input.targetCategory ?? null,
+        input.targetSubCategory ?? null,
+        input.selfAssessmentEnabled,
         createdById ?? null,
       ],
     );
@@ -846,14 +927,16 @@ export async function updateFormTemplate(
            cycle_id = $3,
            target_category = $4,
            target_sub_category = $5,
+           self_assessment_enabled = $6,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6`,
+       WHERE id = $7`,
       [
         input.title,
         input.description || null,
         cycleId,
-        input.targetCategory,
-        input.targetSubCategory,
+        input.targetCategory ?? null,
+        input.targetSubCategory ?? null,
+        input.selfAssessmentEnabled,
         id,
       ],
     );
@@ -885,12 +968,8 @@ export async function deleteFormTemplate(id: number): Promise<{
 }> {
   const appraisalResult = await db.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
-     FROM appraisals ap
-     INNER JOIN users u ON u.id = ap.employee_id
-     INNER JOIN form_templates ft ON ft.id = $1
-     WHERE ap.cycle_id = ft.cycle_id
-       AND u.emp_category = ft.target_category
-       AND u.emp_sub_category = ft.target_sub_category`,
+     FROM appraisals
+     WHERE template_id = $1`,
     [id],
   );
 
@@ -906,4 +985,564 @@ export async function deleteFormTemplate(id: number): Promise<{
   }
 
   return { appraisalCount };
+}
+
+export async function assignFormTemplateToEmployees(
+  templateId: number,
+  employeeCodes: string[],
+  selfAssessmentDisabledMap?: Record<string, boolean>,
+): Promise<{ assignedCount: number; templateId: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    throw new FormTemplateError("At least one employee is required.", 400);
+  }
+
+  const templateResult = await db.query<{ id: string; cycle_id: number | null; self_assessment_enabled: boolean }>(
+    `SELECT id, cycle_id, self_assessment_enabled
+     FROM form_templates
+     WHERE id = $1`,
+    [templateId],
+  );
+
+  if (!templateResult.rows[0]) {
+    throw new FormTemplateError("Form template not found.", 404);
+  }
+
+  const cycleId = templateResult.rows[0].cycle_id
+    ? Number(templateResult.rows[0].cycle_id)
+    : null;
+
+  const formSelfAssessmentEnabled = templateResult.rows[0].self_assessment_enabled;
+
+  const usersResult = await db.query<{ id: string; employee_id: string }>(
+    `SELECT id, employee_id
+     FROM users
+     WHERE employee_id = ANY($1::text[])
+       AND is_active = TRUE`,
+    [normalizedCodes],
+  );
+
+  if (usersResult.rows.length === 0) {
+    throw new FormTemplateError("No matching active employees found.", 404);
+  }
+
+  const userIds = usersResult.rows.map((r) => r.id);
+
+  // One form per employee per appraisal cycle.
+  if (cycleId !== null) {
+    const conflicts = await db.query<{
+      employee_id: string;
+      employee_name: string;
+      other_title: string;
+    }>(
+      `WITH conflict_rows AS (
+         SELECT
+           u.employee_id,
+           CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+           ft.title AS other_title
+         FROM employee_form_assignments efa
+         INNER JOIN form_templates ft ON ft.id = efa.template_id
+         INNER JOIN users u ON u.id = efa.employee_id
+         WHERE efa.employee_id = ANY($1::bigint[])
+           AND ft.cycle_id = $2
+           AND efa.template_id <> $3
+
+         UNION
+
+         SELECT
+           u.employee_id,
+           CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+           COALESCE(ft.title, 'Another form') AS other_title
+         FROM appraisals ap
+         INNER JOIN users u ON u.id = ap.employee_id
+         LEFT JOIN form_templates ft ON ft.id = ap.template_id
+         WHERE ap.employee_id = ANY($1::bigint[])
+           AND ap.cycle_id = $2
+           AND ap.template_id IS NOT NULL
+           AND ap.template_id <> $3
+       )
+       SELECT employee_id, employee_name, other_title
+       FROM conflict_rows
+       ORDER BY employee_name, employee_id
+       LIMIT 8`,
+      [userIds, cycleId, templateId],
+    );
+
+    if (conflicts.rows.length > 0) {
+      const details = conflicts.rows
+        .map(
+          (row) =>
+            `${row.employee_name} (${row.employee_id}) → "${row.other_title}"`,
+        )
+        .join("; ");
+      const extra = conflicts.rows.length === 8 ? " (and more)" : "";
+      throw new FormTemplateError(
+        `Each employee can only have one form in an appraisal cycle. Already assigned elsewhere: ${details}${extra}. Unassign them from the other form first.`,
+        409,
+      );
+    }
+  }
+
+  // Build per-employee self_assessment_disabled values
+  const usersWithFlag = usersResult.rows.map((r) => ({
+    id: r.id,
+    employeeId: r.employee_id,
+    selfAssessmentDisabled: selfAssessmentDisabledMap?.[r.employee_id] ?? false,
+  }));
+
+  // Insert assignments with per-employee self_assessment_disabled
+  await db.query(
+    `INSERT INTO employee_form_assignments (employee_id, template_id, self_assessment_disabled)
+     SELECT u.id, $2, COALESCE(d.disabled, false)
+     FROM unnest($1::bigint[]) WITH ORDINALITY AS u(id, ord)
+     LEFT JOIN unnest($3::boolean[]) WITH ORDINALITY AS d(disabled, dord) ON d.dord = u.ord
+     ON CONFLICT (employee_id, template_id) DO UPDATE
+       SET self_assessment_disabled = EXCLUDED.self_assessment_disabled,
+           updated_at = CURRENT_TIMESTAMP`,
+    [userIds, templateId, usersWithFlag.map((u) => u.selfAssessmentDisabled)],
+  );
+
+  if (cycleId !== null) {
+    // For each employee, determine initial status based on their per-employee flag
+    // Employees with self_assessment_disabled=true get PENDING_HEAD_REVIEW, others get PENDING_SELF_ASSESSMENT
+    const selfAssessEmployees = usersWithFlag.filter((u) => !u.selfAssessmentDisabled).map((u) => u.id);
+    const directAssessEmployees = usersWithFlag.filter((u) => u.selfAssessmentDisabled).map((u) => u.id);
+
+    if (selfAssessEmployees.length > 0) {
+      const initialStatus = "PENDING_SELF_ASSESSMENT";
+      await db.query(
+        `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
+         SELECT u.id, $2, $3, $4
+         FROM unnest($1::bigint[]) AS u(id)
+         ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
+           SET template_id = EXCLUDED.template_id,
+               status = CASE
+                 WHEN appraisals.submitted_at IS NULL THEN $4
+                 ELSE appraisals.status
+               END,
+               updated_at = CURRENT_TIMESTAMP
+         WHERE appraisals.submitted_at IS NULL`,
+        [selfAssessEmployees, cycleId, templateId, initialStatus],
+      );
+    }
+
+    if (directAssessEmployees.length > 0) {
+      const directStatus = "PENDING_HEAD_REVIEW";
+      await db.query(
+        `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
+         SELECT u.id, $2, $3, $4
+         FROM unnest($1::bigint[]) AS u(id)
+         ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
+           SET template_id = EXCLUDED.template_id,
+               status = CASE
+                 WHEN appraisals.submitted_at IS NULL THEN $4
+                 ELSE appraisals.status
+               END,
+               updated_at = CURRENT_TIMESTAMP
+         WHERE appraisals.submitted_at IS NULL`,
+        [directAssessEmployees, cycleId, templateId, directStatus],
+      );
+    }
+  }
+
+  return {
+    assignedCount: usersResult.rows.length,
+    templateId,
+  };
+}
+
+export async function unassignFormTemplateFromEmployees(
+  templateId: number,
+  employeeCodes: string[],
+): Promise<{ unassignedCount: number; templateId: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    throw new FormTemplateError("At least one employee is required.", 400);
+  }
+
+  const templateResult = await db.query<{ id: string; cycle_id: number | null }>(
+    `SELECT id, cycle_id
+     FROM form_templates
+     WHERE id = $1`,
+    [templateId],
+  );
+
+  if (!templateResult.rows[0]) {
+    throw new FormTemplateError("Form template not found.", 404);
+  }
+
+  const cycleId = templateResult.rows[0].cycle_id
+    ? Number(templateResult.rows[0].cycle_id)
+    : null;
+
+  const usersResult = await db.query<{ id: string; employee_id: string }>(
+    `SELECT id, employee_id
+     FROM users
+     WHERE employee_id = ANY($1::text[])`,
+    [normalizedCodes],
+  );
+
+  if (usersResult.rows.length === 0) {
+    throw new FormTemplateError("No matching employees found.", 404);
+  }
+
+  const userIds = usersResult.rows.map((r) => r.id);
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const deletedAssignments = await client.query<{ employee_id: string }>(
+      `DELETE FROM employee_form_assignments
+       WHERE template_id = $1
+         AND employee_id = ANY($2::bigint[])
+       RETURNING employee_id`,
+      [templateId, userIds],
+    );
+
+    if (deletedAssignments.rows.length === 0) {
+      await client.query("ROLLBACK");
+      throw new FormTemplateError(
+        "None of the selected employees are assigned to this form.",
+        404,
+      );
+    }
+
+    const removedUserIds = deletedAssignments.rows.map((row) => row.employee_id);
+
+    // Remove only not-yet-submitted appraisals for this template (and cycle when set).
+    if (cycleId !== null) {
+      await client.query(
+        `DELETE FROM appraisal_answers
+         WHERE appraisal_id IN (
+           SELECT id
+           FROM appraisals
+           WHERE employee_id = ANY($1::bigint[])
+             AND template_id = $2
+             AND cycle_id = $3
+             AND submitted_at IS NULL
+         )`,
+        [removedUserIds, templateId, cycleId],
+      );
+
+      await client.query(
+        `DELETE FROM appraisals
+         WHERE employee_id = ANY($1::bigint[])
+           AND template_id = $2
+           AND cycle_id = $3
+           AND submitted_at IS NULL`,
+        [removedUserIds, templateId, cycleId],
+      );
+    } else {
+      await client.query(
+        `DELETE FROM appraisal_answers
+         WHERE appraisal_id IN (
+           SELECT id
+           FROM appraisals
+           WHERE employee_id = ANY($1::bigint[])
+             AND template_id = $2
+             AND submitted_at IS NULL
+         )`,
+        [removedUserIds, templateId],
+      );
+
+      await client.query(
+        `DELETE FROM appraisals
+         WHERE employee_id = ANY($1::bigint[])
+           AND template_id = $2
+           AND submitted_at IS NULL`,
+        [removedUserIds, templateId],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return {
+      unassignedCount: deletedAssignments.rows.length,
+      templateId,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateAssignmentSelfAssessmentDisabled(
+  templateId: number,
+  employeeCode: string,
+  selfAssessmentDisabled: boolean,
+): Promise<{ templateId: number; employeeId: string; selfAssessmentDisabled: boolean }> {
+  const userResult = await db.query<{ id: string }>(
+    `SELECT id FROM users WHERE employee_id = $1 AND is_active = TRUE`,
+    [employeeCode.trim()],
+  );
+
+  if (userResult.rows.length === 0) {
+    throw new FormTemplateError("Employee not found.", 404);
+  }
+
+  const userId = userResult.rows[0].id;
+
+  const result = await db.query<{ employee_id: string }>(
+    `UPDATE employee_form_assignments
+     SET self_assessment_disabled = $3,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE template_id = $1 AND employee_id = $2
+     RETURNING employee_id`,
+    [templateId, userId, selfAssessmentDisabled],
+  );
+
+  if (result.rows.length === 0) {
+    throw new FormTemplateError("Employee is not assigned to this form.", 404);
+  }
+
+  // Update appraisal status if not yet submitted
+  const templateResult = await db.query<{ cycle_id: number | null }>(
+    `SELECT cycle_id FROM form_templates WHERE id = $1`,
+    [templateId],
+  );
+
+  const cycleId = templateResult.rows[0]?.cycle_id
+    ? Number(templateResult.rows[0].cycle_id)
+    : null;
+
+  if (cycleId !== null) {
+    const newStatus = selfAssessmentDisabled ? "PENDING_HEAD_REVIEW" : "PENDING_SELF_ASSESSMENT";
+    await db.query(
+      `UPDATE appraisals
+       SET status = $4,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE employee_id = $1
+         AND template_id = $2
+         AND cycle_id = $3
+         AND submitted_at IS NULL`,
+      [userId, templateId, cycleId, newStatus],
+    );
+  } else {
+    const newStatus = selfAssessmentDisabled ? "PENDING_HEAD_REVIEW" : "PENDING_SELF_ASSESSMENT";
+    await db.query(
+      `UPDATE appraisals
+       SET status = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE employee_id = $1
+         AND template_id = $2
+         AND submitted_at IS NULL`,
+      [userId, templateId, newStatus],
+    );
+  }
+
+  return {
+    templateId,
+    employeeId: employeeCode.trim(),
+    selfAssessmentDisabled,
+  };
+}
+
+export async function listFormTemplateAssignedEmployees(
+  templateId: number,
+): Promise<Array<{ employeeId: string; employeeName: string; email: string | null; selfAssessmentDisabled: boolean }>> {
+  const result = await db.query<{
+    employee_id: string;
+    employee_name: string;
+    email: string | null;
+    self_assessment_disabled: boolean;
+  }>(
+    `SELECT
+       u.employee_id,
+       CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+       u.email,
+       efa.self_assessment_disabled
+     FROM employee_form_assignments efa
+     INNER JOIN users u ON u.id = efa.employee_id
+     WHERE efa.template_id = $1
+     ORDER BY u.first_name, u.last_name, u.employee_id`,
+    [templateId],
+  );
+
+  return result.rows.map((row) => ({
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    email: row.email,
+    selfAssessmentDisabled: row.self_assessment_disabled,
+  }));
+}
+
+// =========================================================================
+// Direct Score Entry — standalone, not tied to any form template.
+// Employees marked for direct score entry have their Score (O) adjusted
+// manually from the main dashboard by HR, Board, and Super Admin.
+// =========================================================================
+
+export async function assignDirectScoreEntryToEmployees(
+  employeeCodes: string[],
+): Promise<{ assignedCount: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    throw new FormTemplateError("At least one employee is required.", 400);
+  }
+
+  const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
+  const cycleId = cycle.id;
+
+  const usersResult = await db.query<{ id: string; employee_id: string }>(
+    `SELECT id, employee_id FROM users WHERE employee_id = ANY($1::text[]) AND is_active = TRUE`,
+    [normalizedCodes],
+  );
+
+  if (usersResult.rows.length === 0) {
+    throw new FormTemplateError("No matching active employees found.", 404);
+  }
+
+  const userIds = usersResult.rows.map((r) => r.id);
+
+  // Conflict check: employees already have a form assignment in this cycle
+  const alreadyAssigned = await db.query<{ employee_id: string }>(
+    `SELECT efa.employee_id::text
+     FROM employee_form_assignments efa
+     INNER JOIN form_templates ft ON ft.id = efa.template_id
+     WHERE ft.cycle_id = $1 AND efa.employee_id = ANY($2::bigint[])`,
+    [cycleId, userIds],
+  );
+
+  if (alreadyAssigned.rows.length > 0) {
+    const codes = usersResult.rows
+      .filter((r) => alreadyAssigned.rows.some((a) => a.employee_id === r.id))
+      .map((r) => r.employee_id);
+    throw new FormTemplateError(
+      `These employees are already assigned to a form in the current cycle: ${codes.join(", ")}. Unassign them first before marking for direct score entry.`,
+      409,
+    );
+  }
+
+  // Insert direct score entry assignments
+  await db.query(
+    `INSERT INTO direct_score_entry_assignments (employee_id, cycle_id)
+     SELECT u.id, $2
+     FROM unnest($1::bigint[]) AS u(id)
+     ON CONFLICT (employee_id, cycle_id) DO UPDATE
+       SET updated_at = CURRENT_TIMESTAMP`,
+    [userIds, cycleId],
+  );
+
+  // Create appraisals with NULL template_id and PENDING_HEAD_REVIEW status
+  await db.query(
+    `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
+     SELECT u.id, $2, NULL, $3
+     FROM unnest($1::bigint[]) AS u(id)
+     ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL DO UPDATE
+       SET template_id = NULL,
+           status = CASE
+             WHEN appraisals.submitted_at IS NULL THEN $3
+             ELSE appraisals.status
+           END,
+           updated_at = CURRENT_TIMESTAMP
+     WHERE appraisals.submitted_at IS NULL`,
+    [userIds, cycleId, "PENDING_HEAD_REVIEW"],
+  );
+
+  return {
+    assignedCount: usersResult.rows.length,
+  };
+}
+
+export async function unassignDirectScoreEntryFromEmployees(
+  employeeCodes: string[],
+): Promise<{ unassignedCount: number }> {
+  const normalizedCodes = [...new Set(employeeCodes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    throw new FormTemplateError("At least one employee is required.", 400);
+  }
+
+  const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
+  const cycleId = cycle.id;
+
+  const usersResult = await db.query<{ id: string; employee_id: string }>(
+    `SELECT id, employee_id FROM users WHERE employee_id = ANY($1::text[])`,
+    [normalizedCodes],
+  );
+
+  if (usersResult.rows.length === 0) {
+    throw new FormTemplateError("No matching employees found.", 404);
+  }
+
+  const userIds = usersResult.rows.map((r) => r.id);
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const deletedAssignments = await client.query<{ employee_id: string }>(
+      `DELETE FROM direct_score_entry_assignments
+       WHERE cycle_id = $1 AND employee_id = ANY($2::bigint[])
+       RETURNING employee_id`,
+      [cycleId, userIds],
+    );
+
+    if (deletedAssignments.rows.length === 0) {
+      await client.query("ROLLBACK");
+      throw new FormTemplateError(
+        "None of the selected employees are marked for direct score entry.",
+        404,
+      );
+    }
+
+    const removedUserIds = deletedAssignments.rows.map((row) => row.employee_id);
+
+    // Remove only not-yet-submitted appraisals with NULL template_id (direct score entry appraisals)
+    await client.query(
+      `DELETE FROM appraisal_answers
+       WHERE appraisal_id IN (
+         SELECT id FROM appraisals
+         WHERE employee_id = ANY($1::bigint[])
+           AND cycle_id = $2 AND template_id IS NULL AND submitted_at IS NULL
+       )`,
+      [removedUserIds, cycleId],
+    );
+    await client.query(
+      `DELETE FROM appraisals
+       WHERE employee_id = ANY($1::bigint[])
+         AND cycle_id = $2 AND template_id IS NULL AND submitted_at IS NULL`,
+      [removedUserIds, cycleId],
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      unassignedCount: deletedAssignments.rows.length,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listDirectScoreEntryEmployees(): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {
+  const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
+  const cycleId = cycle.id;
+
+  const result = await db.query<{
+    employee_id: string;
+    employee_name: string;
+    email: string | null;
+  }>(
+    `SELECT
+       u.employee_id,
+       CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+       u.email
+     FROM direct_score_entry_assignments dsea
+     INNER JOIN users u ON u.id = dsea.employee_id
+     WHERE dsea.cycle_id = $1
+     ORDER BY u.first_name, u.last_name, u.employee_id`,
+    [cycleId],
+  );
+
+  return result.rows.map((row) => ({
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    email: row.email,
+  }));
 }
