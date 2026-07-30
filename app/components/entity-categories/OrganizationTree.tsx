@@ -299,33 +299,7 @@ export default function OrganizationTree() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-md border border-violet-200 bg-violet-50/70 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-950/20">
-          <p className="text-xs font-medium uppercase tracking-wide text-violet-700 dark:text-violet-300">
-            Total entities
-          </p>
-          <p className="mt-1 text-2xl font-bold text-violet-900 dark:text-violet-100">
-            {entities?.length ?? 0}
-          </p>
-        </div>
-        <div className="rounded-md border border-sky-200 bg-sky-50/70 px-4 py-3 dark:border-sky-500/30 dark:bg-sky-950/20">
-          <p className="text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
-            C0 parents
-          </p>
-          <p className="mt-1 text-2xl font-bold text-sky-900 dark:text-sky-100">
-            {tree.length}
-          </p>
-        </div>
-        <div className="rounded-md border border-emerald-200 bg-emerald-50/70 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/20">
-          <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-            Staff mapped
-          </p>
-          <p className="mt-1 text-2xl font-bold text-emerald-900 dark:text-emerald-100">
-            {(entities ?? []).reduce((sum, entity) => sum + entity.staffCount, 0)}
-          </p>
-        </div>
-      </div>
-
+      
       <div
         ref={containerRef}
         className="relative h-[min(70vh,720px)] min-h-[420px] overflow-hidden rounded-md border border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-sm dark:border-white/10 dark:from-slate-950 dark:to-slate-900"
@@ -366,7 +340,8 @@ export default function OrganizationTree() {
             nodeSize={{ x: 260, y: 90 }}
             pathFunc="step"
             collapsible
-            initialDepth={hasForestWrapper ? 5 : 4}
+            // Show C0 → C1; keep every C1 collapsed (hide C2/C3 until expanded).
+            initialDepth={hasForestWrapper ? 2 : 1}
             enableLegacyTransitions
             transitionDuration={300}
             onUpdate={handleUpdate}
