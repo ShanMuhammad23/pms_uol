@@ -1,3 +1,5 @@
+import { isQuartileScoreMinExclusive } from "@/types/performance-matrices";
+
 export interface PerformanceQuartileBand {
   performanceLevelId: number;
   performanceLevelName: string;
@@ -30,6 +32,29 @@ export function calculateScorePercent(
   return Number(((rawScore / maxRawScore) * 100).toFixed(2));
 }
 
+export function scoreMatchesQuartileRange(
+  scorePercent: number,
+  scoreMin: number,
+  scoreMax: number,
+  minExclusive: boolean,
+): boolean {
+  const aboveMin = minExclusive
+    ? scorePercent > scoreMin
+    : scorePercent >= scoreMin;
+  return aboveMin && scorePercent <= scoreMax;
+}
+
+function sortQuartileBands(
+  bands: PerformanceQuartileBand[],
+): PerformanceQuartileBand[] {
+  return [...bands].sort(
+    (left, right) =>
+      left.levelSortOrder - right.levelSortOrder ||
+      left.quartileSortOrder - right.quartileSortOrder ||
+      left.scoreMin - right.scoreMin,
+  );
+}
+
 export function resolvePerformanceQuartile(
   scorePercent: number,
   bands: PerformanceQuartileBand[],
@@ -38,23 +63,39 @@ export function resolvePerformanceQuartile(
     return null;
   }
 
-  const match = bands.find(
-    (band) => scorePercent >= band.scoreMin && scorePercent <= band.scoreMax,
-  );
+  const sorted = sortQuartileBands(bands);
 
-  if (!match) {
-    return null;
+  for (let index = 0; index < sorted.length; index += 1) {
+    const band = sorted[index]!;
+    const previous = index > 0 ? sorted[index - 1]! : null;
+    const minExclusive = isQuartileScoreMinExclusive(
+      band.scoreMin,
+      previous?.scoreMax,
+    );
+
+    if (
+      !scoreMatchesQuartileRange(
+        scorePercent,
+        band.scoreMin,
+        band.scoreMax,
+        minExclusive,
+      )
+    ) {
+      continue;
+    }
+
+    return {
+      performanceLevelId: band.performanceLevelId,
+      performanceLevelName: band.performanceLevelName,
+      quartileId: band.quartileId,
+      quartileName: band.quartileName,
+      scoreMin: band.scoreMin,
+      scoreMax: band.scoreMax,
+      scorePercent,
+    };
   }
 
-  return {
-    performanceLevelId: match.performanceLevelId,
-    performanceLevelName: match.performanceLevelName,
-    quartileId: match.quartileId,
-    quartileName: match.quartileName,
-    scoreMin: match.scoreMin,
-    scoreMax: match.scoreMax,
-    scorePercent,
-  };
+  return null;
 }
 
 export function resolvePerformanceQuartileForRawScore(

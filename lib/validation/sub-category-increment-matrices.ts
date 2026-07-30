@@ -9,12 +9,15 @@ function validateIncrementPercentage(value: unknown): string | null {
   if (
     value === undefined ||
     value === null ||
-    Number.isNaN(percentage)
+    Number.isNaN(percentage) ||
+    !Number.isFinite(percentage)
   ) {
     return "Increment percentage is required.";
   }
 
-  if (percentage < 1 || percentage > 100) {
+  const rounded = Math.round(percentage * 100) / 100;
+
+  if (rounded < 1 || rounded > 100) {
     return "Increment percentage must be between 1 and 100.";
   }
 

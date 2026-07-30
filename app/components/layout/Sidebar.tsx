@@ -48,7 +48,7 @@ const ADMIN_LINKS = [
   },
   {
     href: "/dashboard/entity-categories",
-    label: "Entities and Categories",
+    label: "Organization Levels",
     icon: Building2,
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/entity-categories"),
