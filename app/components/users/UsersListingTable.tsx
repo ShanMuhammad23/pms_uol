@@ -31,6 +31,7 @@ import {
   type UsersMasterFilterState,
   type UsersMasterFilterTextColumnId,
 } from "@/app/helpers/users-master-filters";
+import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
 import {
   USERS_TABLE_COLUMNS,
   type UsersTableColumnDef,
@@ -38,6 +39,7 @@ import {
 } from "@/app/helpers/users-table-columns";
 import { useUsersByEmployeeIdsQuery } from "@/app/queries/users";
 import type { UserRecord } from "@/types/users";
+import { ExcelExportButton } from "@/app/components/common/ExcelExportButton";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -357,6 +359,23 @@ export function UsersListingTable({
     });
   };
 
+  const handleMasterNumericChange = (
+    columnId: UsersTableColumnId,
+    filter: NumericRangeFilter | undefined,
+  ) => {
+    setMasterFilters((current) => {
+      const numeric = { ...current.numeric };
+
+      if (filter === undefined) {
+        delete numeric[columnId];
+      } else {
+        numeric[columnId] = filter;
+      }
+
+      return { ...current, numeric };
+    });
+  };
+
   const clearMasterFilters = () => {
     setMasterFilters(EMPTY_USERS_MASTER_FILTER_STATE);
   };
@@ -380,6 +399,7 @@ export function UsersListingTable({
         filters={masterFilters}
         onTextChange={handleMasterTextChange}
         onMultiChange={handleMasterMultiChange}
+        onNumericChange={handleMasterNumericChange}
         onClearAll={clearMasterFilters}
       />
 
@@ -405,8 +425,18 @@ export function UsersListingTable({
             ) : null}
           </p>
           {selectedCount > 0 ? (
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              {selectedCount} selected
+            <p className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>
+                {selectedCount} of {totalCount} record{totalCount !== 1 ? "s" : ""} selected
+                {allFilteredSelected ? " (all)" : ""}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedEmployeeIds(new Set())}
+                className="text-amber-600 hover:underline dark:text-amber-400"
+              >
+                Clear
+              </button>
             </p>
           ) : null}
         </div>
@@ -426,6 +456,16 @@ export function UsersListingTable({
             Bulk edit
             {selectedCount > 0 ? ` (${selectedCount})` : ""}
           </button>
+          <ExcelExportButton
+            columns={USERS_TABLE_COLUMNS.filter((c) => c.id !== "actions")}
+            allRows={allUsers}
+            filteredRows={masterFilteredUsers}
+            selectedEmployeeIds={selectedEmployeeIds}
+            getEmployeeId={(row: UserRecord) => row.employeeId}
+            fileName="user-management"
+            sheetName="Users"
+            storageKey="pms-export-user-management-columns"
+          />
         </div>
       </div>
 
@@ -478,6 +518,7 @@ export function UsersListingTable({
                         filters={masterFilters}
                         onTextChange={handleMasterTextChange}
                         onMultiChange={handleMasterMultiChange}
+                        onNumericChange={handleMasterNumericChange}
                       />
                     ) : (
                       col.label

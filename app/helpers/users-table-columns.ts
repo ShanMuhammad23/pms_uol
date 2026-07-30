@@ -26,6 +26,8 @@ export type UsersTableColumnDef = {
   label: string;
   align?: "left" | "right" | "center";
   width?: number;
+  /** Marks the column as numeric, enabling GT/LT range filtering. */
+  numeric?: boolean;
   getValue: (row: UserRecord) => string;
 };
 
@@ -115,6 +117,7 @@ export const USERS_TABLE_COLUMNS: UsersTableColumnDef[] = [
     id: "qualificationYear",
     label: "Year",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNullable(row.qualificationYear),
   },
   {

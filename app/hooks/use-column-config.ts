@@ -49,6 +49,13 @@ function mergeWithDefaults(
   allowedColumnIds?: readonly string[],
 ): ColumnConfig {
   const defaults = buildDefaultConfig(allColumns, allowedColumnIds);
+
+  // First-time user: no saved preferences (API returns empty arrays).
+  // Use defaults so all RBAC-permitted columns are visible.
+  if (saved.order.length === 0 && saved.visible.length === 0) {
+    return defaults;
+  }
+
   const allowed = allowedColumnIds
     ? new Set(allowedColumnIds)
     : null;
@@ -125,11 +132,20 @@ export function useColumnConfig(
   useEffect(() => {
     if (initializedRef.current) return;
     if (savedConfig) {
-      setConfig(mergeWithDefaults(savedConfig, allColumns, allowedColumnIds));
+      const isFirstTime =
+        savedConfig.order.length === 0 && savedConfig.visible.length === 0;
+      const merged = mergeWithDefaults(savedConfig, allColumns, allowedColumnIds);
+      setConfig(merged);
       setHydrated(true);
       initializedRef.current = true;
+
+      // Persist defaults for first-time users so the server has a baseline.
+      if (isFirstTime) {
+        void saveColumnConfig(tableKey, merged);
+        void queryClient.setQueryData(queryKey, merged);
+      }
     }
-  }, [savedConfig, allColumns, allowedColumnIds]);
+  }, [savedConfig, allColumns, allowedColumnIds, tableKey, queryKey, queryClient]);
 
   // If allColumns or allowedColumnIds change after initialization, re-merge
   // the CURRENT config (not from server) to filter out disallowed columns.

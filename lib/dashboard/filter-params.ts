@@ -114,7 +114,7 @@ export function parseMasterFilterParams(
     multi[column.id] = parseCsv(raw) ?? [];
   }
 
-  return { text, multi };
+  return { text, multi, numeric: {} };
 }
 
 export function appendMasterFilterParams(

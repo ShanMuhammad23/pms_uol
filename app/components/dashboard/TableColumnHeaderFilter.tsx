@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { Check, Filter, Search, X } from "lucide-react";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import { NumericRangeFilterControls } from "@/app/components/common/NumericRangeFilterControls";
 import {
   buildMasterFilterOptions,
   isColumnFilterActive,
@@ -24,6 +25,7 @@ import type {
   DashboardTableColumnDef,
   DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
+import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +48,10 @@ interface TableColumnHeaderFilterProps {
   onMultiChange: (
     columnId: DashboardTableColumnId,
     next: MasterFilterMultiSelection,
+  ) => void;
+  onNumericChange?: (
+    columnId: DashboardTableColumnId,
+    filter: NumericRangeFilter | undefined,
   ) => void;
 }
 
@@ -84,6 +90,7 @@ export function TableColumnHeaderFilter({
   filters,
   onTextChange,
   onMultiChange,
+  onNumericChange,
 }: TableColumnHeaderFilterProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -202,13 +209,12 @@ export function TableColumnHeaderFilter({
   }, [open]);
 
   const allValues = options.map((option) => option.value);
-  const selectedSet = new Set(
-    selectedValues === null ? allValues : selectedValues,
-  );
+  const selectedSet = new Set(selectedValues ?? []);
   const allSelected =
     options.length > 0 &&
-    (selectedValues === null || selectedValues.length === options.length);
-  const noneSelected = selectedValues !== null && selectedValues.length === 0;
+    selectedValues !== null &&
+    selectedValues.length === options.length;
+  const noneSelected = selectedValues === null || selectedValues.length === 0;
 
   const filteredOptions = options.filter((option) => {
     if (!query.trim()) {
@@ -218,12 +224,7 @@ export function TableColumnHeaderFilter({
   });
 
   const commitSelection = (nextSelected: string[]) => {
-    if (nextSelected.length === 0) {
-      onMultiChange(column.id, []);
-      return;
-    }
-
-    if (nextSelected.length === allValues.length) {
+    if (nextSelected.length === 0 || nextSelected.length === allValues.length) {
       onMultiChange(column.id, null);
       return;
     }
@@ -232,7 +233,7 @@ export function TableColumnHeaderFilter({
   };
 
   const handleToggle = (value: string) => {
-    const current = selectedValues === null ? allValues : selectedValues;
+    const current = selectedValues ?? [];
     const next = current.includes(value)
       ? current.filter((item) => item !== value)
       : [...current, value];
@@ -257,6 +258,9 @@ export function TableColumnHeaderFilter({
       onTextChange(column.id as MasterFilterTextColumnId, "");
     } else {
       onMultiChange(column.id, null);
+    }
+    if (onNumericChange && column.numeric) {
+      onNumericChange(column.id, undefined);
     }
     setQuery("");
     setOpen(false);
@@ -330,7 +334,7 @@ export function TableColumnHeaderFilter({
                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5 dark:border-white/5">
                   <button
                     type="button"
-                    onClick={() => onMultiChange(column.id, null)}
+                    onClick={() => onMultiChange(column.id, allValues)}
                     disabled={allSelected || options.length === 0}
                     className="text-[11px] font-semibold text-slate-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-slate-300"
                   >
@@ -338,7 +342,7 @@ export function TableColumnHeaderFilter({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onMultiChange(column.id, [])}
+                    onClick={() => onMultiChange(column.id, null)}
                     disabled={noneSelected || options.length === 0}
                     className="text-[11px] font-semibold text-slate-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-slate-300"
                   >
@@ -403,6 +407,12 @@ export function TableColumnHeaderFilter({
                 </ul>
               </>
             )}
+            {!isText && column.numeric && onNumericChange ? (
+              <NumericRangeFilterControls
+                filter={filters.numeric[column.id]}
+                onChange={(next) => onNumericChange(column.id, next)}
+              />
+            ) : null}
           </div>,
           document.body,
         )

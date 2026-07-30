@@ -23,7 +23,7 @@ interface MultiSelectFilterDropdownProps {
   label: string;
   icon?: ElementType;
   options: MultiSelectOption[];
-  /** `null` means all selected (no filter). `[]` means none selected. */
+  /** `null` means no filter (show all records). `[]` is treated as null. */
   selectedValues: string[] | null;
   onChange: (next: string[] | null) => void;
   disabled?: boolean;
@@ -47,12 +47,12 @@ function selectionLabel(
   options: MultiSelectOption[],
   placeholder: string,
 ): string {
-  if (selectedValues === null || selectedValues.length === options.length) {
+  if (selectedValues === null || selectedValues.length === 0) {
     return placeholder;
   }
 
-  if (selectedValues.length === 0) {
-    return "None selected";
+  if (selectedValues.length === options.length) {
+    return `All (${options.length})`;
   }
 
   if (selectedValues.length === 1) {
@@ -106,13 +106,12 @@ export function MultiSelectFilterDropdown({
   const listId = useId();
 
   const allValues = options.map((option) => option.value);
-  const selectedSet = new Set(
-    selectedValues === null ? allValues : selectedValues,
-  );
+  const selectedSet = new Set(selectedValues ?? []);
   const allSelected =
     options.length > 0 &&
-    (selectedValues === null || selectedValues.length === options.length);
-  const noneSelected = selectedValues !== null && selectedValues.length === 0;
+    selectedValues !== null &&
+    selectedValues.length === options.length;
+  const noneSelected = selectedValues === null || selectedValues.length === 0;
 
   useEffect(() => {
     setMounted(true);
@@ -181,12 +180,7 @@ export function MultiSelectFilterDropdown({
   });
 
   const commitSelection = (nextSelected: string[]) => {
-    if (nextSelected.length === 0) {
-      onChange([]);
-      return;
-    }
-
-    if (nextSelected.length === allValues.length) {
+    if (nextSelected.length === 0 || nextSelected.length === allValues.length) {
       onChange(null);
       return;
     }
@@ -195,15 +189,15 @@ export function MultiSelectFilterDropdown({
   };
 
   const handleSelectAll = () => {
-    onChange(null);
+    onChange(allValues);
   };
 
   const handleUnselectAll = () => {
-    onChange([]);
+    onChange(null);
   };
 
   const handleToggle = (value: string) => {
-    const current = selectedValues === null ? allValues : selectedValues;
+    const current = selectedValues ?? [];
     const next = current.includes(value)
       ? current.filter((item) => item !== value)
       : [...current, value];
@@ -372,8 +366,9 @@ export function MultiSelectFilterDropdown({
               (quiet
                 ? "border-slate-400 ring-1 ring-slate-300/50 dark:border-slate-500 dark:ring-slate-600/40"
                 : "border-amber-500/50 ring-2 ring-amber-500/20"),
-            !allSelected &&
-              !noneSelected &&
+            selectedValues !== null &&
+              selectedValues.length > 0 &&
+              !allSelected &&
               (quiet
                 ? "border-slate-400 dark:border-slate-500"
                 : "border-amber-300 dark:border-amber-700/50"),

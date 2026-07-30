@@ -29,6 +29,7 @@ import { canReviewSubmissions, canViewQuartile } from "@/lib/auth/submission-rev
 import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
+import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScoreAdjustmentCell";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
@@ -87,6 +88,159 @@ function buildManagerDraftMap(
   }
 
   return drafts;
+}
+
+function getRatingFromPercent(pct: number | null): string {
+  if (pct === null) return "—";
+  if (pct >= 85) return "OS";
+  if (pct >= 70) return "EX";
+  if (pct >= 55) return "ST";
+  if (pct >= 40) return "IN";
+  return "UN";
+}
+
+interface ScoreAdjustmentsPanelProps {
+  submissionId: number;
+  scoreO: number;
+  maxRawScore: number;
+  creditHrsErpScoreAdj: number | null;
+  pubOricScoreAdj: number | null;
+  qecScoreAdj: number | null;
+  calibrationFactor: number | null;
+  canEdit: boolean;
+}
+
+function ScoreAdjustmentsPanel({
+  submissionId,
+  scoreO,
+  maxRawScore,
+  creditHrsErpScoreAdj,
+  pubOricScoreAdj,
+  qecScoreAdj,
+  calibrationFactor,
+  canEdit,
+}: ScoreAdjustmentsPanelProps) {
+  const chAdj = creditHrsErpScoreAdj ?? 0;
+  const oricAdj = pubOricScoreAdj ?? 0;
+  const qecAdj = qecScoreAdj ?? 0;
+  const calFr = calibrationFactor ?? 1;
+
+  const adjustedScore = scoreO + chAdj + oricAdj + qecAdj;
+  const adjustedScorePct =
+    maxRawScore > 0
+      ? Number(((adjustedScore / maxRawScore) * 100).toFixed(2))
+      : null;
+  const ratingO = getRatingFromPercent(adjustedScorePct);
+
+  const normalizedScore = adjustedScore * calFr;
+  const normalizedScorePct =
+    maxRawScore > 0
+      ? Number(((normalizedScore / maxRawScore) * 100).toFixed(2))
+      : null;
+
+  const disabled = !canEdit;
+
+  return (
+    <div className="border-t border-slate-200 px-4 py-4 dark:border-slate-700">
+      <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+        Score Adjustments &amp; Calibration
+      </h3>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Score (O)
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+            {scoreO.toFixed(1)}
+          </p>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            CH Adj
+          </p>
+          <div className="mt-1">
+            <InlineScoreAdjustmentCell
+              submissionId={submissionId}
+              field="creditHrsErpScoreAdj"
+              value={creditHrsErpScoreAdj}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            ORIC Adj
+          </p>
+          <div className="mt-1">
+            <InlineScoreAdjustmentCell
+              submissionId={submissionId}
+              field="pubOricScoreAdj"
+              value={pubOricScoreAdj}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            QEC Adj
+          </p>
+          <div className="mt-1">
+            <InlineScoreAdjustmentCell
+              submissionId={submissionId}
+              field="qecScoreAdj"
+              value={qecScoreAdj}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Adj. Score (100)
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+            {adjustedScorePct ?? "—"}
+          </p>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Rating (O)
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+            {ratingO}
+          </p>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Cal. Fr
+          </p>
+          <div className="mt-1">
+            <InlineScoreAdjustmentCell
+              submissionId={submissionId}
+              field="calibrationFactor"
+              value={calibrationFactor}
+              disabled={disabled}
+              mode="decimal"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Norm. Score (100)
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+            {normalizedScorePct ?? "—"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function SubmissionDetailView({
@@ -478,9 +632,6 @@ export default function SubmissionDetailView({
           <div className="ml-auto no-print">
             <PrintButton
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-              recommendedOrientation={hasManager2 && showManager2Data ? "landscape" : "portrait"}
-              documentTitle={`${data.employeeName} — ${data.templateTitle}`}
-              showOrientationDialog
             />
           </div>
         </div>
@@ -803,10 +954,10 @@ export default function SubmissionDetailView({
                     </td>
                       </>
                     ) : null}
-                    {/* Manager 1 Score */}
+                    {/* Manager 1 Score — read-only for admin roles */}
                     <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                       {scored ? (
-                        editingManager1 || editingHr ? (
+                        (editingManager1 && !isAdminRole) || (editingHr && !isAdminRole) ? (
                           <input
                             type="number"
                             min={0}
@@ -832,10 +983,10 @@ export default function SubmissionDetailView({
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    {/* Manager 1 Remarks */}
+                    {/* Manager 1 Remarks — read-only for admin roles */}
                     <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                       {scored ? (
-                        editingManager1 || editingHr ? (
+                        (editingManager1 && !isAdminRole) || (editingHr && !isAdminRole) ? (
                           <textarea
                             value={managerDraft.remarks}
                             rows={2}
@@ -863,7 +1014,7 @@ export default function SubmissionDetailView({
                       <>
                         <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                           {scored ? (
-                            editingManager2 || editingHr ? (
+                            (editingManager2 && !isAdminRole) || (editingHr && !isAdminRole) ? (
                               <input
                                 type="number"
                                 min={0}
@@ -894,7 +1045,7 @@ export default function SubmissionDetailView({
                         </td>
                         <td className="px-2 py-2.5">
                           {scored ? (
-                            editingManager2 || editingHr ? (
+                            (editingManager2 && !isAdminRole) || (editingHr && !isAdminRole) ? (
                               <textarea
                                 value={managerDraft.remarks}
                                 rows={2}
@@ -962,6 +1113,19 @@ export default function SubmissionDetailView({
           ) : null}
         </table>
       </div>
+
+      {isAdminRole && rows.length > 0 ? (
+        <ScoreAdjustmentsPanel
+          submissionId={data.id}
+          scoreO={data.initialScoreNumeric ?? data.rawScore}
+          maxRawScore={data.maxRawScore}
+          creditHrsErpScoreAdj={data.creditHrsErpScoreAdj}
+          pubOricScoreAdj={data.pubOricScoreAdj}
+          qecScoreAdj={data.qecScoreAdj}
+          calibrationFactor={data.calibrationFactor}
+          canEdit={data.canEditScoreAdjustments && isEligible}
+        />
+      ) : null}
 
       {rows.length > 0 ? (
         <AssessmentSummaryFooter

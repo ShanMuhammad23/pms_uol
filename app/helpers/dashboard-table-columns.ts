@@ -6,6 +6,37 @@ import {
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
+export type HrApprovalStatus = "pending" | "approved" | "review_required";
+
+const HR_APPROVED_MARKER = "[HR APPROVED]";
+const HR_REVIEW_REQUIRED_MARKER = "[REVIEW REQUIRED]";
+
+export function getHrApprovalStatus(row: FormSubmissionListItem): HrApprovalStatus {
+  const remarks = row.remarksEvaluation ?? "";
+  if (remarks.includes(HR_REVIEW_REQUIRED_MARKER)) return "review_required";
+  if (remarks.includes(HR_APPROVED_MARKER)) return "approved";
+  if (
+    row.status === "PENDING_BOARD_APPROVAL" ||
+    row.status === "APPROVED" ||
+    row.status === "COMPLETED"
+  ) {
+    return "approved";
+  }
+  return "pending";
+}
+
+export function buildHrApprovedRemarks(currentRemarks: string | null): string {
+  const cleaned = (currentRemarks ?? "").replace(HR_REVIEW_REQUIRED_MARKER, "").trim();
+  if (cleaned.includes(HR_APPROVED_MARKER)) return cleaned;
+  return cleaned ? `${cleaned} ${HR_APPROVED_MARKER}` : HR_APPROVED_MARKER;
+}
+
+export function buildReviewRequiredRemarks(currentRemarks: string | null): string {
+  const cleaned = (currentRemarks ?? "").replace(HR_APPROVED_MARKER, "").trim();
+  if (cleaned.includes(HR_REVIEW_REQUIRED_MARKER)) return cleaned;
+  return cleaned ? `${cleaned} ${HR_REVIEW_REQUIRED_MARKER}` : HR_REVIEW_REQUIRED_MARKER;
+}
+
 export type DashboardTableColumnId =
   | "sapCode"
   | "employeeName"
@@ -31,6 +62,7 @@ export type DashboardTableColumnId =
   | "adjustedScore"
   | "ratingO"
   | "calibrationFactor"
+  | "hrApprovalStatus"
   | "normalizedScore"
   | "ratingN"
   | "quartile"
@@ -57,6 +89,8 @@ export type DashboardTableColumnDef = {
   width?: number;
   /** Allow multi-line wrapping. Defaults to false (single line). */
   wrap?: boolean;
+  /** Marks the column as numeric, enabling GT/LT range filtering. */
+  numeric?: boolean;
   getValue: (row: FormSubmissionListItem) => string;
 };
 
@@ -104,6 +138,7 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
       "adjustedScore",
       "ratingO",
       "calibrationFactor",
+      "hrApprovalStatus",
       "normalizedScore",
       "ratingN",
       "quartile",
@@ -306,6 +341,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     id: "uolExperience",
     label: "UoL Exp",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNumber(row.uolExperienceYears),
   },
   qualification: {
@@ -364,6 +400,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 100,
     wrap: true,
+    numeric: true,
     getValue: (row) =>
       formatNumber(getSubmissionApplicableDurationFactor(row), 2),
   },
@@ -373,6 +410,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
+    numeric: true,
     getValue: (row) => formatNumber(row.scoreO ?? row.rawScore, 2),
   },
   creditHrsErpAdj: {
@@ -381,6 +419,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
+    numeric: true,
     getValue: (row) => formatNumber(row.creditHrsErpScoreAdj, 0),
   },
   pubOricScoreAdj: {
@@ -389,6 +428,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
+    numeric: true,
     getValue: (row) => formatNumber(row.pubOricScoreAdj, 0),
   },
   qecScoreAdj: {
@@ -397,6 +437,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
+    numeric: true,
     getValue: (row) => formatNumber(row.qecScoreAdj, 0),
   },
   adjustedScore: {
@@ -405,6 +446,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 110,
     wrap: true,
+    numeric: true,
     getValue: (row) => {
       const pct = getAdjustedScorePercent(row);
       if (pct === null) return "—";
@@ -422,7 +464,20 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 160,
     wrap: true,
+    numeric: true,
     getValue: (row) => formatNumber(row.calibrationFactor ?? 1, 1),
+  },
+  hrApprovalStatus: {
+    id: "hrApprovalStatus",
+    label: "HR Approval",
+    align: "center",
+    width: 90,
+    getValue: (row) => {
+      const status = getHrApprovalStatus(row);
+      if (status === "approved") return "Approved";
+      if (status === "review_required") return "Review Required";
+      return "Pending";
+    },
   },
   normalizedScore: {
     id: "normalizedScore",
@@ -430,6 +485,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     align: "center",
     width: 80,
     wrap: true,
+    numeric: true,
     getValue: (row) => {
       const pct = getNormalizedScorePercent(row);
       if (pct === null) return "—";
@@ -457,18 +513,21 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     id: "currentSalary",
     label: "Current Sal",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNumber(row.currentSalary),
   },
   previousSalary: {
     id: "previousSalary",
     label: "Prev Salary",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNumber(row.previousSalary),
   },
   salaryDiff: {
     id: "salaryDiff",
     label: "Difference",
     align: "right",
+    numeric: true,
     getValue: (row) => {
       if (row.currentSalary == null || row.previousSalary == null) return "—";
       return formatNumber(row.currentSalary - row.previousSalary);
@@ -478,6 +537,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     id: "applicableSalaryForIncrement",
     label: "Applicable Sal",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNumber(row.applicableSalaryForIncrement),
   },
   applicableMatrix: {
@@ -489,24 +549,28 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     id: "incrementPerMatrix",
     label: "Increment Per Matrix",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNumber(row.incrementPerMatrix),
   },
   incrementAdjusted: {
     id: "incrementAdjusted",
     label: "Increment Adjustment",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNumber(row.incrementAdjusted),
   },
   revisedSalary: {
     id: "revisedSalary",
     label: "Revised Salary",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNumber(row.revisedSalary),
   },
   revisedSalaryRo: {
     id: "revisedSalaryRo",
     label: "Revised Salary (RO)",
     align: "right",
+    numeric: true,
     getValue: (row) => formatNumber(row.revisedSalaryRo),
   },
   remarksCompensation: {

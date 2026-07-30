@@ -8,6 +8,12 @@ import {
   type DashboardTableColumnId,
   type DashboardTableColumnDef,
 } from "@/app/helpers/dashboard-table-columns";
+import {
+  hasNumericRange,
+  matchesNumericRange,
+  parseNumericCell,
+  type NumericRangeFilter,
+} from "@/app/helpers/numeric-range-filter";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 /**
@@ -42,11 +48,13 @@ export type MasterFilterMultiSelection = string[] | null;
 export type MasterFilterState = {
   text: Partial<Record<MasterFilterTextColumnId, string>>;
   multi: Partial<Record<DashboardTableColumnId, MasterFilterMultiSelection>>;
+  numeric: Partial<Record<DashboardTableColumnId, NumericRangeFilter>>;
 };
 
 export const EMPTY_MASTER_FILTER_STATE: MasterFilterState = {
   text: {},
   multi: {},
+  numeric: {},
 };
 
 export const MASTER_FILTER_TEXT_COLUMNS: DashboardTableColumnDef[] =
@@ -57,6 +65,11 @@ export const MASTER_FILTER_TEXT_COLUMNS: DashboardTableColumnDef[] =
 export const MASTER_FILTER_MULTI_COLUMNS: DashboardTableColumnDef[] =
   DASHBOARD_TABLE_COLUMNS.filter(
     (column) => !MASTER_FILTER_TEXT_ID_SET.has(column.id),
+  );
+
+export const MASTER_FILTER_NUMERIC_COLUMNS: DashboardTableColumnDef[] =
+  DASHBOARD_TABLE_COLUMNS.filter(
+    (column) => column.numeric === true,
   );
 
 export type MasterFilterSection = {
@@ -142,6 +155,23 @@ export function matchesMasterFiltersExcluding(
     }
 
     if (!selected.includes(column.getValue(submission))) {
+      return false;
+    }
+  }
+
+  for (const column of MASTER_FILTER_NUMERIC_COLUMNS) {
+    if (excludeColumnId === column.id) {
+      continue;
+    }
+
+    const range = filters.numeric[column.id];
+    if (!hasNumericRange(range)) {
+      continue;
+    }
+
+    const cellValue = column.getValue(submission);
+    const numValue = parseNumericCell(cellValue);
+    if (numValue === null || !matchesNumericRange(numValue, range!)) {
       return false;
     }
   }
@@ -239,7 +269,15 @@ export function isColumnFilterActive(
   }
 
   const selected = filters.multi[columnId];
-  return selected !== undefined && selected !== null;
+  if (selected !== undefined && selected !== null) {
+    return true;
+  }
+
+  if (hasNumericRange(filters.numeric[columnId])) {
+    return true;
+  }
+
+  return false;
 }
 
 export function countActiveMasterFilters(filters: MasterFilterState): number {
@@ -253,5 +291,9 @@ export function countActiveMasterFilters(filters: MasterFilterState): number {
     return selected !== undefined && selected !== null ? count + 1 : count;
   }, 0);
 
-  return textCount + multiCount;
+  const numericCount = MASTER_FILTER_NUMERIC_COLUMNS.reduce((count, column) => {
+    return hasNumericRange(filters.numeric[column.id]) ? count + 1 : count;
+  }, 0);
+
+  return textCount + multiCount + numericCount;
 }

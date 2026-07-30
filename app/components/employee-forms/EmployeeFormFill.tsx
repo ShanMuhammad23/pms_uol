@@ -403,13 +403,18 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         <p className="no-print text-sm text-emerald-600">{successMessage}</p>
       ) : null}
 
-      <div className="no-print">
-        <h2 className="text-xl font-semibold text-text-primary">
-          {template.title}
-        </h2>
-        {template.description ? (
-          <p className="mt-1 text-sm text-foreground/70">{template.description}</p>
-        ) : null}
+      <div className="no-print flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-text-primary">
+            {template.title}
+          </h2>
+          {template.description ? (
+            <p className="mt-1 text-sm text-foreground/70">{template.description}</p>
+          ) : null}
+        </div>
+        <PrintButton
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+        />
       </div>
 
       {data != null && !data.assessmentEligibility ? (

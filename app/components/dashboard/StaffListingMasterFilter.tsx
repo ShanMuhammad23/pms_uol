@@ -12,6 +12,7 @@ import {
   MultiSelectFilterDropdown,
   type MultiSelectOption,
 } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import { NumericRangeFilterControls } from "@/app/components/common/NumericRangeFilterControls";
 import {
   MASTER_FILTER_SECTIONS,
   buildMasterFilterOptions,
@@ -25,6 +26,7 @@ import {
   type DashboardColumnSectionId,
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
+import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +52,10 @@ interface StaffListingMasterFilterProps {
   onMultiChange: (
     columnId: DashboardTableColumnId,
     next: MasterFilterMultiSelection,
+  ) => void;
+  onNumericChange?: (
+    columnId: DashboardTableColumnId,
+    filter: NumericRangeFilter | undefined,
   ) => void;
   onClearAll: () => void;
   allowedColumnIds?: readonly DashboardTableColumnId[];
@@ -145,6 +151,7 @@ export function StaffListingMasterFilter({
   filters,
   onTextChange,
   onMultiChange,
+  onNumericChange,
   onClearAll,
   allowedColumnIds,
 }: StaffListingMasterFilterProps) {
@@ -266,21 +273,32 @@ export function StaffListingMasterFilter({
                               }
                             />
                           ) : (
-                            <MultiSelectFilterDropdown
-                              label={column.label}
-                              options={optionsByColumn.get(column.id) ?? []}
-                              selectedValues={filters.multi[column.id] ?? null}
-                              onChange={(next) =>
-                                onMultiChange(column.id, next)
-                              }
-                              placeholder="All"
-                              searchable={
-                                (optionsByColumn.get(column.id) ?? []).length >
-                                8
-                              }
-                              quiet
-                              className="min-w-0 flex-none"
-                            />
+                            <div className="space-y-1.5">
+                              <MultiSelectFilterDropdown
+                                label={column.label}
+                                options={optionsByColumn.get(column.id) ?? []}
+                                selectedValues={filters.multi[column.id] ?? null}
+                                onChange={(next) =>
+                                  onMultiChange(column.id, next)
+                                }
+                                placeholder="All"
+                                searchable={
+                                  (optionsByColumn.get(column.id) ?? []).length >
+                                  8
+                                }
+                                quiet
+                                className="min-w-0 flex-none"
+                              />
+                              {column.numeric && onNumericChange ? (
+                                <NumericRangeFilterControls
+                                  filter={filters.numeric[column.id]}
+                                  onChange={(next) =>
+                                    onNumericChange(column.id, next)
+                                  }
+                                  variant="panel"
+                                />
+                              ) : null}
+                            </div>
                           )}
                         </ColumnFilterRow>
                       );

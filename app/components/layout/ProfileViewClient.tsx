@@ -155,8 +155,6 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
         <div className="flex items-center gap-3">
           <PrintButton
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-            recommendedOrientation="portrait"
-            documentTitle={`${fullName} — Employee Profile`}
           />
           <StatusBadge status={profile.employmentStatus} role={profile.systemRole} />
         </div>

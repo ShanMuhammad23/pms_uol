@@ -47,7 +47,7 @@ export async function fetchFormSubmissions(): Promise<FormSubmissionListItem[]> 
       designations: null,
       formStates: null,
     },
-    masterFilters: { text: {}, multi: {} },
+    masterFilters: { text: {}, multi: {}, numeric: {} },
   });
   return response.items;
 }
