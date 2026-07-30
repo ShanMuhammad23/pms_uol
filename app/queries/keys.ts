@@ -18,4 +18,6 @@ export const queryKeys = {
   usersOverview: ["users", "overview"] as const,
   usersByEmployeeIds: (employeeIds: string[]) =>
     ["users", "by-ids", employeeIds] as const,
+  securityEvents: (page: number, pageSize: number, eventType: string) =>
+    ["security-events", page, pageSize, eventType] as const,
 };

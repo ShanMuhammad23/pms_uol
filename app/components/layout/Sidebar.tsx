@@ -16,7 +16,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings2,
-  SquareUserRound,
+  Shield,
   Users,
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
@@ -55,6 +55,16 @@ const ADMIN_LINKS = [
   },
 ] as const;
 
+const SUPER_ADMIN_ONLY_LINKS = [
+  {
+    href: "/dashboard/security-events",
+    label: "Security Events",
+    icon: Shield,
+    match: (pathname: string) =>
+      pathname.startsWith("/dashboard/security-events"),
+  },
+] as const;
+
 const Sidebar = () => {
   const pathname = usePathname();
   const { data: session } = useSession();
@@ -62,10 +72,14 @@ const Sidebar = () => {
   const user = session?.user;
   const isEmployee = isEmployeeRole(user?.role);
   const isDashboard = pathname === "/dashboard";
-  const isProfile = pathname === "/dashboard/profile";
   const isMyForms = pathname.startsWith("/dashboard/my-forms");
-  const isSuperAdmin = isAdminRole(user?.role);
-  const isAdminRouteActive = ADMIN_LINKS.some((link) => link.match(pathname));
+  const isOrgAdmin = isAdminRole(user?.role);
+  const isTrueSuperAdmin = user?.role === "SUPER_ADMIN";
+  const adminLinks = [
+    ...ADMIN_LINKS,
+    ...(isTrueSuperAdmin ? SUPER_ADMIN_ONLY_LINKS : []),
+  ];
+  const isAdminRouteActive = adminLinks.some((link) => link.match(pathname));
 
   const [adminOpen, setAdminOpen] = useState(isAdminRouteActive);
 
@@ -177,7 +191,7 @@ const Sidebar = () => {
                 </Link>
               </li>
 
-              {isSuperAdmin ? (
+              {isOrgAdmin ? (
                 <li className="pt-2">
                   {collapsed ? (
                     <div className="space-y-0.5 transition-all duration-300 hover:text-primary">
@@ -187,7 +201,7 @@ const Sidebar = () => {
                       >
                         <Settings2 className="size-4" />
                       </div>
-                      {ADMIN_LINKS.map((link) => {
+                      {adminLinks.map((link) => {
                         const Icon = link.icon;
                         const active = link.match(pathname);
                         return (
@@ -226,7 +240,7 @@ const Sidebar = () => {
 
                       {adminOpen ? (
                         <ul className="mt-0.5 space-y-0.5 border-l border-slate-300/60 ml-6 dark:border-white/10">
-                          {ADMIN_LINKS.map((link) => {
+                          {adminLinks.map((link) => {
                             const Icon = link.icon;
                             const active = link.match(pathname);
                             return (
