@@ -16,22 +16,21 @@ interface CalibrationDistributionMatrixProps {
 export function CalibrationDistributionMatrix({
   rows,
   columns,
-  employeeCount,
+  employeeCount: _employeeCount,
   isLoading,
   hideHeader = false,
 }: CalibrationDistributionMatrixProps) {
-  const columnTotals = columns.map((column) =>
-    rows.reduce(
-      (sum, row) => sum + (row.quartiles[column.index]?.count ?? 0),
-      0,
-    ),
-  );
+  const levelColWidth = columns.length > 0 ? 26 : 100;
+  const dataColWidth =
+    columns.length > 0 ? (100 - levelColWidth) / (columns.length + 1) : 0;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col">
       {!hideHeader ? (
-        <div className="mb-3">
-          <p className="text-sm font-semibold text-slate-900 dark:text-white">Rating × Quartile Matrix</p>
+        <div className="mb-3 min-w-0">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+            Rating × Quartile Matrix
+          </p>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             Employee headcount by performance level and quartile (based on
             normalized score)
@@ -48,23 +47,37 @@ export function CalibrationDistributionMatrix({
           No performance levels or quartiles configured yet.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-neutral-700">
-          <table className="min-w-full text-xs border-primary">
-            <thead className="whitespace-nowrap border-b border-slate-300 text-left text-sm font-semibold text-slate-900 dark:border-neutral-600 dark:text-slate-50">
+        <div className="min-w-0 w-full overflow-hidden rounded-md border border-slate-200 dark:border-neutral-700">
+          <table className="w-full table-fixed border-collapse text-xs border-primary">
+            <colgroup>
+              <col style={{ width: `${levelColWidth}%` }} />
+              {columns.map((column) => (
+                <col
+                  key={`col-${column.label}-${column.index}`}
+                  style={{ width: `${dataColWidth}%` }}
+                />
+              ))}
+              <col style={{ width: `${dataColWidth}%` }} />
+            </colgroup>
+            <thead className="border-b border-slate-300 text-left text-sm font-semibold text-slate-900 dark:border-neutral-600 dark:text-slate-50">
               <tr className="divide-x divide-slate-300 dark:divide-neutral-600">
-                <th className="px-3 bg-primary py-2.5 text-left font-semibold text-white dark:text-slate-300">
-                  Performance Level
+                <th className="bg-primary px-2 py-2 text-left font-semibold text-white dark:text-slate-300 sm:px-3 sm:py-2.5">
+                  <span className="block break-words leading-tight">
+                    Performance Level
+                  </span>
                 </th>
                 {columns.map((column) => (
                   <th
                     key={`${column.label}-${column.index}`}
-                    className="px-2 bg-primary py-2.5 text-center font-semibold text-white dark:text-slate-300"
+                    className="bg-primary px-1 py-2 text-center font-semibold text-white dark:text-slate-300 sm:px-2 sm:py-2.5"
                   >
-                    <span className="block">{column.label}</span>
+                    <span className="block break-words leading-tight">
+                      {column.label}
+                    </span>
                   </th>
                 ))}
-                <th className="px-2 bg-primary py-2.5 text-center font-semibold text-white dark:text-slate-300">
-                  Total
+                <th className="bg-primary px-1 py-2 text-center font-semibold text-white dark:text-slate-300 sm:px-2 sm:py-2.5">
+                  <span className="block break-words leading-tight">Total</span>
                 </th>
               </tr>
             </thead>
@@ -76,30 +89,40 @@ export function CalibrationDistributionMatrix({
                 >
                   <td
                     className={cn(
-                      "whitespace-nowrap px-3 py-2.5 font-bold text-white dark:text-slate-200 text-lg",
+                      "px-2 py-2 font-bold text-white dark:text-slate-200 sm:px-3 sm:py-2.5 sm:text-base lg:text-lg",
                       getPerformanceLevelColor(row.rating),
                     )}
                   >
-                    {row.rating}
+                    <span className="block break-words leading-tight">
+                      {row.rating}
+                    </span>
                   </td>
                   {row.quartiles.map((cell) => (
-                    <td key={`${row.levelId}-${cell.id ?? cell.sortOrder}`} className={cn("px-2 py-2.5 text-center", getPerformanceLevelColor(row.rating))} >
+                    <td
+                      key={`${row.levelId}-${cell.id ?? cell.sortOrder}`}
+                      className={cn(
+                        "px-1 py-2 text-center sm:px-2 sm:py-2.5",
+                        getPerformanceLevelColor(row.rating),
+                      )}
+                    >
                       {cell.count === null ? (
-                        <span className="text-slate-300 dark:text-slate-600">—</span>
+                        <span className="text-slate-300 dark:text-slate-600">
+                          —
+                        </span>
                       ) : (
-                        <div className="space-y-0.1">
+                        <div className="min-w-0 space-y-0.5">
                           <span
                             className={cn(
-                              "text-lg inline-flex min-w-8 items-center justify-center text-white dark:text-slate-200 rounded-md  font-bold tabular-nums",
+                              "inline-flex max-w-full items-center justify-center rounded-md text-base font-bold tabular-nums sm:text-lg dark:text-slate-200",
                               cell.count > 0
-                                ? " text-primary dark:bg-amber-950/40 dark:text-amber-300"
-                                : "text-white dark:text-slate-200",
+                                ? "text-white dark:bg-amber-950/40 dark:text-amber-300"
+                                : "text-slate-400 dark:text-slate-600",
                             )}
                           >
                             {cell.count}
                           </span>
                           {cell.sublabel ? (
-                            <p className="text-[10px] text-white dark:text-slate-500">
+                            <p className="break-words text-[10px] leading-tight text-white dark:text-slate-500">
                               {cell.sublabel}
                             </p>
                           ) : null}
@@ -107,13 +130,12 @@ export function CalibrationDistributionMatrix({
                       )}
                     </td>
                   ))}
-                  <td className={cn("px-2 py-2.5 text-center font-bold text-base tabular-nums bg-primary text-white")}>
+                  <td className="bg-primary px-1 py-2 text-center text-sm font-bold tabular-nums text-white sm:px-2 sm:py-2.5 sm:text-base">
                     {row.rowTotal}
                   </td>
                 </tr>
               ))}
             </tbody>
-        
           </table>
         </div>
       )}
