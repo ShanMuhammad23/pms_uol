@@ -2,12 +2,15 @@
 
 import { useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { useDashboardChartMetrics } from "@/app/queries/charts";
-import { useDashboardFilters } from "@/app/queries/dashboard-filters";
+import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
 import {
-  useDashboardOverviewQuery,
-  useFormSubmissionsQuery,
-} from "@/app/queries/forms";
+  buildCalibrationDataFromCounts,
+  buildEligibilityDataFromCounts,
+  buildRatingQuartileMatrixFromCounts,
+} from "@/app/helpers/dashboard-overview-metrics";
+import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
+import { useDashboardFilters } from "@/app/queries/dashboard-filters";
+import { useDashboardOverviewQuery } from "@/app/queries/forms";
 import {
   useDashboardEntitiesQuery,
   useUniqueDesignationsQuery,
@@ -19,38 +22,56 @@ import {
   useMatrixForDistribution,
   usePerformanceMatrixQuery,
 } from "@/app/queries/performance";
-import { matchesSubmissionFilters, matchesSubmissionFiltersExcluding } from "@/app/helpers/dashboard-filters";
-import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
-import { submissionVisibleToHead } from "@/app/helpers/manager-review";
-import { countEligibleSubmissions } from "@/app/helpers/dashboard-workflow-stats";
 import { isHeadRole } from "@/lib/auth/home-path";
-import type { FormSubmissionListItem } from "@/types/form-submissions";
+import type { EligibilityStatus } from "@/app/helpers/dashboard-types";
+import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import type { CountOption } from "@/types/dashboard-api";
 
-function scopeSubmissionsForHead(
-  submissions: FormSubmissionListItem[],
-  viewerUserId: number | null,
-  headEntityId: number | null,
-  entities: Parameters<typeof submissionVisibleToHead>[3],
-) {
-  if (viewerUserId == null || !Number.isFinite(viewerUserId)) {
-    return submissions;
+function mergeEntityOptions(
+  options: MultiSelectOption[],
+  counts: CountOption[] | undefined,
+): MultiSelectOption[] {
+  const countByValue = new Map(
+    (counts ?? []).map((row) => [row.value, row.count]),
+  );
+  return options.map((option) => ({
+    ...option,
+    count: countByValue.get(option.value) ?? 0,
+  }));
+}
+
+function mergeValueOptions(
+  options: MultiSelectOption[],
+  counts: CountOption[] | undefined,
+  opts?: { keepZero?: boolean },
+): MultiSelectOption[] {
+  const countByValue = new Map(
+    (counts ?? []).map((row) => [row.value, row.count]),
+  );
+  const merged = options.map((option) => ({
+    ...option,
+    count: countByValue.get(option.value) ?? 0,
+  }));
+
+  if (opts?.keepZero) {
+    for (const row of counts ?? []) {
+      if (!merged.some((option) => option.value === row.value)) {
+        merged.push({
+          value: row.value,
+          label: row.value,
+          count: row.count,
+        });
+      }
+    }
   }
 
-  return submissions.filter((submission) =>
-    submissionVisibleToHead(viewerUserId, headEntityId, submission, entities),
-  );
+  return merged;
 }
 
 export function useDashboardPage() {
   const isDarkMode = useIsDarkMode();
   const { data: session } = useSession();
   const isHead = isHeadRole(session?.user?.role);
-  const headEntityId =
-    isHead && session?.user?.entityId != null
-      ? Number(session.user.entityId)
-      : null;
-  const viewerUserId =
-    isHead && session?.user?.id != null ? Number(session.user.id) : null;
 
   const { data: financialYears } = useFinancialYearsQuery();
   const activeFinancialYearId = useActiveFinancialYearId(financialYears);
@@ -68,36 +89,6 @@ export function useDashboardPage() {
     useUniqueDesignationsQuery();
 
   const {
-    data: overview = [],
-    isLoading: overviewLoading,
-  } = useDashboardOverviewQuery();
-
-  const {
-    data: submissions = [],
-    isLoading: submissionsLoading,
-    error: submissionsError,
-  } = useFormSubmissionsQuery();
-
-  const scopedOverview = useMemo(
-    () =>
-      scopeSubmissionsForHead(overview, viewerUserId, headEntityId, entities),
-    [overview, viewerUserId, headEntityId, entities],
-  );
-
-  const scopedSubmissions = useMemo(
-    () =>
-      scopeSubmissionsForHead(
-        submissions,
-        viewerUserId,
-        headEntityId,
-        entities,
-      ),
-    [submissions, viewerUserId, headEntityId, entities],
-  );
-
-  const matrixForDistribution = useMatrixForDistribution(performanceMatrix);
-
-  const {
     searchQuery,
     setSearchQuery,
     selectedCategory0EntityIds,
@@ -106,15 +97,14 @@ export function useDashboardPage() {
     selectedRoleCategories,
     selectedDesignations,
     selectedFormStates,
-    category0Options,
-    category0DistributionOptions,
-    category1Options,
-    category2Options,
-    roleCategoryOptions,
-    designationOptions,
-    formStateOptions,
-    filteredSubmissions: filteredOverview,
-    filterState,
+    category0Options: baseCategory0Options,
+    category0DistributionOptions: baseCategory0DistributionOptions,
+    category1Options: baseCategory1Options,
+    category2Options: baseCategory2Options,
+    roleCategoryOptions: baseRoleCategoryOptions,
+    designationOptions: baseDesignationOptions,
+    formStateOptions: baseFormStateOptions,
+    filterParams,
     activeFilters,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,
@@ -126,43 +116,108 @@ export function useDashboardPage() {
     clearAllFilters,
     filterByFormState,
   } = useDashboardFilters({
-    submissions: scopedOverview,
     entities,
     designations,
   });
 
-  const filteredSubmissions = useMemo(() => {
-    if (scopedSubmissions.length === 0) {
-      return [];
-    }
+  const {
+    data: overview,
+    isLoading: overviewLoading,
+  } = useDashboardOverviewQuery(filterParams);
 
-    return scopedSubmissions.filter((submission) =>
-      matchesSubmissionFilters(submission, filterState),
-    );
-  }, [scopedSubmissions, filterState]);
-
-  // Institutional Quota scales from eligible headcount ignoring workflow/form-state
-  // filters so stats-card clicks do not change quota counts on the rating curve.
-  const quotaEligibleCount = useMemo(
-    () =>
-      countEligibleSubmissions(
-        scopedOverview.filter((submission) =>
-          matchesSubmissionFiltersExcluding(submission, filterState, "formState"),
-        ),
-      ),
-    [scopedOverview, filterState],
+  const category0Options = useMemo(
+    () => mergeEntityOptions(baseCategory0Options, overview?.filters.category0),
+    [baseCategory0Options, overview?.filters.category0],
   );
 
-  const chartMetrics = useDashboardChartMetrics({
-    filteredSubmissions,
-    quotaEligibleCount,
-    isDarkMode,
-    matrixForDistribution,
-    institutionalQuotaRows,
-  });
+  const category1Options = useMemo(
+    () => mergeEntityOptions(baseCategory1Options, overview?.filters.category1),
+    [baseCategory1Options, overview?.filters.category1],
+  );
+
+  const category2Options = useMemo(
+    () => mergeEntityOptions(baseCategory2Options, overview?.filters.category2),
+    [baseCategory2Options, overview?.filters.category2],
+  );
+
+  const category0DistributionOptions = useMemo(() => {
+    const merged = mergeEntityOptions(
+      baseCategory0DistributionOptions.length > 0
+        ? baseCategory0DistributionOptions
+        : category0Options,
+      overview?.filters.category0Distribution,
+    );
+    return merged.filter((option) => option.count > 0);
+  }, [
+    baseCategory0DistributionOptions,
+    category0Options,
+    overview?.filters.category0Distribution,
+  ]);
+
+  const roleCategoryOptions = useMemo(
+    () =>
+      mergeValueOptions(
+        baseRoleCategoryOptions,
+        overview?.filters.roleCategories,
+        { keepZero: true },
+      ),
+    [baseRoleCategoryOptions, overview?.filters.roleCategories],
+  );
+
+  const designationOptions = useMemo(
+    () =>
+      mergeValueOptions(
+        baseDesignationOptions,
+        overview?.filters.designations,
+      ).filter((option) => option.count > 0),
+    [baseDesignationOptions, overview?.filters.designations],
+  );
+
+  const formStateOptions = useMemo(
+    () =>
+      mergeValueOptions(baseFormStateOptions, overview?.filters.formStates),
+    [baseFormStateOptions, overview?.filters.formStates],
+  );
+
+  const matrixForDistribution = useMatrixForDistribution(performanceMatrix);
+
+  const eligibilityData = useMemo(() => {
+    if (!overview) {
+      return (Object.keys(ELIGIBILITY_CONFIG) as EligibilityStatus[]).map(
+        (name) => ({
+          name,
+          value: 0,
+          color: isDarkMode
+            ? ELIGIBILITY_CONFIG[name].dark
+            : ELIGIBILITY_CONFIG[name].light,
+        }),
+      );
+    }
+    return buildEligibilityDataFromCounts(overview.eligibility, isDarkMode);
+  }, [overview, isDarkMode]);
+
+  const filteredCalibrationData = useMemo(
+    () =>
+      buildCalibrationDataFromCounts(
+        overview?.ratingDistribution ?? [],
+        institutionalQuotaRows,
+        overview?.quotaEligibleCount ?? 0,
+      ),
+    [overview, institutionalQuotaRows],
+  );
+
+  const ratingQuartileMatrix = useMemo(
+    () =>
+      buildRatingQuartileMatrixFromCounts(
+        overview?.ratingQuartileCounts ?? [],
+        matrixForDistribution,
+      ),
+    [overview?.ratingQuartileCounts, matrixForDistribution],
+  );
 
   return {
     isDarkMode,
+    isHead,
     searchQuery,
     setSearchQuery,
     selectedCategory0EntityIds,
@@ -181,12 +236,9 @@ export function useDashboardPage() {
     entitiesLoading,
     designationsLoading,
     overviewLoading,
-    submissionsLoading,
-    submissionsError,
-    submissions: scopedSubmissions,
+    filterParams,
     performanceMatrixLoading,
     matrixForDistribution,
-    filteredSubmissions,
     activeFilters,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,
@@ -197,6 +249,36 @@ export function useDashboardPage() {
     handleFormStateChange,
     clearAllFilters,
     filterByFormState,
-    ...chartMetrics,
+    eligibilityData,
+    selfAssessmentStats: overview?.workflow.selfAssessment ?? {
+      awaiting: 0,
+      completed: 0,
+      percentageLabel: "—",
+    },
+    managerReviewStats: {
+      manager1: overview?.workflow.manager1 ?? {
+        awaiting: 0,
+        completed: 0,
+        percentageLabel: "—",
+      },
+      manager2: overview?.workflow.manager2 ?? {
+        awaiting: 0,
+        completed: 0,
+        percentageLabel: "—",
+      },
+    },
+    hrAlignmentStats: overview?.workflow.hrAlignment ?? {
+      awaiting: 0,
+      completed: 0,
+      percentageLabel: "—",
+    },
+    boardApprovalStats: overview?.workflow.boardApproval ?? {
+      awaiting: 0,
+      completed: 0,
+      percentageLabel: "—",
+    },
+    filteredCalibrationData,
+    ratingQuartileMatrix,
+    chartSubmissionsCount: overview?.chartEmployeeCount ?? 0,
   };
 }

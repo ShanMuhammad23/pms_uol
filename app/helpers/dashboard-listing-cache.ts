@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/app/queries/keys";
+import type { FormSubmissionsPageResponse } from "@/types/dashboard-api";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 const STAFF_LISTING_KEYS = [
@@ -8,42 +9,35 @@ const STAFF_LISTING_KEYS = [
 ] as const;
 
 export async function cancelStaffListingQueries(queryClient: QueryClient) {
-  await Promise.all(
-    STAFF_LISTING_KEYS.map((queryKey) =>
-      queryClient.cancelQueries({ queryKey }),
-    ),
-  );
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: queryKeys.formSubmissions }),
+    queryClient.cancelQueries({ queryKey: queryKeys.dashboardOverview }),
+  ]);
 }
 
 export function getStaffListingSnapshots(queryClient: QueryClient) {
   return {
-    previousSubmissions: queryClient.getQueryData<FormSubmissionListItem[]>(
-      queryKeys.formSubmissions,
+    previousSubmissions: queryClient.getQueriesData<FormSubmissionsPageResponse>(
+      { queryKey: queryKeys.formSubmissions },
     ),
-    previousOverview: queryClient.getQueryData<FormSubmissionListItem[]>(
-      queryKeys.dashboardOverview,
-    ),
+    previousOverview: queryClient.getQueriesData({
+      queryKey: queryKeys.dashboardOverview,
+    }),
   };
 }
 
 export function restoreStaffListingSnapshots(
   queryClient: QueryClient,
   snapshots: {
-    previousSubmissions?: FormSubmissionListItem[];
-    previousOverview?: FormSubmissionListItem[];
+    previousSubmissions?: Array<[readonly unknown[], FormSubmissionsPageResponse | undefined]>;
+    previousOverview?: Array<[readonly unknown[], unknown]>;
   },
 ) {
-  if (snapshots.previousSubmissions) {
-    queryClient.setQueryData(
-      queryKeys.formSubmissions,
-      snapshots.previousSubmissions,
-    );
+  for (const [queryKey, data] of snapshots.previousSubmissions ?? []) {
+    queryClient.setQueryData(queryKey, data);
   }
-  if (snapshots.previousOverview) {
-    queryClient.setQueryData(
-      queryKeys.dashboardOverview,
-      snapshots.previousOverview,
-    );
+  for (const [queryKey, data] of snapshots.previousOverview ?? []) {
+    queryClient.setQueryData(queryKey, data);
   }
 }
 
@@ -51,11 +45,16 @@ export function patchStaffListingCaches(
   queryClient: QueryClient,
   patch: (row: FormSubmissionListItem) => FormSubmissionListItem,
 ) {
-  for (const queryKey of STAFF_LISTING_KEYS) {
-    queryClient.setQueryData<FormSubmissionListItem[]>(queryKey, (current) =>
-      current?.map(patch),
-    );
-  }
+  queryClient.setQueriesData<FormSubmissionsPageResponse>(
+    { queryKey: queryKeys.formSubmissions },
+    (current) => {
+      if (!current?.items) return current;
+      return {
+        ...current,
+        items: current.items.map(patch),
+      };
+    },
+  );
 }
 
 export function invalidateStaffListingQueries(queryClient: QueryClient) {

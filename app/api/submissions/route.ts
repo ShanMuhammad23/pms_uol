@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { submissionVisibleToHead } from "@/app/helpers/manager-review";
 import { toHeadStaffListingItem } from "@/app/helpers/head-staff-listing";
+import { parseFormSubmissionsQueryParams } from "@/lib/dashboard/filter-params";
 import { resolveEntitySubtreeIds } from "@/lib/queries/entity-scope";
 import { listEntities } from "@/lib/queries/entities";
-import { listFormSubmissions } from "@/lib/queries/form-submissions";
+import { listFormSubmissionsPage } from "@/lib/queries/form-submissions-page";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireDashboardSubmissionsApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -18,13 +19,24 @@ export async function GET() {
   try {
     let scopedEntityIds: number[] | undefined;
     let managedByUserId: number | undefined;
+    const isHead = isHeadRole(auth.user?.role);
 
-    if (isHeadRole(auth.user?.role)) {
+    if (isHead) {
       const headEntityId = auth.user?.entityId;
       const viewerUserId = auth.user?.id ? Number(auth.user.id) : null;
 
       if (viewerUserId == null || !Number.isFinite(viewerUserId)) {
-        return NextResponse.json([]);
+        const query = parseFormSubmissionsQueryParams(
+          request.nextUrl.searchParams,
+        );
+        return NextResponse.json({
+          items: [],
+          total: 0,
+          page: query.page,
+          pageSize: query.pageSize,
+          matchingEmployeeIds: [],
+          columnCounts: {},
+        });
       }
 
       managedByUserId = viewerUserId;
@@ -34,31 +46,32 @@ export async function GET() {
           : [];
     }
 
-    const submissions = await listFormSubmissions({
+    const query = parseFormSubmissionsQueryParams(request.nextUrl.searchParams);
+    const entities = await listEntities();
+
+    const page = await listFormSubmissionsPage({
       scopedEntityIds,
       managedByUserId,
+      page: query.page,
+      pageSize: query.pageSize,
+      filters: query.filters,
+      masterFilters: query.masterFilters,
+      entities,
+      ...(isHead
+        ? {
+            filterRow: (submission) =>
+              submissionVisibleToHead(
+                Number(auth.user!.id),
+                auth.user?.entityId ?? null,
+                submission,
+                entities,
+              ),
+            mapRow: toHeadStaffListingItem,
+          }
+        : {}),
     });
 
-    if (isHeadRole(auth.user?.role)) {
-      const headEntityId = auth.user?.entityId ?? null;
-      const viewerUserId = Number(auth.user!.id);
-      const entities = await listEntities();
-
-      return NextResponse.json(
-        submissions
-          .filter((submission) =>
-            submissionVisibleToHead(
-              viewerUserId,
-              headEntityId,
-              submission,
-              entities,
-            ),
-          )
-          .map(toHeadStaffListingItem),
-      );
-    }
-
-    return NextResponse.json(submissions);
+    return NextResponse.json(page);
   } catch (error) {
     console.error("Failed to list form submissions:", error);
     return NextResponse.json(

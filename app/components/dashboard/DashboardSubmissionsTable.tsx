@@ -36,7 +36,6 @@ import {
 } from "@/app/helpers/dashboard-eligibility";
 import {
   EMPTY_MASTER_FILTER_STATE,
-  applyMasterFilters,
   isMasterFilterableColumn,
   type MasterFilterMultiSelection,
   type MasterFilterState,
@@ -62,15 +61,16 @@ import { buildQuartileBandsFromMatrix, sortPerformanceMatrix } from "@/lib/perfo
 import { resolvePerformanceQuartile } from "@/lib/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
+import { useFormSubmissionsQuery } from "@/app/queries/forms";
+import { DEFAULT_PAGE_SIZE } from "@/lib/dashboard/filter-params";
+import type { DashboardFilterParams } from "@/types/dashboard-api";
+import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 interface DashboardSubmissionsTableProps {
-  submissions: FormSubmissionListItem[];
-  allSubmissions?: FormSubmissionListItem[];
-  isLoading: boolean;
-  error: unknown;
+  filterParams: DashboardFilterParams;
   onClearAllFilters: () => void;
   /** When set (HEAD role), only these columns are shown / toggleable. */
   allowedColumnIds?: readonly DashboardTableColumnId[];
@@ -513,10 +513,7 @@ function renderCell(
 }
 
 export function DashboardSubmissionsTable({
-  submissions,
-  allSubmissions = submissions,
-  isLoading,
-  error,
+  filterParams,
   onClearAllFilters,
   allowedColumnIds,
   role,
@@ -565,6 +562,39 @@ export function DashboardSubmissionsTable({
     error: string | null;
   }>({ open: false, submission: null, error: null });
   const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
+
+  const {
+    data: submissionsPage,
+    isLoading,
+    error,
+  } = useFormSubmissionsQuery({
+    page,
+    pageSize: PAGE_SIZE,
+    filters: filterParams,
+    masterFilters,
+  });
+
+  const submissions = Array.isArray(submissionsPage?.items)
+    ? submissionsPage.items
+    : [];
+  const totalCount = submissionsPage?.total ?? 0;
+  const matchingEmployeeIds = submissionsPage?.matchingEmployeeIds;
+  const columnCountsById = useMemo(() => {
+    const map: Partial<Record<DashboardTableColumnId, MultiSelectOption[]>> =
+      {};
+    for (const [columnId, options] of Object.entries(
+      submissionsPage?.columnCounts ?? {},
+    )) {
+      map[columnId as DashboardTableColumnId] = (options ?? []).map(
+        (option) => ({
+          value: option.value,
+          label: option.value,
+          count: option.count,
+        }),
+      );
+    }
+    return map;
+  }, [submissionsPage?.columnCounts]);
 
   const isHrRole = canReviewSubmissions(role ?? undefined);
   const queryClient = useQueryClient();
@@ -714,26 +744,24 @@ export function DashboardSubmissionsTable({
     [frozenColumnIds],
   );
 
-  const masterFilteredSubmissions = useMemo(
-    () => applyMasterFilters(submissions, masterFilters),
-    [masterFilters, submissions],
-  );
-
-  const totalCount = masterFilteredSubmissions.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   useEffect(() => {
     setPage(1);
-  }, [submissions, masterFilters]);
+  }, [filterParams]);
 
   useEffect(() => {
-    setPage((current) => Math.min(current, totalPages));
-  }, [totalPages]);
+    if (submissionsPage?.page != null && submissionsPage.page !== page) {
+      setPage(submissionsPage.page);
+    }
+  }, [submissionsPage?.page, page]);
 
   useEffect(() => {
-    const available = new Set(
-      masterFilteredSubmissions.map((row) => row.employeeId),
-    );
+    if (!matchingEmployeeIds) {
+      return;
+    }
+
+    const available = new Set(matchingEmployeeIds);
     setSelectedEmployeeIds((current) => {
       let changed = false;
       const next = new Set<string>();
@@ -746,23 +774,9 @@ export function DashboardSubmissionsTable({
       }
       return changed ? next : current;
     });
-  }, [masterFilteredSubmissions]);
+  }, [matchingEmployeeIds]);
 
-  const paginatedSubmissions = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return masterFilteredSubmissions.slice(start, start + PAGE_SIZE);
-  }, [page, masterFilteredSubmissions]);
-
-  const filteredEmployeeIds = useMemo(() => {
-    const ids: string[] = [];
-    const seen = new Set<string>();
-    for (const row of masterFilteredSubmissions) {
-      if (seen.has(row.employeeId)) continue;
-      seen.add(row.employeeId);
-      ids.push(row.employeeId);
-    }
-    return ids;
-  }, [masterFilteredSubmissions]);
+  const filteredEmployeeIds = matchingEmployeeIds ?? [];
 
   const selectedCount = selectedEmployeeIds.size;
   const allFilteredSelected =
@@ -803,6 +817,7 @@ export function DashboardSubmissionsTable({
     columnId: MasterFilterTextColumnId,
     next: string,
   ) => {
+    setPage(1);
     setMasterFilters((current) => {
       const text = { ...current.text };
 
@@ -820,6 +835,7 @@ export function DashboardSubmissionsTable({
     columnId: DashboardTableColumnId,
     next: MasterFilterMultiSelection,
   ) => {
+    setPage(1);
     setMasterFilters((current) => {
       const multi = { ...current.multi };
 
@@ -834,6 +850,7 @@ export function DashboardSubmissionsTable({
   };
 
   const clearMasterFilters = () => {
+    setPage(1);
     setMasterFilters(EMPTY_MASTER_FILTER_STATE);
   };
 
@@ -853,11 +870,7 @@ export function DashboardSubmissionsTable({
       <div className="relative z-50 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-white/5">
         <div className="min-w-0">
           <p className="text-lg font-semibold text-slate-900 dark:text-white">
-            Staff listing ( Total: {totalCount}
-            {totalCount !== submissions.length
-              ? ` of ${submissions.length}`
-              : ""}{" "}
-            )
+            Staff listing ( Total: {totalCount} )
           </p>
           {isHrRole && selectedCount > 0 ? (
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
@@ -895,7 +908,7 @@ export function DashboardSubmissionsTable({
         open={masterFilterOpen}
         onOpenChange={setMasterFilterOpen}
         submissions={submissions}
-        allSubmissions={allSubmissions}
+        columnCounts={columnCountsById}
         filters={masterFilters}
         onTextChange={handleMasterTextChange}
         onMultiChange={handleMasterMultiChange}
@@ -958,7 +971,7 @@ export function DashboardSubmissionsTable({
                       <TableColumnHeaderFilter
                         column={column}
                         submissions={submissions}
-                        allSubmissions={allSubmissions}
+                        columnCounts={columnCountsById[column.id]}
                         filters={masterFilters}
                         onTextChange={handleMasterTextChange}
                         onMultiChange={handleMasterMultiChange}
@@ -986,7 +999,7 @@ export function DashboardSubmissionsTable({
               </tr>
             ) : (
               <AnimatePresence>
-                {paginatedSubmissions.map((submission, index) => {
+                {submissions.map((submission, index) => {
                   const isSelected = selectedEmployeeIds.has(
                     submission.employeeId,
                   );

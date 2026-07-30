@@ -28,6 +28,13 @@ interface OverviewRow {
   initial_rating: PerformanceRating | null;
   calibrated_rating: PerformanceRating | null;
   normalized_score: string | null;
+  system_raw_score: string | null;
+  initial_score_numeric: string | null;
+  max_raw_score: string | null;
+  credit_hrs_erp_score_adj: string | null;
+  pub_oric_score_adj: string | null;
+  qec_score_adj: string | null;
+  calibration_factor: string | null;
   uol_experience_years: string | null;
   is_eligible: boolean | null;
   eligibility_status: EligibilityStatus | null;
@@ -143,6 +150,9 @@ function mapOverviewRow(
     financialYear: eligibilityContext.financialYear,
   });
   const storedFactor = toNumber(row.applicable_duration_factor);
+  const rawScore =
+    toNumber(row.initial_score_numeric) ?? toNumber(row.system_raw_score) ?? 0;
+  const maxRawScore = toNumber(row.max_raw_score) ?? 0;
 
   return {
     id: row.id ? Number(row.id) : 0,
@@ -171,15 +181,18 @@ function mapOverviewRow(
     manager2UserId: row.manager_2_user_id
       ? Number(row.manager_2_user_id)
       : null,
-    rawScore: 0,
-    maxRawScore: 0,
-    scorePercent: 0,
-    scoreO: null,
+    rawScore,
+    maxRawScore,
+    scorePercent:
+      maxRawScore > 0
+        ? Number(((rawScore / maxRawScore) * 100).toFixed(2))
+        : 0,
+    scoreO: toNumber(row.initial_score_numeric) ?? toNumber(row.system_raw_score),
     ratingO: row.initial_rating,
-    creditHrsErpScoreAdj: null,
-    pubOricScoreAdj: null,
-    qecScoreAdj: null,
-    calibrationFactor: null,
+    creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
+    pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
+    qecScoreAdj: toNumber(row.qec_score_adj),
+    calibrationFactor: toNumber(row.calibration_factor),
     normalizedScore: toNumber(row.normalized_score),
     ratingN: row.calibrated_rating,
     performanceLevelName: null,
@@ -244,9 +257,31 @@ export async function listDashboardOverview(
   const dateOfJoiningSelect = excelReady
     ? `u.date_of_joining::text,`
     : `NULL::text AS date_of_joining,`;
-  const normalizedScoreSelect = excelReady
-    ? `ap.normalized_score::text,`
-    : `NULL::text AS normalized_score,`;
+  const scoreSelect = excelReady
+    ? `ap.normalized_score::text,
+       COALESCE(ap.system_raw_score, 0)::text AS system_raw_score,
+       ap.initial_score_numeric::text,
+       COALESCE(
+         (
+           SELECT SUM(fq.total_marks)::text
+           FROM form_questions fq
+           WHERE fq.template_id = ap.template_id
+             AND fq.total_marks > 0
+         ),
+         '0'
+       ) AS max_raw_score,
+       ap.credit_hrs_erp_score_adj::text,
+       ap.pub_oric_score_adj::text,
+       ap.qec_score_adj::text,
+       ap.calibration_factor::text,`
+    : `NULL::text AS normalized_score,
+       '0'::text AS system_raw_score,
+       NULL::text AS initial_score_numeric,
+       '0'::text AS max_raw_score,
+       NULL::text AS credit_hrs_erp_score_adj,
+       NULL::text AS pub_oric_score_adj,
+       NULL::text AS qec_score_adj,
+       NULL::text AS calibration_factor,`;
   const eligibilitySelect = excelReady
     ? `ap.uol_experience_years::text,
        ap.is_eligible,
@@ -282,7 +317,7 @@ export async function listDashboardOverview(
        u.manager_2_id::text AS manager_2_user_id,
        ap.initial_rating,
        ap.calibrated_rating,
-       ${normalizedScoreSelect}
+       ${scoreSelect}
        ${eligibilitySelect}
      FROM users u
      LEFT JOIN LATERAL (

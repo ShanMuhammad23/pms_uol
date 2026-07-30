@@ -39,6 +39,8 @@ interface TableColumnHeaderFilterProps {
   column: DashboardTableColumnDef;
   submissions: FormSubmissionListItem[];
   allSubmissions?: FormSubmissionListItem[];
+  /** Server-provided facet counts — preferred over client-built options. */
+  columnCounts?: MultiSelectOption[] | null;
   filters: MasterFilterState;
   onTextChange: (columnId: MasterFilterTextColumnId, next: string) => void;
   onMultiChange: (
@@ -78,6 +80,7 @@ export function TableColumnHeaderFilter({
   column,
   submissions,
   allSubmissions,
+  columnCounts,
   filters,
   onTextChange,
   onMultiChange,
@@ -96,19 +99,43 @@ export function TableColumnHeaderFilter({
 
   const selectedValues = filters.multi[column.id] ?? null;
 
-  const options = useMemo(
-    () =>
-      isText
-        ? []
-        : buildMasterFilterOptions(
-            submissions,
-            column,
-            filters,
-            selectedValues,
-            allSubmissions,
-          ),
-    [allSubmissions, column, filters, isText, selectedValues, submissions],
-  );
+  const options = useMemo(() => {
+    if (isText) return [];
+
+    if (columnCounts) {
+      const selected = selectedValues ?? [];
+      const byValue = new Map(columnCounts.map((option) => [option.value, option]));
+      for (const value of selected) {
+        if (!byValue.has(value)) {
+          byValue.set(value, { value, label: value, count: 0 });
+        }
+      }
+      return [...byValue.values()].sort((left, right) => {
+        if (left.value === "—") return 1;
+        if (right.value === "—") return -1;
+        return left.label.localeCompare(right.label, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      });
+    }
+
+    return buildMasterFilterOptions(
+      submissions,
+      column,
+      filters,
+      selectedValues,
+      allSubmissions,
+    );
+  }, [
+    allSubmissions,
+    column,
+    columnCounts,
+    filters,
+    isText,
+    selectedValues,
+    submissions,
+  ]);
 
   useEffect(() => {
     setMounted(true);

@@ -9,7 +9,11 @@ export const queryKeys = {
   entities: ["entities"] as const,
   designations: ["designations"] as const,
   formSubmissions: ["form-submissions"] as const,
+  formSubmissionsPage: (paramsKey: string) =>
+    ["form-submissions", paramsKey] as const,
   dashboardOverview: ["dashboard-overview"] as const,
+  dashboardOverviewCounts: (paramsKey: string) =>
+    ["dashboard-overview", paramsKey] as const,
   users: ["users"] as const,
   usersOverview: ["users", "overview"] as const,
   usersByEmployeeIds: (employeeIds: string[]) =>

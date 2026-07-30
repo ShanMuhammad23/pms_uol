@@ -42,6 +42,9 @@ interface StaffListingMasterFilterProps {
   onOpenChange: (open: boolean) => void;
   submissions: FormSubmissionListItem[];
   allSubmissions?: FormSubmissionListItem[];
+  columnCounts?: Partial<
+    Record<DashboardTableColumnId, MultiSelectOption[]>
+  > | null;
   filters: MasterFilterState;
   onTextChange: (columnId: MasterFilterTextColumnId, next: string) => void;
   onMultiChange: (
@@ -138,6 +141,7 @@ export function StaffListingMasterFilter({
   onOpenChange,
   submissions,
   allSubmissions,
+  columnCounts,
   filters,
   onTextChange,
   onMultiChange,
@@ -165,6 +169,12 @@ export function StaffListingMasterFilter({
       for (const column of section.columns) {
         if (isMasterFilterTextColumn(column.id)) continue;
 
+        const serverOptions = columnCounts?.[column.id];
+        if (serverOptions) {
+          map.set(column.id, serverOptions);
+          continue;
+        }
+
         map.set(
           column.id,
           buildMasterFilterOptions(
@@ -179,7 +189,7 @@ export function StaffListingMasterFilter({
     }
 
     return map;
-  }, [allSubmissions, filterSections, filters, submissions]);
+  }, [allSubmissions, columnCounts, filterSections, filters, submissions]);
 
   return (
     <AnimatePresence initial={false}>
