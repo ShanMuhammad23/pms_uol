@@ -110,7 +110,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                     <Fragment key={question.id}>
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-indigo-100/70 dark:bg-indigo-900/30">
-                          <td colSpan={7} className="px-4 py-2 text-sm font-bold text-indigo-800 dark:text-indigo-200">
+                          <td colSpan={7} className="form-section-header-cell text-sm font-bold text-indigo-800 dark:text-indigo-200">
                             {formatSectionLabel(row)}
                           </td>
                         </tr>

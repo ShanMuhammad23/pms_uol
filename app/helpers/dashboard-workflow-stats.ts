@@ -1,4 +1,4 @@
-import { getSubmissionEligibilityStatus } from "@/app/helpers/dashboard-eligibility";
+import { getSubmissionEligibilityDisplayStatus } from "@/app/helpers/dashboard-eligibility";
 import { submissionRequiresSecondManagerReview } from "@/app/helpers/manager-review";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AppraisalStatus } from "@/types/forms";
@@ -6,7 +6,7 @@ import type { AppraisalStatus } from "@/types/forms";
 export function isSubmissionEligible(
   submission: FormSubmissionListItem,
 ): boolean {
-  const eligibility = getSubmissionEligibilityStatus(submission);
+  const eligibility = getSubmissionEligibilityDisplayStatus(submission);
   return eligibility === "Fully Eligible" || eligibility === "Partially Eligible";
 }
 

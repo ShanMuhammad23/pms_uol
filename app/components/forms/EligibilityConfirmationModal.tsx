@@ -99,7 +99,7 @@ export default function EligibilityConfirmationModal({
                       : "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
                   )}
                 >
-                  {currentEligibility ? "Eligible" : "Ineligible"}
+                  {currentEligibility ? "Eligible" : "Not Applicable"}
                 </span>
               </div>
 
@@ -128,7 +128,7 @@ export default function EligibilityConfirmationModal({
               ) : (
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Re-enabling eligibility will allow the employee to participate in
-                  assessments again. The previous ineligibility reason will be cleared.
+                  assessments again. The previous not applicable reason will be cleared.
                 </p>
               )}
 

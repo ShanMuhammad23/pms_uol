@@ -21,7 +21,7 @@ import {
 } from "@/app/helpers/dashboard-workflow-stats";
 import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormState } from "@/app/helpers/dashboard-types";
-import { resolvePerformanceQuartile } from "@/lib/performance-rating";
+import { resolveSubmissionPerformanceQuartile } from "@/lib/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import type {
   CountOption,
@@ -84,24 +84,14 @@ function buildRatingQuartileCounts(
 
   for (const submission of submissions) {
     if (!hasAppraisalProgress(submission)) continue;
+    if (!isSubmissionEligible(submission)) continue;
 
-    const scoreO = submission.scoreO ?? submission.rawScore;
-    if (scoreO == null || Number.isNaN(scoreO)) continue;
-
-    const adjustedScore =
-      scoreO +
-      (submission.creditHrsErpScoreAdj ?? 0) +
-      (submission.pubOricScoreAdj ?? 0) +
-      (submission.qecScoreAdj ?? 0);
-    const normalizedScore = adjustedScore * (submission.calibrationFactor ?? 1);
-
-    if (submission.maxRawScore <= 0) continue;
-
-    const scorePercent = Number(
-      ((normalizedScore / submission.maxRawScore) * 100).toFixed(2),
-    );
-
-    const resolved = resolvePerformanceQuartile(scorePercent, bands);
+    // Use the shared resolver which computes the normalized score %
+    // from Score O + adjustments + calibration factor, then maps it
+    // to the configured performance matrix bands. This ensures the
+    // server-side aggregation uses the exact same logic as the
+    // Staff Listing and the client-side matrix.
+    const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
     if (!resolved) continue;
 
     const key = `${resolved.performanceLevelId}-${resolved.quartileId}`;
@@ -282,6 +272,8 @@ export function buildDashboardOverviewCounts(
     },
     ratingDistribution: buildRatingDistribution(filtered),
     ratingQuartileCounts: buildRatingQuartileCounts(filtered, quartileBands),
-    chartEmployeeCount: filtered.filter(hasAppraisalProgress).length,
+    chartEmployeeCount: filtered.filter(
+      (submission) => hasAppraisalProgress(submission) && isSubmissionEligible(submission),
+    ).length,
   };
 }

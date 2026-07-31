@@ -10,8 +10,12 @@ export type {
 
 export {
   calculateScorePercent,
+  getAdjustedScore,
+  getNormalizedScore,
+  getNormalizedScorePercent,
   resolvePerformanceQuartile,
   resolvePerformanceQuartileForRawScore,
+  resolveSubmissionPerformanceQuartile,
 } from "@/lib/performance-rating";
 
 export async function getActiveFinancialYearQuartileBands(): Promise<

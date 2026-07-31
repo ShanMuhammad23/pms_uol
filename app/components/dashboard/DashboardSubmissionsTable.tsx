@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, Pencil, Search, ShieldCheck, ShieldOff } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, Pencil, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
@@ -32,6 +32,7 @@ import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
 import {
   getEligibilityShortLabel,
+  getEligibilityDisplayLabel,
   getSubmissionEligibilityDisplayStatus,
 } from "@/app/helpers/dashboard-eligibility";
 import {
@@ -47,13 +48,12 @@ import {
   type DashboardTableColumnDef,
   type DashboardTableColumnId,
   getHrApprovalStatus,
-  buildHrApprovedRemarks,
-  buildReviewRequiredRemarks,
+  hasValidNormalizedScore,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { ScoreAdjustmentField } from "@/lib/queries/form-submissions-client";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
-import { updateSubmissionScoreAdjustments, approveHrCalibration, updateAssessmentEligibility, updateSubmissionRemarks } from "@/lib/queries/form-submissions-client";
+import { updateSubmissionScoreAdjustments, approveHrCalibration, setHrReviewRequired, updateAssessmentEligibility, fetchFormSubmissionsPage } from "@/lib/queries/form-submissions-client";
 import {
   invalidateStaffListingQueries,
   cancelStaffListingQueries,
@@ -62,10 +62,12 @@ import {
   patchStaffListingCaches,
 } from "@/app/helpers/dashboard-listing-cache";
 import { buildQuartileBandsFromMatrix, sortPerformanceMatrix } from "@/lib/performance-matrix";
-import { resolvePerformanceQuartile } from "@/lib/performance-rating";
+import { resolveSubmissionPerformanceQuartile } from "@/lib/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import { ExcelExportButton } from "@/app/components/common/ExcelExportButton";
+import { ClearAllFiltersButton } from "@/app/components/common/ClearAllFiltersButton";
+import { HrApprovalConfirmModal, type HrApprovalAction } from "@/app/components/dashboard/HrApprovalConfirmModal";
 import {
   getPerformanceLevelColor,
   getQuartileShade,
@@ -112,13 +114,20 @@ function stickySelectHeaderClassName() {
   );
 }
 
-function stickySelectCellClassName(isSelected: boolean) {
+function stickySelectCellClassName(
+  isSelected: boolean,
+  hrStatus?: "approved" | "review_required" | "pending",
+) {
   return cn(
     "sticky left-0 z-20 border-b border-slate-100 px-2 py-1 dark:border-white/[0.03]",
     STICKY_EDGE_SHADOW_LEFT,
     isSelected
-      ? "bg-amber-50/60 dark:bg-amber-500/5"
-      : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
+      ? "bg-amber-50 dark:bg-amber-950"
+      : hrStatus === "approved"
+        ? "bg-emerald-100 group-hover:bg-emerald-200 dark:bg-emerald-950 dark:group-hover:bg-emerald-900"
+        : hrStatus === "review_required"
+          ? "bg-orange-100 group-hover:bg-orange-200 dark:bg-orange-950 dark:group-hover:bg-orange-900"
+          : "bg-white group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-slate-800",
   );
 }
 
@@ -216,6 +225,7 @@ interface RenderCellContext {
   isApproving: boolean;
   isReviewing: boolean;
   canApprove: boolean;
+  hasValidScore: boolean;
   quartileBands: PerformanceQuartileBand[] | null;
   sortedMatrix: PerformanceLevelWithQuartiles[] | null;
   onToggleAssessmentEligibility?: (submission: FormSubmissionListItem) => void;
@@ -287,7 +297,7 @@ function renderCell(
         <span
           className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white"
           style={{ backgroundColor }}
-          title={status}
+          title={getEligibilityDisplayLabel(status)}
         >
           {label}
         </span>
@@ -299,7 +309,7 @@ function renderCell(
       <span
         className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white"
         style={{ backgroundColor }}
-        title={status}
+        title={getEligibilityDisplayLabel(status)}
       >
         {value}
       </span>
@@ -399,34 +409,26 @@ function renderCell(
     const hrStatus = getHrApprovalStatus(submission);
 
     if (ctx?.isHrRole) {
+      const scoreDisabled = !ctx.hasValidScore;
+      const approvalDisabled =
+        scoreDisabled || ctx.isApproving || ctx.isSaving || ctx.isReviewing;
+      const reviewDisabled =
+        scoreDisabled || ctx.isReviewing || ctx.isSaving || ctx.isApproving;
+      const disabledTitle =
+        "HR approval is unavailable until a valid Normalized Score has been calculated";
+
       return (
         <div className="flex items-center justify-center gap-1">
-          {hrStatus === "approved" ? (
-            <span className="inline-flex items-center justify-center" title="Approved">
-              <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            </span>
-          ) : hrStatus === "review_required" ? (
-            <span className="inline-flex items-center justify-center" title="Review Required">
-              <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-            </span>
-          ) : (
-            <span
-              className="inline-flex items-center justify-center text-xs text-slate-400 dark:text-slate-500"
-              title="Pending"
-            >
-              —
-            </span>
-          )}
           <button
             type="button"
             onClick={ctx.onApprove}
-            disabled={ctx.isApproving || ctx.isSaving || ctx.isReviewing}
-            title="Approve"
+            disabled={approvalDisabled}
+            title={scoreDisabled ? disabledTitle : "Approve"}
             aria-label="Approve"
             className={cn(
-              "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-60",
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
               hrStatus === "approved"
-                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                ? "bg-emerald-600 text-white dark:bg-emerald-500"
                 : "text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20",
             )}
           >
@@ -439,13 +441,13 @@ function renderCell(
           <button
             type="button"
             onClick={ctx.onReviewRequired}
-            disabled={ctx.isReviewing || ctx.isSaving || ctx.isApproving}
-            title="Review Required"
+            disabled={reviewDisabled}
+            title={scoreDisabled ? disabledTitle : "Review Required"}
             aria-label="Mark review required"
             className={cn(
-              "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-60",
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
               hrStatus === "review_required"
-                ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                ? "bg-orange-600 text-white dark:bg-orange-500"
                 : "text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20",
             )}
           >
@@ -487,20 +489,10 @@ function renderCell(
 
   if (columnId === "quartile") {
     if (ctx?.quartileBands && ctx.sortedMatrix) {
-      const scoreO = submission.scoreO ?? submission.rawScore;
-      if (scoreO == null || Number.isNaN(scoreO) || submission.maxRawScore <= 0) {
-        return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
-      }
-      const chAdj = submission.creditHrsErpScoreAdj ?? 0;
-      const oricAdj = submission.pubOricScoreAdj ?? 0;
-      const qecAdj = submission.qecScoreAdj ?? 0;
-      const adjustedScore = scoreO + chAdj + oricAdj + qecAdj;
-      const calFr = submission.calibrationFactor ?? 1;
-      const normalizedScore = adjustedScore * calFr;
-      const scorePercent = Number(
-        ((normalizedScore / submission.maxRawScore) * 100).toFixed(2),
+      const resolved = resolveSubmissionPerformanceQuartile(
+        submission,
+        ctx.quartileBands,
       );
-      const resolved = resolvePerformanceQuartile(scorePercent, ctx.quartileBands);
       if (!resolved) {
         return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
       }
@@ -544,20 +536,10 @@ function renderCell(
 
   if (columnId === "ratingN") {
     if (ctx?.quartileBands && ctx.sortedMatrix) {
-      const scoreO = submission.scoreO ?? submission.rawScore;
-      if (scoreO == null || Number.isNaN(scoreO) || submission.maxRawScore <= 0) {
-        return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
-      }
-      const chAdj = submission.creditHrsErpScoreAdj ?? 0;
-      const oricAdj = submission.pubOricScoreAdj ?? 0;
-      const qecAdj = submission.qecScoreAdj ?? 0;
-      const adjustedScore = scoreO + chAdj + oricAdj + qecAdj;
-      const calFr = submission.calibrationFactor ?? 1;
-      const normalizedScore = adjustedScore * calFr;
-      const scorePercent = Number(
-        ((normalizedScore / submission.maxRawScore) * 100).toFixed(2),
+      const resolved = resolveSubmissionPerformanceQuartile(
+        submission,
+        ctx.quartileBands,
       );
-      const resolved = resolvePerformanceQuartile(scorePercent, ctx.quartileBands);
       if (!resolved) {
         return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
       }
@@ -677,6 +659,11 @@ export function DashboardSubmissionsTable({
     submission: FormSubmissionListItem | null;
     error: string | null;
   }>({ open: false, submission: null, error: null });
+  const [hrApprovalModal, setHrApprovalModal] = useState<{
+    open: boolean;
+    action: HrApprovalAction;
+    submissionId: number;
+  }>({ open: false, action: "approve", submissionId: 0 });
   const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
 
   const {
@@ -810,8 +797,6 @@ export function DashboardSubmissionsTable({
         }
       }
       const existing = submissions.find((s) => s.id === submissionId);
-      const nextRemarks = buildHrApprovedRemarks(existing?.remarksEvaluation ?? null);
-      await updateSubmissionRemarks(submissionId, "remarksEvaluation", nextRemarks);
       if (
         existing &&
         existing.status === "PENDING_HR_CALIBRATION"
@@ -831,9 +816,7 @@ export function DashboardSubmissionsTable({
 
   const hrReviewRequiredMutation = useMutation({
     mutationFn: async (submissionId: number) => {
-      const existing = submissions.find((s) => s.id === submissionId);
-      const nextRemarks = buildReviewRequiredRemarks(existing?.remarksEvaluation ?? null);
-      return updateSubmissionRemarks(submissionId, "remarksEvaluation", nextRemarks);
+      return setHrReviewRequired(submissionId);
     },
     onSuccess: () => {
       invalidateStaffListingQueries(queryClient);
@@ -1011,6 +994,16 @@ export function DashboardSubmissionsTable({
     onClearAllFilters();
   };
 
+  const hasActiveFilters =
+    masterFilterActiveCount > 0 ||
+    !!filterParams.searchQuery ||
+    filterParams.category0EntityIds !== null ||
+    filterParams.category1EntityIds !== null ||
+    filterParams.category2EntityIds !== null ||
+    filterParams.roleCategories !== null ||
+    filterParams.designations !== null ||
+    filterParams.formStates !== null;
+
   return (
     <motion.div
       variants={itemVariants}
@@ -1047,6 +1040,10 @@ export function DashboardSubmissionsTable({
             onOpenChange={setMasterFilterOpen}
             activeCount={masterFilterActiveCount}
           />
+          <ClearAllFiltersButton
+            hasActiveFilters={hasActiveFilters}
+            onClearAllFilters={handleClearAllFilters}
+          />
           <ColumnManagementPanelTrigger
             open={columnMgmtOpen}
             onOpenChange={setColumnMgmtOpen}
@@ -1073,6 +1070,16 @@ export function DashboardSubmissionsTable({
             sheetName="Staff Listing"
             storageKey="pms-export-staff-listing-columns"
             disabled={isLoading || !!error}
+            visible={isHrRole}
+            fetchRowsForExport={async () => {
+              const res = await fetchFormSubmissionsPage({
+                page: 1,
+                pageSize: 100000,
+                filters: filterParams,
+                masterFilters,
+              });
+              return res.items;
+            }}
           />
         </div>
       </div>
@@ -1197,9 +1204,9 @@ export function DashboardSubmissionsTable({
                           : isSelected
                             ? "bg-amber-50/60 dark:bg-amber-500/5"
                             : getHrApprovalStatus(submission) === "approved"
-                              ? "bg-emerald-50/40 dark:bg-emerald-500/[0.03]"
+                              ? "bg-emerald-100/70 dark:bg-emerald-900/20"
                               : getHrApprovalStatus(submission) === "review_required"
-                                ? "bg-orange-50/40 dark:bg-orange-500/[0.03]"
+                                ? "bg-orange-100/70 dark:bg-orange-900/20"
                                 : "hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
                         !submission.assessmentEligibility && isSelected &&
                           "bg-rose-300/70 dark:bg-rose-800/40",
@@ -1208,7 +1215,7 @@ export function DashboardSubmissionsTable({
                       )}
                     >
                       {isHrRole ? (
-                        <td className={stickySelectCellClassName(isSelected)}>
+                        <td className={stickySelectCellClassName(isSelected, getHrApprovalStatus(submission))}>
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -1232,14 +1239,25 @@ export function DashboardSubmissionsTable({
                           onBufferedChange: handleBufferedChange(submission.id),
                           onSave: () => hrSaveMutation.mutate(submission.id),
                           onCancel: handleCancelScoreChanges(submission.id),
-                          onApprove: () => hrApproveMutation.mutate(submission.id),
-                          onReviewRequired: () => hrReviewRequiredMutation.mutate(submission.id),
+                          onApprove: () =>
+                            setHrApprovalModal({
+                              open: true,
+                              action: "approve",
+                              submissionId: submission.id,
+                            }),
+                          onReviewRequired: () =>
+                            setHrApprovalModal({
+                              open: true,
+                              action: "review_required",
+                              submissionId: submission.id,
+                            }),
                           isSaving: hrSaveMutation.isPending,
                           isApproving: hrApproveMutation.isPending,
                           isReviewing: hrReviewRequiredMutation.isPending,
                           canApprove:
                             submission.status === "PENDING_HR_CALIBRATION" ||
                             submission.status === "PENDING_BOARD_APPROVAL",
+                          hasValidScore: hasValidNormalizedScore(submission),
                           quartileBands,
                           sortedMatrix,
                           onToggleAssessmentEligibility: (submission: FormSubmissionListItem) =>
@@ -1257,14 +1275,14 @@ export function DashboardSubmissionsTable({
                               isFrozen && "sticky",
                               isFrozen && (
                                 !submission.assessmentEligibility
-                                  ? "bg-rose-200/70 dark:bg-rose-900/40"
+                                  ? "bg-rose-200 dark:bg-rose-900"
                                   : isSelected
-                                    ? "bg-amber-50/60 dark:bg-amber-500/5"
+                                    ? "bg-amber-50 dark:bg-amber-950"
                                     : getHrApprovalStatus(submission) === "approved"
-                                      ? "bg-emerald-50/40 dark:bg-emerald-500/[0.03]"
+                                      ? "bg-emerald-100 dark:bg-emerald-950"
                                       : getHrApprovalStatus(submission) === "review_required"
-                                        ? "bg-orange-50/40 dark:bg-orange-500/[0.03]"
-                                        : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]"
+                                        ? "bg-orange-100 dark:bg-orange-950"
+                                        : "bg-white group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-slate-800"
                               ),
                               column.id === lastFrozenColumnId && "border-r-2 border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:border-white/20",
                             )}
@@ -1383,6 +1401,27 @@ export function DashboardSubmissionsTable({
           }}
         />
       ) : null}
+
+      <HrApprovalConfirmModal
+        open={hrApprovalModal.open}
+        action={hrApprovalModal.action}
+        isPending={
+          hrApprovalModal.action === "approve"
+            ? hrApproveMutation.isPending
+            : hrReviewRequiredMutation.isPending
+        }
+        onClose={() =>
+          setHrApprovalModal({ open: false, action: "approve", submissionId: 0 })
+        }
+        onConfirm={() => {
+          const { action, submissionId } = hrApprovalModal;
+          if (action === "approve") {
+            hrApproveMutation.mutate(submissionId);
+          } else {
+            hrReviewRequiredMutation.mutate(submissionId);
+          }
+        }}
+      />
     </motion.div>
   );
 }

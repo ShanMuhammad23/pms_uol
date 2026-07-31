@@ -34,9 +34,20 @@ export function getEligibilityShortLabel(
 }
 
 /**
+ * Centralized display label mapping for eligibility status.
+ * The internal enum value "Ineligible" is displayed as "Not Applicable"
+ * throughout the UI. All user-facing displays should use this function
+ * instead of the raw status string.
+ */
+export function getEligibilityDisplayLabel(status: EligibilityStatus): string {
+  if (status === "Ineligible") return "Not Applicable";
+  return status;
+}
+
+/**
  * Returns the eligibility status used for display in the consolidated
  * Eligible? column. When an employee has been manually marked as
- * ineligible (assessmentEligibility === false), the status is "Ineligible"
+ * not applicable (assessmentEligibility === false), the status is "Ineligible"
  * regardless of the duration-based calculation.
  */
 export function getSubmissionEligibilityDisplayStatus(
@@ -79,7 +90,7 @@ export function buildEligibilityData(
   });
 
   return (Object.keys(counts) as EligibilityStatus[]).map((name) => ({
-    name,
+    name: getEligibilityDisplayLabel(name),
     value: counts[name],
     color: isDarkMode ? ELIGIBILITY_CONFIG[name].dark : ELIGIBILITY_CONFIG[name].light,
   }));

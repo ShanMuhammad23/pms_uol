@@ -1,11 +1,14 @@
 import type { RatingQuartileMatrixData } from "@/app/helpers/dashboard-types";
 import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
+import { isSubmissionEligible } from "@/app/helpers/dashboard-workflow-stats";
 import {
   buildQuartileBandsFromMatrix,
   getMatrixQuartileColumnHeaders,
   sortPerformanceMatrix,
 } from "@/lib/performance-matrix";
-import { resolvePerformanceQuartile } from "@/lib/performance-rating";
+import {
+  resolveSubmissionPerformanceQuartile,
+} from "@/lib/performance-rating";
 import { type PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
@@ -15,7 +18,13 @@ export function buildRatingQuartileMatrix(
 ): RatingQuartileMatrixData {
   const sortedMatrix = sortPerformanceMatrix(matrix);
   const columns = getMatrixQuartileColumnHeaders(sortedMatrix);
-  const chartSubmissions = filterSubmissionsForCharts(submissions);
+  // Match the server-side aggregation: only count submissions that have
+  // appraisal progress AND are eligible. Previously this only filtered by
+  // hasAppraisalProgress, which caused the client-side matrix to count
+  // ineligible employees and disagree with the server-side counts.
+  const chartSubmissions = filterSubmissionsForCharts(submissions).filter(
+    isSubmissionEligible,
+  );
   const bands = buildQuartileBandsFromMatrix(sortedMatrix);
   const counts = new Map<string, number>();
 
@@ -26,30 +35,10 @@ export function buildRatingQuartileMatrix(
   });
 
   chartSubmissions.forEach((submission) => {
-    const scoreO = submission.scoreO ?? submission.rawScore;
-    if (scoreO == null || Number.isNaN(scoreO)) {
-      return;
-    }
-
-    const chAdj = submission.creditHrsErpScoreAdj ?? 0;
-    const oricAdj = submission.pubOricScoreAdj ?? 0;
-    const qecAdj = submission.qecScoreAdj ?? 0;
-    const adjustedScore = scoreO + chAdj + oricAdj + qecAdj;
-    const calFr = submission.calibrationFactor ?? 1;
-    const normalizedScore = adjustedScore * calFr;
-
-    if (submission.maxRawScore <= 0) {
-      return;
-    }
-
-    const scorePercent = Number(
-      ((normalizedScore / submission.maxRawScore) * 100).toFixed(2),
-    );
-
-    const resolved = resolvePerformanceQuartile(
-      scorePercent,
-      bands,
-    );
+    // Use the shared resolver which computes the normalized score %
+    // from Score O + adjustments + calibration factor, then maps it
+    // to the configured performance matrix bands.
+    const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
 
     if (resolved) {
       const key = `${resolved.performanceLevelId}-${resolved.quartileId}`;

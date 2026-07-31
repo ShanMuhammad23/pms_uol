@@ -19,6 +19,11 @@ export interface DirectAssessmentEmployee {
   manager1UserId: number | null;
   manager2UserId: number | null;
   canEdit: boolean;
+  designation: string | null;
+  roleCategory: string | null;
+  entityId: number | null;
+  entityName: string | null;
+  parentEntityName: string | null;
 }
 
 export interface DirectAssessmentData {

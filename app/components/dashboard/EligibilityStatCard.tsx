@@ -69,6 +69,7 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
     if (name === "Fully Eligible") return "Full";
     if (name === "Partially Eligible") return "Partial";
     if (name === "Not Eligible") return "None";
+    if (name === "Not Applicable") return "N/A";
     return name;
   };
 

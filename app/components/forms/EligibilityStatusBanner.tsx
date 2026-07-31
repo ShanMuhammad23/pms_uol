@@ -27,7 +27,7 @@ function buildMessage(
     return `This employee is currently unavailable for assessment because their eligibility has been disabled.${reasonText}`;
   }
 
-  return `This employee is marked as Ineligible.${reasonText}`;
+  return `This employee is marked as Not Applicable.${reasonText}`;
 }
 
 export default function EligibilityStatusBanner({

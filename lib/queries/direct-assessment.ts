@@ -2,9 +2,13 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { getFormTemplateById } from "@/lib/queries/forms";
+import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { flattenAllQuestions } from "@/types/forms";
 import type { QuestionRecord, FormSectionRecord } from "@/types/forms";
-import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
+import type {
+  EmployeeFormAnswerAttachment,
+  EmployeeFormAnswerRecord,
+} from "@/types/employee-forms";
 import {
   resolveEntitySubtreeIds,
 } from "@/lib/queries/entity-scope";
@@ -19,6 +23,11 @@ export interface DirectAssessmentEmployee {
   manager1UserId: number | null;
   manager2UserId: number | null;
   canEdit: boolean;
+  designation: string | null;
+  roleCategory: string | null;
+  entityId: number | null;
+  entityName: string | null;
+  parentEntityName: string | null;
 }
 
 export interface DirectAssessmentData {
@@ -50,6 +59,11 @@ interface AssignmentRow {
   manager_level: number | null;
   manager_1_user_id: string | null;
   manager_2_user_id: string | null;
+  designation: string | null;
+  role_category: string | null;
+  entity_id: string | null;
+  entity_name: string | null;
+  parent_entity_name: string | null;
 }
 
 export async function getDirectAssessmentData(
@@ -104,9 +118,16 @@ export async function getDirectAssessmentData(
        COALESCE(ap.status, 'PENDING_HEAD_REVIEW') AS status,
        ap.manager_level,
        u.head_id::text AS manager_1_user_id,
-       u.manager_2_id::text AS manager_2_user_id
+       u.manager_2_id::text AS manager_2_user_id,
+       u.designation,
+       u.role_category,
+       u.entity_id::text AS entity_id,
+       org.name AS entity_name,
+       parent_org.name AS parent_entity_name
      FROM employee_form_assignments efa
      INNER JOIN users u ON u.id = efa.employee_id
+     LEFT JOIN entities org ON org.id = u.entity_id
+     LEFT JOIN entities parent_org ON parent_org.id = org.parent_entity_id
      LEFT JOIN LATERAL (
        SELECT ap_inner.*
        FROM appraisals ap_inner
@@ -149,6 +170,11 @@ export async function getDirectAssessmentData(
       manager1UserId,
       manager2UserId,
       canEdit,
+      designation: row.designation,
+      roleCategory: row.role_category,
+      entityId: row.entity_id ? Number(row.entity_id) : null,
+      entityName: row.entity_name,
+      parentEntityName: row.parent_entity_name,
     };
   });
 
@@ -227,14 +253,25 @@ async function getAnswersForSubmission(
     [appraisalId, filledById],
   );
 
-  return result.rows.map((row) => ({
-    questionId: Number(row.question_id),
-    textResponse: row.text_response,
-    selectedOptionId: row.selected_option_id
-      ? Number(row.selected_option_id)
-      : null,
-    pointsEarned: Number(row.points_earned),
-    remarks: row.remarks ?? null,
-    attachments: [],
-  }));
+  const attachments = await listAttachmentsForAppraisal(appraisalId, filledById);
+  const attachmentsByQuestion = new Map<number, EmployeeFormAnswerAttachment[]>();
+  for (const attachment of attachments) {
+    const current = attachmentsByQuestion.get(attachment.questionId) ?? [];
+    current.push(attachment);
+    attachmentsByQuestion.set(attachment.questionId, current);
+  }
+
+  return result.rows.map((row) => {
+    const questionId = Number(row.question_id);
+    return {
+      questionId,
+      textResponse: row.text_response,
+      selectedOptionId: row.selected_option_id
+        ? Number(row.selected_option_id)
+        : null,
+      pointsEarned: Number(row.points_earned),
+      remarks: row.remarks ?? null,
+      attachments: attachmentsByQuestion.get(questionId) ?? [],
+    };
+  });
 }

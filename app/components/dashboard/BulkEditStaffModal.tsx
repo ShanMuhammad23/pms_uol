@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Pencil, X } from "lucide-react";
+import { Pencil, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,6 +20,8 @@ import type { UserRecord } from "@/types/users";
 import type { FormTemplateListItem } from "@/types/forms";
 import type { EntityRecord } from "@/types/entities";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
+import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
+import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { cn } from "@/lib/utils";
 
 interface BulkEditStaffModalProps {
@@ -85,6 +87,7 @@ export function BulkEditStaffModal({
   const [numberValues, setNumberValues] = useState<Partial<Record<FieldKey, string>>>({});
   const [selectValues, setSelectValues] = useState<Partial<Record<FieldKey, string>>>({});
   const [selectedFormTemplateIds, setSelectedFormTemplateIds] = useState<Set<number>>(new Set());
+  const [formSearch, setFormSearch] = useState("");
   const [assessmentEligibility, setAssessmentEligibility] = useState<"" | "true" | "false">("");
   const [error, setError] = useState<string | null>(null);
 
@@ -114,6 +117,7 @@ export function BulkEditStaffModal({
       setNumberValues({});
       setSelectValues({});
       setSelectedFormTemplateIds(new Set());
+      setFormSearch("");
       setAssessmentEligibility("");
       setError(null);
     }
@@ -121,13 +125,43 @@ export function BulkEditStaffModal({
 
   const managerOptions = useMemo(() => {
     if (!users) return [];
-    return users
-      .filter((u) => u.isActive)
-      .map((u) => ({
+    return filterManagerEligibleUsers(users.filter((u) => u.isActive)).map(
+      (u) => ({
         id: u.id,
         label: `${u.firstName} ${u.lastName} (${u.employeeId})`,
-      }));
+      }),
+    );
   }, [users]);
+
+  const entitySelectOptions = useMemo(
+    () =>
+      (entities ?? []).map((ent: EntityRecord) => ({
+        value: String(ent.id),
+        label: ent.name,
+      })),
+    [entities],
+  );
+
+  const managerSelectOptions = useMemo(
+    () => managerOptions.map((m) => ({ value: String(m.id), label: m.label })),
+    [managerOptions],
+  );
+
+  const eligibilitySelectOptions = useMemo(
+    () => [
+      { value: "true", label: "Eligible" },
+      { value: "false", label: "Not Eligible" },
+    ],
+    [],
+  );
+
+  const filteredFormTemplates = useMemo(() => {
+    const q = formSearch.trim().toLowerCase();
+    if (!q) return formTemplates ?? [];
+    return (formTemplates ?? []).filter((t: FormTemplateListItem) =>
+      t.title.toLowerCase().includes(q),
+    );
+  }, [formTemplates, formSearch]);
 
   const buildFields = () => {
     const fields: Record<string, unknown> = {};
@@ -361,53 +395,80 @@ export function BulkEditStaffModal({
             </div>
 
             <div className="mt-5 space-y-4">
-              {/* Form Assignment (multi-select) */}
+              {/* Form Assignment (multi-select with search) */}
               <div className="block space-y-1.5">
                 <span className={labelClassName}>Form Assignment</span>
-                <div className={cn(
-                  "max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 dark:border-white/10 dark:bg-slate-950",
-                  saveMutation.isPending && "opacity-70",
-                )}>
-                  {formTemplates && formTemplates.length > 0 ? (
-                    <div className="space-y-1">
-                      {formTemplates.map((t: FormTemplateListItem) => {
-                        const checked = selectedFormTemplateIds.has(t.id);
-                        return (
-                          <label
-                            key={t.id}
-                            className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() =>
-                                setSelectedFormTemplateIds((current) => {
-                                  const next = new Set(current);
-                                  if (next.has(t.id)) {
-                                    next.delete(t.id);
-                                  } else {
-                                    next.add(t.id);
-                                  }
-                                  return next;
-                                })
-                              }
-                              disabled={saveMutation.isPending}
-                              className="size-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20"
-                            />
-                            <span className="truncate">{t.title}</span>
-                            <span className="ml-auto shrink-0 text-xs text-slate-400">
-                              FY {t.fiscalYear}
-                            </span>
-                          </label>
-                        );
-                      })}
+                {formTemplates && formTemplates.length > 0 ? (
+                  <>
+                    <div className="relative mb-1.5">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={formSearch}
+                        onChange={(e) => setFormSearch(e.target.value)}
+                        placeholder="Search forms..."
+                        disabled={saveMutation.isPending}
+                        className={cn(
+                          "w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-500/20 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300",
+                          saveMutation.isPending && "opacity-70",
+                        )}
+                      />
                     </div>
-                  ) : (
+                    <div className={cn(
+                      "max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 dark:border-white/10 dark:bg-slate-950",
+                      saveMutation.isPending && "opacity-70",
+                    )}>
+                      <div className="space-y-1">
+                        {filteredFormTemplates.length > 0 ? (
+                          filteredFormTemplates.map((t: FormTemplateListItem) => {
+                            const checked = selectedFormTemplateIds.has(t.id);
+                            return (
+                              <label
+                                key={t.id}
+                                className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() =>
+                                    setSelectedFormTemplateIds((current) => {
+                                      const next = new Set(current);
+                                      if (next.has(t.id)) {
+                                        next.delete(t.id);
+                                      } else {
+                                        next.add(t.id);
+                                      }
+                                      return next;
+                                    })
+                                  }
+                                  disabled={saveMutation.isPending}
+                                  className="size-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20"
+                                />
+                                <span className="truncate">{t.title}</span>
+                                <span className="ml-auto shrink-0 text-xs text-slate-400">
+                                  FY {t.fiscalYear}
+                                </span>
+                              </label>
+                            );
+                          })
+                        ) : (
+                          <p className="py-2 text-center text-sm text-slate-400">
+                            No matching forms.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className={cn(
+                    "max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 dark:border-white/10 dark:bg-slate-950",
+                    saveMutation.isPending && "opacity-70",
+                  )}>
                     <p className="py-2 text-center text-sm text-slate-400">
                       No form templates available.
                     </p>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
               {/* Text fields */}
@@ -433,24 +494,22 @@ export function BulkEditStaffModal({
               {/* Organization (entity) */}
               <label className="block space-y-1.5">
                 <span className={labelClassName}>Organization</span>
-                <select
+                <SearchableSelect
                   value={selectValues.entityId ?? ""}
-                  onChange={(e) =>
+                  options={entitySelectOptions}
+                  onChange={(next) =>
                     setSelectValues((prev) => ({
                       ...prev,
-                      entityId: e.target.value || undefined,
+                      entityId: next || undefined,
                     }))
                   }
                   disabled={saveMutation.isPending}
-                  className={inputClassName}
-                >
-                  <option value="">— Keep existing —</option>
-                  {entities?.map((ent: EntityRecord) => (
-                    <option key={ent.id} value={ent.id}>
-                      {ent.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="— Keep existing —"
+                  emptyOptionLabel="— Keep existing —"
+                  className={cn(
+                    saveMutation.isPending && "opacity-70",
+                  )}
+                />
               </label>
 
               {/* Number fields (qualification year + score adjustments) */}
@@ -477,62 +536,61 @@ export function BulkEditStaffModal({
               {/* Manager 1 */}
               <label className="block space-y-1.5">
                 <span className={labelClassName}>Manager 1</span>
-                <select
+                <SearchableSelect
                   value={selectValues.manager1UserId ?? ""}
-                  onChange={(e) =>
+                  options={managerSelectOptions}
+                  onChange={(next) =>
                     setSelectValues((prev) => ({
                       ...prev,
-                      manager1UserId: e.target.value || undefined,
+                      manager1UserId: next || undefined,
                     }))
                   }
                   disabled={saveMutation.isPending}
-                  className={inputClassName}
-                >
-                  <option value="">— Keep existing —</option>
-                  {managerOptions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="— Keep existing —"
+                  emptyOptionLabel="— Keep existing —"
+                  className={cn(
+                    saveMutation.isPending && "opacity-70",
+                  )}
+                />
               </label>
 
               {/* Manager 2 */}
               <label className="block space-y-1.5">
                 <span className={labelClassName}>Manager 2</span>
-                <select
+                <SearchableSelect
                   value={selectValues.manager2UserId ?? ""}
-                  onChange={(e) =>
+                  options={managerSelectOptions}
+                  onChange={(next) =>
                     setSelectValues((prev) => ({
                       ...prev,
-                      manager2UserId: e.target.value || undefined,
+                      manager2UserId: next || undefined,
                     }))
                   }
                   disabled={saveMutation.isPending}
-                  className={inputClassName}
-                >
-                  <option value="">— Keep existing —</option>
-                  {managerOptions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="— Keep existing —"
+                  emptyOptionLabel="— Keep existing —"
+                  className={cn(
+                    saveMutation.isPending && "opacity-70",
+                  )}
+                />
               </label>
 
               {/* Assessment Eligibility */}
               <label className="block space-y-1.5">
                 <span className={labelClassName}>Assessment Eligibility</span>
-                <select
+                <SearchableSelect
                   value={assessmentEligibility}
-                  onChange={(e) => setAssessmentEligibility(e.target.value as "" | "true" | "false")}
+                  options={eligibilitySelectOptions}
+                  onChange={(next) =>
+                    setAssessmentEligibility(next as "" | "true" | "false")
+                  }
                   disabled={saveMutation.isPending}
-                  className={inputClassName}
-                >
-                  <option value="">— Keep existing —</option>
-                  <option value="true">Eligible</option>
-                  <option value="false">Not Eligible</option>
-                </select>
+                  placeholder="— Keep existing —"
+                  emptyOptionLabel="— Keep existing —"
+                  className={cn(
+                    saveMutation.isPending && "opacity-70",
+                  )}
+                />
               </label>
             </div>
 

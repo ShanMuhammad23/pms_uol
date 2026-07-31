@@ -20,6 +20,7 @@ import {
 import { fetchFormTemplatesForDashboard } from "@/lib/queries/forms-client";
 import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
 import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
+import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import { cn } from "@/lib/utils";
 
 interface EditUserFormState {
@@ -35,6 +36,7 @@ interface EditUserFormState {
   entityId: string;
   headId: string;
   manager2Id: string;
+  isManagerEligible: boolean;
   qualification: string;
   qualificationYear: string;
   qualificationSubject: string;
@@ -57,6 +59,7 @@ function toFormState(user: UserRecord): EditUserFormState {
     entityId: user.entityId ? String(user.entityId) : "",
     headId: user.headId ? String(user.headId) : "",
     manager2Id: user.manager2Id ? String(user.manager2Id) : "",
+    isManagerEligible: user.isManagerEligible,
     qualification: user.qualification ?? "",
     qualificationYear: user.qualificationYear ?? "",
     qualificationSubject: user.qualificationSubject ?? "",
@@ -120,14 +123,19 @@ export function EditUserModal({
   }, [open, user, assignedFormsData]);
 
   const headOptions = useMemo(() => {
-    if (!user) return users;
-    return users.filter((candidate) => candidate.id !== user.id);
-  }, [users, user]);
+    if (!user) return filterManagerEligibleUsers(users);
+    return filterManagerEligibleUsers(
+      users.filter((candidate) => candidate.id !== user.id),
+      form?.headId ?? null,
+    );
+  }, [users, user, form?.headId]);
 
   const manager2Options = useMemo(() => {
     if (!user || !form) return headOptions;
     return headOptions.filter(
-      (candidate) => String(candidate.id) !== form.headId,
+      (candidate) =>
+        String(candidate.id) !== form.headId ||
+        String(candidate.id) === form.manager2Id,
     );
   }, [headOptions, user, form]);
 
@@ -177,6 +185,7 @@ export function EditUserModal({
         entityId: form.entityId ? Number(form.entityId) : null,
         headId: form.headId ? Number(form.headId) : null,
         manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
+        isManagerEligible: form.isManagerEligible,
         qualification: form.qualification.trim() || null,
         qualificationYear: yearValue ? Number(yearValue) : null,
         qualificationSubject: form.qualificationSubject.trim() || null,
@@ -447,6 +456,28 @@ export function EditUserModal({
                           {USER_ROLE_LABELS[role]}
                         </option>
                       ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Manager Role" htmlFor="edit-user-manager-role">
+                    <select
+                      id="edit-user-manager-role"
+                      value={form.isManagerEligible ? "yes" : "no"}
+                      onChange={(event) =>
+                        setForm((current) =>
+                          current
+                            ? {
+                                ...current,
+                                isManagerEligible: event.target.value === "yes",
+                              }
+                            : current,
+                        )
+                      }
+                      disabled={isSubmitting}
+                      className={inputClassName}
+                    >
+                      <option value="no">No</option>
+                      <option value="yes">Yes</option>
                     </select>
                   </Field>
 

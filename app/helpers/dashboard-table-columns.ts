@@ -4,17 +4,21 @@ import {
   getSubmissionEligibilityDisplayStatus,
 } from "@/app/helpers/dashboard-eligibility";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
+import { getReportingManagerScore } from "@/app/helpers/score-o";
+import {
+  getAdjustedScore as sharedGetAdjustedScore,
+  getNormalizedScorePercent as sharedGetNormalizedScorePercent,
+} from "@/lib/performance-rating";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 export type HrApprovalStatus = "pending" | "approved" | "review_required";
 
-const HR_APPROVED_MARKER = "[HR APPROVED]";
-const HR_REVIEW_REQUIRED_MARKER = "[REVIEW REQUIRED]";
-
 export function getHrApprovalStatus(row: FormSubmissionListItem): HrApprovalStatus {
-  const remarks = row.remarksEvaluation ?? "";
-  if (remarks.includes(HR_REVIEW_REQUIRED_MARKER)) return "review_required";
-  if (remarks.includes(HR_APPROVED_MARKER)) return "approved";
+  // Use the dedicated hr_approval_status column — no longer derived from remarks.
+  if (row.hrApprovalStatus === "review_required") return "review_required";
+  if (row.hrApprovalStatus === "approved") return "approved";
+  // Fallback for legacy rows where hr_approval_status is still 'pending'
+  // but the appraisal has already advanced past HR calibration.
   if (
     row.status === "PENDING_BOARD_APPROVAL" ||
     row.status === "APPROVED" ||
@@ -23,18 +27,6 @@ export function getHrApprovalStatus(row: FormSubmissionListItem): HrApprovalStat
     return "approved";
   }
   return "pending";
-}
-
-export function buildHrApprovedRemarks(currentRemarks: string | null): string {
-  const cleaned = (currentRemarks ?? "").replace(HR_REVIEW_REQUIRED_MARKER, "").trim();
-  if (cleaned.includes(HR_APPROVED_MARKER)) return cleaned;
-  return cleaned ? `${cleaned} ${HR_APPROVED_MARKER}` : HR_APPROVED_MARKER;
-}
-
-export function buildReviewRequiredRemarks(currentRemarks: string | null): string {
-  const cleaned = (currentRemarks ?? "").replace(HR_APPROVED_MARKER, "").trim();
-  if (cleaned.includes(HR_REVIEW_REQUIRED_MARKER)) return cleaned;
-  return cleaned ? `${cleaned} ${HR_REVIEW_REQUIRED_MARKER}` : HR_REVIEW_REQUIRED_MARKER;
 }
 
 export type DashboardTableColumnId =
@@ -190,16 +182,7 @@ function formatNumber(value: number | string | null | undefined, digits = 2): st
 }
 
 function getAdjustedScore(row: FormSubmissionListItem): number | null {
-  const scoreO = row.scoreO ?? row.rawScore;
-  if (scoreO === null || scoreO === undefined || Number.isNaN(scoreO)) {
-    return null;
-  }
-
-  const chAdj = row.creditHrsErpScoreAdj ?? 0;
-  const oricAdj = row.pubOricScoreAdj ?? 0;
-  const qecAdj = row.qecScoreAdj ?? 0;
-
-  return scoreO + chAdj + oricAdj + qecAdj;
+  return sharedGetAdjustedScore(row);
 }
 
 function getAdjustedScorePercent(row: FormSubmissionListItem): number | null {
@@ -209,6 +192,15 @@ function getAdjustedScorePercent(row: FormSubmissionListItem): number | null {
 }
 
 function getAdjustedRating(row: FormSubmissionListItem): string | null {
+  // Rating (O) depends completely on Score (O). Only show a rating when
+  // the official reporting-manager score is valid and greater than 0.
+  // This prevents stale ratings, self-assessment ratings, or calculated
+  // ratings from appearing without a valid official score.
+  const officialScore = getReportingManagerScore(row);
+  if (officialScore === null || officialScore === undefined || officialScore <= 0) {
+    return null;
+  }
+
   const pct = getAdjustedScorePercent(row);
   if (pct === null) return null;
   if (pct >= 85) return "OS";
@@ -218,53 +210,13 @@ function getAdjustedRating(row: FormSubmissionListItem): string | null {
   return "UN";
 }
 
-function getNormalizedScore(row: FormSubmissionListItem): number | null {
-  const adjusted = getAdjustedScore(row);
-  if (adjusted === null) return null;
-  const calFr = row.calibrationFactor ?? 1;
-  return adjusted * calFr;
-}
-
 function getNormalizedScorePercent(row: FormSubmissionListItem): number | null {
-  const normalized = getNormalizedScore(row);
-  if (normalized === null || row.maxRawScore <= 0) return null;
-  return Number(((normalized / row.maxRawScore) * 100).toFixed(2));
+  return sharedGetNormalizedScorePercent(row);
 }
 
-function getNormalizedRating(row: FormSubmissionListItem): string | null {
+export function hasValidNormalizedScore(row: FormSubmissionListItem): boolean {
   const pct = getNormalizedScorePercent(row);
-  if (pct === null) return null;
-  if (pct >= 85) return "OS";
-  if (pct >= 70) return "EX";
-  if (pct >= 55) return "ST";
-  if (pct >= 40) return "IN";
-  return "UN";
-}
-
-function getNormalizedQuartile(row: FormSubmissionListItem): string | null {
-  const pct = getNormalizedScorePercent(row);
-  if (pct === null) return null;
-
-  const levelDefs = [
-    { name: "UN", scoreMin: 0, scoreMax: 39 },
-    { name: "IN", scoreMin: 40, scoreMax: 54 },
-    { name: "ST", scoreMin: 55, scoreMax: 69 },
-    { name: "EX", scoreMin: 70, scoreMax: 84 },
-    { name: "OS", scoreMin: 85, scoreMax: 100 },
-  ];
-
-  const level = levelDefs.find(
-    (l) => pct >= l.scoreMin && pct <= l.scoreMax,
-  );
-  if (!level) return null;
-
-  const bandSize = (level.scoreMax - level.scoreMin + 1) / 4;
-  const quartileIndex = Math.min(
-    3,
-    Math.floor((pct - level.scoreMin) / bandSize),
-  );
-
-  return `${level.name}-Q${quartileIndex + 1}`;
+  return pct !== null && pct > 0;
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -411,7 +363,10 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     width: 80,
     wrap: true,
     numeric: true,
-    getValue: (row) => formatNumber(row.scoreO ?? row.rawScore, 2),
+    // Score (O) reflects the official reporting-manager score, never the
+    // employee self-assessment. See getReportingManagerScore for the
+    // decision tree (Manager 2 → Manager 1 → placeholder).
+    getValue: (row) => formatNumber(getReportingManagerScore(row), 2),
   },
   creditHrsErpAdj: {
     id: "creditHrsErpAdj",
@@ -486,21 +441,36 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     width: 80,
     wrap: true,
     numeric: true,
+    // Use the persisted normalized score percentage from the server.
+    // The server computes this from (normalizedScore / maxRawScore) * 100
+    // using the stored normalized_score or calibrated_score_numeric.
+    // This ensures consistency between the Staff Listing, Performance
+    // Matrix, and Reports.
     getValue: (row) => {
-      const pct = getNormalizedScorePercent(row);
-      if (pct === null) return "—";
+      if (row.normalizedScore == null || row.maxRawScore <= 0) return "—";
+      const pct = Number(
+        ((row.normalizedScore / row.maxRawScore) * 100).toFixed(2),
+      );
       return `${formatNumber(pct)}`;
     },
   },
   ratingN: {
     id: "ratingN",
     label: "Rating (N)",
-    getValue: (row) => formatNullable(getNormalizedRating(row)),
+    // Use the persisted performanceLevelName from the server, which is
+    // resolved from the normalized score % and the configured performance
+    // matrix bands. This is the single source of truth — do NOT
+    // recalculate with hardcoded thresholds here.
+    getValue: (row) => formatNullable(row.performanceLevelName),
   },
   quartile: {
     id: "quartile",
     label: "Quartile",
-    getValue: (row) => formatNullable(getNormalizedQuartile(row)),
+    // Use the persisted quartileName from the server, which is resolved
+    // from the normalized score % and the configured performance matrix
+    // bands. This is the single source of truth — do NOT recalculate
+    // with hardcoded level definitions here.
+    getValue: (row) => formatNullable(row.quartileName),
   },
   remarksEvaluation: {
     id: "remarksEvaluation",

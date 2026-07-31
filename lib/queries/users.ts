@@ -31,6 +31,7 @@ interface UserRow {
   head_name: string | null;
   manager_2_id: string | null;
   manager_2_name: string | null;
+  is_manager_eligible: boolean;
   qualification: string | null;
   qualification_year: string | null;
   qualification_subject: string | null;
@@ -46,6 +47,7 @@ let cachedUserOrgMode: UserOrgMode | null = null;
 let cachedExcelColumns: boolean | null = null;
 let cachedQualificationsTable: boolean | null = null;
 let manager2ColumnEnsured = false;
+let managerEligibleColumnEnsured = false;
 
 export async function ensureManager2Column(): Promise<void> {
   if (manager2ColumnEnsured) {
@@ -57,6 +59,18 @@ export async function ensureManager2Column(): Promise<void> {
   );
 
   manager2ColumnEnsured = true;
+}
+
+export async function ensureManagerEligibleColumn(): Promise<void> {
+  if (managerEligibleColumnEnsured) {
+    return;
+  }
+
+  await db.query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_manager_eligible BOOLEAN NOT NULL DEFAULT FALSE`,
+  );
+
+  managerEligibleColumnEnsured = true;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -180,6 +194,7 @@ function buildUserSelect(
       CONCAT(h.first_name, ' ', h.last_name) AS head_name,
       u.manager_2_id,
       CONCAT(m2.first_name, ' ', m2.last_name) AS manager_2_name,
+      u.is_manager_eligible,
       ${qualSelect}
       u.is_active,
       u.created_at::text
@@ -222,6 +237,7 @@ function mapUserRow(row: UserRow): UserRecord {
     headName: row.head_name,
     manager2Id: row.manager_2_id ? Number(row.manager_2_id) : null,
     manager2Name: row.manager_2_name,
+    isManagerEligible: row.is_manager_eligible,
     qualification: row.qualification,
     qualificationYear: row.qualification_year,
     qualificationSubject: row.qualification_subject,
@@ -273,6 +289,7 @@ async function assertValidManager(
   userId: number | null,
   managerId: number | null,
   label: string,
+  previousManagerId?: number | null,
 ): Promise<void> {
   if (managerId === null) {
     return;
@@ -282,10 +299,25 @@ async function assertValidManager(
     throw new UserError(`A user cannot be their own ${label}.`, 400);
   }
 
-  const result = await db.query(`SELECT id FROM users WHERE id = $1`, [managerId]);
+  // If the assignment is unchanged from the existing value, skip the
+  // eligibility check so legacy assignments are preserved (requirement 6).
+  const isUnchanged =
+    previousManagerId !== undefined && managerId === previousManagerId;
+
+  const result = await db.query<{ is_manager_eligible: boolean }>(
+    `SELECT is_manager_eligible FROM users WHERE id = $1`,
+    [managerId],
+  );
 
   if (result.rows.length === 0) {
     throw new UserError(`${label} user not found.`, 404);
+  }
+
+  if (!isUnchanged && !result.rows[0].is_manager_eligible) {
+    throw new UserError(
+      `${label} is not designated as a manager. Set their Manager Role to "Yes" first.`,
+      400,
+    );
   }
 }
 
@@ -293,12 +325,59 @@ async function assertValidManagers(
   userId: number | null,
   headId: number | null,
   manager2Id: number | null,
+  previous?: { previousHeadId?: number | null; previousManager2Id?: number | null },
 ): Promise<void> {
-  await assertValidManager(userId, headId, "Manager 1");
-  await assertValidManager(userId, manager2Id, "Manager 2");
+  await assertValidManager(userId, headId, "Manager 1", previous?.previousHeadId);
+  await assertValidManager(userId, manager2Id, "Manager 2", previous?.previousManager2Id);
 
   if (headId !== null && manager2Id !== null && headId === manager2Id) {
     throw new UserError("Manager 1 and Manager 2 cannot be the same person.", 400);
+  }
+}
+
+/**
+ * Returns users designated as manager-eligible (Manager Role = Yes).
+ * Used as the single source of truth for populating Manager 1/2 dropdowns.
+ */
+export async function listEligibleManagers(): Promise<UserRecord[]> {
+  await ensureManager2Column();
+  await ensureManagerEligibleColumn();
+
+  const [mode, excelReady] = await Promise.all([
+    getUserOrgMode(),
+    hasExcelSheetColumns(),
+  ]);
+  const result = await db.query<UserRow>(
+    `${buildUserSelect(mode, excelReady, false)}
+     WHERE u.is_manager_eligible = TRUE
+     ORDER BY u.last_name ASC, u.first_name ASC`,
+  );
+
+  return result.rows.map(mapUserRow);
+}
+
+/**
+ * Validates that a user is manager-eligible. Used by bulk update paths
+ * where per-user "previous value" tracking is not feasible.
+ */
+export async function assertManagerEligible(
+  managerId: number,
+  label: string,
+): Promise<void> {
+  const result = await db.query<{ is_manager_eligible: boolean }>(
+    `SELECT is_manager_eligible FROM users WHERE id = $1`,
+    [managerId],
+  );
+
+  if (result.rows.length === 0) {
+    throw new UserError(`${label} user not found.`, 404);
+  }
+
+  if (!result.rows[0].is_manager_eligible) {
+    throw new UserError(
+      `${label} is not designated as a manager. Set their Manager Role to "Yes" first.`,
+      400,
+    );
   }
 }
 
@@ -314,6 +393,7 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 
 export async function listUsers(): Promise<UserRecord[]> {
   await ensureManager2Column();
+  await ensureManagerEligibleColumn();
 
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
@@ -333,6 +413,7 @@ export async function listUsers(): Promise<UserRecord[]> {
  */
 export async function listUsersOverview(): Promise<UserRecord[]> {
   await ensureManager2Column();
+  await ensureManagerEligibleColumn();
 
   const [mode, excelReady] = await Promise.all([
     getUserOrgMode(),
@@ -360,6 +441,7 @@ export async function listUsersByEmployeeIds(
   }
 
   await ensureManager2Column();
+  await ensureManagerEligibleColumn();
 
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
@@ -384,6 +466,7 @@ export async function listUsersByEmployeeIds(
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
   await ensureManager2Column();
+  await ensureManagerEligibleColumn();
 
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
@@ -405,6 +488,7 @@ export async function getUserById(id: number): Promise<UserRecord | null> {
 
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {
   await ensureManager2Column();
+  await ensureManagerEligibleColumn();
 
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
@@ -428,9 +512,10 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
          ${mode === "entity" ? "entity_id" : "department_id"},
          head_id,
          manager_2_id,
+         is_manager_eligible,
          is_active
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         normalized.employeeId,
@@ -444,6 +529,7 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
         normalized.entityId,
         normalized.headId,
         normalized.manager2Id,
+        normalized.isManagerEligible,
         normalized.isActive,
       ],
     );
@@ -482,6 +568,7 @@ export async function updateUser(
   input: UpdateUserInput,
 ): Promise<UserRecord> {
   await ensureManager2Column();
+  await ensureManagerEligibleColumn();
 
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
@@ -490,8 +577,18 @@ export async function updateUser(
     hasQualificationsTable(),
   ]);
 
+  // Load current user to allow unchanged manager assignments to persist
+  // without triggering the new eligibility check (preserves existing data).
+  const currentUser = await getUserById(id);
+  if (!currentUser) {
+    throw new UserError("User not found.", 404);
+  }
+
   await assertEntityExists(normalized.entityId);
-  await assertValidManagers(id, normalized.headId, normalized.manager2Id);
+  await assertValidManagers(id, normalized.headId, normalized.manager2Id, {
+    previousHeadId: currentUser.headId,
+    previousManager2Id: currentUser.manager2Id,
+  });
 
   const passwordHash = input.password
     ? await bcrypt.hash(input.password, 10)
@@ -531,6 +628,11 @@ export async function updateUser(
 
   values.push(normalized.manager2Id);
   setClauses.push(`manager_2_id = $${values.length}`);
+
+  if (normalized.isManagerEligible !== undefined) {
+    values.push(normalized.isManagerEligible);
+    setClauses.push(`is_manager_eligible = $${values.length}`);
+  }
 
   values.push(normalized.isActive);
   setClauses.push(`is_active = $${values.length}`);

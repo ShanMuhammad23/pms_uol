@@ -55,6 +55,7 @@ CREATE TABLE users (
     department_id INT REFERENCES departments(id) ON DELETE RESTRICT,
     head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 1
     manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 2
+    is_manager_eligible BOOLEAN NOT NULL DEFAULT FALSE, -- Designates eligibility for Manager 1/2 assignment
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -199,6 +200,7 @@ CREATE TABLE appraisals (
     applicable_duration VARCHAR(100),
     applicable_duration_factor NUMERIC(3, 1), -- 1 = full, 0 = none, else months/12
     remarks_evaluation TEXT,
+    hr_approval_status VARCHAR(20) DEFAULT 'pending', -- pending | approved | review_required (independent of remarks_evaluation)
 
     -- Compensation worksheet
     current_salary NUMERIC(14, 2),

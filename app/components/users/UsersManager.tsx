@@ -8,6 +8,7 @@ import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBa
 import { EditUserModal } from "@/app/components/users/EditUserModal";
 import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
 import { UsersListingTable } from "@/app/components/users/UsersListingTable";
+import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { queryKeys } from "@/app/queries/keys";
 import {
@@ -54,6 +55,7 @@ interface UserFormState {
   entityId: string;
   headId: string;
   manager2Id: string;
+  isManagerEligible: boolean;
   isActive: boolean;
 }
 
@@ -69,6 +71,7 @@ const emptyForm: UserFormState = {
   entityId: "",
   headId: "",
   manager2Id: "",
+  isManagerEligible: false,
   isActive: true,
 };
 
@@ -117,7 +120,7 @@ export default function UsersManager() {
   });
 
   const headOptions = useMemo(() => {
-    return users;
+    return filterManagerEligibleUsers(users);
   }, [users]);
 
   const manager2Options = useMemo(() => {
@@ -235,6 +238,7 @@ export default function UsersManager() {
       entityId: form.entityId ? Number(form.entityId) : null,
       headId: form.headId ? Number(form.headId) : null,
       manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
+      isManagerEligible: form.isManagerEligible,
       isActive: form.isActive,
       password: form.password,
     });
@@ -409,6 +413,26 @@ export default function UsersManager() {
                   {USER_ROLE_LABELS[role]}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="user-manager-role" className="mb-1.5 block text-sm font-medium text-text-primary">
+              Manager Role
+            </label>
+            <select
+              id="user-manager-role"
+              value={form.isManagerEligible ? "yes" : "no"}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  isManagerEligible: event.target.value === "yes",
+                }))
+              }
+              className={inputClassName}
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
             </select>
           </div>
 

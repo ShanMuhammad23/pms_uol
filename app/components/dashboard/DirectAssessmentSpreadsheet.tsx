@@ -8,6 +8,7 @@ import {
   approveDirectAssessment,
   type DirectAssessmentData,
 } from "@/lib/queries/direct-assessment-client";
+import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   type QuestionRecord,
@@ -20,6 +21,11 @@ import {
   type FormTableRow,
 } from "@/app/helpers/form-table-rows";
 import { ArrowLeft, Save, CheckCircle } from "lucide-react";
+import { DirectAssessmentFilterBar } from "@/app/components/dashboard/DirectAssessmentFilterBar";
+import {
+  filterDirectAssessmentEmployees,
+  useDirectAssessmentFilters,
+} from "@/app/queries/direct-assessment-filters";
 
 interface DirectAssessmentSpreadsheetProps {
   templateId: number;
@@ -104,6 +110,25 @@ export default function DirectAssessmentSpreadsheet({
     queryFn: () => fetchDirectAssessmentData(templateId),
   });
 
+  const { data: entities = [] } = useQuery({
+    queryKey: ["entities"],
+    queryFn: fetchDashboardEntities,
+  });
+
+  const filters = useDirectAssessmentFilters(data?.employees ?? [], entities);
+
+  const filteredEmployees = useMemo(
+    () =>
+      data
+        ? filterDirectAssessmentEmployees(
+            data.employees,
+            filters.filterState,
+            entities,
+          )
+        : [],
+    [data, filters.filterState, entities],
+  );
+
   const initializeDrafts = useCallback((d: DirectAssessmentData) => {
     setDrafts(buildInitialDrafts(d));
   }, []);
@@ -113,8 +138,8 @@ export default function DirectAssessmentSpreadsheet({
   }, [data, initializeDrafts]);
 
   const editableEmployees = useMemo(
-    () => data?.employees.filter((e) => e.canEdit) ?? [],
-    [data],
+    () => filteredEmployees.filter((e) => e.canEdit),
+    [filteredEmployees],
   );
 
   const rows = useMemo(() => (data ? buildTableRows(data) : []), [data]);
@@ -235,6 +260,55 @@ export default function DirectAssessmentSpreadsheet({
     );
   }
 
+  if (filteredEmployees.length === 0) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-1 text-xs text-foreground/70 hover:text-text-primary"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back to templates
+        </button>
+        <h2 className="text-lg font-semibold text-text-primary">
+          Direct Assessment — {data.templateTitle}
+        </h2>
+        <DirectAssessmentFilterBar
+          filterState={filters.filterState}
+          selectedDesignations={filters.selectedDesignations}
+          selectedRoleCategories={filters.selectedRoleCategories}
+          selectedAssessmentStatuses={filters.selectedAssessmentStatuses}
+          selectedCategory0EntityIds={filters.selectedCategory0EntityIds}
+          selectedCategory1EntityIds={filters.selectedCategory1EntityIds}
+          selectedCategory2EntityIds={filters.selectedCategory2EntityIds}
+          designationOptions={filters.designationOptions}
+          roleCategoryOptions={filters.roleCategoryOptions}
+          assessmentStatusOptions={filters.assessmentStatusOptions}
+          category0Options={filters.category0Options}
+          category1Options={filters.category1Options}
+          category2Options={filters.category2Options}
+          onDesignationChange={filters.handleDesignationChange}
+          onRoleCategoryChange={filters.handleRoleCategoryChange}
+          onAssessmentStatusChange={filters.handleAssessmentStatusChange}
+          onCategory0EntityChange={filters.handleCategory0EntityChange}
+          onCategory1EntityChange={filters.handleCategory1EntityChange}
+          onCategory2EntityChange={filters.handleCategory2EntityChange}
+          onClearAllFilters={filters.clearAllFilters}
+          onRemoveDesignation={() => filters.handleDesignationChange(null)}
+          onRemoveRoleCategory={() => filters.handleRoleCategoryChange(null)}
+          onRemoveAssessmentStatus={() => filters.handleAssessmentStatusChange(null)}
+          onRemoveCategory0={() => filters.handleCategory0EntityChange(null)}
+          onRemoveCategory1={() => filters.handleCategory1EntityChange(null)}
+          onRemoveCategory2={() => filters.handleCategory2EntityChange(null)}
+          hasActiveFilters={filters.hasActiveFilters}
+        />
+        <div className="rounded-md border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
+          No employees match the selected filters.
+        </div>
+      </div>
+    );
+  }
+
   const scoredQuestions = data.questions.filter(isScoredQuestion);
   const maxRawScore = scoredQuestions.reduce(
     (sum, q) => sum + q.totalMarks,
@@ -262,8 +336,39 @@ export default function DirectAssessmentSpreadsheet({
         </div>
       ) : null}
 
+      <DirectAssessmentFilterBar
+        filterState={filters.filterState}
+        selectedDesignations={filters.selectedDesignations}
+        selectedRoleCategories={filters.selectedRoleCategories}
+        selectedAssessmentStatuses={filters.selectedAssessmentStatuses}
+        selectedCategory0EntityIds={filters.selectedCategory0EntityIds}
+        selectedCategory1EntityIds={filters.selectedCategory1EntityIds}
+        selectedCategory2EntityIds={filters.selectedCategory2EntityIds}
+        designationOptions={filters.designationOptions}
+        roleCategoryOptions={filters.roleCategoryOptions}
+        assessmentStatusOptions={filters.assessmentStatusOptions}
+        category0Options={filters.category0Options}
+        category1Options={filters.category1Options}
+        category2Options={filters.category2Options}
+        onDesignationChange={filters.handleDesignationChange}
+        onRoleCategoryChange={filters.handleRoleCategoryChange}
+        onAssessmentStatusChange={filters.handleAssessmentStatusChange}
+        onCategory0EntityChange={filters.handleCategory0EntityChange}
+        onCategory1EntityChange={filters.handleCategory1EntityChange}
+        onCategory2EntityChange={filters.handleCategory2EntityChange}
+        onClearAllFilters={filters.clearAllFilters}
+        onRemoveDesignation={() => filters.handleDesignationChange(null)}
+        onRemoveRoleCategory={() => filters.handleRoleCategoryChange(null)}
+        onRemoveAssessmentStatus={() => filters.handleAssessmentStatusChange(null)}
+        onRemoveCategory0={() => filters.handleCategory0EntityChange(null)}
+        onRemoveCategory1={() => filters.handleCategory1EntityChange(null)}
+        onRemoveCategory2={() => filters.handleCategory2EntityChange(null)}
+        hasActiveFilters={filters.hasActiveFilters}
+      />
+
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
-        Scroll horizontally to view all employees
+        Showing {filteredEmployees.length} of {data.employees.length} employees
+        — scroll horizontally to view all
       </div>
 
       <div className="overflow-auto max-h-[75vh] rounded-md border border-slate-300 dark:border-slate-700">
@@ -279,7 +384,7 @@ export default function DirectAssessmentSpreadsheet({
               <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Max
               </th>
-              {data.employees.map((emp) => {
+              {filteredEmployees.map((emp) => {
                 const isEditable = emp.canEdit;
                 const statusLabel = isEditable
                   ? `Mgr ${emp.managerLevel ?? 1}`
@@ -322,7 +427,7 @@ export default function DirectAssessmentSpreadsheet({
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={3 + data.employees.length}
+                  colSpan={3 + filteredEmployees.length}
                   className="bg-slate-50 px-3 py-8 text-center text-sm text-slate-500 dark:bg-slate-800/30 dark:text-slate-400"
                 >
                   No questions were found for this form template.
@@ -339,8 +444,8 @@ export default function DirectAssessmentSpreadsheet({
                     {row.isFirstInSection && row.sectionTitle ? (
                       <tr className="bg-amber-50/80 dark:bg-amber-950/20">
                         <td
-                          colSpan={3 + data.employees.length}
-                          className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200"
+                          colSpan={3 + filteredEmployees.length}
+                          className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200"
                         >
                           {formatSectionLabel(row)}
                         </td>
@@ -370,7 +475,7 @@ export default function DirectAssessmentSpreadsheet({
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
                       {scored ? question.totalMarks : "—"}
                     </td>
-                    {data.employees.map((emp) => {
+                    {filteredEmployees.map((emp) => {
                       const isEditable = emp.canEdit;
                       const empDrafts = drafts[emp.submissionId];
                       const draft = empDrafts?.[question.id];
@@ -431,7 +536,7 @@ export default function DirectAssessmentSpreadsheet({
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-100">
                   {maxRawScore}
                 </td>
-                {data.employees.map((emp) => {
+                {filteredEmployees.map((emp) => {
                   const isEditable = emp.canEdit;
                   const empDrafts = drafts[emp.submissionId];
                   const total = scoredQuestions.reduce((sum, q) => {

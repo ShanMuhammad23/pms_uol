@@ -45,6 +45,10 @@ export interface FormSubmissionListItem {
   maxRawScore: number;
   scorePercent: number;
   scoreO: number | null;
+  /** Total of Manager 1's saved answers (SUM of appraisal_answers.points_earned). Null when no answers. */
+  manager1Score: number | null;
+  /** Total of Manager 2's saved answers. Null when Manager 2 unassigned or no answers. */
+  manager2Score: number | null;
   ratingO: PerformanceRating | null;
   creditHrsErpScoreAdj: number | null;
   pubOricScoreAdj: number | null;
@@ -62,6 +66,8 @@ export interface FormSubmissionListItem {
   /** 1 = full, 0 = not eligible, otherwise months-to-evaluation / 12. */
   applicableDurationFactor: number | null;
   remarksEvaluation: string | null;
+  /** Dedicated HR approval status — independent of remarks_evaluation. */
+  hrApprovalStatus: "pending" | "approved" | "review_required" | null;
   currentSalary: number | null;
   previousSalary: number | null;
   applicableSalaryForIncrement: number | null;

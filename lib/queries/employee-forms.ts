@@ -259,7 +259,7 @@ async function getAnswersForAppraisal(
   });
 }
 
-async function listAttachmentsForAppraisal(
+export async function listAttachmentsForAppraisal(
   appraisalId: number,
   userId: number,
   client?: PoolClient,
@@ -948,4 +948,52 @@ export async function deleteEmployeeFormAttachment(
   }
 
   await deleteFormAttachmentFile(result.rows[0].relative_path);
+}
+
+/**
+ * Reviewer-scoped attachment download.
+ *
+ * Unlike {@link getEmployeeFormAttachmentForDownload}, this does NOT restrict
+ * the download to the employee who owns the appraisal. Access control is
+ * enforced by the caller (the submission-detail API route validates that the
+ * requesting user is authorised to view the submission). This lets Manager 1,
+ * Manager 2, HR, Board, and Super Admin download attachments uploaded by the
+ * employee throughout the assessment lifecycle.
+ */
+export async function getSubmissionAttachmentForDownload(
+  submissionId: number,
+  attachmentId: number,
+): Promise<{
+  absolutePath: string;
+  originalFilename: string;
+  mimeType: string | null;
+}> {
+  await ensureAttachmentsTable();
+
+  const result = await db.query<{
+    relative_path: string;
+    original_filename: string;
+    mime_type: string | null;
+  }>(
+    `SELECT
+       att.relative_path,
+       att.original_filename,
+       att.mime_type
+     FROM appraisal_answer_attachments att
+     INNER JOIN appraisals ap ON ap.id = att.appraisal_id
+     WHERE att.id = $1
+       AND ap.id = $2`,
+    [attachmentId, submissionId],
+  );
+
+  if (result.rows.length === 0) {
+    throw new EmployeeFormError("Attachment not found.", 404);
+  }
+
+  const row = result.rows[0];
+  return {
+    absolutePath: resolveFormAttachmentAbsolutePath(row.relative_path),
+    originalFilename: row.original_filename,
+    mimeType: row.mime_type,
+  };
 }

@@ -506,7 +506,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                     <Fragment key={question.id}>
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-amber-50/80 dark:bg-amber-950/20">
-                          <td colSpan={6} className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200">
+                          <td colSpan={6} className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200">
                             {formatSectionLabel(row)}
                           </td>
                         </tr>

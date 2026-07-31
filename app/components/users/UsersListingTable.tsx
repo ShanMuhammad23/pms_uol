@@ -26,6 +26,7 @@ import { itemVariants } from "@/app/helpers/dashboard-animations";
 import {
   EMPTY_USERS_MASTER_FILTER_STATE,
   applyUsersMasterFilters,
+  countActiveUsersMasterFilters,
   isUsersMasterFilterableColumn,
   type UsersMasterFilterMultiSelection,
   type UsersMasterFilterState,
@@ -40,6 +41,7 @@ import {
 import { useUsersByEmployeeIdsQuery } from "@/app/queries/users";
 import type { UserRecord } from "@/types/users";
 import { ExcelExportButton } from "@/app/components/common/ExcelExportButton";
+import { ClearAllFiltersButton } from "@/app/components/common/ClearAllFiltersButton";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -83,8 +85,8 @@ function stickySelectCellClassName(isSelected: boolean) {
     "sticky left-0 z-20 border-b border-slate-100 px-2 py-1 dark:border-white/[0.03]",
     STICKY_EDGE_SHADOW_LEFT,
     isSelected
-      ? "bg-amber-50/60 dark:bg-amber-500/5"
-      : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
+      ? "bg-amber-50 dark:bg-amber-950"
+      : "bg-white group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-slate-800",
   );
 }
 
@@ -385,6 +387,10 @@ export function UsersListingTable({
     onClearAllFilters();
   };
 
+  const masterFilterActiveCount = countActiveUsersMasterFilters(masterFilters);
+  const orgFiltersActive = allUsers != null && users.length !== allUsers.length;
+  const hasActiveFilters = masterFilterActiveCount > 0 || orgFiltersActive;
+
   return (
     <motion.div
       variants={itemVariants}
@@ -442,6 +448,10 @@ export function UsersListingTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <ClearAllFiltersButton
+            hasActiveFilters={hasActiveFilters}
+            onClearAllFilters={handleClearAllFilters}
+          />
           <ColumnManagementPanelTrigger
             open={columnMgmtOpen}
             onOpenChange={setColumnMgmtOpen}
@@ -573,8 +583,8 @@ export function UsersListingTable({
                             isFrozen && "sticky",
                             isFrozen && (
                               isSelected
-                                ? "bg-amber-50/60 dark:bg-amber-500/5"
-                                : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]"
+                                ? "bg-amber-50 dark:bg-amber-950"
+                                : "bg-white group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-slate-800"
                             ),
                             col.id === lastFrozenColumnId && "border-r-2 border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:border-white/20",
                           )}

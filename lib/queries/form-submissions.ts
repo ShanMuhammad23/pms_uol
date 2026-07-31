@@ -6,11 +6,15 @@ import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import {
   calculateScorePercent,
   getActiveFinancialYearQuartileBands,
-  resolvePerformanceQuartile,
+  resolveSubmissionPerformanceQuartile,
 } from "@/lib/queries/performance-rating";
 import { getFormTemplateById } from "@/lib/queries/forms";
+import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
-import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
+import type {
+  EmployeeFormAnswerAttachment,
+  EmployeeFormAnswerRecord,
+} from "@/types/employee-forms";
 import type { ManagerReviewAnswerInput } from "@/types/employee-forms";
 import type {
   FormSubmissionDetail,
@@ -23,7 +27,7 @@ import {
   toEmployeeManagers,
 } from "@/app/helpers/manager-review";
 import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
-import { ensureManager2Column } from "@/lib/queries/users";
+import { assertManagerEligible, ensureManager2Column } from "@/lib/queries/users";
 import type { StaffListScope } from "@/lib/queries/staff-list-scope";
 
 export class FormSubmissionError extends Error {
@@ -61,6 +65,8 @@ interface SubmissionListRow {
   system_raw_score: string;
   max_raw_score: string;
   initial_score_numeric: string | null;
+  manager_1_score: string | null;
+  manager_2_score: string | null;
   initial_rating: PerformanceRating | null;
   credit_hrs_erp_score_adj: string | null;
   pub_oric_score_adj: string | null;
@@ -76,6 +82,7 @@ interface SubmissionListRow {
   applicable_duration: string | null;
   applicable_duration_factor: string | null;
   remarks_evaluation: string | null;
+  hr_approval_status: string | null;
   current_salary: string | null;
   previous_salary: string | null;
   applicable_salary_for_increment: string | null;
@@ -201,16 +208,29 @@ async function getAnswersForSubmission(
     [appraisalId, filledById],
   );
 
-  return result.rows.map((row) => ({
-    questionId: Number(row.question_id),
-    textResponse: row.text_response,
-    selectedOptionId: row.selected_option_id
-      ? Number(row.selected_option_id)
-      : null,
-    pointsEarned: Number(row.points_earned),
-    remarks: row.remarks ?? null,
-    attachments: [],
-  }));
+  // Load attachments uploaded by this contributor (e.g. the employee) and group
+  // them per question so every reviewer role sees the same attachment collection.
+  const attachments = await listAttachmentsForAppraisal(appraisalId, filledById);
+  const attachmentsByQuestion = new Map<number, EmployeeFormAnswerAttachment[]>();
+  for (const attachment of attachments) {
+    const current = attachmentsByQuestion.get(attachment.questionId) ?? [];
+    current.push(attachment);
+    attachmentsByQuestion.set(attachment.questionId, current);
+  }
+
+  return result.rows.map((row) => {
+    const questionId = Number(row.question_id);
+    return {
+      questionId,
+      textResponse: row.text_response,
+      selectedOptionId: row.selected_option_id
+        ? Number(row.selected_option_id)
+        : null,
+      pointsEarned: Number(row.points_earned),
+      remarks: row.remarks ?? null,
+      attachments: attachmentsByQuestion.get(questionId) ?? [],
+    };
+  });
 }
 
 function mapSubmissionRow(
@@ -225,12 +245,33 @@ function mapSubmissionRow(
   const maxRawScore = Number(row.max_raw_score);
   const scorePercent = calculateScorePercent(rawScore, maxRawScore);
   const hasAppraisal = Boolean(row.id);
-  const resolved = hasAppraisal
-    ? resolvePerformanceQuartile(scorePercent, quartileBands)
-    : null;
   const scoreO = toNumber(row.initial_score_numeric) ?? rawScore;
   const normalizedScore =
     toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric);
+
+  // Build a partial submission-like object for the shared resolver.
+  // The performance level and quartile must be resolved from the
+  // NORMALIZED score percentage (Score O + adjustments + calibration
+  // factor), NOT the raw self-assessment score percentage. Using the raw
+  // score % here was the root cause of the matrix not matching the Staff
+  // Listing — the persisted performanceLevelName/quartileName were based
+  // on the self-assessment score, while the dashboard matrix used the
+  // normalized score.
+  const resolved = hasAppraisal
+    ? resolveSubmissionPerformanceQuartile(
+        {
+          scoreO,
+          rawScore,
+          creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
+          pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
+          qecScoreAdj: toNumber(row.qec_score_adj),
+          calibrationFactor: toNumber(row.calibration_factor),
+          maxRawScore,
+        },
+        quartileBands,
+      )
+    : null;
+
   // Prefer FY-scoped values stored on the appraisal; compute only as fallback.
   const computed = computeAppraisalEligibility(row.date_of_joining, {
     financialYear: eligibilityContext.financialYear,
@@ -269,6 +310,8 @@ function mapSubmissionRow(
     maxRawScore,
     scorePercent,
     scoreO,
+    manager1Score: toNumber(row.manager_1_score),
+    manager2Score: toNumber(row.manager_2_score),
     ratingO: row.initial_rating,
     creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
     pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
@@ -289,6 +332,7 @@ function mapSubmissionRow(
     eligibilityReferenceYear: eligibilityContext.financialYear,
     eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
     remarksEvaluation: row.remarks_evaluation,
+    hrApprovalStatus: (row.hr_approval_status as "pending" | "approved" | "review_required" | null) ?? null,
     currentSalary: toNumber(row.current_salary),
     previousSalary: toNumber(row.previous_salary),
     applicableSalaryForIncrement: toNumber(row.applicable_salary_for_increment),
@@ -347,6 +391,13 @@ async function ensureEligibilityColumns(): Promise<void> {
   );
 }
 
+async function ensureHrApprovalStatusColumn(): Promise<void> {
+  await db.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS hr_approval_status VARCHAR(20) DEFAULT 'pending'`,
+  );
+}
+
 function formatReferenceDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -373,6 +424,7 @@ export async function listFormSubmissions(
     ensureEligibilityColumns(),
     ensureManager2Column(),
     ensureAssessmentEligibilityColumn(),
+    ensureHrApprovalStatusColumn(),
   ]);
 
   const roleCategorySelect = roleCategoryReady
@@ -400,6 +452,7 @@ export async function listFormSubmissions(
          ap.applicable_duration,
          ap.applicable_duration_factor::text,
          ap.remarks_evaluation,
+         ap.hr_approval_status,
          ap.current_salary::text,
          ap.previous_salary::text,
          ap.applicable_salary_for_increment::text,
@@ -432,6 +485,7 @@ export async function listFormSubmissions(
          NULL::text AS applicable_duration,
          NULL::text AS applicable_duration_factor,
          NULL::text AS remarks_evaluation,
+         NULL::text AS hr_approval_status,
          NULL::text AS current_salary,
          NULL::text AS previous_salary,
          NULL::text AS applicable_salary_for_increment,
@@ -537,6 +591,18 @@ export async function listFormSubmissions(
        COALESCE(ap.system_raw_score, 0) AS system_raw_score,
        ap.initial_rating,
        ap.calibrated_rating,
+       (
+         SELECT SUM(aa.points_earned)::text
+         FROM appraisal_answers aa
+         WHERE aa.appraisal_id = ap.id
+           AND aa.filled_by_id = u.head_id
+       ) AS manager_1_score,
+       (
+         SELECT SUM(aa.points_earned)::text
+         FROM appraisal_answers aa
+         WHERE aa.appraisal_id = ap.id
+           AND aa.filled_by_id = u.manager_2_id
+       ) AS manager_2_score,
        COALESCE(
          (
            SELECT SUM(fq.total_marks)::text
@@ -841,12 +907,32 @@ export async function approveHrCalibration(appraisalId: number): Promise<{
   await db.query(
     `UPDATE appraisals
      SET status = $2,
+         hr_approval_status = 'approved',
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1`,
     [appraisalId, nextStatus],
   );
 
   return { status: nextStatus };
+}
+
+export async function setHrReviewRequired(appraisalId: number): Promise<{
+  hrApprovalStatus: string;
+}> {
+  const result = await db.query<{ id: string }>(
+    `UPDATE appraisals
+     SET hr_approval_status = 'review_required',
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+     RETURNING id`,
+    [appraisalId],
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  return { hrApprovalStatus: "review_required" };
 }
 
 export async function getFormSubmissionById(
@@ -931,7 +1017,21 @@ export async function getFormSubmissionById(
   }
 
   const quartileBands = await getActiveFinancialYearQuartileBands();
-  const resolved = resolvePerformanceQuartile(summary.scorePercent, quartileBands);
+  // Use the normalized score % (Score O + adjustments + calibration factor)
+  // for resolving the quartile range, consistent with the Staff Listing and
+  // Performance Matrix. Previously this used the raw self-assessment score %.
+  const resolved = resolveSubmissionPerformanceQuartile(
+    {
+      scoreO: summary.scoreO,
+      rawScore: summary.rawScore,
+      creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,
+      pubOricScoreAdj: summary.pubOricScoreAdj,
+      qecScoreAdj: summary.qecScoreAdj,
+      calibrationFactor: summary.calibrationFactor,
+      maxRawScore: summary.maxRawScore,
+    },
+    quartileBands,
+  );
 
   return {
     id: summary.id,
@@ -1242,6 +1342,14 @@ export async function bulkUpdateEmployeeListingFields(
       "Provide at least one field to update.",
       400,
     );
+  }
+
+  // Enforce manager eligibility for bulk manager assignments.
+  if (updatesManager1 && fields.manager1UserId != null) {
+    await assertManagerEligible(fields.manager1UserId, "Manager 1");
+  }
+  if (updatesManager2 && fields.manager2UserId != null) {
+    await assertManagerEligible(fields.manager2UserId, "Manager 2");
   }
 
   if ((updatesRole || updatesDesignation) && !(await hasExcelSheetColumns())) {

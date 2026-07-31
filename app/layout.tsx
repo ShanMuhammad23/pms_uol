@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Performance Management System- The University of Lahore",
-  description: "Performance Management System- The University of Lahore",
+  title: "UOL — PMS",
+  description: "Performance Management System — University of Lahore",
 };
 
 export default function RootLayout({

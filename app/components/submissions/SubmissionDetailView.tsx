@@ -30,6 +30,9 @@ import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
 import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScoreAdjustmentCell";
+import QuartileBadge from "@/app/components/dashboard/QuartileBadge";
+import AttachmentList from "@/app/components/attachments/AttachmentList";
+import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
@@ -108,6 +111,8 @@ interface ScoreAdjustmentsPanelProps {
   qecScoreAdj: number | null;
   calibrationFactor: number | null;
   canEdit: boolean;
+  performanceLevelName: string | null;
+  quartileName: string | null;
 }
 
 function ScoreAdjustmentsPanel({
@@ -119,6 +124,8 @@ function ScoreAdjustmentsPanel({
   qecScoreAdj,
   calibrationFactor,
   canEdit,
+  performanceLevelName,
+  quartileName,
 }: ScoreAdjustmentsPanelProps) {
   const chAdj = creditHrsErpScoreAdj ?? 0;
   const oricAdj = pubOricScoreAdj ?? 0;
@@ -145,16 +152,7 @@ function ScoreAdjustmentsPanel({
       <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
         Score Adjustments &amp; Calibration
       </h3>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Score (O)
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
-            {scoreO.toFixed(1)}
-          </p>
-        </div>
-
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-9">
         <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             CH Adj
@@ -206,14 +204,7 @@ function ScoreAdjustmentsPanel({
           </p>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Rating (O)
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
-            {ratingO}
-          </p>
-        </div>
+        
 
         <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -237,6 +228,18 @@ function ScoreAdjustmentsPanel({
           <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
             {normalizedScorePct ?? "—"}
           </p>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Quartile
+          </p>
+          <div className="mt-1">
+            <QuartileBadge
+              performanceLevelName={performanceLevelName}
+              quartileName={quartileName}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -870,18 +873,21 @@ export default function SubmissionDetailView({
                   <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
                     Mgr 2 Score
                   </th>
-                  <th className="min-w-[180px] print-col-medium px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                  <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
                     Mgr 2 Remarks
                   </th>
                 </>
               ) : null}
+              <th className="min-w-[180px] print-col-medium px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+                Attachments
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 9 : 7) : ((hasManager2 && showManager2Data) ? 7 : 5)}
+                  colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 10 : 8) : ((hasManager2 && showManager2Data) ? 8 : 6)}
                   className="bg-slate-50 px-3 py-8 text-center text-sm text-slate-500 dark:bg-slate-800/30 dark:text-slate-400"
                 >
                   No questions were found for this submission.
@@ -904,7 +910,7 @@ export default function SubmissionDetailView({
                   <Fragment key={question.id}>
                     {row.isFirstInSection && row.sectionTitle ? (
                       <tr className="bg-amber-50/80 dark:bg-amber-950/20">
-                        <td colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 9 : 7) : ((hasManager2 && showManager2Data) ? 7 : 5)} className="px-4 py-2 text-sm font-bold text-amber-800 dark:text-amber-200">
+                        <td colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 10 : 8) : ((hasManager2 && showManager2Data) ? 8 : 6)} className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200">
                           {formatSectionLabel(row)}
                         </td>
                       </tr>
@@ -1070,6 +1076,19 @@ export default function SubmissionDetailView({
                         </td>
                       </>
                     ) : null}
+                    {/* Attachments uploaded by the employee — visible to every authorised reviewer */}
+                    <td className="px-2 py-2.5 align-top">
+                      <AttachmentList
+                        attachments={answer?.attachments ?? []}
+                        buildDownloadUrl={(attachmentId) =>
+                          getSubmissionAttachmentDownloadUrl(
+                            data.id,
+                            attachmentId,
+                          )
+                        }
+                        compact
+                      />
+                    </td>
                   </tr>
                   </Fragment>
                 );
@@ -1105,29 +1124,16 @@ export default function SubmissionDetailView({
                     <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-indigo-300">
                       {editingManager2 ? managerDraftTotal : (manager2Total ?? 0)}
                     </td>
-                    <td className="px-3 py-2.5" />
+                    <td className="border-r border-slate-700 px-3 py-2.5" />
                   </>
                 ) : null}
+                <td className="px-3 py-2.5" />
               </tr>
             </tfoot>
           ) : null}
         </table>
       </div>
-
-      {isAdminRole && rows.length > 0 ? (
-        <ScoreAdjustmentsPanel
-          submissionId={data.id}
-          scoreO={data.initialScoreNumeric ?? data.rawScore}
-          maxRawScore={data.maxRawScore}
-          creditHrsErpScoreAdj={data.creditHrsErpScoreAdj}
-          pubOricScoreAdj={data.pubOricScoreAdj}
-          qecScoreAdj={data.qecScoreAdj}
-          calibrationFactor={data.calibrationFactor}
-          canEdit={data.canEditScoreAdjustments && isEligible}
-        />
-      ) : null}
-
-      {rows.length > 0 ? (
+            {rows.length > 0 ? (
         <AssessmentSummaryFooter
           entries={[
             ...(selfAssessmentEnabled
@@ -1164,6 +1170,23 @@ export default function SubmissionDetailView({
           ]}
         />
       ) : null}
+
+      {isAdminRole && rows.length > 0 ? (
+        <ScoreAdjustmentsPanel
+          submissionId={data.id}
+          scoreO={data.initialScoreNumeric ?? data.rawScore}
+          maxRawScore={data.maxRawScore}
+          creditHrsErpScoreAdj={data.creditHrsErpScoreAdj}
+          pubOricScoreAdj={data.pubOricScoreAdj}
+          qecScoreAdj={data.qecScoreAdj}
+          calibrationFactor={data.calibrationFactor}
+          canEdit={data.canEditScoreAdjustments && isEligible}
+          performanceLevelName={data.performanceLevelName}
+          quartileName={data.quartileName}
+        />
+      ) : null}
+
+
       <PrintFooter />
     </div>
   );

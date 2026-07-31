@@ -24,6 +24,7 @@ import {
 } from "@/app/queries/performance";
 import { isHeadRole } from "@/lib/auth/home-path";
 import type { EligibilityStatus } from "@/app/helpers/dashboard-types";
+import { getEligibilityDisplayLabel } from "@/app/helpers/dashboard-eligibility";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import type { CountOption } from "@/types/dashboard-api";
 
@@ -185,7 +186,7 @@ export function useDashboardPage() {
     if (!overview) {
       return (Object.keys(ELIGIBILITY_CONFIG) as EligibilityStatus[]).map(
         (name) => ({
-          name,
+          name: getEligibilityDisplayLabel(name),
           value: 0,
           color: isDarkMode
             ? ELIGIBILITY_CONFIG[name].dark

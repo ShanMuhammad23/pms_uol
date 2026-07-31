@@ -9,6 +9,7 @@ import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-review
 import {
   FormSubmissionError,
   approveHrCalibration,
+  setHrReviewRequired,
   getFormSubmissionById,
   getFormSubmissionSummaryById,
   saveManagerReviewAnswers,
@@ -108,7 +109,7 @@ export async function PUT(request: Request, context: RouteContext) {
   }
 }
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -149,6 +150,19 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
+    let body: { action?: string } = {};
+    try {
+      body = (await request.json()) as { action?: string };
+    } catch {
+      // Body is optional — default to approve for backward compatibility
+    }
+    const action = body.action ?? "approve";
+
+    if (action === "review_required") {
+      const result = await setHrReviewRequired(submissionId);
+      return NextResponse.json(result);
+    }
+
     const result = await approveHrCalibration(submissionId);
 
     return NextResponse.json(result);
@@ -164,9 +178,9 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
-    console.error("[hr-approval POST] Failed to approve HR review:", error);
+    console.error("[hr-approval POST] Failed to process HR review:", error);
     return NextResponse.json(
-      { error: "Failed to approve HR review." },
+      { error: "Failed to process HR review." },
       { status: 500 },
     );
   }

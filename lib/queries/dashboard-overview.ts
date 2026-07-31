@@ -40,6 +40,7 @@ interface OverviewRow {
   eligibility_status: EligibilityStatus | null;
   applicable_duration: string | null;
   applicable_duration_factor: string | null;
+  hr_approval_status: string | null;
   assessment_eligibility: boolean | null;
   ineligibility_reason: string | null;
 }
@@ -95,6 +96,13 @@ async function ensureAssessmentEligibilityColumn(): Promise<void> {
   await db.query(
     `ALTER TABLE users
      ADD COLUMN IF NOT EXISTS ineligibility_reason TEXT`,
+  );
+}
+
+async function ensureHrApprovalStatusColumn(): Promise<void> {
+  await db.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS hr_approval_status VARCHAR(20) DEFAULT 'pending'`,
   );
 }
 
@@ -188,6 +196,11 @@ function mapOverviewRow(
         ? Number(((rawScore / maxRawScore) * 100).toFixed(2))
         : 0,
     scoreO: toNumber(row.initial_score_numeric) ?? toNumber(row.system_raw_score),
+    // Overview rows do not aggregate per-manager answer totals; the reporting
+    // manager score is resolved only for the staff listing. Null here keeps the
+    // type satisfied without changing overview/counts calculations.
+    manager1Score: null,
+    manager2Score: null,
     ratingO: row.initial_rating,
     creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
     pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
@@ -208,6 +221,7 @@ function mapOverviewRow(
     eligibilityReferenceYear: eligibilityContext.financialYear,
     eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
     remarksEvaluation: null,
+    hrApprovalStatus: (row.hr_approval_status as "pending" | "approved" | "review_required" | null) ?? null,
     currentSalary: null,
     previousSalary: null,
     applicableSalaryForIncrement: null,
@@ -246,6 +260,7 @@ export async function listDashboardOverview(
     ensureEligibilityColumns(),
     ensureManager2Column(),
     ensureAssessmentEligibilityColumn(),
+    ensureHrApprovalStatusColumn(),
   ]);
 
   const designationSelect = excelReady
@@ -288,6 +303,7 @@ export async function listDashboardOverview(
        ap.eligibility_status,
        ap.applicable_duration,
        ap.applicable_duration_factor::text,
+       ap.hr_approval_status,
        COALESCE(u.assessment_eligibility, true) AS assessment_eligibility,
        u.ineligibility_reason`
     : `NULL::text AS uol_experience_years,
@@ -295,6 +311,7 @@ export async function listDashboardOverview(
        NULL::text AS eligibility_status,
        NULL::text AS applicable_duration,
        NULL::text AS applicable_duration_factor,
+       NULL::text AS hr_approval_status,
        COALESCE(u.assessment_eligibility, true) AS assessment_eligibility,
        u.ineligibility_reason`;
 

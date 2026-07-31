@@ -125,7 +125,7 @@ export function ExportColumnSelectorModal<T>({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-            className="relative w-full max-w-md max-h-[85vh] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/15 dark:bg-slate-900"
+            className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/15 dark:bg-slate-900"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -182,46 +182,45 @@ export function ExportColumnSelectorModal<T>({
                 </div>
               </div>
 
-              <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 dark:border-white/10 dark:bg-slate-950">
+              <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 dark:border-white/10 dark:bg-slate-950">
                 {columns.length === 0 ? (
                   <p className="py-4 text-center text-xs text-slate-500 dark:text-slate-400">
                     No columns available for export.
                   </p>
                 ) : (
-                  <ul className="space-y-0.5">
+                  <div className="grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
                     {columns.map((col) => {
                       const checked = selectedIds.has(col.id);
                       return (
-                        <li key={col.id}>
-                          <label
-                            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-white/5"
+                        <label
+                          key={col.id}
+                          className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-white/5"
+                        >
+                          <span
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                              checked
+                                ? "border-amber-500 bg-amber-500 text-white"
+                                : "border-slate-300 dark:border-white/20",
+                            )}
                           >
-                            <span
-                              className={cn(
-                                "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                                checked
-                                  ? "border-amber-500 bg-amber-500 text-white"
-                                  : "border-slate-300 dark:border-white/20",
-                              )}
-                            >
-                              {checked ? (
-                                <Check className="h-3 w-3" strokeWidth={3} />
-                              ) : null}
-                            </span>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleColumn(col.id)}
-                              className="sr-only"
-                            />
-                            <span className="min-w-0 flex-1 truncate">
-                              {col.label}
-                            </span>
-                          </label>
-                        </li>
+                            {checked ? (
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            ) : null}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleColumn(col.id)}
+                            className="sr-only"
+                          />
+                          <span className="min-w-0 flex-1 truncate" title={col.label}>
+                            {col.label}
+                          </span>
+                        </label>
                       );
                     })}
-                  </ul>
+                  </div>
                 )}
               </div>
             </div>

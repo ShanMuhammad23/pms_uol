@@ -14,7 +14,7 @@ export default function IneligibilityBanner({
       <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
       <p className="text-sm font-medium text-rose-800 dark:text-rose-200">
         {message ??
-          "Assessment unavailable. This employee is marked as Ineligible and cannot be assessed until eligibility is re-enabled."}
+          "Assessment unavailable. This employee is marked as Not Applicable and cannot be assessed until eligibility is re-enabled."}
       </p>
     </div>
   );

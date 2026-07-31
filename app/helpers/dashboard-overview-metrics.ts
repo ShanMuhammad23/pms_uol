@@ -1,6 +1,7 @@
 import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
 import type { EligibilityStatus } from "@/app/helpers/dashboard-types";
 import type { RatingQuartileMatrixData } from "@/app/helpers/dashboard-types";
+import { getEligibilityDisplayLabel } from "@/app/helpers/dashboard-eligibility";
 import {
   getMatrixQuartileColumnHeaders,
   sortPerformanceMatrix,
@@ -13,7 +14,7 @@ export function buildEligibilityDataFromCounts(
   isDarkMode: boolean,
 ) {
   return (Object.keys(counts) as EligibilityStatus[]).map((name) => ({
-    name,
+    name: getEligibilityDisplayLabel(name),
     value: counts[name],
     color: isDarkMode
       ? ELIGIBILITY_CONFIG[name].dark
