@@ -62,3 +62,29 @@ export function formatPerformanceScore(value: number): string {
 
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
+
+/** True when this quartile shares its min with the previous quartile's max. */
+export function isQuartileScoreMinExclusive(
+  scoreMin: number,
+  previousScoreMax: number | null | undefined,
+): boolean {
+  return (
+    previousScoreMax != null && Number(previousScoreMax) === Number(scoreMin)
+  );
+}
+
+/**
+ * Formats a quartile range. Shared boundaries use a greater-than lower bound
+ * so e.g. 90–92.5 then >92.5–95 have no overlap at 92.5.
+ */
+export function formatQuartileScoreRange(
+  scoreMin: number,
+  scoreMax: number,
+  minExclusive = false,
+): string {
+  const minLabel = minExclusive
+    ? `>${formatPerformanceScore(scoreMin)}`
+    : formatPerformanceScore(scoreMin);
+
+  return `${minLabel} – ${formatPerformanceScore(scoreMax)}`;
+}

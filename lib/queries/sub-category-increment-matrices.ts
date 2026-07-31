@@ -153,7 +153,7 @@ export async function createSubCategoryIncrementMatrix(
         input.financialYearId,
         input.matrixLabel.trim(),
         input.performanceQuartileId,
-        input.incrementPercentage,
+        Math.round(Number(input.incrementPercentage) * 100) / 100,
       ],
     );
 
@@ -216,7 +216,7 @@ export async function updateSubCategoryIncrementMatrix(
       [
         input.matrixLabel.trim(),
         input.performanceQuartileId,
-        input.incrementPercentage,
+        Math.round(Number(input.incrementPercentage) * 100) / 100,
         id,
       ],
     );

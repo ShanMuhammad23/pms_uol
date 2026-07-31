@@ -26,6 +26,8 @@ import { fetchUsers } from "@/lib/queries/users-client";
 import { cn } from "@/lib/utils";
 import {
   formatPerformanceScore,
+  formatQuartileScoreRange,
+  isQuartileScoreMinExclusive,
   type PerformanceLevelRecord,
   type PerformanceLevelWithQuartiles,
   type PerformanceQuartileRecord,
@@ -636,7 +638,7 @@ export default function PerformanceMatricesManager() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-semibold text-text-primary">
-                      Combined matrix
+                      {selectedMatrixLabel}
                     </h3>
                     <p className="text-sm text-foreground/70">
                       Click a level row to select it, then edit or add quartiles.
@@ -742,7 +744,17 @@ export default function PerformanceMatricesManager() {
 
                   {selectedLevelQuartiles.length > 0 ? (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {selectedLevelQuartiles.map((quartile) => (
+                      {selectedLevelQuartiles.map((quartile, index) => {
+                        const previousQuartile =
+                          index > 0
+                            ? (selectedLevelQuartiles[index - 1] ?? null)
+                            : null;
+                        const minExclusive = isQuartileScoreMinExclusive(
+                          quartile.scoreMin,
+                          previousQuartile?.scoreMax,
+                        );
+
+                        return (
                         <div
                           key={quartile.id}
                           className="inline-flex items-center gap-2 rounded-lg border border-slate-300/80 bg-background/80 px-2.5 py-1.5 text-xs dark:border-white/15"
@@ -751,8 +763,11 @@ export default function PerformanceMatricesManager() {
                             {quartile.name}
                           </span>
                           <span className="tabular-nums text-foreground/70">
-                            {formatPerformanceScore(quartile.scoreMin)}–
-                            {formatPerformanceScore(quartile.scoreMax)}
+                            {formatQuartileScoreRange(
+                              quartile.scoreMin,
+                              quartile.scoreMax,
+                              minExclusive,
+                            )}
                           </span>
                           <button
                             type="button"
@@ -772,7 +787,8 @@ export default function PerformanceMatricesManager() {
                             <Trash2 className="size-3" />
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="mt-3 text-sm opacity-80">
@@ -1247,6 +1263,11 @@ export default function PerformanceMatricesManager() {
                     />
                   </div>
                 </div>
+                <p className="text-xs text-foreground/60">
+                  Shared boundaries use a greater-than lower bound. Example:
+                  90–92.5 then &gt;92.5–95 — score 92.5 stays in the earlier
+                  quartile; 92.51 goes to the next.
+                </p>
 
                 <div>
                   <label

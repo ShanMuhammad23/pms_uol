@@ -21,7 +21,7 @@ const tabs: Array<{
 }> = [
   { id: "financial-year", label: "Financial Year", description: "Cycle dates", icon: CalendarRange },
   { id: "matrices", label: "Performance Matrix", description: "Levels & quartiles", icon: Grid3X3 },
-  { id: "increment-matrix", label: "Increment Matrix", description: "Employee %", icon: TrendingUp },
+  { id: "increment-matrix", label: "Increment Matrix", description: "Quartile %", icon: TrendingUp },
   { id: "institutional-quota", label: "Quota", description: "Allocation caps", icon: Percent },
 ];
 
@@ -30,6 +30,9 @@ export default function MatricesAndCyclesTabs() {
 
   return (
     <div className="space-y-6">
+     
+
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03] min-h-screen">
       <nav
         aria-label="Matrices and cycles tabs"
         className="flex gap-1.5 overflow-x-auto rounded-md border border-slate-200 bg-white p-1.5 shadow-sm dark:border-white/10 dark:bg-white/5"
@@ -73,15 +76,15 @@ export default function MatricesAndCyclesTabs() {
           );
         })}
       </nav>
-
-      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
-        <div className="h-1 w-full bg-secondary" />
-        <div className="p-5 sm:p-6">
-          {activeTab === "financial-year" ? <FinancialYearsManager /> : null}
+      <div className="p-2">
+      {activeTab === "financial-year" ? <FinancialYearsManager /> : null}
           {activeTab === "matrices" ? <PerformanceMatricesManager /> : null}
           {activeTab === "increment-matrix" ? <IncrementMatrixManager /> : null}
           {activeTab === "institutional-quota" ? <InstitutionalQuotaManager /> : null}
-        </div>
+      </div>
+        
+        
+        
       </div>
     </div>
   );

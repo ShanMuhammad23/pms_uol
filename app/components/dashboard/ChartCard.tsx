@@ -29,13 +29,13 @@ export function ChartCard({
       variants={itemVariants}
       transition={{ delay }}
       className={cn(
-        "rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900",
+        "min-w-0 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900",
         clipOverflow ? "overflow-hidden" : "overflow-visible",
         className,
       )}
     >
-      <div className="mb-5 flex items-start justify-between">
-        <div>
+      <div className="mb-5 flex min-w-0 items-start justify-between">
+        <div className="min-w-0">
           <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-white">
             {title}
           </h3>
@@ -45,7 +45,7 @@ export function ChartCard({
         </div>
         {action}
       </div>
-      {children}
+      <div className="min-w-0">{children}</div>
     </motion.div>
   );
 }
