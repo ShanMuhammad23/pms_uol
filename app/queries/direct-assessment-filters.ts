@@ -17,9 +17,9 @@ export type AssessmentStatusFilter = "pending" | "locked" | "approved" | "final"
 
 export const ASSESSMENT_STATUS_OPTIONS: { value: AssessmentStatusFilter; label: string }[] = [
   { value: "pending", label: "Pending" },
-  { value: "locked", label: "Locked" },
+  { value: "locked", label: "Pending Mgr" },
   { value: "approved", label: "Approved" },
-  { value: "final", label: "Final" },
+  { value: "final", label: "Locked" },
 ];
 
 export interface DirectAssessmentFilterState {
@@ -43,9 +43,9 @@ export const EMPTY_DIRECT_ASSESSMENT_FILTER_STATE: DirectAssessmentFilterState =
 /**
  * Resolves an employee's assessment status into a filter-friendly bucket.
  * - "pending": editable by current reviewer (canEdit = true)
- * - "locked": pending review but not editable by current reviewer
- * - "approved": past PENDING_HEAD_REVIEW (HR calibration / board / completed)
- * - "final": APPROVED or COMPLETED
+ * - "locked": pending review but not editable by current reviewer (Pending Mgr)
+ * - "approved": past PENDING_HEAD_REVIEW (HR calibration / board)
+ * - "final": APPROVED or COMPLETED (Locked)
  */
 function resolveAssessmentStatusBucket(
   emp: Pick<DirectAssessmentEmployee, "canEdit" | "status">,

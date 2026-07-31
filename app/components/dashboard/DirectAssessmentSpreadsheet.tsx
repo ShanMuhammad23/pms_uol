@@ -389,11 +389,11 @@ export default function DirectAssessmentSpreadsheet({
                 const statusLabel = isEditable
                   ? `Mgr ${emp.managerLevel ?? 1}`
                   : emp.status === "PENDING_HEAD_REVIEW"
-                    ? `Mgr ${emp.managerLevel ?? 1} (locked)`
+                    ? `Pending Mgr ${emp.managerLevel ?? 1}`
                     : emp.status === "PENDING_HR_CALIBRATION"
                       ? "Approved"
                       : emp.status === "APPROVED" || emp.status === "COMPLETED"
-                        ? "Final"
+                        ? "Locked"
                         : emp.status.replace(/_/g, " ");
                 return (
                   <th
