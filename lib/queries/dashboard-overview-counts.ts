@@ -1,7 +1,3 @@
-import {
-  getSubmissionDisplayRating,
-  normalizeRating,
-} from "@/app/helpers/dashboard-calibration";
 import { hasAppraisalProgress } from "@/app/helpers/dashboard-chart-submissions";
 import { getSubmissionEligibilityDisplayStatus } from "@/app/helpers/dashboard-eligibility";
 import {
@@ -106,15 +102,18 @@ function buildRatingQuartileCounts(
 
 function buildRatingDistribution(
   submissions: FormSubmissionListItem[],
+  bands: PerformanceQuartileBand[],
 ): CountOption[] {
-  const chartSubmissions = submissions.filter(hasAppraisalProgress);
-  const eligible = chartSubmissions.filter(isSubmissionEligible);
   const counts = new Map<string, number>();
 
-  for (const submission of eligible) {
-    const displayRating = getSubmissionDisplayRating(submission);
-    if (displayRating === "—") continue;
-    const bucket = normalizeRating(displayRating);
+  for (const submission of submissions) {
+    if (!hasAppraisalProgress(submission)) continue;
+    if (!isSubmissionEligible(submission)) continue;
+
+    const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
+    if (!resolved) continue;
+
+    const bucket = resolved.performanceLevelName;
     counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
   }
 
@@ -270,7 +269,7 @@ export function buildDashboardOverviewCounts(
       hrAlignment: buildHrAlignmentStats(filtered),
       boardApproval: buildBoardApprovalStats(filtered),
     },
-    ratingDistribution: buildRatingDistribution(filtered),
+    ratingDistribution: buildRatingDistribution(filtered, quartileBands),
     ratingQuartileCounts: buildRatingQuartileCounts(filtered, quartileBands),
     chartEmployeeCount: filtered.filter(
       (submission) => hasAppraisalProgress(submission) && isSubmissionEligible(submission),
