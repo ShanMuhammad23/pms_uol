@@ -8,7 +8,7 @@ import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
 import { cn } from "@/lib/utils";
-import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { requireModuleViewPage } from "@/lib/auth/require-module-page";
 import { getFormTemplateById } from "@/lib/queries/forms";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export default async function ViewFormPage({
   params,
   searchParams,
 }: ViewFormPageProps) {
-  await requireSuperAdminSession();
+  const { canEdit } = await requireModuleViewPage("FORMS");
 
   const { id } = await params;
   const { print, download } = await searchParams;
@@ -80,19 +80,23 @@ export default async function ViewFormPage({
           template={template}
           headerActions={
             <>
-              <Link
-                href={`/dashboard/forms/${templateId}`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 dark:border-primary/50 dark:bg-primary/15 dark:hover:bg-primary/25"
-              >
-                <Pencil className="size-3.5" />
-                Edit Form
-              </Link>
-              <Link
-                href={`/dashboard/forms/${templateId}/assign`}
-                className="inline-flex items-center rounded-lg border border-success/30 bg-success/10 px-3 py-1.5 text-sm font-medium text-success hover:bg-success/20 dark:border-success/50 dark:bg-success/15 dark:hover:bg-success/25"
-              >
-                Assign Employees
-              </Link>
+              {canEdit ? (
+                <>
+                  <Link
+                    href={`/dashboard/forms/${templateId}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 dark:border-primary/50 dark:bg-primary/15 dark:hover:bg-primary/25"
+                  >
+                    <Pencil className="size-3.5" />
+                    Edit Form
+                  </Link>
+                  <Link
+                    href={`/dashboard/forms/${templateId}/assign`}
+                    className="inline-flex items-center rounded-lg border border-success/30 bg-success/10 px-3 py-1.5 text-sm font-medium text-success hover:bg-success/20 dark:border-success/50 dark:bg-success/15 dark:hover:bg-success/25"
+                  >
+                    Assign Employees
+                  </Link>
+                </>
+              ) : null}
               <PrintButton
                 className="inline-flex items-center gap-1.5 rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-sm font-medium text-secondary hover:bg-secondary/20 dark:border-secondary/50 dark:bg-secondary/15 dark:hover:bg-secondary/25"
                 printUrl={`/dashboard/forms/${templateId}/view?print=true`}

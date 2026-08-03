@@ -162,7 +162,12 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     }
 
     const fromTemplate = flattenAllQuestions(data.template)
-      .filter(isScoredQuestion)
+      .filter(
+        (question) =>
+          isScoredQuestion(question) &&
+          data.selfAssessmentEnabled &&
+          question.selfAssessmentEnabled,
+      )
       .reduce((sum, question) => sum + Number(question.totalMarks), 0);
 
     return fromTemplate > 0 ? fromTemplate : (data.maxRawScore ?? 0);
@@ -174,7 +179,12 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
     }
 
     return flattenAllQuestions(data.template)
-      .filter(isScoredQuestion)
+      .filter(
+        (question) =>
+          isScoredQuestion(question) &&
+          data.selfAssessmentEnabled &&
+          question.selfAssessmentEnabled,
+      )
       .reduce((sum, question) => {
         const answer = answers[question.id];
         if (!answer || answer.pointsEarned === "") {

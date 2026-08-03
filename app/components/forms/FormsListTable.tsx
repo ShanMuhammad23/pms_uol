@@ -13,9 +13,10 @@ import FormActionsDropdown from "./FormActionsDropdown";
 
 interface FormsListTableProps {
   templates: FormTemplateListItem[];
+  canEdit?: boolean;
 }
 
-export default function FormsListTable({ templates }: FormsListTableProps) {
+export default function FormsListTable({ templates, canEdit = true }: FormsListTableProps) {
   const queryClient = useQueryClient();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -84,12 +85,14 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Create your first appraisal form to get started.
         </p>
-        <Link
-          href="/dashboard/forms/new"
-          className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
-        >
-          Create Form
-        </Link>
+        {canEdit ? (
+          <Link
+            href="/dashboard/forms/new"
+            className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+          >
+            Create Form
+          </Link>
+        ) : null}
       </div>
     );
   }
@@ -141,6 +144,7 @@ export default function FormsListTable({ templates }: FormsListTableProps) {
                     appraisalCount={template.appraisalCount}
                     onDelete={handleDelete}
                     deletePending={deleteMutation.isPending}
+                    canEdit={canEdit}
                   />
                 </td>
               </tr>

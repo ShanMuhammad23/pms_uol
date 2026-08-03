@@ -26,6 +26,7 @@ import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFoo
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
 import { useSession } from "next-auth/react";
 import { canReviewSubmissions, canViewQuartile } from "@/lib/auth/submission-review-roles";
+import { useAdditionalAccess } from "@/app/queries/use-additional-access";
 import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
@@ -111,6 +112,9 @@ interface ScoreAdjustmentsPanelProps {
   qecScoreAdj: number | null;
   calibrationFactor: number | null;
   canEdit: boolean;
+  canEditCreditHours?: boolean;
+  canEditOric?: boolean;
+  canEditQec?: boolean;
   performanceLevelName: string | null;
   quartileName: string | null;
 }
@@ -124,6 +128,9 @@ function ScoreAdjustmentsPanel({
   qecScoreAdj,
   calibrationFactor,
   canEdit,
+  canEditCreditHours = true,
+  canEditOric = true,
+  canEditQec = true,
   performanceLevelName,
   quartileName,
 }: ScoreAdjustmentsPanelProps) {
@@ -163,6 +170,7 @@ function ScoreAdjustmentsPanel({
               field="creditHrsErpScoreAdj"
               value={creditHrsErpScoreAdj}
               disabled={disabled}
+              canEdit={canEditCreditHours}
             />
           </div>
         </div>
@@ -177,6 +185,7 @@ function ScoreAdjustmentsPanel({
               field="pubOricScoreAdj"
               value={pubOricScoreAdj}
               disabled={disabled}
+              canEdit={canEditOric}
             />
           </div>
         </div>
@@ -191,6 +200,7 @@ function ScoreAdjustmentsPanel({
               field="qecScoreAdj"
               value={qecScoreAdj}
               disabled={disabled}
+              canEdit={canEditQec}
             />
           </div>
         </div>
@@ -254,6 +264,18 @@ export default function SubmissionDetailView({
   const userRole = session?.user?.role;
   const isAdminRole = canReviewSubmissions(userRole);
   const showQuartile = canViewQuartile(userRole);
+  const { canEdit: canEditModule, canView: canViewModule } = useAdditionalAccess(
+    session?.user?.id ? Number(session.user.id) : undefined,
+    userRole,
+  );
+  const canEditCreditHours = isAdminRole || canEditModule("CREDIT_HOURS");
+  const canEditOric = isAdminRole || canEditModule("ORIC_ADJUSTMENTS");
+  const canEditQec = isAdminRole || canEditModule("QEC_ADJUSTMENTS");
+  const hasAnyModuleAccess =
+    canEditCreditHours ||
+    canEditOric ||
+    canEditQec ||
+    (!isAdminRole && (canViewModule("CREDIT_HOURS") || canViewModule("ORIC_ADJUSTMENTS") || canViewModule("QEC_ADJUSTMENTS")));
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
     new Map(),
@@ -898,6 +920,8 @@ export default function SubmissionDetailView({
                 const { question } = row;
                 const answer = answerMap.get(question.id);
                 const scored = isScoredQuestion(question);
+                const questionSelfAssessmentEnabled =
+                  selfAssessmentEnabled && question.selfAssessmentEnabled;
                 const managerDraft = managerDrafts.get(question.id) ?? {
                   pointsEarned: "",
                   remarks: "",
@@ -943,16 +967,26 @@ export default function SubmissionDetailView({
                     {selfAssessmentEnabled ? (
                       <>
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-bold text-teal-700 dark:border-slate-700/40 dark:text-teal-300">
-                      {scored ? (answer?.pointsEarned ?? 0) : "—"}
+                      {scored ? (
+                        questionSelfAssessmentEnabled ? (
+                          answer?.pointsEarned ?? 0
+                        ) : (
+                          <span className="text-slate-400" title="To be filled by Manager">N/A</span>
+                        )
+                      ) : "—"}
                     </td>
                     <td className="border-r border-slate-100 px-3 py-2.5 text-xs text-slate-600 dark:border-slate-700/40 dark:text-slate-300">
                       {scored ? (
-                        answer?.remarks?.trim() ? (
-                          <p className="whitespace-pre-wrap break-words">
-                            {answer.remarks}
-                          </p>
+                        questionSelfAssessmentEnabled ? (
+                          answer?.remarks?.trim() ? (
+                            <p className="whitespace-pre-wrap break-words">
+                              {answer.remarks}
+                            </p>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-slate-400" title="To be filled by Manager">N/A</span>
                         )
                       ) : (
                         "—"
@@ -1171,7 +1205,7 @@ export default function SubmissionDetailView({
         />
       ) : null}
 
-      {isAdminRole && rows.length > 0 ? (
+      {(isAdminRole || hasAnyModuleAccess) && rows.length > 0 ? (
         <ScoreAdjustmentsPanel
           submissionId={data.id}
           scoreO={data.initialScoreNumeric ?? data.rawScore}
@@ -1181,6 +1215,9 @@ export default function SubmissionDetailView({
           qecScoreAdj={data.qecScoreAdj}
           calibrationFactor={data.calibrationFactor}
           canEdit={data.canEditScoreAdjustments && isEligible}
+          canEditCreditHours={canEditCreditHours}
+          canEditOric={canEditOric}
+          canEditQec={canEditQec}
           performanceLevelName={data.performanceLevelName}
           quartileName={data.quartileName}
         />

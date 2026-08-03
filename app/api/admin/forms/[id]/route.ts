@@ -9,6 +9,9 @@ import {
 } from "@/lib/queries/forms";
 import { validateFormTemplateInput } from "@/lib/validation/forms";
 import type { FormTemplateInput } from "@/types/forms";
+import { canViewModule, canEditModule } from "@/lib/auth/additional-access";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -39,7 +42,10 @@ function formTemplateErrorResponse(error: FormTemplateError) {
 export async function GET(_request: Request, context: RouteContext) {
   const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
-    return auth;
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return auth;
+    const allowed = await canViewModule(Number(session.user.id), "FORMS", session.user.role);
+    if (!allowed) return auth;
   }
 
   const { id } = await context.params;
@@ -69,7 +75,10 @@ export async function GET(_request: Request, context: RouteContext) {
 export async function PUT(request: Request, context: RouteContext) {
   const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
-    return auth;
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return auth;
+    const allowed = await canEditModule(Number(session.user.id), "FORMS", session.user.role);
+    if (!allowed) return auth;
   }
 
   const { id } = await context.params;
@@ -116,7 +125,10 @@ export async function PUT(request: Request, context: RouteContext) {
 export async function DELETE(_request: Request, context: RouteContext) {
   const auth = await requireSuperAdminApi();
   if (auth instanceof NextResponse) {
-    return auth;
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return auth;
+    const allowed = await canEditModule(Number(session.user.id), "FORMS", session.user.role);
+    if (!allowed) return auth;
   }
 
   const { id } = await context.params;

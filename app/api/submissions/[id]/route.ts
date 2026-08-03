@@ -8,6 +8,8 @@ import { isHeadRole } from "@/lib/auth/home-path";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
 import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-reviewer";
 import { managerCanReviewSubmission } from "@/app/helpers/manager-review";
+import { canEditModule } from "@/lib/auth/additional-access";
+import type { AdditionalAccessModule } from "@/types/additional-access";
 import {
   FormSubmissionError,
   getFormSubmissionById,
@@ -134,9 +136,32 @@ export async function PATCH(request: Request, context: RouteContext) {
     const scoreAdjField = SCORE_ADJ_FIELDS.find((f) => f in body);
 
     if (scoreAdjField) {
-      if (!canReviewSubmissions(auth.user?.role)) {
+      // Map score adjustment fields to their additional-access modules.
+      // calibrationFactor, calibratedScoreNumeric, and initialScoreNumeric
+      // remain admin-only (no additional-access module mapping).
+      const FIELD_MODULE_MAP: Partial<
+        Record<typeof scoreAdjField, AdditionalAccessModule>
+      > = {
+        creditHrsErpScoreAdj: "CREDIT_HOURS",
+        pubOricScoreAdj: "ORIC_ADJUSTMENTS",
+        qecScoreAdj: "QEC_ADJUSTMENTS",
+      };
+      const requiredModule = FIELD_MODULE_MAP[scoreAdjField];
+
+      // RBAC check: admin roles always pass.
+      // Additional-access: non-admin users need EDIT permission on the mapped module.
+      const isAdmin = canReviewSubmissions(auth.user?.role);
+      const hasModuleAccess = requiredModule
+        ? await canEditModule(
+            Number(auth.user?.id),
+            requiredModule,
+            auth.user?.role,
+          )
+        : false;
+
+      if (!isAdmin && !hasModuleAccess) {
         return NextResponse.json(
-          { error: "Forbidden: admin role required to edit score adjustments." },
+          { error: "Forbidden: admin role or additional-access permission required to edit score adjustments." },
           { status: 403 },
         );
       }

@@ -17,10 +17,24 @@ export function getPostLoginPath(role: string | null | undefined): string {
 
 /** Paths an EMPLOYEE may access under /dashboard. */
 export function isEmployeeAllowedDashboardPath(pathname: string): boolean {
-  return (
+  if (
     pathname === EMPLOYEE_HOME_PATH ||
     pathname.startsWith(`${EMPLOYEE_HOME_PATH}/`)
-  );
+  ) {
+    return true;
+  }
+
+  // Allow employees through to /dashboard/forms paths.
+  // Server-side page guards (requireModuleViewPage/requireModuleEditPage)
+  // enforce actual authorization via additional-access permissions.
+  if (
+    pathname === "/dashboard/forms" ||
+    pathname.startsWith("/dashboard/forms/")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function assertEmployeeRole(

@@ -355,11 +355,30 @@ function validateAnswers(
   submit: boolean,
   selfAssessmentEnabled: boolean,
 ): EmployeeFormAnswerInput[] {
-  const answerMap = new Map(
-    answers.map((answer) => [answer.questionId, answer]),
+  const formSelfAssessmentEnabled = selfAssessmentEnabled;
+
+  // Build a set of question IDs that the employee is allowed to answer.
+  // Questions with selfAssessmentEnabled=false (or when form-level
+  // self-assessment is disabled) are restricted to manager/HOD only.
+  const allowedQuestionIds = new Set(
+    getTemplateQuestions(template)
+      .filter(
+        (question) =>
+          formSelfAssessmentEnabled && question.selfAssessmentEnabled,
+      )
+      .map((question) => question.id),
   );
 
-  const formSelfAssessmentEnabled = selfAssessmentEnabled;
+  // Strip out any answers for restricted questions — the employee must not
+  // be able to persist scores or remarks for HOD-only questions, even via
+  // direct API requests.
+  const filteredAnswers = answers.filter((answer) =>
+    allowedQuestionIds.has(answer.questionId),
+  );
+
+  const answerMap = new Map(
+    filteredAnswers.map((answer) => [answer.questionId, answer]),
+  );
 
   for (const question of getTemplateQuestions(template)) {
     // Skip HOD-only questions — employee self-assessment should not validate them
@@ -427,7 +446,7 @@ function validateAnswers(
     }
   }
 
-  return answers;
+  return filteredAnswers;
 }
 
 function normalizeAnswer(

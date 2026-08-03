@@ -27,6 +27,7 @@ interface FormActionsDropdownProps {
   appraisalCount: number;
   onDelete: (id: number, title: string, appraisalCount: number) => void;
   deletePending: boolean;
+  canEdit?: boolean;
 }
 
 interface ActionItem {
@@ -76,6 +77,7 @@ export default function FormActionsDropdown({
   appraisalCount,
   onDelete,
   deletePending,
+  canEdit = true,
 }: FormActionsDropdownProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<MenuPosition | null>(null);
@@ -163,47 +165,49 @@ export default function FormActionsDropdown({
         },
       ],
     },
-    {
-      heading: "Manage",
-      headingColor: "text-teal-600 dark:text-teal-400",
-      items: [
-        {
-          label: "Edit Form",
-          icon: <Pencil className="size-4" />,
-          href: `/dashboard/forms/${templateId}`,
-          colorClass:
-            "text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40",
-        },
-        {
-          label: "Assign Employees",
-          icon: <Users className="size-4" />,
-          href: `/dashboard/forms/${templateId}/assign`,
-          colorClass:
-            "text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40",
-        },
-        {
-          label: "Copy Form",
-          icon: <Copy className="size-4" />,
-          href: `/dashboard/forms/${templateId}/copy`,
-          colorClass:
-            "text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/40",
-        },
-      ],
-    },
-    {
-      heading: "Danger Zone",
-      headingColor: "text-red-600 dark:text-red-400",
-      items: [
-        {
-          label: "Delete Form",
-          icon: <Trash2 className="size-4" />,
-          onClick: () => onDelete(templateId, templateTitle, appraisalCount),
-          colorClass:
-            "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40",
-          disabled: deletePending,
-        },
-      ],
-    },
+    ...(canEdit ? [
+      {
+        heading: "Manage",
+        headingColor: "text-teal-600 dark:text-teal-400",
+        items: [
+          {
+            label: "Edit Form",
+            icon: <Pencil className="size-4" />,
+            href: `/dashboard/forms/${templateId}`,
+            colorClass:
+              "text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40",
+          },
+          {
+            label: "Assign Employees",
+            icon: <Users className="size-4" />,
+            href: `/dashboard/forms/${templateId}/assign`,
+            colorClass:
+              "text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40",
+          },
+          {
+            label: "Copy Form",
+            icon: <Copy className="size-4" />,
+            href: `/dashboard/forms/${templateId}/copy`,
+            colorClass:
+              "text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/40",
+          },
+        ],
+      },
+      {
+        heading: "Danger Zone",
+        headingColor: "text-red-600 dark:text-red-400",
+        items: [
+          {
+            label: "Delete Form",
+            icon: <Trash2 className="size-4" />,
+            onClick: () => onDelete(templateId, templateTitle, appraisalCount),
+            colorClass:
+              "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40",
+            disabled: deletePending,
+          },
+        ],
+      },
+    ] : []),
   ];
 
   const menu =

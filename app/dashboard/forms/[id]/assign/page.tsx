@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import FormEmployeeAssignment from "@/app/components/forms/FormEmployeeAssignment";
-import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { requireModuleEditPage } from "@/lib/auth/require-module-page";
 import { getFormTemplateById } from "@/lib/queries/forms";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ interface AssignFormPageProps {
 }
 
 export default async function AssignFormPage({ params }: AssignFormPageProps) {
-  await requireSuperAdminSession();
+  await requireModuleEditPage("FORMS");
 
   const { id } = await params;
   const templateId = Number(id);

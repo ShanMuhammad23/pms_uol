@@ -10,8 +10,24 @@ import {
   getNormalizedScorePercent as sharedGetNormalizedScorePercent,
 } from "@/lib/performance-rating";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
+import type { AdditionalAccessModule } from "@/types/additional-access";
 
 export type HrApprovalStatus = "pending" | "approved" | "review_required";
+
+/**
+ * Maps an AdditionalAccessModule to the dashboard column IDs that should
+ * become visible when a user has view or edit access to that module.
+ * Used to extend the Head (MANAGER) role's base column set.
+ */
+export const ADDITIONAL_ACCESS_MODULE_COLUMNS: Record<
+  AdditionalAccessModule,
+  DashboardTableColumnId[]
+> = {
+  FORMS: [],
+  CREDIT_HOURS: ["creditHrsErpAdj"],
+  ORIC_ADJUSTMENTS: ["pubOricScoreAdj"],
+  QEC_ADJUSTMENTS: ["qecScoreAdj"],
+};
 
 export function getHrApprovalStatus(row: FormSubmissionListItem): HrApprovalStatus {
   // Use the dedicated hr_approval_status column — no longer derived from remarks.

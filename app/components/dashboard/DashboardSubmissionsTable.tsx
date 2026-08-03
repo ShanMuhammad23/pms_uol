@@ -54,6 +54,8 @@ import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { ScoreAdjustmentField } from "@/lib/queries/form-submissions-client";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
 import { updateSubmissionScoreAdjustments, approveHrCalibration, setHrReviewRequired, updateAssessmentEligibility, fetchFormSubmissionsPage } from "@/lib/queries/form-submissions-client";
+import { useSession } from "next-auth/react";
+import { useAdditionalAccess } from "@/app/queries/use-additional-access";
 import {
   invalidateStaffListingQueries,
   cancelStaffListingQueries,
@@ -230,6 +232,8 @@ interface RenderCellContext {
   sortedMatrix: PerformanceLevelWithQuartiles[] | null;
   onToggleAssessmentEligibility?: (submission: FormSubmissionListItem) => void;
   isTogglingEligibility?: boolean;
+  /** Modules the current user can edit via additional-access (non-admin roles). */
+  editableModules?: Set<string>;
 }
 
 function renderCell(
@@ -338,12 +342,14 @@ function renderCell(
   }
 
   if (columnId === "creditHrsErpAdj") {
+    const canEdit = ctx?.isHrRole || ctx?.editableModules?.has("CREDIT_HOURS") === true;
     return (
       <InlineScoreAdjustmentCell
         submissionId={submission.id}
         field="creditHrsErpScoreAdj"
         value={submission.creditHrsErpScoreAdj}
         disabled={submission.id <= 0 || !submission.assessmentEligibility}
+        canEdit={canEdit}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.creditHrsErpScoreAdj : undefined}
       />
@@ -351,12 +357,14 @@ function renderCell(
   }
 
   if (columnId === "pubOricScoreAdj") {
+    const canEdit = ctx?.isHrRole || ctx?.editableModules?.has("ORIC_ADJUSTMENTS") === true;
     return (
       <InlineScoreAdjustmentCell
         submissionId={submission.id}
         field="pubOricScoreAdj"
         value={submission.pubOricScoreAdj}
         disabled={submission.id <= 0 || !submission.assessmentEligibility}
+        canEdit={canEdit}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.pubOricScoreAdj : undefined}
       />
@@ -364,12 +372,14 @@ function renderCell(
   }
 
   if (columnId === "qecScoreAdj") {
+    const canEdit = ctx?.isHrRole || ctx?.editableModules?.has("QEC_ADJUSTMENTS") === true;
     return (
       <InlineScoreAdjustmentCell
         submissionId={submission.id}
         field="qecScoreAdj"
         value={submission.qecScoreAdj}
         disabled={submission.id <= 0 || !submission.assessmentEligibility}
+        canEdit={canEdit}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.qecScoreAdj : undefined}
       />
@@ -700,6 +710,18 @@ export function DashboardSubmissionsTable({
   }, [submissionsPage?.columnCounts]);
 
   const isHrRole = canReviewSubmissions(role ?? undefined);
+  const { data: session } = useSession();
+  const { canEdit: canEditModule } = useAdditionalAccess(
+    session?.user?.id ? Number(session.user.id) : undefined,
+    session?.user?.role,
+  );
+  const editableModules = useMemo(() => {
+    const modules = new Set<string>();
+    if (canEditModule("CREDIT_HOURS")) modules.add("CREDIT_HOURS");
+    if (canEditModule("ORIC_ADJUSTMENTS")) modules.add("ORIC_ADJUSTMENTS");
+    if (canEditModule("QEC_ADJUSTMENTS")) modules.add("QEC_ADJUSTMENTS");
+    return modules;
+  }, [canEditModule]);
   const queryClient = useQueryClient();
   const [pendingScoreChanges, setPendingScoreChanges] = useState<
     Record<number, PendingScoreChanges>
@@ -1263,6 +1285,7 @@ export function DashboardSubmissionsTable({
                           onToggleAssessmentEligibility: (submission: FormSubmissionListItem) =>
                             setEligibilityModalState({ open: true, submission, error: null }),
                           isTogglingEligibility: eligibilityToggleMutation.isPending,
+                          editableModules,
                         };
                         return (
                           <td

@@ -22,6 +22,18 @@ import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-clien
 import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
 import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import { cn } from "@/lib/utils";
+import {
+  ADDITIONAL_ACCESS_MODULES,
+  ADDITIONAL_ACCESS_MODULE_LABELS,
+  ADDITIONAL_ACCESS_LEVEL_LABELS,
+  type AdditionalAccessLevel,
+  type AdditionalAccessModule,
+  type AdditionalAccessPermission,
+} from "@/types/additional-access";
+import {
+  fetchUserAdditionalAccess,
+  saveUserAdditionalAccess,
+} from "@/lib/queries/additional-access-client";
 
 interface EditUserFormState {
   employeeId: string;
@@ -93,6 +105,13 @@ export function EditUserModal({
   const [form, setForm] = useState<EditUserFormState | null>(null);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<number>>(new Set());
   const [initialTemplateIds, setInitialTemplateIds] = useState<Set<number>>(new Set());
+  const [additionalAccess, setAdditionalAccess] = useState<Record<AdditionalAccessModule, AdditionalAccessLevel | null>>(
+    () =>
+      Object.fromEntries(
+        ADDITIONAL_ACCESS_MODULES.map((m) => [m, null]),
+      ) as Record<AdditionalAccessModule, AdditionalAccessLevel | null>,
+  );
+  const [accessSaving, setAccessSaving] = useState(false);
 
   const { data: formTemplates } = useQuery({
     queryKey: ["form-templates"],
@@ -114,11 +133,26 @@ export function EditUserModal({
       );
       setSelectedTemplateIds(assignedIds);
       setInitialTemplateIds(assignedIds);
+
+      fetchUserAdditionalAccess(user.id).then((perms) => {
+        const map = Object.fromEntries(
+          ADDITIONAL_ACCESS_MODULES.map((m) => [m, null]),
+        ) as Record<AdditionalAccessModule, AdditionalAccessLevel | null>;
+        for (const p of perms) {
+          map[p.module] = p.accessLevel;
+        }
+        setAdditionalAccess(map);
+      });
     }
     if (!open) {
       setForm(null);
       setSelectedTemplateIds(new Set());
       setInitialTemplateIds(new Set());
+      setAdditionalAccess(
+        Object.fromEntries(
+          ADDITIONAL_ACCESS_MODULES.map((m) => [m, null]),
+        ) as Record<AdditionalAccessModule, AdditionalAccessLevel | null>,
+      );
     }
   }, [open, user, assignedFormsData]);
 
@@ -161,7 +195,7 @@ export function EditUserModal({
   const inputClassName =
     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 disabled:opacity-70 dark:border-white/10 dark:bg-slate-950 dark:text-white";
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const yearValue = form.qualificationYear.trim();
@@ -170,6 +204,23 @@ export function EditUserModal({
     const templatesChanged =
       templateIds.length !== initialIds.length ||
       templateIds.some((id, i) => id !== initialIds[i]);
+
+    const validPerms: AdditionalAccessPermission[] = [];
+    for (const m of ADDITIONAL_ACCESS_MODULES) {
+      if (additionalAccess[m]) {
+        validPerms.push({ module: m, accessLevel: additionalAccess[m]! });
+      }
+    }
+
+    setAccessSaving(true);
+    try {
+      await saveUserAdditionalAccess(user.id, validPerms);
+    } catch {
+      // non-fatal: user profile still saves
+    } finally {
+      setAccessSaving(false);
+    }
+
     onSubmit(
       {
         employeeId: form.employeeId.trim(),
@@ -663,6 +714,68 @@ export function EditUserModal({
                       />
                       Active account
                     </label>
+                  </div>
+                </div>
+
+                {/* Additional Access */}
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Additional Access
+                  </span>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Grant module-level permissions supplementary to the user&rsquo;s role.
+                  </p>
+                  <div className="mt-1.5 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-slate-950">
+                    <div className="space-y-2">
+                      {ADDITIONAL_ACCESS_MODULES.map((module) => {
+                        const currentLevel = additionalAccess[module];
+                        return (
+                          <div
+                            key={module}
+                            className="flex items-center gap-3 text-sm"
+                          >
+                            <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                              <input
+                                type="checkbox"
+                                checked={currentLevel !== null}
+                                onChange={(e) =>
+                                  setAdditionalAccess((prev) => ({
+                                    ...prev,
+                                    [module]: e.target.checked ? "VIEW_ONLY" : null,
+                                  }))
+                                }
+                                disabled={isSubmitting || accessSaving}
+                                className="size-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20"
+                              />
+                              <span className="font-medium">
+                                {ADDITIONAL_ACCESS_MODULE_LABELS[module]}
+                              </span>
+                            </label>
+                            {currentLevel !== null && (
+                              <select
+                                value={currentLevel}
+                                onChange={(e) =>
+                                  setAdditionalAccess((prev) => ({
+                                    ...prev,
+                                    [module]: e.target.value as AdditionalAccessLevel,
+                                  }))
+                                }
+                                disabled={isSubmitting || accessSaving}
+                                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-white/15 dark:bg-slate-900 dark:text-slate-300"
+                              >
+                                {(["VIEW_ONLY", "EDIT"] as AdditionalAccessLevel[]).map(
+                                  (level) => (
+                                    <option key={level} value={level}>
+                                      {ADDITIONAL_ACCESS_LEVEL_LABELS[level]}
+                                    </option>
+                                  ),
+                                )}
+                              </select>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 

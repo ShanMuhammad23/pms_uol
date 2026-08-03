@@ -25,6 +25,8 @@ import { isEmployeeRole } from "@/lib/auth/home-path";
 import { isAdminRole } from "@/lib/auth/submission-review-roles";
 import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
+import { useAdditionalAccess } from "@/app/queries/use-additional-access";
+import { type AdditionalAccessModule } from "@/types/additional-access";
 
 const ADMIN_LINKS = [
   {
@@ -32,12 +34,14 @@ const ADMIN_LINKS = [
     label: "Forms",
     icon: FileText,
     match: (pathname: string) => pathname.startsWith("/dashboard/forms"),
+    module: "FORMS" as AdditionalAccessModule | undefined,
   },
   {
     href: "/dashboard/users",
     label: "Users",
     icon: Users,
     match: (pathname: string) => pathname.startsWith("/dashboard/users"),
+    module: undefined as AdditionalAccessModule | undefined,
   },
   {
     href: "/dashboard/matrices-and-cycles",
@@ -45,6 +49,7 @@ const ADMIN_LINKS = [
     icon: Grid3X3,
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/matrices-and-cycles"),
+    module: undefined as AdditionalAccessModule | undefined,
   },
   {
     href: "/dashboard/entity-categories",
@@ -52,6 +57,7 @@ const ADMIN_LINKS = [
     icon: Building2,
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/entity-categories"),
+    module: undefined as AdditionalAccessModule | undefined,
   },
 ] as const;
 
@@ -75,10 +81,26 @@ const Sidebar = () => {
   const isMyForms = pathname.startsWith("/dashboard/my-forms");
   const isOrgAdmin = isAdminRole(user?.role);
   const isTrueSuperAdmin = user?.role === "SUPER_ADMIN";
-  const adminLinks = [
+  const { canView } = useAdditionalAccess(
+    user?.id ? Number(user.id) : undefined,
+    user?.role,
+  );
+
+  const allAdminLinks = [
     ...ADMIN_LINKS,
     ...(isTrueSuperAdmin ? SUPER_ADMIN_ONLY_LINKS : []),
   ];
+
+  const adminLinks = isOrgAdmin
+    ? allAdminLinks
+    : allAdminLinks.filter(
+        (link) =>
+          "module" in link &&
+          link.module &&
+          canView(link.module as AdditionalAccessModule),
+      );
+
+  const showAdminDropdown = adminLinks.length > 0;
   const isAdminRouteActive = adminLinks.some((link) => link.match(pathname));
 
   const [adminOpen, setAdminOpen] = useState(isAdminRouteActive);
@@ -154,17 +176,95 @@ const Sidebar = () => {
       <nav aria-label="Primary sidebar navigation" className="flex-1">
         <ul className="space-y-0.5 text-sm font-medium text-foreground/75">
           {isEmployee ? (
-            <li>
-              <Link
-                href="/dashboard/my-forms"
-                aria-current={isMyForms ? "page" : undefined}
-                title="My Forms"
-                className={navLinkClass(isMyForms)}
-              >
-                <ClipboardList className="size-4 shrink-0" />
-                {!collapsed ? "My Forms" : null}
-              </Link>
-            </li>
+            <>
+              <li>
+                <Link
+                  href="/dashboard/my-forms"
+                  aria-current={isMyForms ? "page" : undefined}
+                  title="My Forms"
+                  className={navLinkClass(isMyForms)}
+                >
+                  <ClipboardList className="size-4 shrink-0" />
+                  {!collapsed ? "My Forms" : null}
+                </Link>
+              </li>
+
+              {showAdminDropdown ? (
+                <li className="pt-2">
+                  {collapsed ? (
+                    <div className="space-y-0.5 transition-all duration-300 hover:text-primary">
+                      <div
+                        className="flex justify-center py-2 text-secondary"
+                        title="Administration"
+                      >
+                        <Settings2 className="size-4" />
+                      </div>
+                      {adminLinks.map((link) => {
+                        const Icon = link.icon;
+                        const active = link.match(pathname);
+                        return (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            aria-current={active ? "page" : undefined}
+                            title={link.label}
+                            className={navLinkClass(active)}
+                          >
+                            <Icon className="size-4 shrink-0" />
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setAdminOpen((open) => !open)}
+                        aria-expanded={adminOpen}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground/50 transition hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                          isAdminRouteActive && "text-primary",
+                        )}
+                      >
+                        <Settings2 className="size-4 shrink-0" />
+                        <span className="flex-1">Administration</span>
+                        <ChevronDown
+                          className={cn(
+                            "size-4 shrink-0 transition-transform duration-200",
+                            adminOpen && "rotate-180",
+                          )}
+                        />
+                      </button>
+
+                      {adminOpen ? (
+                        <ul className="mt-0.5 space-y-0.5 border-l border-slate-300/60 ml-6 dark:border-white/10">
+                          {adminLinks.map((link) => {
+                            const Icon = link.icon;
+                            const active = link.match(pathname);
+                            return (
+                              <li key={link.href}>
+                                <Link
+                                  href={link.href}
+                                  aria-current={active ? "page" : undefined}
+                                  title={link.label}
+                                  className={cn(
+                                    navLinkClass(active),
+                                    "pl-4",
+                                  )}
+                                >
+                                  <Icon className="size-4 shrink-0" />
+                                  {link.label}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : null}
+                    </div>
+                  )}
+                </li>
+              ) : null}
+            </>
           ) : (
             <>
               <li>
@@ -191,7 +291,7 @@ const Sidebar = () => {
                 </Link>
               </li>
 
-              {isOrgAdmin ? (
+              {showAdminDropdown ? (
                 <li className="pt-2">
                   {collapsed ? (
                     <div className="space-y-0.5 transition-all duration-300 hover:text-primary">

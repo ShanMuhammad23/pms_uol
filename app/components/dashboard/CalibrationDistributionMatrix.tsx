@@ -119,7 +119,7 @@ export function CalibrationDistributionMatrix({
                                 : "text-slate-400 dark:text-slate-600",
                             )}
                           >
-                            {cell.count}
+                            {cell.count === 0 ? "—" : cell.count}
                           </span>
                           {cell.sublabel ? (
                             <p className="break-words text-[10px] leading-tight text-white dark:text-slate-500">
@@ -131,7 +131,7 @@ export function CalibrationDistributionMatrix({
                     </td>
                   ))}
                   <td className="bg-primary px-1 py-2 text-center text-sm font-bold tabular-nums text-white sm:px-2 sm:py-2.5 sm:text-base">
-                    {row.rowTotal}
+                    {row.rowTotal === 0 ? "—" : row.rowTotal}
                   </td>
                 </tr>
               ))}

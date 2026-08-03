@@ -24,6 +24,8 @@ interface InlineScoreAdjustmentCellProps {
   onBufferedChange?: (field: ScoreAdjustmentField, value: number | null) => void;
   /** Pending buffered value (from parent). When set, cell shows this instead of the saved value. */
   pendingValue?: number | null;
+  /** When false, the cell is read-only (no edit button). Defaults to true. */
+  canEdit?: boolean;
 }
 
 const FIELD_LABELS: Record<ScoreAdjustmentField, string> = {
@@ -43,6 +45,7 @@ export function InlineScoreAdjustmentCell({
   mode = "integer",
   onBufferedChange,
   pendingValue,
+  canEdit = true,
 }: InlineScoreAdjustmentCellProps) {
   const isDecimal = mode === "decimal" || mode === "score";
   const hasRangeConstraint = mode === "decimal";
@@ -173,6 +176,18 @@ export function InlineScoreAdjustmentCell({
 
   if (disabled) {
     return <span className="text-xs text-slate-400">—</span>;
+  }
+
+  if (!canEdit) {
+    const finalDisplayValue = isDecimal ? (displayValue ?? 1) : displayValue;
+    return (
+      <span
+        className="block w-full px-1.5 py-0.5 text-center text-sm tabular-nums text-slate-700 dark:text-slate-300"
+        title={finalDisplayValue != null ? String(finalDisplayValue) : undefined}
+      >
+        {displayValue != null ? (isDecimal ? displayValue.toFixed(1) : Math.round(displayValue)) : "—"}
+      </span>
+    );
   }
 
   if (editing) {

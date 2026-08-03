@@ -1,9 +1,9 @@
 import FormBuilderWizard from "@/app/components/forms/FormBuilderWizard";
-import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { requireModuleEditPage } from "@/lib/auth/require-module-page";
 import { listAppraisalCycles } from "@/lib/queries/appraisal-cycles";
 
 export default async function NewFormPage() {
-  await requireSuperAdminSession();
+  await requireModuleEditPage("FORMS");
   const appraisalCycles = await listAppraisalCycles();
 
   return (

@@ -11,9 +11,17 @@ import { DashboardWorkflowStatsRow } from "@/app/components/dashboard/DashboardW
 import DirectAssessmentTab from "@/app/components/dashboard/DirectAssessmentTab";
 import { HeadDashboardOverview } from "@/app/components/dashboard/HeadDashboardOverview";
 import { useDashboardPage } from "@/app/queries/dashboard";
-import { HEAD_DASHBOARD_TABLE_COLUMN_IDS } from "@/app/helpers/dashboard-table-columns";
+import {
+  HEAD_DASHBOARD_TABLE_COLUMN_IDS,
+  ADDITIONAL_ACCESS_MODULE_COLUMNS,
+} from "@/app/helpers/dashboard-table-columns";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { canAccessDashboardSubmissions } from "@/lib/auth/submission-review-roles";
+import { useAdditionalAccess } from "@/app/queries/use-additional-access";
+import { useSession } from "next-auth/react";
+import { useMemo } from "react";
+import type { DashboardTableColumnId } from "@/app/helpers/dashboard-table-columns";
+import type { AdditionalAccessModule } from "@/types/additional-access";
 import { cn } from "@/lib/utils";
 
 interface HRDashboardPageProps {
@@ -30,6 +38,25 @@ type DashboardTab = "overview" | "direct-assessment";
 export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   const isHead = isHeadRole(role);
   const canAccessDirectAssessment = canAccessDashboardSubmissions(role ?? undefined);
+  const { data: session } = useSession();
+  const { canView } = useAdditionalAccess(
+    session?.user?.id ? Number(session.user.id) : undefined,
+    session?.user?.role,
+  );
+
+  const allowedColumnIds = useMemo(() => {
+    if (!isHead) return undefined;
+    const base = HEAD_DASHBOARD_TABLE_COLUMN_IDS as readonly DashboardTableColumnId[];
+    const extra: DashboardTableColumnId[] = [];
+    for (const module of Object.keys(ADDITIONAL_ACCESS_MODULE_COLUMNS) as AdditionalAccessModule[]) {
+      if (canView(module)) {
+        extra.push(...ADDITIONAL_ACCESS_MODULE_COLUMNS[module]);
+      }
+    }
+    if (extra.length === 0) return base;
+    return [...base, ...extra];
+  }, [isHead, canView]);
+
   const [statsVisible, setStatsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
@@ -207,7 +234,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
         <DashboardSubmissionsTable
           filterParams={filterParams}
           onClearAllFilters={clearAllFilters}
-          allowedColumnIds={isHead ? HEAD_DASHBOARD_TABLE_COLUMN_IDS : undefined}
+          allowedColumnIds={allowedColumnIds}
           role={role}
           performanceMatrix={matrixForDistribution}
         />

@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import DirectScoreEntryAssignment from "@/app/components/forms/DirectScoreEntryAssignment";
-import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { requireModuleEditPage } from "@/lib/auth/require-module-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function DirectScoreEntryPage() {
-  await requireSuperAdminSession();
+  await requireModuleEditPage("FORMS");
 
   return (
     <div className="space-y-6 text-text-primary">

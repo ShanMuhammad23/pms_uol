@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import FormBuilderWizard from "@/app/components/forms/FormBuilderWizard";
-import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { requireModuleEditPage } from "@/lib/auth/require-module-page";
 import { listAppraisalCycles } from "@/lib/queries/appraisal-cycles";
 import { getFormTemplateById } from "@/lib/queries/forms";
 
@@ -11,7 +11,7 @@ interface CopyFormPageProps {
 }
 
 export default async function CopyFormPage({ params }: CopyFormPageProps) {
-  await requireSuperAdminSession();
+  await requireModuleEditPage("FORMS");
 
   const { id } = await params;
   const templateId = Number(id);

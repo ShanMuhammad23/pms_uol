@@ -156,11 +156,6 @@ export default function MyFormsList({
           value: displayValue(userInfo.roleCategory),
         },
         {
-          icon: Layers,
-          label: "Employee Category",
-          value: displayValue(userInfo.empCategory),
-        },
-        {
           icon: UserRound,
           label: "Reporting Head",
           value: displayValue(userInfo.headName),

@@ -4,6 +4,8 @@ import {
   FormSubmissionError,
   bulkUpdateEmployeeListingFields,
 } from "@/lib/queries/form-submissions";
+import { canEditModule } from "@/lib/auth/additional-access";
+import type { AdditionalAccessModule } from "@/types/additional-access";
 
 function parseOptionalTextField(
   body: Record<string, unknown>,
@@ -125,6 +127,39 @@ export async function PATCH(request: Request) {
         { error: "Provide at least one field to update." },
         { status: 400 },
       );
+    }
+
+    // Additional-access checks for score adjustment fields.
+    // Admin roles (SUPER_ADMIN, HR, BOARD) pass via RBAC through requireSubmissionReviewerApi.
+    // Non-admin users with additional-access EDIT permission on the mapped module can also edit.
+    const SCORE_ADJ_MODULE_MAP: Record<string, AdditionalAccessModule> = {
+      creditHrsErpScoreAdj: "CREDIT_HOURS",
+      pubOricScoreAdj: "ORIC_ADJUSTMENTS",
+      qecScoreAdj: "QEC_ADJUSTMENTS",
+    };
+
+    const isAdmin = ["SUPER_ADMIN", "HR", "BOARD"].includes(
+      auth.user?.role ?? "",
+    );
+
+    if (!isAdmin) {
+      for (const [fieldName, moduleName] of Object.entries(
+        SCORE_ADJ_MODULE_MAP,
+      )) {
+        if (fieldName in fields) {
+          const allowed = await canEditModule(
+            Number(auth.user?.id),
+            moduleName,
+            auth.user?.role,
+          );
+          if (!allowed) {
+            return NextResponse.json(
+              { error: `Forbidden: edit access required for ${moduleName}.` },
+              { status: 403 },
+            );
+          }
+        }
+      }
     }
 
     const updated = await bulkUpdateEmployeeListingFields(
