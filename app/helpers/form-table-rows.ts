@@ -11,10 +11,11 @@ export interface FormTableRow {
   sectionNumber: number | null;
   subsectionTitle: string | null;
   subsectionNumber: string | null;
-  question: QuestionRecord;
+  question: QuestionRecord | null;
   isFirstInSection: boolean;
   isFirstInSubsection: boolean;
   sectionRowCount: number;
+  isHeaderOnly: boolean;
 }
 
 /**
@@ -44,6 +45,23 @@ export function buildFormTableRows(
     const startIdx = rows.length;
     const subsectionNumber = `${currentSectionNumber}.${subIndex + 1}`;
 
+    if (subsection.questions.length === 0) {
+      sr += 1;
+      rows.push({
+        sr,
+        sectionTitle: section.title,
+        sectionNumber: currentSectionNumber,
+        subsectionTitle: subsection.title,
+        subsectionNumber,
+        question: null,
+        isFirstInSection: false,
+        isFirstInSubsection: true,
+        sectionRowCount: 0,
+        isHeaderOnly: true,
+      });
+      return;
+    }
+
     subsection.questions.forEach((question) => {
       sr += 1;
       rows.push({
@@ -56,6 +74,7 @@ export function buildFormTableRows(
         isFirstInSection: false,
         isFirstInSubsection: false,
         sectionRowCount: 0,
+        isHeaderOnly: false,
       });
     });
 
@@ -82,6 +101,7 @@ export function buildFormTableRows(
         isFirstInSection: false,
         isFirstInSubsection: false,
         sectionRowCount: 0,
+        isHeaderOnly: false,
       });
     });
 
@@ -121,6 +141,7 @@ export function buildFormTableRows(
           isFirstInSection: true,
           isFirstInSubsection: false,
           sectionRowCount: 1,
+          isHeaderOnly: false,
         });
       }
     }

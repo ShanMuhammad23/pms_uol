@@ -504,17 +504,10 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
               ) : (
                 rows.map((row, rowIdx) => {
                   const { question } = row;
-                  const answer = answers[question.id] ?? {
-                    pointsEarned: "",
-                    remarks: "",
-                    attachments: [],
-                  };
-                  const scored = isScoredQuestion(question);
-                  const isHodOnly = !question.selfAssessmentEnabled || !data.selfAssessmentEnabled;
                   const isEvenRow = rowIdx % 2 === 0;
 
                   return (
-                    <Fragment key={question.id}>
+                    <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-amber-50/80 dark:bg-amber-950/20">
                           <td colSpan={6} className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200">
@@ -529,153 +522,172 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
                           </td>
                         </tr>
                       ) : null}
-                    <tr key={question.id} className={cn(
-                      "align-top border-b border-slate-100 dark:border-slate-700/40",
-                      isEvenRow
-                        ? "bg-white dark:bg-slate-900/40"
-                        : "bg-slate-50/60 dark:bg-slate-800/20",
-                    )}>
-                      <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
-                        {row.sr}
-                      </td>
-                      <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
-                        <p className="max-w-[420px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
-                          {question.questionText}
-                        </p>
-                        {question.options.length > 0 ? (
-                          <ul className="mt-1.5 space-y-0.5">
-                            {question.options.map((option) => (
-                              <li
-                                key={option.id}
-                                className="max-w-[400px] break-words text-[11px] text-slate-500 dark:text-slate-400"
-                              >
-                                • {option.optionLabel}
-                                {option.pointsAssigned > 0
-                                  ? ` (${option.pointsAssigned} pts)`
-                                  : ""}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </td>
-                      <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
-                        {question.totalMarks}
-                      </td>
-                      <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
-                        {scored && !isHodOnly ? (
-                          <input
-                            type="number"
-                            min={0}
-                            max={question.totalMarks}
-                            step="0.5"
-                            value={answer.pointsEarned}
-                            disabled={isReadOnly}
-                            onChange={(e) =>
-                              updateScore(
-                                question.id,
-                                question.totalMarks,
-                                e.target.value,
-                              )
-                            }
-                            onBlur={(e) =>
-                              updateScore(
-                                question.id,
-                                question.totalMarks,
-                                e.target.value,
-                              )
-                            }
-                            className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums text-teal-700 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
-                            placeholder={`0–${question.totalMarks}`}
-                          />
-                        ) : scored && isHodOnly ? (
-                          <span className="text-xs text-slate-400" title="To be filled by HOD">N/A</span>
-                        ) : (
-                          <span className="tabular-nums text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
-                        <textarea
-                          value={answer.remarks}
-                          disabled={isReadOnly || isHodOnly}
-                          rows={2}
-                          onChange={(e) =>
-                            updateAnswer(question.id, "remarks", e.target.value)
-                          }
-                          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                          placeholder={isHodOnly ? "HOD only" : "Optional remarks"}
-                        />
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <div className="space-y-2">
-                          {(answer.attachments ?? []).map((attachment) => (
-                            <div
-                              key={attachment.id}
-                              className="flex items-start justify-between gap-2 rounded border border-slate-200 px-2 py-1.5 dark:border-white/10"
-                            >
-                              <a
-                                href={getEmployeeFormAttachmentDownloadUrl(
-                                  templateId,
-                                  attachment.id,
+                      {row.isHeaderOnly ? (
+                        <tr className="bg-amber-50/40 dark:bg-amber-950/10">
+                          <td colSpan={6} className="px-3 py-2 pl-10 text-xs italic text-amber-400 dark:text-amber-400/70">
+                            No questions in this subsection
+                          </td>
+                        </tr>
+                      ) : (
+                        (() => {
+                          const answer = answers[question!.id] ?? {
+                            pointsEarned: "",
+                            remarks: "",
+                            attachments: [],
+                          };
+                          const scored = isScoredQuestion(question!);
+                          const isHodOnly = !question!.selfAssessmentEnabled || !data.selfAssessmentEnabled;
+                          return (
+                            <tr className={cn(
+                              "align-top border-b border-slate-100 dark:border-slate-700/40",
+                              isEvenRow
+                                ? "bg-white dark:bg-slate-900/40"
+                                : "bg-slate-50/60 dark:bg-slate-800/20",
+                            )}>
+                              <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
+                                {row.sr}
+                              </td>
+                              <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+                                <p className="max-w-[420px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
+                                  {question!.questionText}
+                                </p>
+                                {question!.options.length > 0 ? (
+                                  <ul className="mt-1.5 space-y-0.5">
+                                    {question!.options.map((option) => (
+                                      <li
+                                        key={option.id}
+                                        className="max-w-[400px] break-words text-[11px] text-slate-500 dark:text-slate-400"
+                                      >
+                                        • {option.optionLabel}
+                                        {option.pointsAssigned > 0
+                                          ? ` (${option.pointsAssigned} pts)`
+                                          : ""}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                              </td>
+                              <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
+                                {question!.totalMarks}
+                              </td>
+                              <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                                {scored && !isHodOnly ? (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={question!.totalMarks}
+                                    step="0.5"
+                                    value={answer.pointsEarned}
+                                    disabled={isReadOnly}
+                                    onChange={(e) =>
+                                      updateScore(
+                                        question!.id,
+                                        question!.totalMarks,
+                                        e.target.value,
+                                      )
+                                    }
+                                    onBlur={(e) =>
+                                      updateScore(
+                                        question!.id,
+                                        question!.totalMarks,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums text-teal-700 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
+                                    placeholder={`0–${question!.totalMarks}`}
+                                  />
+                                ) : scored && isHodOnly ? (
+                                  <span className="text-xs text-slate-400" title="To be filled by HOD">N/A</span>
+                                ) : (
+                                  <span className="tabular-nums text-slate-400">—</span>
                                 )}
-                                className="min-w-0 flex-1 truncate text-[11px] font-medium text-primary hover:underline"
-                                title={attachment.originalFilename}
-                              >
-                                {attachment.originalFilename}
-                                <span className="ml-1 text-slate-400">
-                                  ({formatBytes(attachment.sizeBytes)})
-                                </span>
-                              </a>
-                              {!isReadOnly ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void handleDeleteAttachment(
-                                      question.id,
-                                      attachment.id,
-                                    )
+                              </td>
+                              <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
+                                <textarea
+                                  value={answer.remarks}
+                                  disabled={isReadOnly || isHodOnly}
+                                  rows={2}
+                                  onChange={(e) =>
+                                    updateAnswer(question!.id, "remarks", e.target.value)
                                   }
-                                  className="inline-flex size-6 items-center justify-center rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                  aria-label={`Remove ${attachment.originalFilename}`}
-                                >
-                                  <Trash2 className="size-3.5" />
-                                </button>
-                              ) : null}
-                            </div>
-                          ))}
+                                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                  placeholder={isHodOnly ? "HOD only" : "Optional remarks"}
+                                />
+                              </td>
+                              <td className="px-2 py-2.5">
+                                <div className="space-y-2">
+                                  {(answer.attachments ?? []).map((attachment) => (
+                                    <div
+                                      key={attachment.id}
+                                      className="flex items-start justify-between gap-2 rounded border border-slate-200 px-2 py-1.5 dark:border-white/10"
+                                    >
+                                      <a
+                                        href={getEmployeeFormAttachmentDownloadUrl(
+                                          templateId,
+                                          attachment.id,
+                                        )}
+                                        className="min-w-0 flex-1 truncate text-[11px] font-medium text-primary hover:underline"
+                                        title={attachment.originalFilename}
+                                      >
+                                        {attachment.originalFilename}
+                                        <span className="ml-1 text-slate-400">
+                                          ({formatBytes(attachment.sizeBytes)})
+                                        </span>
+                                      </a>
+                                      {!isReadOnly ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void handleDeleteAttachment(
+                                              question!.id,
+                                              attachment.id,
+                                            )
+                                          }
+                                          className="inline-flex size-6 items-center justify-center rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                          aria-label={`Remove ${attachment.originalFilename}`}
+                                        >
+                                          <Trash2 className="size-3.5" />
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ))}
 
-                          {!isReadOnly ? (
-                            <>
-                              <input
-                                ref={(element) => {
-                                  fileInputRefs.current[question.id] = element;
-                                }}
-                                type="file"
-                                className="hidden"
-                                onChange={(event) =>
-                                  void handleUpload(
-                                    question.id,
-                                    event.target.files?.[0] ?? null,
-                                  )
-                                }
-                              />
-                              <button
-                                type="button"
-                                disabled={uploadingQuestionId === question.id}
-                                onClick={() =>
-                                  fileInputRefs.current[question.id]?.click()
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-primary/10 disabled:opacity-60 dark:border-white/15 dark:text-slate-300"
-                              >
-                                <Paperclip className="size-3.5" />
-                                {uploadingQuestionId === question.id
-                                  ? "Uploading..."
-                                  : "Attach file"}
-                              </button>
-                            </>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
+                                  {!isReadOnly ? (
+                                    <>
+                                      <input
+                                        ref={(element) => {
+                                          fileInputRefs.current[question!.id] = element;
+                                        }}
+                                        type="file"
+                                        className="hidden"
+                                        onChange={(event) =>
+                                          void handleUpload(
+                                            question!.id,
+                                            event.target.files?.[0] ?? null,
+                                          )
+                                        }
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={uploadingQuestionId === question!.id}
+                                        onClick={() =>
+                                          fileInputRefs.current[question!.id]?.click()
+                                        }
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-primary/10 disabled:opacity-60 dark:border-white/15 dark:text-slate-300"
+                                      >
+                                        <Paperclip className="size-3.5" />
+                                        {uploadingQuestionId === question!.id
+                                          ? "Uploading..."
+                                          : "Attach file"}
+                                      </button>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })()
+                      )}
                     </Fragment>
                   );
                 })

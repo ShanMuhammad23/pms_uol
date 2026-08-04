@@ -919,20 +919,20 @@ export default function SubmissionDetailView({
             ) : (
               rows.map((row, rowIdx) => {
                 const { question } = row;
-                const answer = answerMap.get(question.id);
-                const scored = isScoredQuestion(question);
+                const answer = answerMap.get(question!.id);
+                const scored = isScoredQuestion(question!);
                 const questionSelfAssessmentEnabled =
-                  selfAssessmentEnabled && question.selfAssessmentEnabled;
-                const managerDraft = managerDrafts.get(question.id) ?? {
+                  selfAssessmentEnabled && question!.selfAssessmentEnabled;
+                const managerDraft = managerDrafts.get(question!.id) ?? {
                   pointsEarned: "",
                   remarks: "",
                 };
-                const mgr1Answer = manager1AnswerMap.get(question.id);
-                const mgr2Answer = manager2AnswerMap.get(question.id);
+                const mgr1Answer = manager1AnswerMap.get(question!.id);
+                const mgr2Answer = manager2AnswerMap.get(question!.id);
                 const isEvenRow = rowIdx % 2 === 0;
 
                 return (
-                  <Fragment key={question.id}>
+                  <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
                     {row.isFirstInSection && row.sectionTitle ? (
                       <tr className="bg-amber-50/80 dark:bg-amber-950/20">
                         <td colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 10 : 8) : ((hasManager2 && showManager2Data) ? 8 : 6)} className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200">
@@ -947,8 +947,14 @@ export default function SubmissionDetailView({
                         </td>
                       </tr>
                     ) : null}
+                    {row.isHeaderOnly ? (
+                      <tr className="bg-amber-50/40 dark:bg-amber-950/10">
+                        <td colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 10 : 8) : ((hasManager2 && showManager2Data) ? 8 : 6)} className="px-3 py-2 pl-10 text-xs italic text-amber-400 dark:text-amber-400/70">
+                          No questions in this subsection
+                        </td>
+                      </tr>
+                    ) : (
                   <tr
-                    key={question.id}
                     className={cn(
                       "align-top border-b border-slate-100 dark:border-slate-700/40",
                       isEvenRow
@@ -961,11 +967,11 @@ export default function SubmissionDetailView({
                     </td>
                     <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
                       <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
-                        {question.questionText}
+                        {question!.questionText}
                       </p>
                     </td>
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
-                      {scored ? question.totalMarks : "—"}
+                      {scored ? question!.totalMarks : "—"}
                     </td>
                     {selfAssessmentEnabled ? (
                       <>
@@ -1004,14 +1010,14 @@ export default function SubmissionDetailView({
                           <input
                             type="number"
                             min={0}
-                            max={question.totalMarks}
+                            max={question!.totalMarks}
                             step="0.5"
                             value={managerDraft.pointsEarned}
                             onChange={(event) =>
-                              updateManagerDraft(question.id, {
+                              updateManagerDraft(question!.id, {
                                 pointsEarned: clampScore(
                                   event.target.value,
-                                  question.totalMarks,
+                                  question!.totalMarks,
                                 ),
                               })
                             }
@@ -1034,7 +1040,7 @@ export default function SubmissionDetailView({
                             value={managerDraft.remarks}
                             rows={2}
                             onChange={(event) =>
-                              updateManagerDraft(question.id, {
+                              updateManagerDraft(question!.id, {
                                 remarks: event.target.value,
                               })
                             }
@@ -1061,14 +1067,14 @@ export default function SubmissionDetailView({
                               <input
                                 type="number"
                                 min={0}
-                                max={question.totalMarks}
+                                max={question!.totalMarks}
                                 step="0.5"
                                 value={managerDraft.pointsEarned}
                                 onChange={(event) =>
-                                  updateManagerDraft(question.id, {
+                                  updateManagerDraft(question!.id, {
                                     pointsEarned: clampScore(
                                       event.target.value,
-                                      question.totalMarks,
+                                      question!.totalMarks,
                                     ),
                                   })
                                 }
@@ -1093,7 +1099,7 @@ export default function SubmissionDetailView({
                                 value={managerDraft.remarks}
                                 rows={2}
                                 onChange={(event) =>
-                                  updateManagerDraft(question.id, {
+                                  updateManagerDraft(question!.id, {
                                     remarks: event.target.value,
                                   })
                                 }
@@ -1127,6 +1133,7 @@ export default function SubmissionDetailView({
                       />
                     </td>
                   </tr>
+                    )}
                   </Fragment>
                 );
               })
