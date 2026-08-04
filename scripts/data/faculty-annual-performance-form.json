@@ -1,0 +1,447 @@
+{
+  "title": "Faculty Annual Performance Evaluation Form",
+  "description": "Key Performance Indicators (KPIs) for Permanent Faculty",
+  "staffCategoryId": 1,
+  "staffSubCategoryId": 3,
+  "sections": [
+    {
+      "letter": "A",
+      "title": "TEACHING",
+      "sortOrder": 0,
+      "subsections": [
+        {
+          "title": "Teaching (academic activities preparedness & execution)\n(based on ERP-SLCM verified, data)",
+          "sortOrder": 0,
+          "questions": [
+            {
+              "text": "Teaching Workload as specified for each Academic Tier (as per UOL Policy = 10 mark; Partial Compliance = Proportional marks; not as per UOL Policy = 0 mark)",
+              "marks": 10,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Course Material updated on Slate in time for all assigned courses (Completed = 2 marks; Not completed = 0 mark)",
+              "marks": 2,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Daily Course Log Forms maintained for all scheduled classes & assigned courses (Completed = 3 marks; Partial = 1 mark)",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Student Attendance uploaded for all assigned courses (all in-time = 2 marks; not in time = 0 mark)",
+              "marks": 2,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Students' result uploaded (all in-time = 2 mark; not in time = 0 mark )",
+              "marks": 2,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Classes Delivered (100% with no makeups = 4 mark) Makeups Held (within one week of unheld class = 2 mark; after one week of unheld class = 0.5 mark; makeups not held = 0 marks)",
+              "marks": 4,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Quizzes/assignments/projects assigned, evaluated, and feedback provided (as per policy = 3 marks; not assigned as per policy = 0 marks)",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Student Failure Rate (below 30% = 3 marks; 30-50% = 1.5) for all assigned courses",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Evidence of interactive dialogue and student participation during lectures and tutorials (90% or above = 3 marks; 70%-89% =2 marks;60%-69% = 1 mark; less than 60% = 0 mark).",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "QEC Survey - Reference Link\nQuestion 6",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Evidence of transparent and unbiased grading practices, equal participation opportunities, and consistent application of assessment criteria (90% or above = 3 marks; 70%-89% =2 marks;60%-69% = 1 mark; less than 60% = 0 mark).",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "QEC Survey - Reference Link\nQuestion 5",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Frequency and effectiveness of digital tool integration within teaching methodology, demonstrated through consistent use of LMS features, simulation software, collaborative platforms, and interactive applications, with evidence reflected in course outlines, verified LMS activity logs, and student feedback reports (80% or above = 2 marks; 60%-79% =1 mark; less than 60% = 0 mark).",
+              "marks": 2,
+              "type": "Mandatory",
+              "remarks": "QEC Survey - Reference Link\nQuestion 9",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Consistency in starting and ending classes at the scheduled time (100% = 3 marks; 90%-99% = 2 marks; 80%-89% = 1 mark; Less than 80% = 0 mark)",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "UOL Monitoring Cell",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Faculty adherence to required monthly working hours following UOL Employee Working Policy (90%-100% = 2 marks; 80%-89% = 1 mark; Less than 80% = 0 mark)",
+              "marks": 2,
+              "type": "Mandatory",
+              "remarks": "UOL-HRD Report",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Evidence of faculty practices that foster safety, respect, and equitable treatment in all interactions (90% or above = 3 marks; 70%-89% =2 marks;60%-69% = 1 mark; less than 60% = 0 mark).",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "QEC Survey - Reference Link\nQuestion 1",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        }
+      ],
+      "questions": [],
+      "hodOnly": false
+    },
+    {
+      "letter": "B",
+      "title": "RESEARCH & INNOVATIVE ENDEAVORS",
+      "sortOrder": 1,
+      "subsections": [
+        {
+          "title": "Journal Publications",
+          "sortOrder": 0,
+          "questions": [
+            {
+              "text": "Number of publications (Manuscripts, Proceedings, and Monographs Published) in HEC-recognized and indexed journals (Scopus & WOS) as per the minimum target set by UOL policy for each Academic Tier.\n(Completed = 10 marks; Partially completed = Proportional marks; Not completed = 0 marks)",
+              "marks": 10,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Number of publications (Manuscripts, Proceedings, and Monographs Published) in HEC-recognized and indexed journals (Scopus & WOS) over & above the minimum target set by UOL policy for each Academic Tier.  Interdisciplinary publications with demonstrated cross-disciplinary impact encouraged.\n(2 marks for each publication above the minimum target)",
+              "marks": 4,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Books and Book Chapters",
+          "sortOrder": 1,
+          "questions": [
+            {
+              "text": "* Authored book published by an HEC-recognized or reputable international academic publisher (1 book national = 3 marks; 1 book International = 5 marks)\n* Scholarly book chapter in a peer-reviewed edited volume published by an HEC-recognized or international academic publisher (1 book chapter national = 1.5 marks; 1 book chapter International = 2 marks)",
+              "marks": 5,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Conferences & Related Contribution",
+          "sortOrder": 2,
+          "questions": [
+            {
+              "text": "Participation in Conferences/Symposia at International Level:\n* Full-length paper, Policy advocacy paper or case study presented (2.5 mark each event)\n* Keynote speaker (3 marks each event)",
+              "marks": 6,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Participation in Conferences/Symposia at National Level:\n* Full-length paper, Policy advocacy paper or case study presented (1.5 mark each event)\n* Keynote speaker (2 marks each event)",
+              "marks": 4,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Extension/Invited Lectures Delivered (2 lectures = 1 mark; 4 lectures or more = 2 marks).\nExaminer / Juror with affiliation of UOL (1 mark per 2 events, with a cap of 2 marks), mainly for creative disciplines",
+              "marks": 2,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Creative and Professional Outputs\n(mainly for creative disciplines)",
+          "sortOrder": 3,
+          "questions": [
+            {
+              "text": "Impactful participation in any of the below events international / national Level:\n*Exhibited design portfolios at accredited national/international forums\n*Documented architectural projects recognized by professional councils\n*Recognized art exhibitions, performances, or curated shows \n*Media productions screened at accredited festivals/platforms\n(2.5 mark each national event, 4 marks each international event)",
+              "marks": 5,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Patents, Inventions, and Applied Research",
+          "sortOrder": 4,
+          "questions": [
+            {
+              "text": "Number of Patents Approved - National/International (1 National patent = 4 marks; 1 International Patent = 6 marks) / Number of Spin-Off, 3 Marks for each Spin-Off)",
+              "marks": 6,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Industrial designs, prototypes, innovative technologies or protocols verified by professional/industry bodies (National = 3 marks; International Patent = 4 marks)",
+              "marks": 6,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Consultancy contracts/contract research executed through ORIC with industry, commerce, or government (2.5 mark for each proven service)",
+              "marks": 5,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Grants and Funded Projects",
+          "sortOrder": 5,
+          "questions": [
+            {
+              "text": "Research grants obtained / joint research projects approved, from HEC or other national/international funding sources (PSF, IGNITE, IFS, DAAD, EC, etc.) (1 mark for every PKR 0.5 M grant)",
+              "marks": 4,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Number of Contract Research OR Commercialization of Research (1 mark for every PKR 0.5 M)",
+              "marks": 3,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        }
+      ],
+      "questions": [],
+      "hodOnly": false
+    },
+    {
+      "letter": "C",
+      "title": "ADMINISTRATIVE TASKS & OTHERS",
+      "sortOrder": 2,
+      "subsections": [
+        {
+          "title": "Academic & Industry Engagement",
+          "sortOrder": 0,
+          "questions": [
+            {
+              "text": "Conduct academic, research or industry forums, expert talks/lectures (at universities, industry platforms, or professional forums with demonstrated impact through recognition or follow-up collaboration) (Actively Engaged = 2 mark; Poorly Engaged = 0 mark)",
+              "marks": 2,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Partnerships leading to signed/executed MoUs (verified by ORIC),  industry visits, and min 05 internships facilitated (02 marks for each event)",
+              "marks": 4,
+              "type": "Optional",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Departmental Committees",
+          "sortOrder": 1,
+          "questions": [
+            {
+              "text": "Active role in officially announced departmental committees (curriculum, accreditation, quality assurance, assessment, admissions, or completion of HoD assigned tasks) requiring ≥3 hrs/week equivalent to 3 Credit hours, with documented verification, (Convener/exceptional member = 4; adequate participation = 3; inadequate participation = 0)\nNote: Applicable only if course exemption is not granted",
+              "marks": 4,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Social Responsibility/Civic Engagement",
+          "sortOrder": 2,
+          "questions": [
+            {
+              "text": "Participation/organization of initiatives addressing social, community, or national issues (e.g., health camps, awareness drives, school outreach, blood drives, disaster relief, environmental campaigns, policy dialogues) with documented evidence and HoD approval (1 mark for each event)",
+              "marks": 4,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Continuous Professional Development",
+          "sortOrder": 3,
+          "questions": [
+            {
+              "text": "Completion of short courses, certifications, or diplomas from HEC-recognized, international, or professional bodies with verifiable impact on job role (1.5 mark for each)",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Participation in faculty/staff trainings on pedagogy, leadership, or professional skills offered by UOL, HEC, or recognized institutions (1 mark for each training)",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            },
+            {
+              "text": "Faculty Profile & Research Output Updated in relevant systems (Completely updated = 2 mark; partially updated = 1 mark; not updated = 0 mark)",
+              "marks": 2,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": true,
+              "hodAssessment": true
+            }
+          ]
+        }
+      ],
+      "questions": [],
+      "hodOnly": false
+    },
+    {
+      "letter": "D",
+      "title": "HEAD'S EVALUATION (To be filled by concerned head only)",
+      "sortOrder": 3,
+      "subsections": [
+        {
+          "title": "Departmental Engagement",
+          "sortOrder": 0,
+          "questions": [
+            {
+              "text": "Different Academic/Administrative Meetings (Full attendance = 2 marks; Partial attendance = 1 mark) (HoD's Call)",
+              "marks": 2,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": false,
+              "hodAssessment": true
+            },
+            {
+              "text": "Performance of various duties assigned by the department from time to time (Full compliance = 3 marks; Partial compliance = 2 mark; non-compliance = 0 mark) (HoD's call)",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": false,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Ideas for Departmental Improvement",
+          "sortOrder": 1,
+          "questions": [
+            {
+              "text": "Deliverance Level and Future Development Plans for the Department Improvement (To be assessed by the HOD/Dean)",
+              "marks": 4,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": false,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Individual-Assessment",
+          "sortOrder": 2,
+          "questions": [
+            {
+              "text": "Assessment of the Faculty Member in providing academic knowledge, motivation, personality development, and career progression to the students (To be assessed by the HOD)",
+              "marks": 4,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": false,
+              "hodAssessment": true
+            }
+          ]
+        },
+        {
+          "title": "Code of Coduct",
+          "sortOrder": 3,
+          "questions": [
+            {
+              "text": "Assessment of the Faculty Member's professional behaviour (dress code, dealing with the students, relationship with peers)",
+              "marks": 3,
+              "type": "Mandatory",
+              "remarks": "",
+              "selfAssessment": false,
+              "hodAssessment": true
+            }
+          ]
+        }
+      ],
+      "questions": [],
+      "hodOnly": true
+    }
+  ],
+  "questions": [
+    {
+      "text": "List out areas of improvement and growth for the faculty member, along with any other important observations not covered in the above assessment (to be filled by HOD)",
+      "marks": 0,
+      "type": "narrative",
+      "selfAssessment": false,
+      "hodAssessment": true
+    }
+  ]
+}

@@ -1,0 +1,326 @@
+[
+  {
+    "row": 8,
+    "text": "Message from the Dean of Faculty:\n(Dean's message illustrating a roadmap as well as focus on latest trends in different programs being executed in the Faculty and how the Faculty would produce quality graduates comparable to those of world-class institutions)",
+    "marks": null,
+    "type": "narrative"
+  },
+  {
+    "row": 13,
+    "text": "Mission of Faculty:\n(Devise clear and explicit mission of Faculty)",
+    "marks": null,
+    "type": "narrative"
+  },
+  {
+    "row": 18,
+    "text": "Vision of Faculty:\n(Devise clear and explicit vision of Faculty)",
+    "marks": null,
+    "type": "narrative"
+  },
+  {
+    "row": 23,
+    "text": "Goals and Targets of Faculty:\n(Devise clear and explicit goals and targets of the Faculty. The targets must be SMART (Specific, Measurable, Achievable, Realistic, and Time-framed)",
+    "marks": null,
+    "type": "narrative"
+  },
+  {
+    "row": 30,
+    "text": "Revision and Updation of Curriculum (Revised after 2 years = 2 marks; after 3 years = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 31,
+    "text": "Measures Undertaken to Improve the Quality of Teaching Following HEC QA Guidelines (Fully = 2 marks; Partially = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 32,
+    "text": "Teaching Effectiveness Index (Partial): a. Use of Innovative Technologies/Gadgets and Advanced Syllabus for Teaching (Full = 2 marks; Partial = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 33,
+    "text": "b. Student Learning Outcome (SLOs) Achievement (Average score more than 60% = 1 mark; more than 70% = 2 marks",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 34,
+    "text": "c. Appraisal of Teaching Quality through Student Feedback - QEC (Average of the Faculty over 4 points = 2 marks; within 3.5-4 points = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 35,
+    "text": "Conferences/Symposia Organized at an International Level (One mark for each intl conf )",
+    "marks": 3.0,
+    "type": "kpi"
+  },
+  {
+    "row": 36,
+    "text": "Conferences/Symposia Organized at National Level (0.5 mark for each conf)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 37,
+    "text": "Industrial Linkages Developed and Executed (One mark for each linkage developed and executed)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 38,
+    "text": "Increase in Enrollment over Last Year (5% increase =1 mark; 10% increase = 2 marks)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 39,
+    "text": "Student Retentation Rate (100% = 2 marks; 90-99% = 1 mark; 80-89% = 0.5 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 40,
+    "text": "Faculty Social Responsibility and Brand Building (0.5 mark for each activity conducted)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 41,
+    "text": "Extension/Invited Lectures Delivered by Eminent Industrialists/Entrepreneurs/Scholars (6 lectures = 1 mark; 12 lecutres or more = 2 marks)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 42,
+    "text": "Number of International Academic Collaborations (4 Joint Ventures = 1 mark; 8 Ventures = 2 marks)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 43,
+    "text": "Contribution towards Overall Global Rankings (Significant contribution = 2 marks; Partial = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 44,
+    "text": "Contribution towards Subject Rankings (in top 100 = 2 marks; in top 200 = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 45,
+    "text": "Adherance to the UOL Main Strategic Plan (Siginifantly followed = 1 mark; Partially followed = 0.5 mark)          1",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 46,
+    "text": "Number of Publications (Manuscripts - only Scopus indexed) (If 20 publications over the mandatory requirement = 1 mark; If 40 publications over the mandatory requirement = 2 marks; if 60 = 3 marks)",
+    "marks": 3.0,
+    "type": "kpi"
+  },
+  {
+    "row": 47,
+    "text": "Number of Exotic (National/International) Grants Hunted (5 grants = 1.5 marks; 10 grants = 3 marks)",
+    "marks": 3.0,
+    "type": "kpi"
+  },
+  {
+    "row": 48,
+    "text": "Elevation of Research and Scholarship Base (Effective base = 2 marks; Partially developed = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 49,
+    "text": "Books Published (one Book Published in a foreign publisher = 2 marks; two published = 4 marks. The Books published nationally will be given 50% weightage",
+    "marks": 4.0,
+    "type": "kpi"
+  },
+  {
+    "row": 50,
+    "text": "Number of Patents Filed or Got Approved - National/International (1 National patent = 2 marks; 1 International Patent = 4 marks)",
+    "marks": 4.0,
+    "type": "kpi"
+  },
+  {
+    "row": 51,
+    "text": "Increase in h-index of the Faculty (10% increase over last year = 1 mark; 20% increase = 2 marks",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 52,
+    "text": "Number of Innovative Technologies or Protocols Developed and Commercialized (1 Technology developed = 0.5 mark, 1 Technology commercialized = 1 marks, and so on)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 53,
+    "text": "Mentoring System for Graduates Particularly for Postgraduates (monthly contact = 1 mark; fortnightly contact = 2 marks)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 54,
+    "text": "Accreditation Readiness for All Relevant Councils (Fully Ready = 2 marks; Partially Ready = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 55,
+    "text": "Student Enrolment Data (complete information i.e. students' adresses, parents details, etc. = 1 mark)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 56,
+    "text": "Faculty Profiles (Completely updated = 1 mark; not updated = 0 mark)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 57,
+    "text": "Teaching Workload Status Assessment (Complete = 1 mark)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 58,
+    "text": "Teaching Workload as Specified for Each Faculty Tier-wise (as per UOL Policy = 1 mark; not as per UOL Policy = 0 mark)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 59,
+    "text": "Availability and Future Requirement of Infrastructure and Logistics (Developed = 1 mark; Not Developed = 0 mark))",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 60,
+    "text": "Novelty and Importance of Postgraduate Research being Carried-out (Up to the mark = 1 mark; unsatisfactory = 0 mark)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 61,
+    "text": "Number of New Programs Launched (One mark for each)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 62,
+    "text": "Faculty and Staff Attendance (Monitored regularly = 2 marks; not monitored = 0 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 63,
+    "text": "Statutory Bodies' Rules, Regulations,  and Policies implemented (Yes = 2 marks; Partial Implementation =1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 64,
+    "text": "Board of Faculty Meetings Convened (12 Meetings per annum = 2 marks; 6 meetings per annum = 1)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 65,
+    "text": "Alumni Engagement (Annual meetings of all departments = 1 mark; 6 monthly meetings of all departments = 2 marks)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 66,
+    "text": "Does the Faculty have a well-established student mentoring system? (Full-fledged system = 2 marks; Partial system = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 67,
+    "text": "Graduate Employability Rate (5-10% = 0.5 mark; 10-20% = 1 mark; over 20% = 2)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 68,
+    "text": "Student Advising Services Established (in all departments = 2 marks; Partial = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 69,
+    "text": "Effectiveness of Internships Mutually Developed and Conducted (0.5 mark for each)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 70,
+    "text": "Extra-Curricular Activities (0.1 mark for each)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 71,
+    "text": "Student Satisfaction Index - QEC (over 4 points = 2 marks; within 3.5-4 = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 72,
+    "text": "Faculty Satisfaction Index - Rector through annual climate survey (over 4 points = 2 marks; within 3.5-4 = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 73,
+    "text": "Faculty and Staff Turnover rate (Less than 5% = 2 marks; Less than 10% = 1 mark)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 74,
+    "text": "Faculty/Staff Trainings (0.5 mark for each training)",
+    "marks": 2.0,
+    "type": "kpi"
+  },
+  {
+    "row": 75,
+    "text": "Retension of High-Performing Faculty (100% = 1 mark)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 76,
+    "text": "Different Academic/Administrative Meetings (Full attendance = 1 mark; Partial attendance = 0.5 mark)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 77,
+    "text": "Close Liaison with the Regulatory Bodies (Effective liaison = 1 mark; Poor liaison = 0 mark)",
+    "marks": 1.0,
+    "type": "kpi"
+  },
+  {
+    "row": 78,
+    "text": "Deliverance Level and Future Development Plans for the Faculty Uplift (To be assessed by the Rector/Chairman)",
+    "marks": 4.0,
+    "type": "kpi"
+  },
+  {
+    "row": 79,
+    "text": "Assessment of the Level of Leadership and Management of the Dean as compared with his Contemporaries (To be assessed by the Rector/Chairman)",
+    "marks": 4.0,
+    "type": "kpi"
+  }
+]
