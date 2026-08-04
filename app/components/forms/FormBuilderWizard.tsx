@@ -16,6 +16,7 @@ import type {
   AppraisalCycleRecord,
   FormSectionInput,
   FormSectionRecord,
+  FormSubsectionInput,
   FormSubsectionRecord,
   FormTemplateInput,
   FormTemplateRecord,
@@ -27,6 +28,7 @@ import {
   countAllQuestions,
   createClientId,
   createEmptyQuestion,
+  createEmptySubsection,
   FIELD_TYPES,
   FIELD_TYPE_LABELS,
   applyQuestionInputTypeChange,
@@ -346,11 +348,12 @@ function ModernFormDesignStep({
     commitStructure(
       sections.map(s => {
         if (s.clientId === sectionClientId) {
+          const nextSortOrder = s.questions.length === 0 ? 0 : Math.max(...s.questions.map(q => q.sortOrder)) + 1;
           return {
             ...s,
             questions: [
               ...s.questions,
-              createEmptyQuestion(s.questions.length),
+              createEmptyQuestion(nextSortOrder),
             ],
           };
         }
@@ -360,28 +363,159 @@ function ModernFormDesignStep({
     );
   };
 
-  const removeQuestion = (sectionClientId: string | null, questionClientId: string) => {
-    if (sectionClientId) {
-      commitStructure(
-        sections.map(s => {
-          if (s.clientId === sectionClientId) {
-            return {
-              ...s,
-              questions: s.questions
-                .filter(q => q.clientId !== questionClientId)
-                .map((question, sortOrder) => ({ ...question, sortOrder })),
-            };
-          }
-          return s;
-        }),
-        questions,
-      );
-    } else {
+  const removeQuestion = (questionClientId: string) => {
+    if (questions.some(q => q.clientId === questionClientId)) {
       commitStructure(
         sections,
         questions.filter(q => q.clientId !== questionClientId),
       );
+      return;
     }
+
+    commitStructure(
+      sections.map(s => ({
+        ...s,
+        questions: s.questions
+          .filter(q => q.clientId !== questionClientId)
+          .map((question, sortOrder) => ({ ...question, sortOrder })),
+        subsections: s.subsections.map(sub => ({
+          ...sub,
+          questions: sub.questions
+            .filter(q => q.clientId !== questionClientId)
+            .map((question, sortOrder) => ({ ...question, sortOrder })),
+        })),
+      })),
+      questions,
+    );
+  };
+
+  const updateQuestion = (questionClientId: string, updates: Partial<QuestionInput>) => {
+    if (questions.some(q => q.clientId === questionClientId)) {
+      commitStructure(
+        sections,
+        questions.map(q => q.clientId === questionClientId ? { ...q, ...updates } : q),
+      );
+      return;
+    }
+
+    commitStructure(
+      sections.map(s => ({
+        ...s,
+        questions: s.questions.map(q =>
+          q.clientId === questionClientId ? { ...q, ...updates } : q
+        ),
+        subsections: s.subsections.map(sub => ({
+          ...sub,
+          questions: sub.questions.map(q =>
+            q.clientId === questionClientId ? { ...q, ...updates } : q
+          ),
+        })),
+      })),
+      questions,
+    );
+  };
+
+  const addSubsectionToSection = (sectionClientId: string) => {
+    commitStructure(
+      sections.map(s => {
+        if (s.clientId === sectionClientId) {
+          const nextSortOrder = s.subsections.length === 0 ? 0 : Math.max(...s.subsections.map(sub => sub.sortOrder)) + 1;
+          return {
+            ...s,
+            subsections: [
+              ...s.subsections,
+              createEmptySubsection(nextSortOrder),
+            ],
+          };
+        }
+        return s;
+      }),
+      questions,
+    );
+  };
+
+  const removeSubsection = (sectionClientId: string, subsectionClientId: string) => {
+    commitStructure(
+      sections.map(s => {
+        if (s.clientId === sectionClientId) {
+          return {
+            ...s,
+            subsections: s.subsections
+              .filter(sub => sub.clientId !== subsectionClientId)
+              .map((sub, sortOrder) => ({ ...sub, sortOrder })),
+          };
+        }
+        return s;
+      }),
+      questions,
+    );
+  };
+
+  const addQuestionToSubsection = (sectionClientId: string, subsectionClientId: string) => {
+    commitStructure(
+      sections.map(s => {
+        if (s.clientId === sectionClientId) {
+          return {
+            ...s,
+            subsections: s.subsections.map(sub => {
+              if (sub.clientId === subsectionClientId) {
+                const nextSortOrder = sub.questions.length === 0 ? 0 : Math.max(...sub.questions.map(q => q.sortOrder)) + 1;
+                return {
+                  ...sub,
+                  questions: [
+                    ...sub.questions,
+                    createEmptyQuestion(nextSortOrder),
+                  ],
+                };
+              }
+              return sub;
+            }),
+          };
+        }
+        return s;
+      }),
+      questions,
+    );
+  };
+
+  const moveSubsection = (subsectionClientId: string, sourceSectionClientId: string, targetSectionClientId: string, insertIndex: number) => {
+    const sourceSection = sections.find(s => s.clientId === sourceSectionClientId);
+    if (!sourceSection) return;
+    const sourceSubIndex = sourceSection.subsections.findIndex(sub => sub.clientId === subsectionClientId);
+    if (sourceSubIndex < 0) return;
+    const movedSubsection = sourceSection.subsections[sourceSubIndex];
+
+    let nextSections = sections.map(s => {
+      if (s.clientId !== sourceSectionClientId) return s;
+      const nextSubsections = s.subsections.filter((_, i) => i !== sourceSubIndex);
+      return { ...s, subsections: nextSubsections.map((sub, i) => ({ ...sub, sortOrder: i })) };
+    });
+
+    const targetSection = nextSections.find(s => s.clientId === targetSectionClientId);
+    if (!targetSection) return;
+
+    let targetSubIndex = insertIndex;
+    if (sourceSectionClientId === targetSectionClientId && sourceSubIndex < insertIndex) {
+      targetSubIndex -= 1;
+    }
+
+    const nextSubsections = [...targetSection.subsections];
+    nextSubsections.splice(targetSubIndex, 0, { ...movedSubsection, sortOrder: targetSubIndex });
+    const finalSubsections = nextSubsections.map((sub, i) => ({ ...sub, sortOrder: i }));
+
+    nextSections = nextSections.map(s => s.clientId === targetSectionClientId ? { ...s, subsections: finalSubsections } : s);
+    commitStructure(nextSections, questions);
+  };
+
+  const moveSection = (sectionClientId: string, insertIndex: number) => {
+    const sourceIndex = sections.findIndex(s => s.clientId === sectionClientId);
+    if (sourceIndex < 0) return;
+    const nextSections = [...sections];
+    const [moved] = nextSections.splice(sourceIndex, 1);
+    let targetIndex = insertIndex;
+    if (sourceIndex < insertIndex) targetIndex -= 1;
+    nextSections.splice(targetIndex, 0, moved);
+    commitStructure(nextSections, questions);
   };
 
   const moveQuestion = useCallback(
@@ -718,26 +852,16 @@ function ModernFormDesignStep({
                           onUpdate={(updates) => updateSection(section.clientId, updates)}
                           onRemove={() => removeSection(section.clientId)}
                           onAddQuestion={() => addQuestionToSection(section.clientId)}
-                          onRemoveQuestion={(qId) => removeQuestion(section.clientId, qId)}
+                          onAddSubsection={() => addSubsectionToSection(section.clientId)}
+                          onRemoveSubsection={(subId) => removeSubsection(section.clientId, subId)}
+                          onDropSection={(dragSectionClientId, insertIndex) => moveSection(dragSectionClientId, insertIndex)}
+                          onDropSubsection={(dragSubsectionClientId, sourceSectionClientId, insertIndex) =>
+                            moveSubsection(dragSubsectionClientId, sourceSectionClientId, section.clientId, insertIndex)
+                          }
+                          onAddQuestionToSubsection={(subId) => addQuestionToSubsection(section.clientId, subId)}
+                          onRemoveQuestion={removeQuestion}
                           onMoveQuestion={moveQuestion}
-                          onUpdateQuestion={(qId, updates) => {
-                            commitStructure(
-                              sections.map((currentSection) => {
-                                if (currentSection.clientId === section.clientId) {
-                                  return {
-                                    ...currentSection,
-                                    questions: currentSection.questions.map((question) =>
-                                      question.clientId === qId
-                                        ? { ...question, ...updates }
-                                        : question,
-                                    ),
-                                  };
-                                }
-                                return currentSection;
-                              }),
-                              questions,
-                            );
-                          }}
+                          onUpdateQuestion={updateQuestion}
                           formSelfAssessmentEnabled={selfAssessmentEnabled}
                         />
                       );
@@ -759,17 +883,8 @@ function ModernFormDesignStep({
                         errorPrefix={`question-${questionIndex}`}
                         errors={errors}
                         sourceLocation={{ sectionClientId: null, subsectionClientId: null }}
-                        onRemove={() => removeQuestion(null, question.clientId)}
-                        onChange={(updates) => {
-                          commitStructure(
-                            sections,
-                            questions.map((currentQuestion) =>
-                              currentQuestion.clientId === question.clientId
-                                ? { ...currentQuestion, ...updates }
-                                : currentQuestion,
-                            ),
-                          );
-                        }}
+                        onRemove={() => removeQuestion(question.clientId)}
+                        onChange={(updates) => updateQuestion(question.clientId, updates)}
                         onDropQuestion={(dragData, insertIndex) => {
                           moveQuestion(dragData.questionClientId, dragData.source, {
                             sectionClientId: null,
@@ -847,6 +962,191 @@ function ModernFormDesignStep({
 
 // --- Sub-components for cleaner architecture ---
 
+function SubsectionCard({
+  subsection,
+  subsectionIndex,
+  sectionIndex,
+  sectionClientId,
+  errors,
+  onUpdate,
+  onRemove,
+  onAddQuestion,
+  onRemoveQuestion,
+  onUpdateQuestion,
+  onMoveQuestion,
+  onDropSubsection,
+  formSelfAssessmentEnabled = true,
+}: {
+  subsection: FormSubsectionInput;
+  subsectionIndex: number;
+  sectionIndex: number;
+  sectionClientId: string;
+  errors: Record<string, string>;
+  onUpdate: (updates: Partial<FormSubsectionInput>) => void;
+  onRemove: () => void;
+  onAddQuestion: () => void;
+  onRemoveQuestion: (qId: string) => void;
+  onUpdateQuestion: (qId: string, updates: Partial<QuestionInput>) => void;
+  onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
+  onDropSubsection: (dragSubsectionClientId: string, sourceSectionClientId: string, insertIndex: number) => void;
+  formSelfAssessmentEnabled?: boolean;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const [dragOverPos, setDragOverPos] = useState<"before" | "after" | null>(null);
+  const titleError = errors[`section-${sectionIndex}-sub-${subsectionIndex}-title`];
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const rect = e.currentTarget.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        setDragOverPos(e.clientY < midpoint ? "before" : "after");
+      }}
+      onDragLeave={(e) => {
+        const relatedTarget = e.relatedTarget as Node | null;
+        if (relatedTarget && e.currentTarget.contains(relatedTarget)) return;
+        setDragOverPos(null);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOverPos(null);
+        try {
+          const data = JSON.parse(e.dataTransfer.getData("application/json"));
+          if (data.kind === "subsection" && data.subsectionClientId !== subsection.clientId) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            const insertIndex = e.clientY < midpoint ? subsectionIndex : subsectionIndex + 1;
+            onDropSubsection(data.subsectionClientId, data.sourceSectionClientId, insertIndex);
+          }
+        } catch { /* ignore */ }
+      }}
+      className={cn(
+        "relative rounded-md border p-3 transition-all",
+        titleError
+          ? "border-amber-300 bg-amber-50/50 dark:border-amber-600/50 dark:bg-amber-950/30"
+          : "border-indigo-200/70 bg-white shadow-sm hover:border-indigo-300 dark:border-indigo-500/30 dark:bg-slate-900/40",
+        dragOverPos === "before" && "rounded-t-none border-t-2 border-t-primary",
+        dragOverPos === "after" && "rounded-b-none border-b-2 border-b-primary"
+      )}
+    >
+      {dragOverPos === "before" && (
+        <div className="pointer-events-none absolute -top-0.5 left-2 right-2 h-0.5 rounded-full bg-primary z-20" />
+      )}
+      {dragOverPos === "after" && (
+        <div className="pointer-events-none absolute -bottom-0.5 left-2 right-2 h-0.5 rounded-full bg-primary z-20" />
+      )}
+      <div className="mb-3 flex items-start gap-2">
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData("application/json", JSON.stringify({
+              kind: "subsection",
+              subsectionClientId: subsection.clientId,
+              sourceSectionClientId: sectionClientId,
+            }));
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          className="mt-1 flex cursor-grab items-center text-amber-300 hover:text-amber-600 active:cursor-grabbing dark:text-amber-500 dark:hover:text-amber-300"
+          title="Drag to move subsection"
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-amber-100 text-[10px] font-bold text-amber-700 dark:bg-amber-800/50 dark:text-amber-200">
+          {sectionIndex + 1}.{subsectionIndex + 1}
+        </div>
+        <input
+          type="text"
+          value={subsection.title}
+          onChange={(e) => onUpdate({ title: e.target.value })}
+          placeholder="Subsection Title"
+          className={cn(
+            "min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none",
+            titleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400" : "text-indigo-900 placeholder:text-indigo-400 dark:text-indigo-100"
+          )}
+        />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onAddQuestion}
+            className="rounded p-1 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-800/40"
+            title="Add question"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={onRemove}
+            className="rounded p-1 text-indigo-400 hover:bg-red-100 hover:text-red-600 dark:text-indigo-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+            title="Delete subsection"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {titleError && (
+        <p className="mb-3 flex items-center gap-1 text-xs text-red-500">
+          <AlertCircle className="h-3 w-3" /> {titleError}
+        </p>
+      )}
+
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          try {
+            const data = JSON.parse(e.dataTransfer.getData("application/json"));
+            onMoveQuestion(data.questionClientId, data.source, {
+              sectionClientId,
+              subsectionClientId: subsection.clientId,
+              insertIndex: subsection.questions.length,
+            });
+          } catch { /* ignore */ }
+        }}
+        className={cn(
+          "space-y-3 rounded-lg transition-all",
+          dragOver && "ring-2 ring-primary/40 bg-primary/5"
+        )}
+      >
+        {subsection.questions.map((question, qIdx) => (
+          <QuestionCard
+            key={question.clientId}
+            question={question}
+            index={qIdx}
+            errorPrefix={`section-${sectionIndex}-sub-${subsectionIndex}-question-${qIdx}`}
+            errors={errors}
+            sourceLocation={{ sectionClientId, subsectionClientId: subsection.clientId }}
+            onRemove={() => onRemoveQuestion(question.clientId)}
+            onChange={(updates) => onUpdateQuestion(question.clientId, updates)}
+            onDropQuestion={(dragData, insertIndex) => {
+              onMoveQuestion(dragData.questionClientId, dragData.source, {
+                sectionClientId,
+                subsectionClientId: subsection.clientId,
+                insertIndex,
+              });
+            }}
+            compact
+            formSelfAssessmentEnabled={formSelfAssessmentEnabled}
+          />
+        ))}
+
+        {subsection.questions.length === 0 && (
+          <div className="rounded-lg border border-dashed border-indigo-200 py-5 text-center dark:border-indigo-500/30">
+            <p className="text-xs text-indigo-400 dark:text-indigo-400/70">No questions — drag here or click Add Question</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SectionCard({
   section,
   index,
@@ -856,6 +1156,11 @@ function SectionCard({
   onUpdate,
   onRemove,
   onAddQuestion,
+  onAddSubsection,
+  onRemoveSubsection,
+  onDropSection,
+  onDropSubsection,
+  onAddQuestionToSubsection,
   onRemoveQuestion,
   onMoveQuestion,
   onUpdateQuestion,
@@ -869,27 +1174,83 @@ function SectionCard({
   onUpdate: (updates: Partial<FormSectionInput>) => void;
   onRemove: () => void;
   onAddQuestion: () => void;
+  onAddSubsection: () => void;
+  onRemoveSubsection: (subId: string) => void;
+  onDropSection: (dragSectionClientId: string, insertIndex: number) => void;
+  onDropSubsection: (dragSubsectionClientId: string, sourceSectionClientId: string, insertIndex: number) => void;
+  onAddQuestionToSubsection: (subId: string) => void;
   onRemoveQuestion: (qId: string) => void;
   onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
   onUpdateQuestion: (qId: string, updates: Partial<QuestionInput>) => void;
   formSelfAssessmentEnabled?: boolean;
 }) {
   const [sectionDragOver, setSectionDragOver] = useState(false);
+  const [headerDragPos, setHeaderDragPos] = useState<"before" | "after" | null>(null);
   const hasTitleError = errors[`section-${index}-title`];
   const hasAnyError = Object.keys(errors).some(k => k.startsWith(`section-${index}`));
+  const totalQuestions = section.questions.length + section.subsections.reduce((sum, sub) => sum + sub.questions.length, 0);
 
   return (
     <div className={cn(
-      "group rounded-md border transition-all shadow-sm",
+      "group relative rounded-md border transition-all shadow-sm",
       hasAnyError
         ? "border-red-400 bg-red-50 shadow-red-200/40 dark:border-red-600/50 dark:bg-red-950/30 dark:shadow-red-900/20"
         : "border-indigo-200 bg-indigo-50/80 shadow-indigo-100/60 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/40 dark:border-indigo-500/30 dark:bg-indigo-950/40 dark:shadow-indigo-900/10 dark:hover:border-indigo-400/40"
     )}>
+      {headerDragPos === "before" && (
+        <div className="pointer-events-none absolute -top-0.5 left-2 right-2 h-0.5 rounded-full bg-primary z-20" />
+      )}
+      {headerDragPos === "after" && (
+        <div className="pointer-events-none absolute -bottom-0.5 left-2 right-2 h-0.5 rounded-full bg-primary z-20" />
+      )}
       {/* Section Header */}
-      <div 
-        className="flex items-center gap-3 p-4 cursor-pointer rounded-t-xl"
+      <div
+        className={cn(
+          "relative flex items-center gap-3 p-4 cursor-pointer rounded-t-xl",
+          headerDragPos === "before" && "rounded-t-none border-t-2 border-t-primary",
+          headerDragPos === "after" && "rounded-b-none border-b-2 border-b-primary"
+        )}
         onClick={onToggle}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          const rect = e.currentTarget.getBoundingClientRect();
+          const midpoint = rect.top + rect.height / 2;
+          setHeaderDragPos(e.clientY < midpoint ? "before" : "after");
+        }}
+        onDragLeave={(e) => {
+          const relatedTarget = e.relatedTarget as Node | null;
+          if (relatedTarget && e.currentTarget.contains(relatedTarget)) return;
+          setHeaderDragPos(null);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const midpoint = rect.top + rect.height / 2;
+          const isAfter = e.clientY >= midpoint;
+          setHeaderDragPos(null);
+          try {
+            const data = JSON.parse(e.dataTransfer.getData("application/json"));
+            if (data.kind === "section") {
+              onDropSection(data.sectionClientId, isAfter ? index + 1 : index);
+            } else if (data.kind === "subsection") {
+              onDropSubsection(data.subsectionClientId, data.sourceSectionClientId, section.subsections.length);
+            }
+          } catch { /* ignore */ }
+        }}
       >
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData("application/json", JSON.stringify({ kind: "section", sectionClientId: section.clientId }));
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          className="flex cursor-grab items-center text-indigo-300 hover:text-indigo-600 active:cursor-grabbing dark:text-indigo-600 dark:hover:text-indigo-300"
+          title="Drag to move section"
+        >
+          <GripVertical className="h-5 w-5" />
+        </div>
         <div className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-colors",
           hasAnyError
@@ -921,11 +1282,19 @@ function SectionCard({
             </h4>
           )}
           <p className="text-xs text-indigo-600/70 dark:text-indigo-300/70">
-            {section.questions.length} question{section.questions.length !== 1 ? "s" : ""}
+            {totalQuestions} question{totalQuestions !== 1 ? "s" : ""}
+            {section.subsections.length > 0 ? ` · ${section.subsections.length} subsection${section.subsections.length !== 1 ? "s" : ""}` : ""}
           </p>
         </div>
 
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            onClick={(e) => { e.stopPropagation(); onAddSubsection(); }}
+            className="rounded p-1.5 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-800/40 dark:hover:text-indigo-200"
+            title="Add subsection"
+          >
+            <Layers className="h-4 w-4" />
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onAddQuestion(); }}
             className="rounded p-1.5 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-800/40 dark:hover:text-indigo-200"
@@ -954,6 +1323,36 @@ function SectionCard({
             <p className="mb-3 flex items-center gap-1 text-xs text-red-500">
               <AlertCircle className="h-3 w-3" /> {hasTitleError}
             </p>
+          )}
+
+          {section.subsections.length > 0 && (
+            <div className="mb-4 space-y-3">
+              <h5 className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
+                Subsections
+              </h5>
+              {section.subsections.map((sub, subIndex) => (
+                <SubsectionCard
+                  key={sub.clientId}
+                  subsection={sub}
+                  subsectionIndex={subIndex}
+                  sectionIndex={index}
+                  sectionClientId={section.clientId}
+                  errors={errors}
+                  onUpdate={(updates) => onUpdate({
+                    subsections: section.subsections.map(s => s.clientId === sub.clientId ? { ...s, ...updates } : s),
+                  })}
+                  onRemove={() => onRemoveSubsection(sub.clientId)}
+                  onAddQuestion={() => onAddQuestionToSubsection(sub.clientId)}
+                  onRemoveQuestion={onRemoveQuestion}
+                  onUpdateQuestion={onUpdateQuestion}
+                  onMoveQuestion={onMoveQuestion}
+                  onDropSubsection={(dragSubsectionClientId, sourceSectionClientId, insertIndex) =>
+                    onDropSubsection(dragSubsectionClientId, sourceSectionClientId, insertIndex)
+                  }
+                  formSelfAssessmentEnabled={formSelfAssessmentEnabled}
+                />
+              ))}
+            </div>
           )}
 
           {/* Section Questions - Drop Target */}
@@ -1007,7 +1406,14 @@ function SectionCard({
           </div>
 
           {/* Action Bar */}
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={onAddSubsection}
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-amber-300 px-3 py-2 text-xs font-medium text-amber-600 transition-all hover:border-amber-500 hover:bg-amber-50 hover:text-amber-700 dark:border-amber-500/40 dark:text-amber-300 dark:hover:border-amber-400 dark:hover:bg-amber-900/30"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              Add Subsection
+            </button>
             <button
               onClick={onAddQuestion}
               className="flex items-center gap-1.5 rounded-lg border border-dashed border-indigo-300 px-3 py-2 text-xs font-medium text-indigo-600 transition-all hover:border-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:border-indigo-400 dark:hover:bg-indigo-900/30"
@@ -1438,6 +1844,20 @@ export default function FormBuilderWizard({
       if (!section.title.trim()) {
         nextErrors[`section-${sectionIndex}-title`] = "Section title is required.";
       }
+
+      section.subsections.forEach((subsection, subsectionIndex) => {
+        if (!subsection.title.trim()) {
+          nextErrors[`section-${sectionIndex}-sub-${subsectionIndex}-title`] = "Subsection title is required.";
+        }
+
+        subsection.questions.forEach((question, questionIndex) => {
+          validateQuestionFields(
+            question,
+            `section-${sectionIndex}-sub-${subsectionIndex}-question-${questionIndex}`,
+            nextErrors,
+          );
+        });
+      });
 
       section.questions.forEach((question, questionIndex) => {
         validateQuestionFields(

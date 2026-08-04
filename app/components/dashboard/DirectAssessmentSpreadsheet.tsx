@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import {
   buildFormTableRows,
   formatSectionLabel,
+  formatSubsectionLabel,
   type FormTableRow,
 } from "@/app/helpers/form-table-rows";
 import { ArrowLeft, Save, CheckCircle } from "lucide-react";
@@ -451,6 +452,16 @@ export default function DirectAssessmentSpreadsheet({
                         </td>
                       </tr>
                     ) : null}
+                    {row.isFirstInSubsection && row.subsectionTitle ? (
+                      <tr className="bg-amber-50/50 dark:bg-amber-950/10">
+                        <td
+                          colSpan={3 + filteredEmployees.length}
+                          className="form-section-header-cell pl-8 text-xs font-bold text-amber-700 dark:text-amber-300"
+                        >
+                          {formatSubsectionLabel(row)}
+                        </td>
+                      </tr>
+                    ) : null}
                     <tr
                       className={cn(
                         "align-top border-b border-slate-100 dark:border-slate-700/40",
@@ -463,11 +474,6 @@ export default function DirectAssessmentSpreadsheet({
                         {row.sr}
                       </td>
                       <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
-                      {row.subsectionTitle ? (
-                        <span className="mb-1 block text-xs font-medium text-amber-600 dark:text-amber-400/70">
-                          {row.subsectionTitle}
-                        </span>
-                      ) : null}
                       <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
                         {question.questionText}
                       </p>
