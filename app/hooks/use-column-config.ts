@@ -74,13 +74,23 @@ function mergeWithDefaults(
 
   // Normalize visible: filter to allowed columns. Empty saved visible means
   // "use defaults" (API returns [] when no preference row exists yet).
+  // Additionally, any columns that are newly allowed (present in defaults
+  // but not in the saved config) are automatically made visible so that
+  // expanding the allowed set (e.g. via additional-access permissions)
+  // surfaces the new columns without requiring a manual toggle.
+  const savedVisibleSet = new Set(saved.visible);
   const visibleFiltered = saved.visible.filter(
     (id) =>
       allIds.has(id) &&
       (!allowed || allowed.has(id)),
   );
+  const newlyAllowed = defaults.visible.filter(
+    (id) => !savedVisibleSet.has(id),
+  );
   const visible =
-    visibleFiltered.length > 0 ? visibleFiltered : defaults.visible;
+    visibleFiltered.length > 0
+      ? [...visibleFiltered, ...newlyAllowed]
+      : defaults.visible;
 
   // Normalize frozen: must be subset of visible
   const visibleSet = new Set(visible);

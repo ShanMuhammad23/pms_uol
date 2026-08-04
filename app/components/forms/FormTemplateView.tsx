@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   buildFormTableRows,
   formatSectionLabel,
+  formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
 
 interface FormTemplateViewProps {
@@ -107,7 +108,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                   const { question } = row;
                   const isEvenRow = rowIdx % 2 === 0;
                   return (
-                    <Fragment key={question.id}>
+                    <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-indigo-100/70 dark:bg-indigo-900/30">
                           <td colSpan={7} className="form-section-header-cell text-sm font-bold text-indigo-800 dark:text-indigo-200">
@@ -115,6 +116,20 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                           </td>
                         </tr>
                       ) : null}
+                      {row.isFirstInSubsection && row.subsectionTitle ? (
+                        <tr className="bg-indigo-50/70 dark:bg-indigo-900/20">
+                          <td colSpan={7} className="form-section-header-cell pl-8 text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                            {formatSubsectionLabel(row)}
+                          </td>
+                        </tr>
+                      ) : null}
+                      {row.isHeaderOnly ? (
+                        <tr className="bg-indigo-50/40 dark:bg-indigo-950/10">
+                          <td colSpan={7} className="px-3 py-2 pl-10 text-xs italic text-indigo-400 dark:text-indigo-400/70">
+                            No questions in this subsection
+                          </td>
+                        </tr>
+                      ) : (
                     <tr className={cn(
                       "align-top border-b border-indigo-100 dark:border-indigo-500/15",
                       isEvenRow
@@ -125,15 +140,10 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                         {row.sr}
                       </td>
                       <td className="border-r border-indigo-100 px-3 py-2.5 dark:border-indigo-500/15">
-                        {row.subsectionTitle ? (
-                          <span className="mb-1 block text-xs font-medium text-indigo-500 dark:text-indigo-400/70">
-                            {row.subsectionTitle}
-                          </span>
-                        ) : null}
-                        <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">{question.questionText}</p>
-                        {question.options.length > 0 ? (
+                        <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">{question!.questionText}</p>
+                        {question!.options.length > 0 ? (
                           <ul className="mt-1.5 space-y-0.5">
-                            {question.options.map((option) => (
+                            {question!.options.map((option) => (
                               <li key={option.id} className="max-w-[400px] break-words text-[11px] text-slate-600 dark:text-slate-400">
                                 <span className="text-teal-600 dark:text-teal-400">•</span> {option.optionLabel} <span className="text-slate-400">({option.pointsAssigned} pts)</span>
                               </li>
@@ -142,24 +152,24 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                         ) : null}
                       </td>
                       <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-right tabular-nums font-semibold text-teal-700 dark:border-indigo-500/15 dark:text-teal-300">
-                        {question.totalMarks}
+                        {question!.totalMarks}
                       </td>
                       <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-xs text-slate-700 dark:border-indigo-500/15 dark:text-slate-300">
-                        {FIELD_TYPE_LABELS[question.inputType]}
+                        {FIELD_TYPE_LABELS[question!.inputType]}
                       </td>
                       <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
-                        {question.isRequired ? (
+                        {question!.isRequired ? (
                           <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                            Yes
+                            Mandatory
                           </span>
                         ) : (
                           <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/40 dark:text-slate-400">
-                            No
+                            Optional
                           </span>
                         )}
                       </td>
                       <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
-                        {question.selfAssessmentEnabled ? (
+                        {question!.selfAssessmentEnabled ? (
                           <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                             Enabled
                           </span>
@@ -170,7 +180,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                         )}
                       </td>
                       <td className="whitespace-nowrap border-r border-indigo-100 px-3 py-2.5 text-center dark:border-indigo-500/15">
-                        {question.hodAssessmentEnabled ? (
+                        {question!.hodAssessmentEnabled ? (
                           <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                             Enabled
                           </span>
@@ -181,6 +191,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                         )}
                       </td>
                     </tr>
+                      )}
                     </Fragment>
                   );
                 })

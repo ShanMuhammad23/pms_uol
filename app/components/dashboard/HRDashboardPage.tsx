@@ -39,7 +39,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   const isHead = isHeadRole(role);
   const canAccessDirectAssessment = canAccessDashboardSubmissions(role ?? undefined);
   const { data: session } = useSession();
-  const { canView } = useAdditionalAccess(
+  const { canView, permissions } = useAdditionalAccess(
     session?.user?.id ? Number(session.user.id) : undefined,
     session?.user?.role,
   );
@@ -55,7 +55,11 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     }
     if (extra.length === 0) return base;
     return [...base, ...extra];
-  }, [isHead, canView]);
+    // canView is excluded from deps because it is a new function reference on
+    // every render. It closes over `permissions`, so depending on `permissions`
+    // is sufficient to recompute when access actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHead, permissions]);
 
   const [statsVisible, setStatsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(true);

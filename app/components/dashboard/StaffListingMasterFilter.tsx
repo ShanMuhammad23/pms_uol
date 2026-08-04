@@ -15,7 +15,6 @@ import {
 import { NumericRangeFilterControls } from "@/app/components/common/NumericRangeFilterControls";
 import {
   MASTER_FILTER_SECTIONS,
-  buildMasterFilterOptions,
   countActiveMasterFilters,
   isMasterFilterTextColumn,
   type MasterFilterMultiSelection,
@@ -27,7 +26,6 @@ import {
   type DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
 import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
-import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 
 const SECTION_STYLE: Record<DashboardColumnSectionId, string> = {
@@ -42,8 +40,13 @@ const SECTION_STYLE: Record<DashboardColumnSectionId, string> = {
 interface StaffListingMasterFilterProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  submissions: FormSubmissionListItem[];
-  allSubmissions?: FormSubmissionListItem[];
+  /**
+   * Server-provided facet counts keyed by column id. These are computed
+   * server-side from the full dashboard-filtered dataset (not just the
+   * current page) and cascade across all master filters except the column's
+   * own. This is the single source of truth for filter option counts — the
+   * frontend never recomputes counts from page items.
+   */
   columnCounts?: Partial<
     Record<DashboardTableColumnId, MultiSelectOption[]>
   > | null;
@@ -145,8 +148,6 @@ export function StaffListingMasterFilterTrigger({
 export function StaffListingMasterFilter({
   open,
   onOpenChange,
-  submissions,
-  allSubmissions,
   columnCounts,
   filters,
   onTextChange,
@@ -169,34 +170,23 @@ export function StaffListingMasterFilter({
     })).filter((section) => section.columns.length > 0);
   }, [allowedColumnIds]);
 
+  // Filter option counts come exclusively from the server response
+  // (`columnCounts`), which is computed from the full dashboard-filtered
+  // dataset with cascading master-filter exclusion. The frontend never
+  // recomputes counts from page items — doing so would produce inconsistent
+  // counts that shift with pagination and don't reflect the full filtered set.
   const optionsByColumn = useMemo(() => {
     const map = new Map<string, MultiSelectOption[]>();
 
     for (const section of filterSections) {
       for (const column of section.columns) {
         if (isMasterFilterTextColumn(column.id)) continue;
-
-        const serverOptions = columnCounts?.[column.id];
-        if (serverOptions) {
-          map.set(column.id, serverOptions);
-          continue;
-        }
-
-        map.set(
-          column.id,
-          buildMasterFilterOptions(
-            submissions,
-            column,
-            filters,
-            filters.multi[column.id] ?? null,
-            allSubmissions,
-          ),
-        );
+        map.set(column.id, columnCounts?.[column.id] ?? []);
       }
     }
 
     return map;
-  }, [allSubmissions, columnCounts, filterSections, filters, submissions]);
+  }, [columnCounts, filterSections]);
 
   return (
     <AnimatePresence initial={false}>

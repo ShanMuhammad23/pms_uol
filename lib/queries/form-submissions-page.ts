@@ -19,23 +19,16 @@ import type {
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
-/** Columns whose facet lists stay small enough to ship on every page response. */
-const SERVER_COLUMN_COUNT_IDS = new Set<DashboardTableColumnId>([
-  "formAssignment",
-  "designation",
-  "roleCategory",
-  "facultyName",
-  "deptGroupName",
-  "status",
-  "eligible",
-  "applicableDuration",
-  "ratingO",
-  "ratingN",
-  "quartile",
-  "applicableMatrix",
-  "qualificationCountry",
-  "qualificationYear",
-]);
+/**
+ * Columns whose facet lists are computed server-side from the full filtered
+ * dataset. All multi-select columns are included so that filter option counts
+ * are always consistent with the actual filtered results — never derived from
+ * the current page only (which would produce inconsistent counts as filters
+ * change and pagination shifts).
+ */
+const SERVER_COLUMN_COUNT_IDS = new Set<DashboardTableColumnId>(
+  MASTER_FILTER_MULTI_COLUMNS.map((column) => column.id),
+);
 
 const MAX_OPTIONS_PER_COLUMN = 200;
 

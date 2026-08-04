@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, Pencil, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
 import { ResizableHeader } from "@/app/components/common/ResizableHeader";
@@ -27,6 +27,7 @@ import {
   getMasterFilterActiveCount,
 } from "@/app/components/dashboard/StaffListingMasterFilter";
 import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
+import { TopHorizontalScrollbar } from "@/app/components/common/TopHorizontalScrollbar";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
@@ -627,6 +628,7 @@ export function DashboardSubmissionsTable({
   role,
   performanceMatrix,
 }: DashboardSubmissionsTableProps) {
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const {
     config,
     defaults: configDefaults,
@@ -711,7 +713,7 @@ export function DashboardSubmissionsTable({
 
   const isHrRole = canReviewSubmissions(role ?? undefined);
   const { data: session } = useSession();
-  const { canEdit: canEditModule } = useAdditionalAccess(
+  const { canEdit: canEditModule, permissions } = useAdditionalAccess(
     session?.user?.id ? Number(session.user.id) : undefined,
     session?.user?.role,
   );
@@ -721,7 +723,11 @@ export function DashboardSubmissionsTable({
     if (canEditModule("ORIC_ADJUSTMENTS")) modules.add("ORIC_ADJUSTMENTS");
     if (canEditModule("QEC_ADJUSTMENTS")) modules.add("QEC_ADJUSTMENTS");
     return modules;
-  }, [canEditModule]);
+    // canEditModule is excluded from deps because it is a new function reference
+    // on every render. It closes over `permissions`, so depending on `permissions`
+    // is sufficient to recompute when access actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions]);
   const queryClient = useQueryClient();
   const [pendingScoreChanges, setPendingScoreChanges] = useState<
     Record<number, PendingScoreChanges>
@@ -1109,7 +1115,6 @@ export function DashboardSubmissionsTable({
       <StaffListingMasterFilter
         open={masterFilterOpen}
         onOpenChange={setMasterFilterOpen}
-        submissions={submissions}
         columnCounts={columnCountsById}
         filters={masterFilters}
         onTextChange={handleMasterTextChange}
@@ -1129,7 +1134,15 @@ export function DashboardSubmissionsTable({
         onReset={resetConfig}
       />
 
-      <div className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain">
+      <TopHorizontalScrollbar
+        targetRef={tableScrollRef}
+        className="border-b border-slate-200 dark:border-white/5"
+      />
+
+      <div
+        ref={tableScrollRef}
+        className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain"
+      >
         <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
             <tr className="bg-primary text-white">
@@ -1174,7 +1187,6 @@ export function DashboardSubmissionsTable({
                     {isMasterFilterableColumn(column.id) ? (
                       <TableColumnHeaderFilter
                         column={column}
-                        submissions={submissions}
                         columnCounts={columnCountsById[column.id]}
                         filters={masterFilters}
                         onTextChange={handleMasterTextChange}

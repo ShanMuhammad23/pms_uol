@@ -14,7 +14,6 @@ import { Check, Filter, Search, X } from "lucide-react";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { NumericRangeFilterControls } from "@/app/components/common/NumericRangeFilterControls";
 import {
-  buildMasterFilterOptions,
   isColumnFilterActive,
   isMasterFilterTextColumn,
   type MasterFilterMultiSelection,
@@ -26,7 +25,6 @@ import type {
   DashboardTableColumnId,
 } from "@/app/helpers/dashboard-table-columns";
 import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
-import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 
 type MenuPosition = {
@@ -39,9 +37,12 @@ type MenuPosition = {
 
 interface TableColumnHeaderFilterProps {
   column: DashboardTableColumnDef;
-  submissions: FormSubmissionListItem[];
-  allSubmissions?: FormSubmissionListItem[];
-  /** Server-provided facet counts — preferred over client-built options. */
+  /**
+   * Server-provided facet counts — the single source of truth for filter
+   * option counts. Computed server-side from the full dashboard-filtered
+   * dataset with cascading master-filter exclusion. The frontend never
+   * recomputes counts from page items.
+   */
   columnCounts?: MultiSelectOption[] | null;
   filters: MasterFilterState;
   onTextChange: (columnId: MasterFilterTextColumnId, next: string) => void;
@@ -84,8 +85,6 @@ function getMenuPosition(trigger: HTMLElement): MenuPosition {
 
 export function TableColumnHeaderFilter({
   column,
-  submissions,
-  allSubmissions,
   columnCounts,
   filters,
   onTextChange,
@@ -106,43 +105,35 @@ export function TableColumnHeaderFilter({
 
   const selectedValues = filters.multi[column.id] ?? null;
 
+  // Filter option counts come exclusively from the server response
+  // (`columnCounts`), which is computed from the full dashboard-filtered
+  // dataset with cascading master-filter exclusion. The frontend never
+  // recomputes counts from page items — doing so would produce inconsistent
+  // counts that shift with pagination and don't reflect the full filtered set.
   const options = useMemo(() => {
     if (isText) return [];
 
-    if (columnCounts) {
-      const selected = selectedValues ?? [];
-      const byValue = new Map(columnCounts.map((option) => [option.value, option]));
-      for (const value of selected) {
-        if (!byValue.has(value)) {
-          byValue.set(value, { value, label: value, count: 0 });
-        }
-      }
-      return [...byValue.values()].sort((left, right) => {
-        if (left.value === "—") return 1;
-        if (right.value === "—") return -1;
-        return left.label.localeCompare(right.label, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        });
-      });
-    }
-
-    return buildMasterFilterOptions(
-      submissions,
-      column,
-      filters,
-      selectedValues,
-      allSubmissions,
+    const baseOptions = columnCounts ?? [];
+    const selected = selectedValues ?? [];
+    const byValue = new Map(
+      baseOptions.map((option) => [option.value, option]),
     );
-  }, [
-    allSubmissions,
-    column,
-    columnCounts,
-    filters,
-    isText,
-    selectedValues,
-    submissions,
-  ]);
+    // Keep currently selected values visible even if other filters zero them
+    // out or the server response hasn't arrived yet.
+    for (const value of selected) {
+      if (!byValue.has(value)) {
+        byValue.set(value, { value, label: value, count: 0 });
+      }
+    }
+    return [...byValue.values()].sort((left, right) => {
+      if (left.value === "—") return 1;
+      if (right.value === "—") return -1;
+      return left.label.localeCompare(right.label, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    });
+  }, [columnCounts, isText, selectedValues]);
 
   useEffect(() => {
     setMounted(true);
