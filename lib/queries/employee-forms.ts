@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { PoolClient } from "pg";
+import { computeAppraisalEligibility } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import {
@@ -12,6 +13,7 @@ import {
 } from "@/lib/uploads/form-attachments";
 import type {
   AssignedFormListItem,
+  EmployeeAssessmentEligibilityStatus,
   EmployeeFormAnswerAttachment,
   EmployeeFormAnswerInput,
   EmployeeFormAnswerRecord,
@@ -91,6 +93,88 @@ export class EmployeeFormError extends Error {
   }
 }
 
+type UserAssessmentEligibilityContext = {
+  assessmentEligibility: boolean;
+  ineligibilityReason: string | null;
+  dateOfJoining: string | null;
+};
+
+type ResolvedAssessmentEligibility = {
+  assessmentEligibility: boolean;
+  eligibilityStatus: EmployeeAssessmentEligibilityStatus;
+  canFillAssessment: boolean;
+  ineligibilityReason: string | null;
+};
+
+async function getUserAssessmentEligibilityContext(
+  userId: number,
+  client?: PoolClient,
+): Promise<UserAssessmentEligibilityContext> {
+  const executor = client ?? db;
+  const result = await executor.query<{
+    assessment_eligibility: boolean;
+    ineligibility_reason: string | null;
+    date_of_joining: string | null;
+  }>(
+    `SELECT
+       COALESCE(assessment_eligibility, true) AS assessment_eligibility,
+       ineligibility_reason,
+       date_of_joining::text AS date_of_joining
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId],
+  );
+
+  const row = result.rows[0];
+  return {
+    assessmentEligibility: row?.assessment_eligibility ?? true,
+    ineligibilityReason: row?.ineligibility_reason ?? null,
+    dateOfJoining: row?.date_of_joining ? row.date_of_joining.slice(0, 10) : null,
+  };
+}
+
+function resolveEmployeeAssessmentEligibility(
+  ctx: UserAssessmentEligibilityContext,
+  financialYear: number | null | undefined,
+): ResolvedAssessmentEligibility {
+  if (!ctx.assessmentEligibility) {
+    return {
+      assessmentEligibility: false,
+      eligibilityStatus: "Ineligible",
+      canFillAssessment: false,
+      ineligibilityReason: ctx.ineligibilityReason,
+    };
+  }
+
+  const computed = computeAppraisalEligibility(ctx.dateOfJoining, {
+    financialYear: financialYear ?? undefined,
+  });
+
+  return {
+    assessmentEligibility: true,
+    eligibilityStatus: computed.status,
+    canFillAssessment: computed.isEligible,
+    ineligibilityReason: null,
+  };
+}
+
+async function assertUserCanFillAssessment(
+  userId: number,
+  fiscalYear: number,
+  client?: PoolClient,
+): Promise<void> {
+  const ctx = await getUserAssessmentEligibilityContext(userId, client);
+  const resolved = resolveEmployeeAssessmentEligibility(ctx, fiscalYear);
+  if (!resolved.canFillAssessment) {
+    const message =
+      resolved.eligibilityStatus === "Ineligible"
+        ? "Score editing is disabled: you are not eligible for assessment."
+        : "Score editing is disabled: you are not eligible for this appraisal cycle based on your length of service.";
+    throw new EmployeeFormError(message, 403);
+  }
+}
+
 async function listExplicitlyAssignedTemplatesForUser(
   userId: number,
   client?: PoolClient,
@@ -101,6 +185,7 @@ async function listExplicitlyAssignedTemplatesForUser(
     description: string | null;
     questionCount: number;
     selfAssessmentEnabled: boolean;
+    fiscalYear: number;
   }>
 > {
   const executor = client ?? db;
@@ -110,18 +195,21 @@ async function listExplicitlyAssignedTemplatesForUser(
     description: string | null;
     question_count: string;
     self_assessment_disabled: boolean;
+    fiscal_year: number;
   }>(
     `SELECT
        ft.id,
        ft.title,
        ft.description,
        efa.self_assessment_disabled,
+       ac.fiscal_year,
        COUNT(fq.id)::text AS question_count
      FROM employee_form_assignments efa
      INNER JOIN form_templates ft ON ft.id = efa.template_id
+     INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
      WHERE efa.employee_id = $1
-     GROUP BY ft.id, efa.self_assessment_disabled
+     GROUP BY ft.id, efa.self_assessment_disabled, ac.fiscal_year
      ORDER BY ft.id DESC`,
     [userId],
   );
@@ -132,6 +220,7 @@ async function listExplicitlyAssignedTemplatesForUser(
     description: row.description,
     questionCount: Number(row.question_count),
     selfAssessmentEnabled: !row.self_assessment_disabled,
+    fiscalYear: Number(row.fiscal_year),
   }));
 }
 
@@ -506,10 +595,15 @@ export async function listAssignedFormsForUser(
   userId: number,
 ): Promise<AssignedFormListItem[]> {
   const explicitAssignments = await listExplicitlyAssignedTemplatesForUser(userId);
+  const eligibilityCtx = await getUserAssessmentEligibilityContext(userId);
 
   return Promise.all(
     explicitAssignments.map(async (assigned) => {
       const appraisal = await getAppraisalForUserTemplate(userId, assigned.templateId);
+      const eligibility = resolveEmployeeAssessmentEligibility(
+        eligibilityCtx,
+        assigned.fiscalYear,
+      );
 
       return {
         templateId: assigned.templateId,
@@ -520,6 +614,9 @@ export async function listAssignedFormsForUser(
         selfAssessmentEnabled: assigned.selfAssessmentEnabled,
         submittedAt: appraisal?.submitted_at ?? null,
         updatedAt: appraisal?.updated_at ?? null,
+        eligibilityStatus: eligibility.eligibilityStatus,
+        canFillAssessment: eligibility.canFillAssessment,
+        ineligibilityReason: eligibility.ineligibilityReason,
       } satisfies AssignedFormListItem;
     }),
   );
@@ -556,14 +653,11 @@ export async function getEmployeeFormDetail(
   const rawScore = calculateRawScore(template, normalizedAnswers);
   const maxRawScore = calculateMaxRawScore(template);
 
-  const eligibilityResult = await db.query<{ assessment_eligibility: boolean; ineligibility_reason: string | null }>(
-    `SELECT COALESCE(assessment_eligibility, true) AS assessment_eligibility,
-            ineligibility_reason
-     FROM users WHERE id = $1 LIMIT 1`,
-    [userId],
+  const eligibilityCtx = await getUserAssessmentEligibilityContext(userId);
+  const eligibility = resolveEmployeeAssessmentEligibility(
+    eligibilityCtx,
+    template.fiscalYear,
   );
-  const assessmentEligibility = eligibilityResult.rows[0]?.assessment_eligibility ?? true;
-  const ineligibilityReason = eligibilityResult.rows[0]?.ineligibility_reason ?? null;
 
   const managerResult = await db.query<{ head_name: string | null; manager_2_name: string | null }>(
     `SELECT CONCAT(h.first_name, ' ', h.last_name) AS head_name,
@@ -588,8 +682,10 @@ export async function getEmployeeFormDetail(
       : rawScore,
     maxRawScore,
     selfAssessmentEnabled,
-    assessmentEligibility,
-    ineligibilityReason,
+    assessmentEligibility: eligibility.assessmentEligibility,
+    eligibilityStatus: eligibility.eligibilityStatus,
+    canFillAssessment: eligibility.canFillAssessment,
+    ineligibilityReason: eligibility.ineligibilityReason,
     headName,
     manager2Name,
   };
@@ -607,19 +703,7 @@ export async function saveEmployeeForm(
     throw new EmployeeFormError("Form not found.", 404);
   }
 
-  const eligibilityResult = await db.query<{ assessment_eligibility: boolean; ineligibility_reason: string | null }>(
-    `SELECT COALESCE(assessment_eligibility, true) AS assessment_eligibility,
-            ineligibility_reason
-     FROM users WHERE id = $1 LIMIT 1`,
-    [userId],
-  );
-  const assessmentEligibility = eligibilityResult.rows[0]?.assessment_eligibility ?? true;
-  if (!assessmentEligibility) {
-    throw new EmployeeFormError(
-      "Score editing is disabled: you are not eligible for assessment.",
-      403,
-    );
-  }
+  await assertUserCanFillAssessment(userId, template.fiscalYear);
 
   const submit = Boolean(input.submit);
   const assignments = await listExplicitlyAssignedTemplatesForUser(userId);
@@ -770,6 +854,8 @@ export async function addEmployeeFormAttachment(
   if (!template) {
     throw new EmployeeFormError("Form not found.", 404);
   }
+
+  await assertUserCanFillAssessment(userId, template.fiscalYear);
 
   const question = getTemplateQuestions(template).find(
     (item) => item.id === questionId,
@@ -952,6 +1038,12 @@ export async function deleteEmployeeFormAttachment(
       409,
     );
   }
+
+  const template = await getFormTemplateById(templateId);
+  if (!template) {
+    throw new EmployeeFormError("Form not found.", 404);
+  }
+  await assertUserCanFillAssessment(userId, template.fiscalYear);
 
   const result = await db.query<{ relative_path: string }>(
     `DELETE FROM appraisal_answer_attachments

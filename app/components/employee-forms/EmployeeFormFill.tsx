@@ -156,7 +156,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   const isReadOnly =
     data?.status === "SUBMITTED" ||
     (data != null && !data.selfAssessmentEnabled) ||
-    (data != null && !data.assessmentEligibility);
+    (data != null && !data.canFillAssessment);
   const maxRawScore = useMemo(() => {
     if (!data) {
       return 0;
@@ -428,9 +428,14 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         />
       </div>
 
-      {data != null && !data.assessmentEligibility ? (
+      {data != null && !data.canFillAssessment ? (
         <IneligibilityBanner
           role="self"
+          status={
+            data.eligibilityStatus === "Not Eligible"
+              ? "Not Eligible"
+              : "Ineligible"
+          }
           reason={data.ineligibilityReason}
         />
       ) : null}

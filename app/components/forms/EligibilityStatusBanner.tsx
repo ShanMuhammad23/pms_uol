@@ -4,11 +4,14 @@ import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type EligibilityBannerRole = "self" | "manager" | "admin";
+type BannerEligibilityStatus = "Ineligible" | "Not Eligible";
 
 interface EligibilityStatusBannerProps {
   role: EligibilityBannerRole;
   employeeName?: string;
   reason?: string | null;
+  /** Defaults to Ineligible (manually marked N/A). */
+  status?: BannerEligibilityStatus;
   className?: string;
 }
 
@@ -16,8 +19,19 @@ function buildMessage(
   role: EligibilityBannerRole,
   employeeName: string | undefined,
   reason: string | null,
+  status: BannerEligibilityStatus,
 ): string {
   const reasonText = reason ? ` Reason: ${reason}` : "";
+
+  if (status === "Not Eligible") {
+    if (role === "self") {
+      return "You are not eligible to complete this assessment based on your length of service for this appraisal cycle. You can view assigned forms, but scoring is disabled.";
+    }
+    if (role === "manager") {
+      return "This employee is not eligible for assessment based on their length of service for this appraisal cycle.";
+    }
+    return "This employee is marked as Not Eligible for this appraisal cycle.";
+  }
 
   if (role === "self") {
     return `Your assessment is currently unavailable because your eligibility has been temporarily disabled.${reasonText}`;
@@ -34,9 +48,10 @@ export default function EligibilityStatusBanner({
   role,
   employeeName,
   reason,
+  status = "Ineligible",
   className,
 }: EligibilityStatusBannerProps) {
-  const message = buildMessage(role, employeeName, reason ?? null);
+  const message = buildMessage(role, employeeName, reason ?? null, status);
 
   return (
     <div
