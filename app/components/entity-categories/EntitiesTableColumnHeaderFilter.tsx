@@ -409,7 +409,7 @@ export function EntitiesTableColumnHeaderFilter({
           open && !active && "bg-primary/10 text-primary",
         )}
       >
-        <Filter className="h-3 w-3" />
+        <Filter className="h-3 w-3 text-white" />
       </button>
       {menu}
     </div>

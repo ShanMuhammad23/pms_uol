@@ -760,7 +760,7 @@ export default function EntitiesManager() {
                   <th
                     key={column.id}
                     className={cn(
-                      "px-4 py-3 font-semibold text-text-primary",
+                      "px-4 py-3 font-semibold text-white bg-primary ",
                       column.align === "right" ? "text-right" : "text-left",
                     )}
                   >
