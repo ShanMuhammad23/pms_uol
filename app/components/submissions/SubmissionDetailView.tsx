@@ -24,6 +24,9 @@ import {
   formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
+import OverallRemarksSection, {
+  OverallRemarksPrintSection,
+} from "@/app/components/forms/OverallRemarksSection";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
 import { useSession } from "next-auth/react";
 import { canReviewSubmissions, canViewQuartile } from "@/lib/auth/submission-review-roles";
@@ -286,6 +289,12 @@ export default function SubmissionDetailView({
   const [initialDraftsSnapshot, setInitialDraftsSnapshot] = useState<
     Map<number, ManagerDraft>
   >(new Map());
+  const [manager1OverallRemarks, setManager1OverallRemarks] = useState<string>("");
+  const [manager2OverallRemarks, setManager2OverallRemarks] = useState<string>("");
+  const [initialOverallRemarks, setInitialOverallRemarks] = useState<{
+    manager1: string;
+    manager2: string;
+  }>({ manager1: "", manager2: "" });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["form-submission", submissionId],
@@ -311,6 +320,11 @@ export default function SubmissionDetailView({
         ]),
       ),
     );
+    const m1Remarks = data.manager1OverallRemarks ?? "";
+    const m2Remarks = data.manager2OverallRemarks ?? "";
+    setManager1OverallRemarks(m1Remarks);
+    setManager2OverallRemarks(m2Remarks);
+    setInitialOverallRemarks({ manager1: m1Remarks, manager2: m2Remarks });
   }, [data]);
 
   const saveMutation = useMutation({
@@ -331,7 +345,10 @@ export default function SubmissionDetailView({
           };
         });
 
-      return saveManagerReview(submissionId, answers);
+      const overallRemarks =
+        currentManagerLevel === 2 ? manager2OverallRemarks : manager1OverallRemarks;
+
+      return saveManagerReview(submissionId, answers, overallRemarks);
     },
     onSuccess: (result) => {
       setSaveMessage("Manager review saved.");
@@ -340,8 +357,28 @@ export default function SubmissionDetailView({
         return {
           ...current,
           managerAnswers: result.managerAnswers,
+          ...(result.manager1OverallRemarks !== undefined
+            ? { manager1OverallRemarks: result.manager1OverallRemarks }
+            : {}),
+          ...(result.manager2OverallRemarks !== undefined
+            ? { manager2OverallRemarks: result.manager2OverallRemarks }
+            : {}),
         };
       });
+      if (result.manager1OverallRemarks !== undefined) {
+        setManager1OverallRemarks(result.manager1OverallRemarks ?? "");
+        setInitialOverallRemarks((prev) => ({
+          ...prev,
+          manager1: result.manager1OverallRemarks ?? "",
+        }));
+      }
+      if (result.manager2OverallRemarks !== undefined) {
+        setManager2OverallRemarks(result.manager2OverallRemarks ?? "");
+        setInitialOverallRemarks((prev) => ({
+          ...prev,
+          manager2: result.manager2OverallRemarks ?? "",
+        }));
+      }
     },
     onError: (mutationError: Error) => {
       setSaveMessage(mutationError.message);
@@ -362,7 +399,9 @@ export default function SubmissionDetailView({
               remarks: draft?.remarks?.trim() || null,
             };
           });
-        await saveManagerReview(submissionId, answers);
+        const overallRemarks =
+          currentManagerLevel === 2 ? manager2OverallRemarks : manager1OverallRemarks;
+        await saveManagerReview(submissionId, answers, overallRemarks);
       }
 
       return approveManagerReview(submissionId);
@@ -518,8 +557,17 @@ export default function SubmissionDetailView({
       if (initial.pointsEarned !== draft.pointsEarned) return true;
       if (initial.remarks !== draft.remarks) return true;
     }
+    // Check overall remarks for unsaved changes
+    if ((data?.additionalRemarksEnabled ?? false) && data?.canEditManagerReview) {
+      if (currentManagerLevel === 1 && manager1OverallRemarks !== initialOverallRemarks.manager1) {
+        return true;
+      }
+      if (currentManagerLevel === 2 && manager2OverallRemarks !== initialOverallRemarks.manager2) {
+        return true;
+      }
+    }
     return false;
-  }, [editingHr, data?.canEditManagerReview, managerDrafts, initialDraftsSnapshot]);
+  }, [editingHr, data?.canEditManagerReview, managerDrafts, initialDraftsSnapshot, data?.additionalRemarksEnabled, currentManagerLevel, manager1OverallRemarks, manager2OverallRemarks, initialOverallRemarks]);
 
   const cancelEditing = useCallback(() => {
     setManagerDrafts(
@@ -530,8 +578,10 @@ export default function SubmissionDetailView({
         ]),
       ),
     );
+    setManager1OverallRemarks(initialOverallRemarks.manager1);
+    setManager2OverallRemarks(initialOverallRemarks.manager2);
     setSaveMessage(null);
-  }, [initialDraftsSnapshot]);
+  }, [initialDraftsSnapshot, initialOverallRemarks]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -1215,6 +1265,19 @@ export default function SubmissionDetailView({
         />
       ) : null}
 
+      {(data.additionalRemarksEnabled ?? false) && rows.length > 0 ? (
+        <OverallRemarksSection
+          enabled={data.additionalRemarksEnabled ?? false}
+          manager1Remarks={manager1OverallRemarks}
+          manager2Remarks={manager2OverallRemarks}
+          hasManager2={hasManager2 && showManager2Data}
+          canEditManager1={Boolean(editingManager1)}
+          canEditManager2={Boolean(editingManager2)}
+          onManager1Change={setManager1OverallRemarks}
+          onManager2Change={setManager2OverallRemarks}
+        />
+      ) : null}
+
       {(isAdminRole || hasAnyModuleAccess) && rows.length > 0 ? (
         <ScoreAdjustmentsPanel
           submissionId={data.id}
@@ -1230,6 +1293,15 @@ export default function SubmissionDetailView({
           canEditQec={canEditQec}
           performanceLevelName={data.performanceLevelName}
           quartileName={data.quartileName}
+        />
+      ) : null}
+
+      {(data.additionalRemarksEnabled ?? false) && rows.length > 0 ? (
+        <OverallRemarksPrintSection
+          enabled={data.additionalRemarksEnabled ?? false}
+          manager1Remarks={data.manager1OverallRemarks}
+          manager2Remarks={data.manager2OverallRemarks}
+          hasManager2={hasManager2}
         />
       ) : null}
 

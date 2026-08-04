@@ -68,4 +68,6 @@ export interface ManagerReviewAnswerInput {
 
 export interface SaveManagerReviewInput {
   answers: ManagerReviewAnswerInput[];
+  /** Optional overall remarks saved alongside question answers. */
+  overallRemarks?: string | null;
 }

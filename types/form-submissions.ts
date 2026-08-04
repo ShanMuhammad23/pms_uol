@@ -68,6 +68,17 @@ export interface FormSubmissionListItem {
   remarksEvaluation: string | null;
   /** Dedicated HR approval status — independent of remarks_evaluation. */
   hrApprovalStatus: "pending" | "approved" | "review_required" | null;
+  /**
+   * Overall remarks entered by Manager 1 (head_id) during review.
+   * Independent from question-level remarks. Only populated when the form
+   * template has additional_remarks_enabled = TRUE.
+   */
+  manager1OverallRemarks: string | null;
+  /**
+   * Overall remarks entered by Manager 2 (manager_2_id) during review.
+   * Independent from Manager 1 remarks and question-level remarks.
+   */
+  manager2OverallRemarks: string | null;
   currentSalary: number | null;
   previousSalary: number | null;
   applicableSalaryForIncrement: number | null;
@@ -135,4 +146,10 @@ export interface FormSubmissionDetail {
   selfAssessmentEnabled: boolean;
   assessmentEligibility: boolean;
   ineligibilityReason: string | null;
+  /** True when the form template has additional_remarks_enabled = TRUE. */
+  additionalRemarksEnabled: boolean;
+  /** Overall remarks entered by Manager 1 (read-only for non-Manager-1 viewers). */
+  manager1OverallRemarks: string | null;
+  /** Overall remarks entered by Manager 2 (read-only for non-Manager-2 viewers). */
+  manager2OverallRemarks: string | null;
 }

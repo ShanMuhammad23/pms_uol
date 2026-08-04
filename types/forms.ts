@@ -210,6 +210,7 @@ export interface FormTemplateInput {
   targetCategory?: EmployeeCategory;
   targetSubCategory?: SubCategory;
   selfAssessmentEnabled: boolean;
+  additionalRemarksEnabled?: boolean;
   sections: FormSectionInput[];
   questions: QuestionInput[];
   incrementMatrices?: IncrementMatrixInput[];
@@ -244,6 +245,7 @@ export interface FormTemplateListItem {
   targetCategory: EmployeeCategory | null;
   targetSubCategory: SubCategory | null;
   selfAssessmentEnabled: boolean;
+  additionalRemarksEnabled: boolean;
   questionCount: number;
   appraisalCount: number;
   assignedEmployeeCount: number;
@@ -260,6 +262,7 @@ export interface FormTemplateRecord {
   targetCategory: EmployeeCategory | null;
   targetSubCategory: SubCategory | null;
   selfAssessmentEnabled: boolean;
+  additionalRemarksEnabled: boolean;
   sections: FormSectionRecord[];
   questions: QuestionRecord[];
   incrementMatrices: IncrementMatrixInput[];

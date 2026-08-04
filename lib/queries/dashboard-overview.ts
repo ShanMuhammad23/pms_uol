@@ -222,6 +222,8 @@ function mapOverviewRow(
     eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
     remarksEvaluation: null,
     hrApprovalStatus: (row.hr_approval_status as "pending" | "approved" | "review_required" | null) ?? null,
+    manager1OverallRemarks: null,
+    manager2OverallRemarks: null,
     currentSalary: null,
     previousSalary: null,
     applicableSalaryForIncrement: null,

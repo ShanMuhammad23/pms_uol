@@ -120,10 +120,10 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                 key={template.id}
                 className="divide-x divide-slate-200 dark:divide-neutral-700"
               >
-                <td className="px-4 py-4 font-medium text-slate-900 dark:text-slate-50 whitespace-nowrap">
-                  <p className="font-semibold text-slate-900 dark:text-white">{template.title}</p>
+                <td className="px-4 py-4 font-medium text-slate-900 dark:text-slate-50">
+                  <p className="font-semibold whitespace-nowrap text-slate-900 dark:text-white">{template.title}</p>
                   {template.description ? (
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <p className="mt-0.5 max-w-xs break-words text-xs text-slate-500 dark:text-slate-400">
                       {template.description}
                     </p>
                   ) : null}

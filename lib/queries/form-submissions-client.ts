@@ -75,6 +75,10 @@ export async function fetchFormSubmission(
 
 export type RemarksField = "remarksEvaluation" | "remarksCompensation";
 
+export type OverallRemarksField =
+  | "manager1OverallRemarks"
+  | "manager2OverallRemarks";
+
 export type ScoreAdjustmentField =
   | "creditHrsErpScoreAdj"
   | "pubOricScoreAdj"
@@ -132,16 +136,26 @@ export async function saveManagerReview(
     pointsEarned?: number;
     remarks?: string | null;
   }>,
-): Promise<{ managerAnswers: FormSubmissionDetail["managerAnswers"] }> {
+  overallRemarks?: string | null,
+): Promise<{
+  managerAnswers: FormSubmissionDetail["managerAnswers"];
+  manager1OverallRemarks?: string | null;
+  manager2OverallRemarks?: string | null;
+}> {
   const response = await fetch(`/api/submissions/${id}/manager-review`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ answers }),
+    body: JSON.stringify({
+      answers,
+      ...(overallRemarks !== undefined ? { overallRemarks } : {}),
+    }),
   });
 
-  return parseResponse<{ managerAnswers: FormSubmissionDetail["managerAnswers"] }>(
-    response,
-  );
+  return parseResponse<{
+    managerAnswers: FormSubmissionDetail["managerAnswers"];
+    manager1OverallRemarks?: string | null;
+    manager2OverallRemarks?: string | null;
+  }>(response);
 }
 
 export async function approveHrCalibration(
@@ -206,6 +220,32 @@ export async function updateSubmissionRemarks(
     id: number;
     remarksEvaluation?: string | null;
     remarksCompensation?: string | null;
+  }>(response);
+}
+
+/**
+ * Updates overall remarks for a specific manager level via the submission
+ * PATCH endpoint. Manager 1 and Manager 2 remarks are stored independently.
+ */
+export async function updateSubmissionOverallRemarks(
+  id: number,
+  field: OverallRemarksField,
+  value: string | null,
+): Promise<{
+  id: number;
+  manager1OverallRemarks: string | null;
+  manager2OverallRemarks: string | null;
+}> {
+  const response = await fetch(`/api/submissions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ [field]: value }),
+  });
+
+  return parseResponse<{
+    id: number;
+    manager1OverallRemarks: string | null;
+    manager2OverallRemarks: string | null;
   }>(response);
 }
 

@@ -14,6 +14,7 @@
     "db:migrate:role-category": "node scripts/migrate-role-category-column.mjs",
     "db:migrate:manager-2": "node scripts/migrate-user-manager-2.mjs",
     "db:migrate:institutional-quotas": "node scripts/migrate-institutional-quotas.mjs",
+    "db:migrate:additional-remarks": "node scripts/migrate-additional-remarks.mjs",
     "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
     "db:update:emails-from-excel": "node scripts/update-emails-from-excel.mjs",
     "db:seed:qualifications": "node scripts/seed-qualifications-from-excel.mjs",

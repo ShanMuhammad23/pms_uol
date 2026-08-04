@@ -63,6 +63,14 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
               Per-Employee
             </span>
           </span>
+          {template.additionalRemarksEnabled ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/30 dark:text-amber-100">
+              <span className="text-amber-600 dark:text-amber-300">
+                Additional Remarks
+              </span>
+              <span className="font-medium text-text-primary">Enabled</span>
+            </span>
+          ) : null}
           {headerActions}
         </div>
       </div>

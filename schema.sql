@@ -88,7 +88,12 @@ CREATE TABLE form_templates (
     
     -- When FALSE, the form skips self-assessment and goes directly to manager review
     self_assessment_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    
+
+    -- When TRUE, an "Additional Remarks" section is shown at the bottom of the
+    -- assessment form for reporting managers (Manager 1 / Manager 2) to enter
+    -- overall assessment remarks. Employees never see or edit this section.
+    additional_remarks_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+
     created_by BIGINT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -216,10 +221,17 @@ CREATE TABLE appraisals (
     remarks_compensation TEXT,
     effective_date DATE,
     
-    employee_strengths TEXT,       
-    employee_weaknesses TEXT,      
-    committee_feedback TEXT,       
-    next_year_targets TEXT,        
+    employee_strengths TEXT,
+    employee_weaknesses TEXT,
+    committee_feedback TEXT,
+    next_year_targets TEXT,
+
+    -- Overall assessment remarks entered by reporting managers.
+    -- Independent from question-level remarks, HR approval, evaluation remarks,
+    -- calibration, and assessment scoring. Only collected when the form template
+    -- has additional_remarks_enabled = TRUE.
+    manager1_overall_remarks TEXT,
+    manager2_overall_remarks TEXT,
     
     submitted_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

@@ -83,6 +83,8 @@ interface SubmissionListRow {
   applicable_duration_factor: string | null;
   remarks_evaluation: string | null;
   hr_approval_status: string | null;
+  manager1_overall_remarks: string | null;
+  manager2_overall_remarks: string | null;
   current_salary: string | null;
   previous_salary: string | null;
   applicable_salary_for_increment: string | null;
@@ -333,6 +335,8 @@ function mapSubmissionRow(
     eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
     remarksEvaluation: row.remarks_evaluation,
     hrApprovalStatus: (row.hr_approval_status as "pending" | "approved" | "review_required" | null) ?? null,
+    manager1OverallRemarks: row.manager1_overall_remarks,
+    manager2OverallRemarks: row.manager2_overall_remarks,
     currentSalary: toNumber(row.current_salary),
     previousSalary: toNumber(row.previous_salary),
     applicableSalaryForIncrement: toNumber(row.applicable_salary_for_increment),
@@ -398,6 +402,18 @@ async function ensureHrApprovalStatusColumn(): Promise<void> {
   );
 }
 
+async function ensureOverallRemarksColumns(): Promise<void> {
+  await db.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS manager1_overall_remarks TEXT,
+     ADD COLUMN IF NOT EXISTS manager2_overall_remarks TEXT`,
+  );
+  await db.query(
+    `ALTER TABLE form_templates
+     ADD COLUMN IF NOT EXISTS additional_remarks_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+  );
+}
+
 function formatReferenceDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -425,6 +441,7 @@ export async function listFormSubmissions(
     ensureManager2Column(),
     ensureAssessmentEligibilityColumn(),
     ensureHrApprovalStatusColumn(),
+    ensureOverallRemarksColumns(),
   ]);
 
   const roleCategorySelect = roleCategoryReady
@@ -453,6 +470,8 @@ export async function listFormSubmissions(
          ap.applicable_duration_factor::text,
          ap.remarks_evaluation,
          ap.hr_approval_status,
+         ap.manager1_overall_remarks,
+         ap.manager2_overall_remarks,
          ap.current_salary::text,
          ap.previous_salary::text,
          ap.applicable_salary_for_increment::text,
@@ -462,7 +481,7 @@ export async function listFormSubmissions(
          ap.approved_increment_percentage::text,
          ap.revised_salary::text,
          ap.revised_salary_ro::text,
-         ap.hod_review_comments,
+         COALESCE(NULLIF(ap.manager2_overall_remarks, ''), ap.manager1_overall_remarks) AS hod_review_comments,
          ap.remarks_compensation,
     `
     : `
@@ -486,6 +505,8 @@ export async function listFormSubmissions(
          NULL::text AS applicable_duration_factor,
          NULL::text AS remarks_evaluation,
          NULL::text AS hr_approval_status,
+         NULL::text AS manager1_overall_remarks,
+         NULL::text AS manager2_overall_remarks,
          NULL::text AS current_salary,
          NULL::text AS previous_salary,
          NULL::text AS applicable_salary_for_increment,
@@ -769,6 +790,10 @@ export async function saveManagerReviewAnswers(
   reviewerUserId: number,
   answers: ManagerReviewAnswerInput[],
   templateQuestions: QuestionRecord[],
+  options?: {
+    managerLevel?: number;
+    overallRemarks?: string | null;
+  },
 ): Promise<EmployeeFormAnswerRecord[]> {
   const questionById = new Map(templateQuestions.map((q) => [q.id, q]));
 
@@ -814,6 +839,29 @@ export async function saveManagerReviewAnswers(
          remarks = EXCLUDED.remarks,
          updated_at = CURRENT_TIMESTAMP`,
       [appraisalId, answer.questionId, reviewerUserId, pointsEarned, remarks],
+    );
+  }
+
+  // Save overall remarks independently from question-level answers.
+  // Only write to the column matching the current manager level so Manager 2
+  // never overwrites Manager 1 remarks (and vice versa).
+  if (options?.overallRemarks !== undefined) {
+    await ensureOverallRemarksColumns();
+    const trimmedRemarks =
+      typeof options.overallRemarks === "string"
+        ? options.overallRemarks.trim() || null
+        : null;
+    const column =
+      options?.managerLevel === 2
+        ? "manager2_overall_remarks"
+        : "manager1_overall_remarks";
+
+    await db.query(
+      `UPDATE appraisals
+       SET ${column} = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [appraisalId, trimmedRemarks],
     );
   }
 
@@ -1005,6 +1053,7 @@ export async function getFormSubmissionById(
   let sections: FormSubmissionDetail["sections"] = [];
   let rootQuestions: FormSubmissionDetail["rootQuestions"] = [];
   let templateDescription: string | null = null;
+  let additionalRemarksEnabled = false;
 
   if (summary.templateId) {
     const template = await getFormTemplateById(summary.templateId);
@@ -1013,6 +1062,7 @@ export async function getFormSubmissionById(
       rootQuestions = template.questions;
       questions = flattenAllQuestions(template);
       templateDescription = template.description;
+      additionalRemarksEnabled = template.additionalRemarksEnabled;
     }
   }
 
@@ -1072,6 +1122,9 @@ export async function getFormSubmissionById(
     selfAssessmentEnabled: summary.selfAssessmentEnabled,
     assessmentEligibility: summary.assessmentEligibility,
     ineligibilityReason: summary.ineligibilityReason ?? null,
+    additionalRemarksEnabled,
+    manager1OverallRemarks: summary.manager1OverallRemarks,
+    manager2OverallRemarks: summary.manager2OverallRemarks,
   };
 }
 
@@ -1221,6 +1274,49 @@ export async function updateAppraisalRemarks(
   return {
     id: Number(result.rows[0].id),
     remarksCompensation: result.rows[0].remarks_compensation,
+  };
+}
+
+/**
+ * Updates the overall remarks for a specific manager level (1 or 2).
+ * Manager 1 remarks and Manager 2 remarks are stored independently and
+ * never overwrite each other.
+ */
+export async function updateAppraisalOverallRemarks(
+  appraisalId: number,
+  managerLevel: 1 | 2,
+  value: string | null,
+): Promise<{
+  id: number;
+  manager1OverallRemarks: string | null;
+  manager2OverallRemarks: string | null;
+}> {
+  await ensureOverallRemarksColumns();
+
+  const column =
+    managerLevel === 1 ? "manager1_overall_remarks" : "manager2_overall_remarks";
+
+  const result = await db.query<{
+    id: string;
+    manager1_overall_remarks: string | null;
+    manager2_overall_remarks: string | null;
+  }>(
+    `UPDATE appraisals
+     SET ${column} = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+     RETURNING id, manager1_overall_remarks, manager2_overall_remarks`,
+    [appraisalId, value],
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  return {
+    id: Number(result.rows[0].id),
+    manager1OverallRemarks: result.rows[0].manager1_overall_remarks,
+    manager2OverallRemarks: result.rows[0].manager2_overall_remarks,
   };
 }
 
