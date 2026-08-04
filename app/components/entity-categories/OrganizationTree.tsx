@@ -2,17 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  ChevronDown,
+  ChevronRight,
   FolderTree,
   Network,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  CustomNodeElementProps,
-  RawNodeDatum,
-} from "react-d3-tree";
 import { EntityListFilterBar } from "@/app/components/entity-categories/EntityListFilterBar";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import {
@@ -28,15 +25,6 @@ import { cn } from "@/lib/utils";
 import type { EntityRecord } from "@/types/entities";
 import type { EntityCategoryCode } from "@/types/entity-categories";
 
-const Tree = dynamic(() => import("react-d3-tree").then((mod) => mod.Tree), {
-  ssr: false,
-  loading: () => (
-    <p className="px-5 py-16 text-center text-sm text-foreground/60">
-      Loading tree diagram…
-    </p>
-  ),
-});
-
 type EntityTreeNode = EntityRecord & {
   children: EntityTreeNode[];
 };
@@ -49,11 +37,34 @@ const CATEGORY_RANK: Record<string, number> = {
   C3: 3,
 };
 
-const CATEGORY_COLORS: Record<string, { fill: string; text: string; ring: string }> = {
-  C0: { fill: "#0f172a", text: "#ffffff", ring: "#0f172a" },
-  C1: { fill: "#ede9fe", text: "#5b21b6", ring: "#8b5cf6" },
-  C2: { fill: "#e0f2fe", text: "#075985", ring: "#0ea5e9" },
-  C3: { fill: "#d1fae5", text: "#065f46", ring: "#10b981" },
+const CATEGORY_COLORS: Record<
+  string,
+  { fill: string; text: string; ring: string; box: string }
+> = {
+  C0: {
+    fill: "bg-slate-900 dark:bg-slate-800",
+    text: "text-white",
+    ring: "ring-slate-900/20 dark:ring-white/10",
+    box: "bg-slate-100/80 border-slate-200 dark:bg-slate-900/60 dark:border-slate-700",
+  },
+  C1: {
+    fill: "bg-violet-100 dark:bg-violet-950/50",
+    text: "text-violet-900 dark:text-violet-100",
+    ring: "ring-violet-300/60 dark:ring-violet-700/40",
+    box: "bg-violet-50/70 border-violet-200/80 dark:bg-violet-950/30 dark:border-violet-800/50",
+  },
+  C2: {
+    fill: "bg-sky-100 dark:bg-sky-950/50",
+    text: "text-sky-900 dark:text-sky-100",
+    ring: "ring-sky-300/60 dark:ring-sky-700/40",
+    box: "bg-sky-50/70 border-sky-200/80 dark:bg-sky-950/30 dark:border-sky-800/50",
+  },
+  C3: {
+    fill: "bg-emerald-100 dark:bg-emerald-950/50",
+    text: "text-emerald-900 dark:text-emerald-100",
+    ring: "ring-emerald-300/60 dark:ring-emerald-700/40",
+    box: "bg-emerald-50/70 border-emerald-200/80 dark:bg-emerald-950/30 dark:border-emerald-800/50",
+  },
 };
 
 function compareEntityNodes(a: EntityTreeNode, b: EntityTreeNode): number {
@@ -100,121 +111,174 @@ function buildEntityTree(entities: EntityRecord[]): EntityTreeNode[] {
   return roots;
 }
 
-function toRawNode(node: EntityTreeNode): RawNodeDatum {
-  return {
-    name: node.name,
-    attributes: {
-      categoryCode: node.categoryCode,
-      staffCount: String(node.staffCount),
-      entityId: String(node.id),
-    },
-    children: node.children.map(toRawNode),
+function EntityCard({
+  node,
+  expanded,
+  onToggle,
+}: {
+  node: EntityTreeNode;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const colors = CATEGORY_COLORS[node.categoryCode] ?? {
+    fill: "bg-slate-50 dark:bg-slate-800",
+    text: "text-text-primary",
+    ring: "ring-slate-200 dark:ring-slate-700",
+    box: "bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700",
   };
-}
-
-/** Always a single root object — react-d3-tree only renders data[0]. */
-function toD3TreeData(roots: EntityTreeNode[]): RawNodeDatum {
-  if (roots.length === 1) {
-    return toRawNode(roots[0]);
-  }
-
-  // Invisible wrapper so every top-level root appears as a sibling.
-  return {
-    name: "",
-    attributes: {
-      categoryCode: "ROOT",
-      staffCount: "0",
-      entityId: "root",
-    },
-    children: roots.map(toRawNode),
-  };
-}
-
-function EntityNode({
-  nodeDatum,
-  toggleNode,
-}: CustomNodeElementProps) {
-  const category = String(nodeDatum.attributes?.categoryCode ?? "");
-  const staffCount = String(nodeDatum.attributes?.staffCount ?? "0");
-
-  // Multi-root forest wrapper: take no visual space.
-  if (category === "ROOT") {
-    return <g />;
-  }
-
-  const isC0 = category === "C0";
-  const colors = CATEGORY_COLORS[category] ?? {
-    fill: "#f8fafc",
-    text: "#0f172a",
-    ring: "#64748b",
-  };
-  const hasChildren = Boolean(nodeDatum.children?.length);
-  const width = Math.min(210, Math.max(150, nodeDatum.name.length * 8 + 44));
-  const height = isC0 ? 58 : 64;
+  const hasChildren = node.children.length > 0;
+  const isC0 = node.categoryCode === "C0";
 
   return (
-    <g>
-      <rect
-        width={width}
-        height={height}
-        x={-width / 2}
-        y={-height / 2}
-        rx={10}
-        ry={10}
-        fill={colors.fill}
-        stroke={colors.ring}
-        strokeWidth={isC0 ? 2 : 1.5}
-        className={cn(hasChildren && "cursor-pointer")}
-        onClick={hasChildren ? toggleNode : undefined}
-      />
-      <text
-        fill={colors.text}
-        strokeWidth={0}
-        x={0}
-        y={-8}
-        textAnchor="middle"
-        style={{
-          fontSize: isC0 ? "12px" : "11px",
-          fontWeight: 700,
-          fontFamily: "inherit",
-        }}
-        className={cn(hasChildren && "cursor-pointer")}
-        onClick={hasChildren ? toggleNode : undefined}
-      >
-        {nodeDatum.name.length > 22
-          ? `${nodeDatum.name.slice(0, 20)}…`
-          : nodeDatum.name}
-      </text>
-      <text
-        fill={colors.text}
-        strokeWidth={0}
-        x={0}
-        y={8}
-        textAnchor="middle"
-        style={{ fontSize: "9px", fontWeight: 600, opacity: isC0 ? 0.9 : 0.85 }}
-      >
-        {category} · {staffCount} staff
-      </text>
+    <button
+      type="button"
+      onClick={hasChildren ? onToggle : undefined}
+      disabled={!hasChildren}
+      className={cn(
+        "flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left ring-1 transition-colors",
+        colors.fill,
+        colors.text,
+        colors.ring,
+        hasChildren
+          ? "cursor-pointer hover:brightness-[0.98] dark:hover:brightness-110"
+          : "cursor-default",
+      )}
+    >
       {hasChildren ? (
-        <text
-          fill={isC0 ? "#cbd5e1" : colors.ring}
-          strokeWidth={0}
-          x={0}
-          y={22}
-          textAnchor="middle"
-          style={{ fontSize: "8px", fontWeight: 500 }}
+        <span className="mt-0.5 shrink-0 opacity-80">
+          {expanded ? (
+            <ChevronDown className="size-3.5" />
+          ) : (
+            <ChevronRight className="size-3.5" />
+          )}
+        </span>
+      ) : (
+        <span className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+      )}
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block truncate font-semibold leading-snug",
+            isC0 ? "text-sm" : "text-[13px]",
+          )}
         >
-          {nodeDatum.__rd3t.collapsed ? "▸ expand" : "▾ collapse"}
-        </text>
+          {node.name}
+        </span>
+        <span
+          className={cn(
+            "mt-0.5 block text-[10px] font-medium opacity-80",
+            isC0 && "text-slate-300",
+          )}
+        >
+          {node.categoryCode} · {node.staffCount} staff
+          {hasChildren
+            ? ` · ${node.children.length} child${node.children.length === 1 ? "" : "ren"}`
+            : ""}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function SiblingListBox({
+  parentCategory,
+  nodes,
+  expandedIds,
+  onToggle,
+  depth,
+}: {
+  parentCategory: string;
+  nodes: EntityTreeNode[];
+  expandedIds: Set<number>;
+  onToggle: (id: number) => void;
+  depth: number;
+}) {
+  if (nodes.length === 0) return null;
+
+  const boxColors =
+    CATEGORY_COLORS[parentCategory]?.box ??
+    "bg-slate-50 border-slate-200 dark:bg-slate-900/40 dark:border-slate-700";
+
+  return (
+    <div
+      className={cn(
+        "mt-2 space-y-1.5 rounded-xl border p-2 shadow-sm",
+        boxColors,
+        depth > 0 && "ml-3 border-dashed",
+      )}
+    >
+      {nodes.map((child) => {
+        const isExpanded = expandedIds.has(child.id);
+        const hasKids = child.children.length > 0;
+
+        return (
+          <div key={child.id} className="min-w-0">
+            <EntityCard
+              node={child}
+              expanded={isExpanded}
+              onToggle={() => onToggle(child.id)}
+            />
+            {hasKids && isExpanded ? (
+              <SiblingListBox
+                parentCategory={child.categoryCode}
+                nodes={child.children}
+                expandedIds={expandedIds}
+                onToggle={onToggle}
+                depth={depth + 1}
+              />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RootColumn({
+  root,
+  expandedIds,
+  onToggle,
+}: {
+  root: EntityTreeNode;
+  expandedIds: Set<number>;
+  onToggle: (id: number) => void;
+}) {
+  const isExpanded = expandedIds.has(root.id);
+  const hasChildren = root.children.length > 0;
+  const boxColors =
+    CATEGORY_COLORS[root.categoryCode]?.box ??
+    "bg-slate-50 border-slate-200 dark:bg-slate-900/40 dark:border-slate-700";
+
+  return (
+    <div
+      className={cn(
+        "flex w-[280px] shrink-0 flex-col rounded-2xl border p-3 shadow-sm",
+        boxColors,
+      )}
+    >
+      <EntityCard
+        node={root}
+        expanded={isExpanded}
+        onToggle={() => onToggle(root.id)}
+      />
+      {hasChildren && isExpanded ? (
+        <SiblingListBox
+          parentCategory={root.categoryCode}
+          nodes={root.children}
+          expandedIds={expandedIds}
+          onToggle={onToggle}
+          depth={0}
+        />
       ) : null}
-    </g>
+    </div>
   );
 }
 
 export default function OrganizationTree() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [translate, setTranslate] = useState({ x: 0, y: 100 });
-  const [zoom, setZoom] = useState(0.75);
+  const [zoom, setZoom] = useState(1);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
+  const treeSignatureRef = useRef<string>("");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategoryCode, setSelectedCategoryCode] = useState<
@@ -354,46 +418,23 @@ export default function OrganizationTree() {
     () => buildEntityTree(filteredEntities),
     [filteredEntities],
   );
-  const treeData = useMemo(() => toD3TreeData(tree), [tree]);
-  const hasForestWrapper = tree.length > 1;
 
-  const recenter = useCallback(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const { width } = el.getBoundingClientRect();
-    // Pull invisible multi-root wrapper off-canvas so roots sit near the top.
-    setTranslate({ x: width / 2, y: hasForestWrapper ? -60 : 100 });
-  }, [hasForestWrapper]);
-
+  // Expand roots whenever the visible forest changes so C1 lists show by default.
   useEffect(() => {
-    recenter();
-    const el = containerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => recenter());
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [recenter, treeData]);
+    const signature = tree.map((root) => root.id).join(",");
+    if (signature === treeSignatureRef.current) return;
+    treeSignatureRef.current = signature;
+    setExpandedIds(new Set(tree.map((root) => root.id)));
+  }, [tree]);
 
-  const handleUpdate = useCallback(
-    (target: { zoom: number; translate: { x: number; y: number } }) => {
-      setZoom(target.zoom);
-      setTranslate(target.translate);
-    },
-    [],
-  );
-
-  const pathClassFunc = useCallback(
-    (link: { source: { data: RawNodeDatum } }) => {
-      const sourceCategory = String(
-        link.source.data.attributes?.categoryCode ?? "",
-      );
-      if (sourceCategory === "ROOT") {
-        return "organization-tree-link organization-tree-link--root";
-      }
-      return "organization-tree-link";
-    },
-    [],
-  );
+  const handleToggle = useCallback((id: number) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const totalCount = entities?.length ?? 0;
   const showTree = !isLoading && !error && tree.length > 0;
@@ -419,8 +460,8 @@ export default function OrganizationTree() {
               Organization Tree
             </h2>
             <p className="mt-0.5 text-sm text-foreground/60">
-              Top-down from every C0 parent, then C1 → C2 → C3. Drag to pan,
-              scroll to zoom, click nodes to expand/collapse.
+              Each C0 is a column; children of the same parent stack in a shaded
+              list. Click a node to expand or collapse.
             </p>
           </div>
         </div>
@@ -428,7 +469,7 @@ export default function OrganizationTree() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setZoom((current) => Math.min(2, current + 0.15))}
+            onClick={() => setZoom((current) => Math.min(1.5, current + 0.1))}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
           >
             <ZoomIn className="size-3.5" />
@@ -436,7 +477,7 @@ export default function OrganizationTree() {
           </button>
           <button
             type="button"
-            onClick={() => setZoom((current) => Math.max(0.3, current - 0.15))}
+            onClick={() => setZoom((current) => Math.max(0.5, current - 0.1))}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
           >
             <ZoomOut className="size-3.5" />
@@ -444,10 +485,7 @@ export default function OrganizationTree() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setZoom(0.75);
-              recenter();
-            }}
+            onClick={() => setZoom(1)}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
           >
             Reset view
@@ -493,7 +531,7 @@ export default function OrganizationTree() {
 
       <div
         ref={containerRef}
-        className="relative h-[min(70vh,720px)] min-h-[420px] overflow-hidden rounded-md border border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-sm dark:border-white/10 dark:from-slate-950 dark:to-slate-900"
+        className="relative h-[min(70vh,720px)] min-h-[420px] overflow-auto rounded-md border border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-sm dark:border-white/10 dark:from-slate-950 dark:to-slate-900"
       >
         {isLoading ? (
           <p className="px-5 py-16 text-center text-sm text-foreground/60">
@@ -537,41 +575,26 @@ export default function OrganizationTree() {
         ) : null}
 
         {showTree ? (
-          <Tree
-            data={treeData}
-            orientation="vertical"
-            translate={translate}
-            zoom={zoom}
-            scaleExtent={{ min: 0.25, max: 2 }}
-            separation={{ siblings: 1.15, nonSiblings: 1.35 }}
-            nodeSize={{ x: 200, y: 120 }}
-            pathFunc="step"
-            collapsible
-            // Show C0 → C1; keep every C1 collapsed (hide C2/C3 until expanded).
-            initialDepth={hasForestWrapper ? 2 : 1}
-            enableLegacyTransitions
-            transitionDuration={300}
-            onUpdate={handleUpdate}
-            renderCustomNodeElement={(props) => <EntityNode {...props} />}
-            pathClassFunc={pathClassFunc as never}
-          />
+          <div
+            className="origin-top-left p-5 transition-transform duration-200"
+            style={{
+              transform: `scale(${zoom})`,
+              width: `${100 / zoom}%`,
+            }}
+          >
+            <div className="flex items-start gap-4">
+              {tree.map((root) => (
+                <RootColumn
+                  key={root.id}
+                  root={root}
+                  expandedIds={expandedIds}
+                  onToggle={handleToggle}
+                />
+              ))}
+            </div>
+          </div>
         ) : null}
       </div>
-
-      <style>{`
-        .organization-tree-link {
-          stroke: #94a3b8 !important;
-          stroke-width: 1.5px !important;
-          fill: none !important;
-        }
-        .organization-tree-link--root {
-          stroke: transparent !important;
-          stroke-width: 0 !important;
-        }
-        .dark .organization-tree-link:not(.organization-tree-link--root) {
-          stroke: #64748b !important;
-        }
-      `}</style>
     </div>
   );
 }

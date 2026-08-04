@@ -96,7 +96,7 @@ function buildManagerReviewStatsForLevel(
   submissions: FormSubmissionListItem[],
   level: 1 | 2,
 ): WorkflowStageStats {
-  const awaiting = submissions.filter(
+  const pendingAtLevel = submissions.filter(
     (submission) =>
       submission.status === "PENDING_HEAD_REVIEW" &&
       (submission.managerLevel ?? 1) === level,
@@ -115,11 +115,18 @@ function buildManagerReviewStatsForLevel(
     return SUBMITTED_FOR_HR_STATES.includes(submission.status);
   }).length;
 
-  return toWorkflowStageStats(awaiting, completed);
+  // Submitted = still pending at this level + already reviewed (all that reached this stage).
+  const submitted = pendingAtLevel + completed;
+  return {
+    awaiting: submitted,
+    completed,
+    percentageLabel: formatWorkflowPercentage(completed, submitted),
+  };
 }
 
 /**
  * Manager 1 / Manager 2 stats are scoped by appraisals.manager_level.
+ * Submitted = pending at level + already reviewed; % = reviewed / submitted.
  * Manager 2 pool only includes submissions that require a second review.
  */
 export function buildManagerReviewStats(

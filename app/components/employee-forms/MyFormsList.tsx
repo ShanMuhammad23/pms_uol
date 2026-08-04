@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
+import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
 import { fetchAssignedForms } from "@/lib/queries/employee-forms-client";
 import type { AppraisalStatus } from "@/types/forms";
 import { USER_ROLE_LABELS } from "@/types/users";
@@ -70,8 +71,10 @@ function isFillable(
   status: AppraisalStatus,
   submittedAt: string | null,
   selfAssessmentEnabled: boolean,
+  canFillAssessment: boolean,
 ): boolean {
   return (
+    canFillAssessment &&
     selfAssessmentEnabled &&
     status === "PENDING_SELF_ASSESSMENT" &&
     !submittedAt
@@ -179,6 +182,11 @@ export default function MyFormsList({
       ).length ?? 0,
   };
 
+  const blockedEligibility =
+    data?.find((form) => form.eligibilityStatus === "Ineligible") ??
+    data?.find((form) => form.eligibilityStatus === "Not Eligible");
+  const showEligibilityBanner = blockedEligibility != null;
+
 
 
   if (isLoading) {
@@ -232,6 +240,18 @@ export default function MyFormsList({
 
   return (
     <div className="space-y-6">
+      {showEligibilityBanner ? (
+        <IneligibilityBanner
+          role="self"
+          status={
+            blockedEligibility.eligibilityStatus === "Not Eligible"
+              ? "Not Eligible"
+              : "Ineligible"
+          }
+          reason={blockedEligibility.ineligibilityReason}
+        />
+      ) : null}
+
       {/* Profile Hero + Basic Info + Form Status Stats */}
       <div className="rounded-xl border border-slate-200 bg-surface p-6 shadow-sm dark:border-white/10">
         <div className="flex items-center gap-4">
@@ -296,7 +316,12 @@ export default function MyFormsList({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.map((form) => {
             const statusConfig = APPRAISAL_STATE_CONFIG[form.status];
-            const canFill = isFillable(form.status, form.submittedAt, form.selfAssessmentEnabled);
+            const canFill = isFillable(
+              form.status,
+              form.submittedAt,
+              form.selfAssessmentEnabled,
+              form.canFillAssessment,
+            );
             const phase = STATUS_PHASE[form.status];
             const relativeDate = formatRelativeDate(
               form.updatedAt ?? form.submittedAt,

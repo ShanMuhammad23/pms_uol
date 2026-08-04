@@ -2,6 +2,13 @@ import type { AppraisalStatus, FormTemplateRecord } from "@/types/forms";
 
 export type EmployeeFormStatus = "NOT_STARTED" | "DRAFT" | "SUBMITTED";
 
+/** Display eligibility for my-forms. "Ineligible" = manually marked N/A. */
+export type EmployeeAssessmentEligibilityStatus =
+  | "Fully Eligible"
+  | "Partially Eligible"
+  | "Not Eligible"
+  | "Ineligible";
+
 export interface AssignedFormListItem {
   templateId: number;
   title: string;
@@ -12,6 +19,10 @@ export interface AssignedFormListItem {
   selfAssessmentEnabled: boolean;
   submittedAt: string | null;
   updatedAt: string | null;
+  eligibilityStatus: EmployeeAssessmentEligibilityStatus;
+  /** False when Not Eligible or Ineligible — employee cannot fill even if assigned. */
+  canFillAssessment: boolean;
+  ineligibilityReason: string | null;
 }
 
 export interface EmployeeFormAnswerAttachment {
@@ -42,6 +53,9 @@ export interface EmployeeFormDetail {
   maxRawScore: number;
   selfAssessmentEnabled: boolean;
   assessmentEligibility: boolean;
+  eligibilityStatus: EmployeeAssessmentEligibilityStatus;
+  /** False when Not Eligible or Ineligible — employee cannot fill even if assigned. */
+  canFillAssessment: boolean;
   ineligibilityReason: string | null;
   headName: string | null;
   manager2Name: string | null;
