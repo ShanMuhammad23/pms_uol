@@ -56,27 +56,53 @@ function resolveAssessmentStatusBucket(
   return "approved";
 }
 
-export function matchesDirectAssessmentFilters(
+/** Filter dimensions that can be excluded for cascading count calculations. */
+export type DirectAssessmentFilterDimension =
+  | "designation"
+  | "roleCategory"
+  | "assessmentStatus"
+  | "category0"
+  | "category1"
+  | "category2";
+
+/**
+ * Same as {@link matchesDirectAssessmentFilters}, but ignores the filter for
+ * `excludeDimension`. Used to compute cascading filter option counts: the
+ * count for dimension X reflects all employees matching every active filter
+ * *except* X's own filter, so users can see how many records each option
+ * would add/remove.
+ */
+function matchesDirectAssessmentFiltersExcluding(
   emp: DirectAssessmentEmployee,
   filters: DirectAssessmentFilterState,
   entities: EntityRecord[],
+  excludeDimension: DirectAssessmentFilterDimension | null,
 ): boolean {
   // Designation filter
-  if (filters.selectedDesignations !== null) {
+  if (
+    excludeDimension !== "designation" &&
+    filters.selectedDesignations !== null
+  ) {
     if (filters.selectedDesignations.length === 0) return false;
     const designation = emp.designation ?? "";
     if (!filters.selectedDesignations.includes(designation)) return false;
   }
 
   // Role Category filter
-  if (filters.selectedRoleCategories !== null) {
+  if (
+    excludeDimension !== "roleCategory" &&
+    filters.selectedRoleCategories !== null
+  ) {
     if (filters.selectedRoleCategories.length === 0) return false;
     const roleCategory = emp.roleCategory ?? "";
     if (!filters.selectedRoleCategories.includes(roleCategory)) return false;
   }
 
   // Assessment Status filter
-  if (filters.selectedAssessmentStatuses !== null) {
+  if (
+    excludeDimension !== "assessmentStatus" &&
+    filters.selectedAssessmentStatuses !== null
+  ) {
     if (filters.selectedAssessmentStatuses.length === 0) return false;
     const bucket = resolveAssessmentStatusBucket(emp);
     if (!filters.selectedAssessmentStatuses.includes(bucket)) return false;
@@ -84,15 +110,21 @@ export function matchesDirectAssessmentFilters(
 
   // Organization hierarchy filters (AND logic across levels)
   if (
-    filters.selectedCategory0EntityIds !== null ||
-    filters.selectedCategory1EntityIds !== null ||
-    filters.selectedCategory2EntityIds !== null
+    (excludeDimension !== "category0" &&
+      filters.selectedCategory0EntityIds !== null) ||
+    (excludeDimension !== "category1" &&
+      filters.selectedCategory1EntityIds !== null) ||
+    (excludeDimension !== "category2" &&
+      filters.selectedCategory2EntityIds !== null)
   ) {
     if (emp.entityId == null) return false;
 
     const selfAndAncestors = getEntitySelfAndAncestorIds(emp.entityId, entities);
 
-    if (filters.selectedCategory0EntityIds !== null) {
+    if (
+      excludeDimension !== "category0" &&
+      filters.selectedCategory0EntityIds !== null
+    ) {
       if (filters.selectedCategory0EntityIds.length === 0) return false;
       const category0Entities = getEntitiesForFilterLevels(entities, 0, null);
       const matchingC0 = category0Entities.some(
@@ -103,7 +135,10 @@ export function matchesDirectAssessmentFilters(
       if (!matchingC0) return false;
     }
 
-    if (filters.selectedCategory1EntityIds !== null) {
+    if (
+      excludeDimension !== "category1" &&
+      filters.selectedCategory1EntityIds !== null
+    ) {
       if (filters.selectedCategory1EntityIds.length === 0) return false;
       const category1Entities = getEntitiesForFilterLevels(
         entities,
@@ -118,7 +153,10 @@ export function matchesDirectAssessmentFilters(
       if (!matchingC1) return false;
     }
 
-    if (filters.selectedCategory2EntityIds !== null) {
+    if (
+      excludeDimension !== "category2" &&
+      filters.selectedCategory2EntityIds !== null
+    ) {
       if (filters.selectedCategory2EntityIds.length === 0) return false;
       const category2Entities = getEntitiesForFilterLevels(
         entities,
@@ -135,6 +173,19 @@ export function matchesDirectAssessmentFilters(
   }
 
   return true;
+}
+
+export function matchesDirectAssessmentFilters(
+  emp: DirectAssessmentEmployee,
+  filters: DirectAssessmentFilterState,
+  entities: EntityRecord[],
+): boolean {
+  return matchesDirectAssessmentFiltersExcluding(
+    emp,
+    filters,
+    entities,
+    null,
+  );
 }
 
 export function filterDirectAssessmentEmployees(
@@ -204,11 +255,73 @@ function fromStringIds(values: string[] | null): MultiFilterSelection<number> {
   return values === null ? null : values.map(Number);
 }
 
-function buildOptionsFromValues(values: string[]): MultiSelectOption[] {
-  return values
-    .filter((v) => v !== "")
-    .map((value) => ({ value, label: value, count: 0 }))
-    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+/**
+ * Builds filter options with cascading counts from the employee dataset.
+ *
+ * For each distinct value of the given `getValue` selector, the count is the
+ * number of employees matching every active filter *except* `excludeDimension`
+ * — so the user sees how many records each option would yield if selected.
+ * This mirrors the Staff Listing's `buildMasterFilterOptions` cascade logic.
+ *
+ * `valueToLabel` maps the raw value to a display label (e.g. entity id → name).
+ * `fixedValues` (optional) ensures certain values always appear (e.g. all
+ * status buckets), even if no employee currently maps to them.
+ */
+function buildOptionsWithCounts(
+  employees: DirectAssessmentEmployee[],
+  filters: DirectAssessmentFilterState,
+  entities: EntityRecord[],
+  excludeDimension: DirectAssessmentFilterDimension,
+  getValue: (emp: DirectAssessmentEmployee) => string | null | undefined,
+  valueToLabel: (value: string) => string,
+  fixedValues?: string[],
+): MultiSelectOption[] {
+  const counts = new Map<string, number>();
+  const labelByValue = new Map<string, string>();
+
+  for (const emp of employees) {
+    if (
+      !matchesDirectAssessmentFiltersExcluding(
+        emp,
+        filters,
+        entities,
+        excludeDimension,
+      )
+    ) {
+      continue;
+    }
+    const rawValue = getValue(emp);
+    const value = rawValue && rawValue !== "" ? rawValue : "—";
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+    labelByValue.set(value, value === "—" ? "—" : valueToLabel(value));
+  }
+
+  // Ensure fixed values (e.g. all assessment status buckets) always appear,
+  // even with a zero count, so the dropdown structure stays stable.
+  if (fixedValues) {
+    for (const value of fixedValues) {
+      if (!counts.has(value)) {
+        counts.set(value, 0);
+        labelByValue.set(value, valueToLabel(value));
+      }
+    }
+  }
+
+  return [...counts.entries()]
+    .map(([value, count]) => ({
+      value,
+      label: labelByValue.get(value) ?? value,
+      count,
+    }))
+    .filter((option) => option.count > 0 || (fixedValues?.includes(option.value) ?? false))
+    .sort((a, b) => {
+      if (a.value === "—") return 1;
+      if (b.value === "—") return -1;
+      return a.label.localeCompare(b.label, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    });
 }
 
 export function useDirectAssessmentFilters(
@@ -228,34 +341,8 @@ export function useDirectAssessmentFilters(
   const [selectedCategory2EntityIds, setSelectedCategory2EntityIds] =
     useState<MultiFilterSelection<number>>(null);
 
-  // Build filter options from the employee dataset
-  const designationOptions = useMemo(() => {
-    const designations = new Set<string>();
-    for (const emp of employees) {
-      if (emp.designation) designations.add(emp.designation);
-    }
-    return buildOptionsFromValues([...designations]);
-  }, [employees]);
-
-  const roleCategoryOptions = useMemo(() => {
-    const categories = new Set<string>();
-    for (const emp of employees) {
-      if (emp.roleCategory) categories.add(emp.roleCategory);
-    }
-    return buildOptionsFromValues([...categories]);
-  }, [employees]);
-
-  const assessmentStatusOptions = useMemo<MultiSelectOption[]>(
-    () =>
-      ASSESSMENT_STATUS_OPTIONS.map((opt) => ({
-        value: opt.value,
-        label: opt.label,
-        count: 0,
-      })),
-    [],
-  );
-
-  // Entity filter options (cascading)
+  // Entity lists (cascading parent → child). Computed early because the
+  // filterState pruning and the option counts both depend on them.
   const category0Entities = useMemo(
     () => getEntitiesForFilterLevels(entities, 0, null),
     [entities],
@@ -271,36 +358,6 @@ export function useDirectAssessmentFilters(
     [entities, selectedCategory1EntityIds],
   );
 
-  const category0Options = useMemo<MultiSelectOption[]>(
-    () =>
-      category0Entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: 0,
-      })),
-    [category0Entities],
-  );
-
-  const category1Options = useMemo<MultiSelectOption[]>(
-    () =>
-      category1Entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: 0,
-      })),
-    [category1Entities],
-  );
-
-  const category2Options = useMemo<MultiSelectOption[]>(
-    () =>
-      category2Entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: 0,
-      })),
-    [category2Entities],
-  );
-
   // Prune child selections when parent changes
   const prunedCategory1 = useMemo(
     () => pruneMultiSelection(selectedCategory1EntityIds, category1Entities.map((e) => e.id)),
@@ -311,6 +368,9 @@ export function useDirectAssessmentFilters(
     [selectedCategory2EntityIds, category2Entities],
   );
 
+  // Filter state is computed before option memos because the cascading
+  // counts below depend on the full active filter state (excluding each
+  // option's own dimension).
   const filterState: DirectAssessmentFilterState = useMemo(
     () => ({
       selectedDesignations,
@@ -329,6 +389,116 @@ export function useDirectAssessmentFilters(
       prunedCategory2,
     ],
   );
+
+  // ---- Dynamic filter options with cascading counts ----
+  //
+  // Each option's count reflects the number of employees matching every
+  // active filter *except* that option's own dimension — so the user sees
+  // how many records each value would yield if selected. Options are built
+  // from the employee dataset (already RBAC-scoped server-side), so counts
+  // never include inaccessible employees.
+
+  const designationOptions = useMemo(
+    () =>
+      buildOptionsWithCounts(
+        employees,
+        filterState,
+        entities,
+        "designation",
+        (emp) => emp.designation,
+        (value) => value,
+      ),
+    [employees, filterState, entities],
+  );
+
+  const roleCategoryOptions = useMemo(
+    () =>
+      buildOptionsWithCounts(
+        employees,
+        filterState,
+        entities,
+        "roleCategory",
+        (emp) => emp.roleCategory,
+        (value) => value,
+      ),
+    [employees, filterState, entities],
+  );
+
+  const assessmentStatusOptions = useMemo<MultiSelectOption[]>(
+    () =>
+      buildOptionsWithCounts(
+        employees,
+        filterState,
+        entities,
+        "assessmentStatus",
+        (emp) => resolveAssessmentStatusBucket(emp),
+        (value) =>
+          ASSESSMENT_STATUS_OPTIONS.find((opt) => opt.value === value)?.label ??
+          value,
+        // Keep all status buckets visible (even at zero count) so the
+        // dropdown structure stays stable and users can see what statuses
+        // exist in the workflow.
+        ASSESSMENT_STATUS_OPTIONS.map((opt) => opt.value),
+      ),
+    [employees, filterState, entities],
+  );
+
+  // Entity (Organization) filter options with counts. For each entity at
+  // the given level, the count is the number of employees whose entity
+  // self+ancestors include that entity id, matching all other active
+  // filters. Only entities that actually have employees in the dataset are
+  // shown (zero-count entities are filtered out) so the dropdown reflects
+  // real data, not the full org tree.
+  const category0Options = useMemo<MultiSelectOption[]>(() => {
+    return buildOptionsWithCounts(
+      employees,
+      filterState,
+      entities,
+      "category0",
+      (emp) => {
+        if (emp.entityId == null) return null;
+        const selfAndAncestors = getEntitySelfAndAncestorIds(emp.entityId, entities);
+        const match = category0Entities.find((e) => selfAndAncestors.has(e.id));
+        return match ? String(match.id) : null;
+      },
+      (value) =>
+        category0Entities.find((e) => String(e.id) === value)?.name ?? value,
+    );
+  }, [employees, filterState, entities, category0Entities]);
+
+  const category1Options = useMemo<MultiSelectOption[]>(() => {
+    return buildOptionsWithCounts(
+      employees,
+      filterState,
+      entities,
+      "category1",
+      (emp) => {
+        if (emp.entityId == null) return null;
+        const selfAndAncestors = getEntitySelfAndAncestorIds(emp.entityId, entities);
+        const match = category1Entities.find((e) => selfAndAncestors.has(e.id));
+        return match ? String(match.id) : null;
+      },
+      (value) =>
+        category1Entities.find((e) => String(e.id) === value)?.name ?? value,
+    );
+  }, [employees, filterState, entities, category1Entities]);
+
+  const category2Options = useMemo<MultiSelectOption[]>(() => {
+    return buildOptionsWithCounts(
+      employees,
+      filterState,
+      entities,
+      "category2",
+      (emp) => {
+        if (emp.entityId == null) return null;
+        const selfAndAncestors = getEntitySelfAndAncestorIds(emp.entityId, entities);
+        const match = category2Entities.find((e) => selfAndAncestors.has(e.id));
+        return match ? String(match.id) : null;
+      },
+      (value) =>
+        category2Entities.find((e) => String(e.id) === value)?.name ?? value,
+    );
+  }, [employees, filterState, entities, category2Entities]);
 
   const hasActiveFilters = hasActiveDirectAssessmentFilters(filterState);
 
