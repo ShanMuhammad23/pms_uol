@@ -19,6 +19,7 @@ import {
 } from "@/types/users";
 import { fetchFormTemplatesForDashboard } from "@/lib/queries/forms-client";
 import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
+import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
 import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import { cn } from "@/lib/utils";
@@ -176,6 +177,17 @@ export function EditUserModal({
   const selectedEntity = useMemo(
     () => entities.find((entity) => String(entity.id) === form?.entityId) ?? null,
     [entities, form?.entityId],
+  );
+
+  const entityOptions = useMemo(
+    () =>
+      entities.map((entity) => ({
+        value: String(entity.id),
+        label: entity.parentName
+          ? `${entity.name} (${entity.parentName})`
+          : entity.name,
+      })),
+    [entities],
   );
 
   const orgPreviewUser = useMemo(() => {
@@ -421,27 +433,19 @@ export function EditUserModal({
                   </Field>
 
                   <Field label="Entity" htmlFor="edit-user-entity">
-                    <select
+                    <SearchableSelect
                       id="edit-user-entity"
                       value={form.entityId}
-                      onChange={(event) =>
+                      options={entityOptions}
+                      onChange={(next) =>
                         setForm((current) =>
-                          current
-                            ? { ...current, entityId: event.target.value }
-                            : current,
+                          current ? { ...current, entityId: next } : current,
                         )
                       }
                       disabled={isSubmitting}
-                      className={inputClassName}
-                    >
-                      <option value="">None</option>
-                      {entities.map((entity) => (
-                        <option key={entity.id} value={entity.id}>
-                          {entity.name}
-                          {entity.parentName ? ` (${entity.parentName})` : ""}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="None"
+                      emptyOptionLabel="None"
+                    />
                   </Field>
 
                   <Field label="ORG Level 1" htmlFor="edit-user-org-1">

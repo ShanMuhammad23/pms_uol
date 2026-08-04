@@ -492,49 +492,90 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
 
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
+  const [excelReady, qualsReady] = await Promise.all([
+    hasExcelSheetColumns(),
+    hasQualificationsTable(),
+  ]);
 
   await assertEntityExists(normalized.entityId);
   await assertValidManagers(null, normalized.headId, normalized.manager2Id);
 
   const passwordHash = await bcrypt.hash(input.password, 10);
 
+  const columns = [
+    "employee_id",
+    "email",
+    "password_hash",
+    "first_name",
+    "last_name",
+    "system_role",
+    "emp_category",
+    "emp_sub_category",
+    mode === "entity" ? "entity_id" : "department_id",
+    "head_id",
+    "manager_2_id",
+    "is_manager_eligible",
+    "is_active",
+  ];
+  const values: unknown[] = [
+    normalized.employeeId,
+    normalized.email,
+    passwordHash,
+    normalized.firstName,
+    normalized.lastName,
+    normalized.systemRole,
+    normalized.empCategory,
+    normalized.empSubCategory,
+    normalized.entityId,
+    normalized.headId,
+    normalized.manager2Id,
+    normalized.isManagerEligible,
+    normalized.isActive,
+  ];
+
+  if (excelReady) {
+    columns.push("designation", "role_category", "date_of_joining");
+    values.push(
+      normalized.designation ?? null,
+      normalized.roleCategory ?? null,
+      normalized.dateOfJoining ?? null,
+    );
+  }
+
+  const placeholders = values.map((_, index) => `$${index + 1}`).join(", ");
+
   try {
     const result = await db.query<{ id: string }>(
       `INSERT INTO users (
-         employee_id,
-         email,
-         password_hash,
-         first_name,
-         last_name,
-         system_role,
-         emp_category,
-         emp_sub_category,
-         ${mode === "entity" ? "entity_id" : "department_id"},
-         head_id,
-         manager_2_id,
-         is_manager_eligible,
-         is_active
+         ${columns.join(",\n         ")}
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       VALUES (${placeholders})
        RETURNING id`,
-      [
-        normalized.employeeId,
-        normalized.email,
-        passwordHash,
-        normalized.firstName,
-        normalized.lastName,
-        normalized.systemRole,
-        normalized.empCategory,
-        normalized.empSubCategory,
-        normalized.entityId,
-        normalized.headId,
-        normalized.manager2Id,
-        normalized.isManagerEligible,
-        normalized.isActive,
-      ],
+      values,
     );
 
-    const created = await getUserById(Number(result.rows[0].id));
+    const createdId = Number(result.rows[0].id);
+
+    if (qualsReady) {
+      const hasQualificationData =
+        normalized.qualification != null ||
+        normalized.qualificationYear != null ||
+        normalized.qualificationSubject != null ||
+        normalized.qualificationInstitute != null ||
+        normalized.qualificationCountry != null;
+
+      if (hasQualificationData) {
+        await upsertPrimaryQualification(createdId, {
+          qualification: normalized.qualification ?? null,
+          year: normalized.qualificationYear ?? null,
+          subject: normalized.qualificationSubject ?? null,
+          institute: normalized.qualificationInstitute ?? null,
+          country: normalized.qualificationCountry ?? null,
+        });
+      }
+    }
+
+    const created = await getUserById(createdId);
 
     if (!created) {
       throw new UserError("Failed to load created user.", 500);

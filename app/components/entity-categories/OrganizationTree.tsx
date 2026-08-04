@@ -13,10 +13,20 @@ import type {
   CustomNodeElementProps,
   RawNodeDatum,
 } from "react-d3-tree";
+import { EntityListFilterBar } from "@/app/components/entity-categories/EntityListFilterBar";
+import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import {
+  filterEntityRecords,
+  getDirectChildEntitiesOfParents,
+  getEntitiesForCategoryCode,
+  type MultiFilterSelection,
+} from "@/app/helpers/dashboard-entity-filters";
 import { queryKeys } from "@/app/queries/keys";
+import { fetchEntityCategories } from "@/lib/queries/entity-categories-client";
 import { fetchEntities } from "@/lib/queries/entities-client";
 import { cn } from "@/lib/utils";
 import type { EntityRecord } from "@/types/entities";
+import type { EntityCategoryCode } from "@/types/entity-categories";
 
 const Tree = dynamic(() => import("react-d3-tree").then((mod) => mod.Tree), {
   ssr: false,
@@ -53,10 +63,6 @@ function compareEntityNodes(a: EntityTreeNode, b: EntityTreeNode): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
-/**
- * Build hierarchy rooted at C0 (ORG Level 0).
- * Children attach via parent_entity_id so C1 hang under their C0, C2 under C1, etc.
- */
 function buildEntityTree(entities: EntityRecord[]): EntityTreeNode[] {
   const byId = new Map<number, EntityTreeNode>();
   for (const entity of entities) {
@@ -73,8 +79,14 @@ function buildEntityTree(entities: EntityRecord[]): EntityTreeNode[] {
     }
   }
 
+  // Roots: C0 nodes, or any node whose parent is outside the current set
+  // (so filtered views still render a coherent forest).
   const roots = [...byId.values()]
-    .filter((node) => node.categoryCode === "C0")
+    .filter((node) => {
+      if (node.categoryCode === "C0") return true;
+      const parentId = node.parentEntityId;
+      return parentId == null || !byId.has(parentId);
+    })
     .sort(compareEntityNodes);
 
   const sortNodes = (nodes: EntityTreeNode[]) => {
@@ -106,7 +118,7 @@ function toD3TreeData(roots: EntityTreeNode[]): RawNodeDatum {
     return toRawNode(roots[0]);
   }
 
-  // Invisible wrapper so every C0 appears as a left-side root sibling.
+  // Invisible wrapper so every top-level root appears as a sibling.
   return {
     name: "",
     attributes: {
@@ -125,7 +137,7 @@ function EntityNode({
   const category = String(nodeDatum.attributes?.categoryCode ?? "");
   const staffCount = String(nodeDatum.attributes?.staffCount ?? "0");
 
-  // Multi-C0 forest wrapper: take no visual space.
+  // Multi-root forest wrapper: take no visual space.
   if (category === "ROOT") {
     return <g />;
   }
@@ -201,24 +213,156 @@ function EntityNode({
 
 export default function OrganizationTree() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [translate, setTranslate] = useState({ x: 140, y: 0 });
+  const [translate, setTranslate] = useState({ x: 0, y: 100 });
   const [zoom, setZoom] = useState(0.75);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategoryCode, setSelectedCategoryCode] = useState<
+    EntityCategoryCode | "ALL"
+  >("ALL");
+  const [selectedEntityIds, setSelectedEntityIds] =
+    useState<MultiFilterSelection<number>>(null);
+  const [selectedChildEntityIds, setSelectedChildEntityIds] =
+    useState<MultiFilterSelection<number>>(null);
+  const [selectedParentEntityIds, setSelectedParentEntityIds] =
+    useState<MultiFilterSelection<number>>(null);
+
+  const { data: categories, isLoading: categoriesLoading } = useQuery({
+    queryKey: ["entity-categories"],
+    queryFn: fetchEntityCategories,
+  });
 
   const { data: entities, isLoading, error } = useQuery({
     queryKey: queryKeys.entities,
     queryFn: fetchEntities,
   });
 
-  const tree = useMemo(() => buildEntityTree(entities ?? []), [entities]);
+  const categoryEntities = useMemo(
+    () => getEntitiesForCategoryCode(entities ?? [], selectedCategoryCode),
+    [entities, selectedCategoryCode],
+  );
+
+  const entityOptions = useMemo<MultiSelectOption[]>(
+    () =>
+      categoryEntities.map((entity) => ({
+        value: String(entity.id),
+        label: entity.name,
+        count: 0,
+      })),
+    [categoryEntities],
+  );
+
+  const childEntities = useMemo(
+    () =>
+      getDirectChildEntitiesOfParents(
+        entities ?? [],
+        selectedEntityIds,
+        categoryEntities.map((entity) => entity.id),
+      ),
+    [entities, selectedEntityIds, categoryEntities],
+  );
+
+  const childEntityOptions = useMemo<MultiSelectOption[]>(
+    () =>
+      childEntities.map((entity) => ({
+        value: String(entity.id),
+        label: `${entity.name} (${entity.categoryCode})`,
+        count: 0,
+      })),
+    [childEntities],
+  );
+
+  const parentEntityOptions = useMemo<MultiSelectOption[]>(() => {
+    if (!entities) return [];
+    const parentIds = new Set<number>();
+    for (const entity of entities) {
+      if (entity.parentEntityId != null) {
+        parentIds.add(entity.parentEntityId);
+      }
+    }
+    const byId = new Map(entities.map((e) => [e.id, e]));
+    return [...parentIds]
+      .map((id) => byId.get(id))
+      .filter((e): e is EntityRecord => e != null)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((e) => ({ value: String(e.id), label: e.name, count: 0 }));
+  }, [entities]);
+
+  const filteredEntities = useMemo(
+    () =>
+      filterEntityRecords(entities ?? [], {
+        searchQuery,
+        categoryCode: selectedCategoryCode,
+        entityIds: selectedEntityIds,
+        childEntityIds: selectedChildEntityIds,
+        parentEntityIds: selectedParentEntityIds,
+      }),
+    [
+      entities,
+      searchQuery,
+      selectedCategoryCode,
+      selectedEntityIds,
+      selectedChildEntityIds,
+      selectedParentEntityIds,
+    ],
+  );
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 ||
+    selectedCategoryCode !== "ALL" ||
+    selectedEntityIds !== null ||
+    selectedChildEntityIds !== null ||
+    selectedParentEntityIds !== null;
+
+  const clearFilters = useCallback(() => {
+    setSearchQuery("");
+    setSelectedCategoryCode("ALL");
+    setSelectedEntityIds(null);
+    setSelectedChildEntityIds(null);
+    setSelectedParentEntityIds(null);
+  }, []);
+
+  const handleCategoryCodeChange = useCallback(
+    (value: EntityCategoryCode | "ALL") => {
+      setSelectedCategoryCode(value);
+      setSelectedEntityIds(null);
+      setSelectedChildEntityIds(null);
+    },
+    [],
+  );
+
+  const handleEntityIdsChange = useCallback((values: string[] | null) => {
+    setSelectedEntityIds(
+      values === null ? null : values.map((value) => Number(value)),
+    );
+    setSelectedChildEntityIds(null);
+  }, []);
+
+  const handleChildEntityIdsChange = useCallback((values: string[] | null) => {
+    setSelectedChildEntityIds(
+      values === null ? null : values.map((value) => Number(value)),
+    );
+  }, []);
+
+  const handleParentEntityIdsChange = useCallback((values: string[] | null) => {
+    setSelectedParentEntityIds(
+      values === null ? null : values.map((value) => Number(value)),
+    );
+  }, []);
+
+  const tree = useMemo(
+    () => buildEntityTree(filteredEntities),
+    [filteredEntities],
+  );
   const treeData = useMemo(() => toD3TreeData(tree), [tree]);
   const hasForestWrapper = tree.length > 1;
 
   const recenter = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const { height } = el.getBoundingClientRect();
-    // Pull invisible multi-C0 wrapper off-canvas so C0 nodes sit on the left.
-    setTranslate({ x: hasForestWrapper ? -140 : 140, y: height / 2 });
+    const { width } = el.getBoundingClientRect();
+    // Pull invisible multi-root wrapper off-canvas so roots sit near the top.
+    setTranslate({ x: width / 2, y: hasForestWrapper ? -60 : 100 });
   }, [hasForestWrapper]);
 
   useEffect(() => {
@@ -251,6 +395,18 @@ export default function OrganizationTree() {
     [],
   );
 
+  const totalCount = entities?.length ?? 0;
+  const showTree = !isLoading && !error && tree.length > 0;
+  const showNoMatch =
+    !isLoading &&
+    !error &&
+    totalCount > 0 &&
+    filteredEntities.length === 0;
+  const showNoC0 =
+    !isLoading &&
+    !error &&
+    totalCount === 0;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -263,8 +419,8 @@ export default function OrganizationTree() {
               Organization Tree
             </h2>
             <p className="mt-0.5 text-sm text-foreground/60">
-              Left-to-right from every C0 parent, then C1 → C2 → C3. Drag to
-              pan, scroll to zoom, click nodes to expand/collapse.
+              Top-down from every C0 parent, then C1 → C2 → C3. Drag to pan,
+              scroll to zoom, click nodes to expand/collapse.
             </p>
           </div>
         </div>
@@ -299,7 +455,42 @@ export default function OrganizationTree() {
         </div>
       </div>
 
-      
+      {!isLoading && !error && totalCount > 0 ? (
+        <EntityListFilterBar
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          selectedCategoryCode={selectedCategoryCode}
+          onCategoryCodeChange={handleCategoryCodeChange}
+          selectedEntityIds={
+            selectedEntityIds === null
+              ? null
+              : selectedEntityIds.map(String)
+          }
+          onEntityIdsChange={handleEntityIdsChange}
+          selectedChildEntityIds={
+            selectedChildEntityIds === null
+              ? null
+              : selectedChildEntityIds.map(String)
+          }
+          onChildEntityIdsChange={handleChildEntityIdsChange}
+          selectedParentEntityIds={
+            selectedParentEntityIds === null
+              ? null
+              : selectedParentEntityIds.map(String)
+          }
+          onParentEntityIdsChange={handleParentEntityIdsChange}
+          parentEntityOptions={parentEntityOptions}
+          entityOptions={entityOptions}
+          childEntityOptions={childEntityOptions}
+          categories={categories ?? []}
+          categoriesLoading={categoriesLoading}
+          filteredCount={filteredEntities.length}
+          totalCount={totalCount}
+          onClearFilters={clearFilters}
+          hasActiveFilters={hasActiveFilters}
+        />
+      ) : null}
+
       <div
         ref={containerRef}
         className="relative h-[min(70vh,720px)] min-h-[420px] overflow-hidden rounded-md border border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-sm dark:border-white/10 dark:from-slate-950 dark:to-slate-900"
@@ -316,11 +507,11 @@ export default function OrganizationTree() {
           </p>
         ) : null}
 
-        {!isLoading && !error && tree.length === 0 ? (
+        {showNoC0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             <FolderTree className="size-10 text-foreground/30" />
             <p className="mt-3 text-sm font-semibold text-text-primary">
-              No C0 entities yet
+              No entities yet
             </p>
             <p className="mt-1 text-sm text-foreground/60">
               Add at least one C0 (ORG Level 0) entity, then attach C1 children
@@ -329,15 +520,31 @@ export default function OrganizationTree() {
           </div>
         ) : null}
 
-        {!isLoading && !error && tree.length > 0 ? (
+        {showNoMatch ? (
+          <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+            <FolderTree className="size-10 text-foreground/30" />
+            <p className="mt-3 text-sm font-semibold text-text-primary">
+              No entities match the current filters
+            </p>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-3 text-sm font-medium text-primary hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : null}
+
+        {showTree ? (
           <Tree
             data={treeData}
-            orientation="horizontal"
+            orientation="vertical"
             translate={translate}
             zoom={zoom}
             scaleExtent={{ min: 0.25, max: 2 }}
-            separation={{ siblings: 1.2, nonSiblings: 1.4 }}
-            nodeSize={{ x: 260, y: 90 }}
+            separation={{ siblings: 1.15, nonSiblings: 1.35 }}
+            nodeSize={{ x: 200, y: 120 }}
             pathFunc="step"
             collapsible
             // Show C0 → C1; keep every C1 collapsed (hide C2/C3 until expanded).

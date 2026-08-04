@@ -63,6 +63,9 @@ export interface CreateUserInput {
   password: string;
   firstName: string;
   lastName: string;
+  designation?: string | null;
+  roleCategory?: string | null;
+  dateOfJoining?: string | null;
   systemRole: UserRole;
   empCategory: string;
   empSubCategory: string;
@@ -70,6 +73,11 @@ export interface CreateUserInput {
   headId?: number | null;
   manager2Id?: number | null;
   isManagerEligible?: boolean;
+  qualification?: string | null;
+  qualificationYear?: number | null;
+  qualificationSubject?: string | null;
+  qualificationInstitute?: string | null;
+  qualificationCountry?: string | null;
   isActive?: boolean;
 }
 

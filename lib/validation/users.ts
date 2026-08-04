@@ -220,22 +220,21 @@ export function normalizeUserInput(
   const entityId = parseOptionalId(body.entityId);
   const headId = parseOptionalId(body.headId);
   const manager2Id = parseOptionalId(body.manager2Id);
-  const updateBody = body as UpdateUserInput;
 
   const dateOfJoining =
-    updateBody.dateOfJoining === undefined
+    body.dateOfJoining === undefined
       ? undefined
-      : updateBody.dateOfJoining === null || updateBody.dateOfJoining === ""
+      : body.dateOfJoining === null || body.dateOfJoining === ""
         ? null
-        : updateBody.dateOfJoining.slice(0, 10);
+        : body.dateOfJoining.slice(0, 10);
 
   return {
     employeeId: body.employeeId.trim(),
     email: body.email.trim().toLowerCase(),
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
-    designation: parseOptionalString(updateBody.designation),
-    roleCategory: parseOptionalString(updateBody.roleCategory),
+    designation: parseOptionalString(body.designation),
+    roleCategory: parseOptionalString(body.roleCategory),
     dateOfJoining,
     systemRole: body.systemRole,
     empCategory: body.empCategory.trim(),
@@ -243,13 +242,12 @@ export function normalizeUserInput(
     entityId: entityId ?? null,
     headId: headId ?? null,
     manager2Id: manager2Id ?? null,
-    isManagerEligible:
-      (body as CreateUserInput | UpdateUserInput).isManagerEligible ?? false,
-    qualification: parseOptionalString(updateBody.qualification),
-    qualificationYear: parseOptionalYear(updateBody.qualificationYear),
-    qualificationSubject: parseOptionalString(updateBody.qualificationSubject),
-    qualificationInstitute: parseOptionalString(updateBody.qualificationInstitute),
-    qualificationCountry: parseOptionalString(updateBody.qualificationCountry),
+    isManagerEligible: body.isManagerEligible ?? false,
+    qualification: parseOptionalString(body.qualification),
+    qualificationYear: parseOptionalYear(body.qualificationYear),
+    qualificationSubject: parseOptionalString(body.qualificationSubject),
+    qualificationInstitute: parseOptionalString(body.qualificationInstitute),
+    qualificationCountry: parseOptionalString(body.qualificationCountry),
     isActive: body.isActive ?? true,
   };
 }
