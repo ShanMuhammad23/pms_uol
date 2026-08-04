@@ -5,13 +5,29 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Building2, Pencil, Plus, Table2, Trash2, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { EntityListFilterBar } from "@/app/components/entity-categories/EntityListFilterBar";
+import { EntitiesTableColumnHeaderFilter } from "@/app/components/entity-categories/EntitiesTableColumnHeaderFilter";
 import {
   filterEntityRecords,
   getDirectChildEntitiesOfParents,
   getEntitiesForCategoryCode,
   type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
+import {
+  applyEntitiesMasterFilters,
+  EMPTY_ENTITIES_MASTER_FILTER_STATE,
+  hasActiveEntitiesMasterFilters,
+  isEntitiesMasterFilterableColumn,
+  type EntitiesMasterFilterMultiSelection,
+  type EntitiesMasterFilterState,
+  type EntitiesMasterFilterTextColumnId,
+} from "@/app/helpers/entities-master-filters";
+import {
+  ENTITIES_TABLE_COLUMNS,
+  type EntitiesTableColumnId,
+} from "@/app/helpers/entities-table-columns";
+import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import { cn } from "@/lib/utils";
 import { fetchEntityCategories } from "@/lib/queries/entity-categories-client";
 import {
   createEntity,
@@ -59,6 +75,9 @@ export default function EntitiesManager() {
     useState<MultiFilterSelection<number>>(null);
   const [selectedParentEntityIds, setSelectedParentEntityIds] =
     useState<MultiFilterSelection<number>>(null);
+  const [masterFilters, setMasterFilters] = useState<EntitiesMasterFilterState>(
+    EMPTY_ENTITIES_MASTER_FILTER_STATE,
+  );
 
   const { data: categories, isLoading: categoriesLoading } = useQuery({
     queryKey: ["entity-categories"],
@@ -213,12 +232,18 @@ export default function EntitiesManager() {
     ],
   );
 
+  const displayedEntities = useMemo(
+    () => applyEntitiesMasterFilters(filteredEntities, masterFilters),
+    [filteredEntities, masterFilters],
+  );
+
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
     selectedCategoryCode !== "ALL" ||
     selectedEntityIds !== null ||
     selectedChildEntityIds !== null ||
-    selectedParentEntityIds !== null;
+    selectedParentEntityIds !== null ||
+    hasActiveEntitiesMasterFilters(masterFilters);
 
   const clearFilters = useCallback(() => {
     setSearchQuery("");
@@ -226,7 +251,52 @@ export default function EntitiesManager() {
     setSelectedEntityIds(null);
     setSelectedChildEntityIds(null);
     setSelectedParentEntityIds(null);
+    setMasterFilters(EMPTY_ENTITIES_MASTER_FILTER_STATE);
   }, []);
+
+  const handleMasterTextChange = useCallback(
+    (columnId: EntitiesMasterFilterTextColumnId, next: string) => {
+      setMasterFilters((current) => ({
+        ...current,
+        text: {
+          ...current.text,
+          [columnId]: next,
+        },
+      }));
+    },
+    [],
+  );
+
+  const handleMasterMultiChange = useCallback(
+    (
+      columnId: EntitiesTableColumnId,
+      next: EntitiesMasterFilterMultiSelection,
+    ) => {
+      setMasterFilters((current) => ({
+        ...current,
+        multi: {
+          ...current.multi,
+          [columnId]: next,
+        },
+      }));
+    },
+    [],
+  );
+
+  const handleMasterNumericChange = useCallback(
+    (columnId: EntitiesTableColumnId, filter: NumericRangeFilter | undefined) => {
+      setMasterFilters((current) => {
+        const nextNumeric = { ...current.numeric };
+        if (filter === undefined) {
+          delete nextNumeric[columnId];
+        } else {
+          nextNumeric[columnId] = filter;
+        }
+        return { ...current, numeric: nextNumeric };
+      });
+    },
+    [],
+  );
 
   const handleCategoryCodeChange = useCallback(
     (value: EntityCategoryCode | "ALL") => {
@@ -661,13 +731,13 @@ export default function EntitiesManager() {
             childEntityOptions={childEntityOptions}
             categories={categories ?? []}
             categoriesLoading={categoriesLoading}
-            filteredCount={filteredEntities.length}
+            filteredCount={displayedEntities.length}
             totalCount={entities.length}
             onClearFilters={clearFilters}
             hasActiveFilters={hasActiveFilters}
           />
 
-          {filteredEntities.length === 0 ? (
+          {displayedEntities.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
               <Building2 className="mx-auto size-8 text-foreground/50" />
               <p className="mt-3 text-sm font-medium text-text-primary">
@@ -686,28 +756,32 @@ export default function EntitiesManager() {
           <table className="min-w-full text-sm">
             <thead className="bg-primary/5">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                  Name
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                  Category
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                  Parent
-                </th>
-                <th className="px-4 py-3 text-right font-semibold text-text-primary">
-                  Staff
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                  Updated
-                </th>
-                <th className="px-4 py-3 text-right font-semibold text-text-primary">
-                  Actions
-                </th>
+                {ENTITIES_TABLE_COLUMNS.map((column) => (
+                  <th
+                    key={column.id}
+                    className={cn(
+                      "px-4 py-3 font-semibold text-text-primary",
+                      column.align === "right" ? "text-right" : "text-left",
+                    )}
+                  >
+                    {isEntitiesMasterFilterableColumn(column.id) ? (
+                      <EntitiesTableColumnHeaderFilter
+                        column={column}
+                        entities={filteredEntities}
+                        filters={masterFilters}
+                        onTextChange={handleMasterTextChange}
+                        onMultiChange={handleMasterMultiChange}
+                        onNumericChange={handleMasterNumericChange}
+                      />
+                    ) : (
+                      column.label
+                    )}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {filteredEntities.map((entity) => (
+              {displayedEntities.map((entity) => (
                 <tr
                   key={entity.id}
                   className="border-t border-slate-300/80 dark:border-white/15"
