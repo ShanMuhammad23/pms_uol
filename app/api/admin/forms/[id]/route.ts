@@ -96,7 +96,16 @@ export async function PUT(request: Request, context: RouteContext) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const template = await updateFormTemplate(templateId, body);
+    const session = await getServerSession(authOptions);
+    const updatedById = session?.user?.id
+      ? Number(session.user.id)
+      : undefined;
+
+    const template = await updateFormTemplate(
+      templateId,
+      body,
+      Number.isFinite(updatedById) ? updatedById : undefined,
+    );
     revalidatePath(`/dashboard/forms/${templateId}/view`);
     revalidatePath(`/dashboard/forms/${templateId}`);
     revalidatePath("/dashboard/forms");

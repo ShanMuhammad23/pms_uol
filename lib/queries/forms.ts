@@ -32,6 +32,10 @@ interface FormTemplateListRow {
   assigned_employee_count: string;
   created_at: string;
   updated_at: string;
+  updated_by: string | null;
+  updated_by_first_name: string | null;
+  updated_by_last_name: string | null;
+  updated_by_employee_id: string | null;
 }
 
 interface FormTemplateRow {
@@ -99,6 +103,45 @@ async function ensureAdditionalRemarksColumns(): Promise<void> {
      ADD COLUMN IF NOT EXISTS manager1_overall_remarks TEXT,
      ADD COLUMN IF NOT EXISTS manager2_overall_remarks TEXT`,
   );
+}
+
+async function ensureFormTemplateUpdatedByColumn(): Promise<void> {
+  await db.query(
+    `ALTER TABLE form_templates
+     ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
+  );
+}
+
+async function ensureFormTemplateSchema(): Promise<void> {
+  await ensureAdditionalRemarksColumns();
+  await ensureFormTemplateUpdatedByColumn();
+}
+
+function mapFormTemplateListItem(row: FormTemplateListRow): FormTemplateListItem {
+  const firstName = row.updated_by_first_name?.trim() ?? "";
+  const lastName = row.updated_by_last_name?.trim() ?? "";
+  const updatedByName =
+    [firstName, lastName].filter(Boolean).join(" ") || null;
+
+  return {
+    id: Number(row.id),
+    title: row.title,
+    description: row.description,
+    cycleId: row.cycle_id,
+    fiscalYear: row.fiscal_year,
+    targetCategory: row.target_category,
+    targetSubCategory: row.target_sub_category,
+    selfAssessmentEnabled: row.self_assessment_enabled,
+    additionalRemarksEnabled: row.additional_remarks_enabled,
+    questionCount: Number(row.question_count),
+    appraisalCount: Number(row.appraisal_count),
+    assignedEmployeeCount: Number(row.assigned_employee_count),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    updatedById: row.updated_by != null ? Number(row.updated_by) : null,
+    updatedByName,
+    updatedByEmployeeId: row.updated_by_employee_id,
+  };
 }
 
 async function resolveCycleId(cycleId?: number): Promise<number> {
@@ -683,7 +726,7 @@ export async function getFormTemplateAppraisalCount(
 }
 
 export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
-  await ensureAdditionalRemarksColumns();
+  await ensureFormTemplateSchema();
 
   const result = await db.query<FormTemplateListRow>(
     `SELECT
@@ -700,38 +743,35 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        COUNT(DISTINCT ap.id)::text AS appraisal_count,
        COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
        ft.created_at::text,
-       ft.updated_at::text
+       ft.updated_at::text,
+       ft.updated_by::text,
+       ub.first_name AS updated_by_first_name,
+       ub.last_name AS updated_by_last_name,
+       ub.employee_id AS updated_by_employee_id
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
+     LEFT JOIN users ub ON ub.id = ft.updated_by
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
      LEFT JOIN appraisals ap ON ap.template_id = ft.id
      LEFT JOIN employee_form_assignments efa ON efa.template_id = ft.id
-     GROUP BY ft.id, ac.fiscal_year
+     GROUP BY
+       ft.id,
+       ac.fiscal_year,
+       ub.first_name,
+       ub.last_name,
+       ub.employee_id
      ORDER BY ft.updated_at DESC`,
   );
 
-  return result.rows.map((row) => ({
-    id: Number(row.id),
-    title: row.title,
-    description: row.description,
-    cycleId: row.cycle_id,
-    fiscalYear: row.fiscal_year,
-    targetCategory: row.target_category,
-    targetSubCategory: row.target_sub_category,
-    selfAssessmentEnabled: row.self_assessment_enabled,
-    additionalRemarksEnabled: row.additional_remarks_enabled,
-    questionCount: Number(row.question_count),
-    appraisalCount: Number(row.appraisal_count),
-    assignedEmployeeCount: Number(row.assigned_employee_count),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return result.rows.map(mapFormTemplateListItem);
 }
 
 export async function listDirectAssessmentTemplates(scope: {
   reviewerUserId: number;
   headEntityId: number | null;
 }): Promise<FormTemplateListItem[]> {
+  await ensureFormTemplateSchema();
+
   const { reviewerUserId, headEntityId } = scope;
 
   const scopedEntityIds =
@@ -772,9 +812,14 @@ export async function listDirectAssessmentTemplates(scope: {
        COUNT(DISTINCT ap.id)::text AS appraisal_count,
        COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
        ft.created_at::text,
-       ft.updated_at::text
+       ft.updated_at::text,
+       ft.updated_by::text,
+       ub.first_name AS updated_by_first_name,
+       ub.last_name AS updated_by_last_name,
+       ub.employee_id AS updated_by_employee_id
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
+     LEFT JOIN users ub ON ub.id = ft.updated_by
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
      LEFT JOIN appraisals ap ON ap.template_id = ft.id
      INNER JOIN employee_form_assignments efa ON efa.template_id = ft.id
@@ -784,33 +829,23 @@ export async function listDirectAssessmentTemplates(scope: {
        AND COALESCE(u.assessment_eligibility, true) = true
        AND efa.self_assessment_disabled = true
        ${visibilityClause}
-     GROUP BY ft.id, ac.fiscal_year
+     GROUP BY
+       ft.id,
+       ac.fiscal_year,
+       ub.first_name,
+       ub.last_name,
+       ub.employee_id
      ORDER BY ft.updated_at DESC`,
     visibilityParams,
   );
 
-  return result.rows.map((row) => ({
-    id: Number(row.id),
-    title: row.title,
-    description: row.description,
-    cycleId: row.cycle_id,
-    fiscalYear: row.fiscal_year,
-    targetCategory: row.target_category,
-    targetSubCategory: row.target_sub_category,
-    selfAssessmentEnabled: row.self_assessment_enabled,
-    additionalRemarksEnabled: row.additional_remarks_enabled,
-    questionCount: Number(row.question_count),
-    appraisalCount: Number(row.appraisal_count),
-    assignedEmployeeCount: Number(row.assigned_employee_count),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return result.rows.map(mapFormTemplateListItem);
 }
 
 export async function getFormTemplateById(
   id: number,
 ): Promise<FormTemplateRecord | null> {
-  await ensureAdditionalRemarksColumns();
+  await ensureFormTemplateSchema();
 
   const result = await db.query<FormTemplateRow>(
     `SELECT
@@ -861,6 +896,7 @@ export async function createFormTemplate(
   input: FormTemplateInput,
   createdById?: number,
 ): Promise<FormTemplateRecord> {
+  await ensureFormTemplateSchema();
   const client = await db.connect();
 
   try {
@@ -877,8 +913,9 @@ export async function createFormTemplate(
          target_sub_category,
          self_assessment_enabled,
          additional_remarks_enabled,
-         created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         created_by,
+         updated_by
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
        RETURNING id`,
       [
         input.title,
@@ -919,7 +956,9 @@ export async function createFormTemplate(
 export async function updateFormTemplate(
   id: number,
   input: FormTemplateInput,
+  updatedById?: number,
 ): Promise<FormTemplateRecord> {
+  await ensureFormTemplateSchema();
   const client = await db.connect();
 
   try {
@@ -955,8 +994,9 @@ export async function updateFormTemplate(
            target_sub_category = $5,
            self_assessment_enabled = $6,
            additional_remarks_enabled = $7,
+           updated_by = COALESCE($8, updated_by),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $8`,
+       WHERE id = $9`,
       [
         input.title,
         input.description || null,
@@ -965,6 +1005,7 @@ export async function updateFormTemplate(
         input.targetSubCategory ?? null,
         input.selfAssessmentEnabled,
         input.additionalRemarksEnabled ?? false,
+        updatedById ?? null,
         id,
       ],
     );

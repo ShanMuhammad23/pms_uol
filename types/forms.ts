@@ -251,6 +251,12 @@ export interface FormTemplateListItem {
   assignedEmployeeCount: number;
   createdAt: string;
   updatedAt: string;
+  /** User id of who last updated the template, if known. */
+  updatedById: number | null;
+  /** Display name of the last updater. */
+  updatedByName: string | null;
+  /** SAP / employee code of the last updater. */
+  updatedByEmployeeId: string | null;
 }
 
 export interface FormTemplateRecord {

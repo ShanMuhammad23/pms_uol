@@ -95,6 +95,7 @@ CREATE TABLE form_templates (
     additional_remarks_enabled BOOLEAN NOT NULL DEFAULT FALSE,
 
     created_by BIGINT REFERENCES users(id),
+    updated_by BIGINT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     

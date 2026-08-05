@@ -16,12 +16,17 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
+import { SlowRequestBanner } from "@/app/components/employee-forms/SlowRequestBanner";
 import { fetchAssignedForms } from "@/lib/queries/employee-forms-client";
 import type { AppraisalStatus } from "@/types/forms";
 import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
+
+/** Show slow-load banner if My Forms API has not settled by this time. */
+const SLOW_LOAD_MS = 5_000;
 
 export interface MyFormsUserInfo {
   employeeId: string;
@@ -114,10 +119,39 @@ export default function MyFormsList({
   userEmail,
   userInfo = null,
 }: MyFormsListProps) {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["my-forms"],
     queryFn: fetchAssignedForms,
   });
+
+  const [slowLoad, setSlowLoad] = useState(false);
+  const [slowBannerDismissed, setSlowBannerDismissed] = useState(false);
+
+  const waitingOnForms = isLoading || isFetching;
+
+  useEffect(() => {
+    if (!waitingOnForms) {
+      setSlowLoad(false);
+      setSlowBannerDismissed(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSlowLoad(true);
+    }, SLOW_LOAD_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [waitingOnForms]);
+
+  const showSlowBanner = slowLoad && !slowBannerDismissed && waitingOnForms;
+
+  const handleHoldOn = () => {
+    setSlowBannerDismissed(true);
+  };
+
+  const handleRefreshPage = () => {
+    window.location.reload();
+  };
 
   const roleLabel = userInfo?.systemRole
     ? userInfo.systemRole
@@ -226,14 +260,43 @@ export default function MyFormsList({
             />
           ))}
         </div>
+        <SlowRequestBanner
+          open={showSlowBanner}
+          onHoldOn={handleHoldOn}
+          onRefresh={handleRefreshPage}
+        />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-        Failed to load assigned forms.
+      <div className="space-y-4">
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          <p className="font-medium">Failed to load assigned forms.</p>
+          <p className="mt-1 text-red-600/90 dark:text-red-300/80">
+            The server may be busy. Wait a moment and try again, or refresh the
+            page.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void refetch();
+              }}
+              className="inline-flex items-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={handleRefreshPage}
+              className="inline-flex items-center rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800"
+            >
+              Refresh page
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -251,6 +314,12 @@ export default function MyFormsList({
           reason={blockedEligibility.ineligibilityReason}
         />
       ) : null}
+
+      <SlowRequestBanner
+        open={showSlowBanner}
+        onHoldOn={handleHoldOn}
+        onRefresh={handleRefreshPage}
+      />
 
       {/* Profile Hero + Basic Info + Form Status Stats */}
       <div className="rounded-xl border border-slate-200 bg-surface p-6 shadow-sm dark:border-white/10">

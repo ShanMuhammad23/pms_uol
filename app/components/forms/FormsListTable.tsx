@@ -111,6 +111,7 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
               <th className="px-2 py-2">Assigned </th>
               <th className="px-4 py-3.5">Cycle</th>
               <th className="px-4 py-3.5">Questions</th>
+              <th className="px-4 py-3.5">Last updated</th>
               <th className="px-4 py-3.5">Actions</th>
             </tr>
           </thead>
@@ -121,12 +122,15 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                 className="divide-x divide-slate-200 dark:divide-neutral-700"
               >
                 <td className="px-4 py-4 font-medium text-slate-900 dark:text-slate-50">
-                  <p className="font-semibold whitespace-nowrap text-slate-900 dark:text-white">{template.title}</p>
-                  {template.description ? (
-                    <p className="mt-0.5 max-w-7xl break-words text-xs text-slate-500 dark:text-slate-400">
-                      {template.description}
-                    </p>
-                  ) : null}
+                  <a
+                    href={`/dashboard/forms/${template.id}/employee-view`}
+                    
+                    rel="noopener noreferrer"
+                    className="font-semibold whitespace-nowrap text-primary hover:underline dark:text-sky-300"
+                    title="Open employee form preview in a new window"
+                  >
+                    {template.title}
+                  </a>
                 </td>
                 <td className="px-2 py-2 text-slate-700 dark:text-slate-300">
                   {template.assignedEmployeeCount}
@@ -136,6 +140,29 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                 </td>
                 <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
                   {template.questionCount}
+                </td>
+                <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
+                  <div className="min-w-[10rem] space-y-0.5">
+                    <p className="whitespace-nowrap text-slate-900 dark:text-slate-100">
+                      {new Date(template.updatedAt).toLocaleString()}
+                    </p>
+                    {template.updatedByName || template.updatedByEmployeeId ? (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {[
+                          template.updatedByName,
+                          template.updatedByEmployeeId
+                            ? `(${template.updatedByEmployeeId})`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
+                        —
+                      </p>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-4 text-right whitespace-nowrap">
                   <FormActionsDropdown

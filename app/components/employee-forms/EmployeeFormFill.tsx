@@ -12,12 +12,15 @@ import {
   saveEmployeeForm,
   uploadEmployeeFormAttachment,
 } from "@/lib/queries/employee-forms-client";
+import { fetchFormTemplate } from "@/lib/queries/forms-client";
 import type {
   EmployeeFormAnswerAttachment,
   EmployeeFormAnswerInput,
+  EmployeeFormDetail,
 } from "@/types/employee-forms";
 import {
   flattenAllQuestions,
+  type FormTemplateRecord,
   type QuestionRecord,
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
@@ -34,6 +37,36 @@ import PrintFooter from "@/app/components/print/PrintFooter";
 
 interface EmployeeFormFillProps {
   templateId: number;
+  /** Admin/employee-layout preview: view only, no save/submit or assignment required. */
+  mode?: "fill" | "preview";
+}
+
+function buildPreviewDetail(template: FormTemplateRecord): EmployeeFormDetail {
+  const maxRawScore = flattenAllQuestions(template)
+    .filter(
+      (question) =>
+        Number(question.totalMarks) > 0 &&
+        template.selfAssessmentEnabled &&
+        question.selfAssessmentEnabled,
+    )
+    .reduce((sum, question) => sum + Number(question.totalMarks), 0);
+
+  return {
+    template,
+    appraisalId: null,
+    status: "NOT_STARTED",
+    submittedAt: null,
+    answers: [],
+    rawScore: 0,
+    maxRawScore,
+    selfAssessmentEnabled: template.selfAssessmentEnabled,
+    assessmentEligibility: true,
+    eligibilityStatus: "Fully Eligible",
+    canFillAssessment: true,
+    ineligibilityReason: null,
+    headName: null,
+    manager2Name: null,
+  };
 }
 
 type AnswerState = Record<
@@ -123,7 +156,11 @@ function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) {
+export default function EmployeeFormFill({
+  templateId,
+  mode = "fill",
+}: EmployeeFormFillProps) {
+  const isPreview = mode === "preview";
   const queryClient = useQueryClient();
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [answers, setAnswers] = useState<AnswerState>({});
@@ -139,8 +176,16 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   );
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["my-form", templateId],
-    queryFn: () => fetchEmployeeForm(templateId),
+    queryKey: isPreview
+      ? ["form-employee-preview", templateId]
+      : ["my-form", templateId],
+    queryFn: async () => {
+      if (isPreview) {
+        const template = await fetchFormTemplate(templateId);
+        return buildPreviewDetail(template);
+      }
+      return fetchEmployeeForm(templateId);
+    },
   });
 
   useEffect(() => {
@@ -154,6 +199,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   }, [data]);
 
   const isReadOnly =
+    isPreview ||
     data?.status === "SUBMITTED" ||
     (data != null && !data.selfAssessmentEnabled) ||
     (data != null && !data.canFillAssessment);
@@ -279,6 +325,10 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   };
 
   const handleSave = (submit: boolean) => {
+    if (isPreview) {
+      return;
+    }
+
     setFormError(null);
     setSuccessMessage(null);
 
@@ -391,8 +441,9 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
   const { template } = data;
   const rows = buildFormTableRows(template.sections, template.questions);
 
-  const statusLabel =
-    data.status === "SUBMITTED"
+  const statusLabel = isPreview
+    ? "Preview · view only"
+    : data.status === "SUBMITTED"
       ? `Submitted${data.submittedAt ? ` ${new Date(data.submittedAt).toLocaleString()}` : ""}`
       : data.status === "DRAFT"
         ? "Draft"
@@ -414,6 +465,13 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         <p className="no-print text-sm text-emerald-600">{successMessage}</p>
       ) : null}
 
+      {isPreview ? (
+        <div className="no-print rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+          Employee form preview — layout matches what staff see on My Forms.
+          Scores and submissions are disabled.
+        </div>
+      ) : null}
+
       <div className="no-print flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-text-primary">
@@ -428,7 +486,7 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         />
       </div>
 
-      {data != null && !data.canFillAssessment ? (
+      {!isPreview && data != null && !data.canFillAssessment ? (
         <IneligibilityBanner
           role="self"
           status={
@@ -757,11 +815,13 @@ export default function EmployeeFormFill({ templateId }: EmployeeFormFillProps) 
         </div>
       ) : (
         <p className="no-print text-xs text-emerald-700 dark:text-emerald-300">
-          {data && !data.selfAssessmentEnabled
-            ? "Self-assessment is not enabled for this form. It will be reviewed directly by your reporting head."
-            : data?.status === "SUBMITTED"
-              ? `Submitted${data.submittedAt ? ` on ${new Date(data.submittedAt).toLocaleString()}` : ""} · read-only · score ${data.rawScore}/${data.maxRawScore}`
-              : "Read-only"}
+          {isPreview
+            ? "Preview mode — submissions are disabled."
+            : data && !data.selfAssessmentEnabled
+              ? "Self-assessment is not enabled for this form. It will be reviewed directly by your reporting head."
+              : data?.status === "SUBMITTED"
+                ? `Submitted${data.submittedAt ? ` on ${new Date(data.submittedAt).toLocaleString()}` : ""} · read-only · score ${data.rawScore}/${data.maxRawScore}`
+                : "Read-only"}
         </p>
       )}
 
