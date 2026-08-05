@@ -108,11 +108,11 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
           <thead className="bg-primary text-left text-sm font-semibold whitespace-nowrap text-white">
             <tr className="divide-x divide-white/15">
               <th className="px-4 py-3.5">Title</th>
-              <th className="px-2 py-2">Assigned </th>
-              <th className="px-4 py-3.5">Cycle</th>
-              <th className="px-4 py-3.5">Questions</th>
-              <th className="px-4 py-3.5">Last updated</th>
-              <th className="px-4 py-3.5">Actions</th>
+              <th className="px-2 py-2 w-1/16 text-center">Assigned </th>
+              <th className="px-4 py-3.5 text-center w-1/16">Cycle</th>
+              <th className="px-4 py-3.5 text-center w-1/16">Questions</th>
+              <th className="px-4 py-3.5 text-center">Last updated</th>
+              <th className="px-4 py-3.5 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="text-sm divide-y divide-slate-200 dark:divide-neutral-700">
@@ -132,16 +132,16 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                     {template.title}
                   </a>
                 </td>
-                <td className="px-2 py-2 text-slate-700 dark:text-slate-300">
+                <td className="px-2 py-2 text-center text-slate-700 dark:text-slate-300">
                   {template.assignedEmployeeCount}
                 </td>
-                <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
+                <td className="px-4 py-4 text-center text-slate-700 dark:text-slate-300">
                   FY {template.fiscalYear}
                 </td>
-                <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
+                <td className="px-4 py-4 text-center text-slate-700 dark:text-slate-300">
                   {template.questionCount}
                 </td>
-                <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
+                <td className="px-4 py-4 text-center text-slate-700 dark:text-slate-300">
                   <div className="min-w-[10rem] space-y-0.5">
                     <p className="whitespace-nowrap text-slate-900 dark:text-slate-100">
                       {new Date(template.updatedAt).toLocaleString()}
@@ -164,7 +164,7 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-4 text-right whitespace-nowrap">
+                <td className="px-4 py-4 text-center whitespace-nowrap">
                   <FormActionsDropdown
                     templateId={template.id}
                     templateTitle={template.title}
