@@ -80,6 +80,29 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
     }
 
+    // RBAC: Score Adjustments & Calibration is a confidential administrative
+    // section. Only HR, Board, and Super Admin (canReviewSubmissions) may view
+    // these fields. Strip them from the response for all other roles
+    // (Employee, Manager 1, Manager 2) even if they can otherwise access the
+    // submission. The frontend additionally does not render the section, but
+    // the backend is the source of truth so these fields never leak.
+    if (!canReviewSubmissions(role)) {
+      return NextResponse.json({
+        ...submission,
+        creditHrsErpScoreAdj: null,
+        pubOricScoreAdj: null,
+        qecScoreAdj: null,
+        calibrationFactor: null,
+        calibratedScoreNumeric: null,
+        initialScoreNumeric: null,
+        canEditScoreAdjustments: false,
+        performanceLevelName: null,
+        quartileName: null,
+        quartileScoreMin: null,
+        quartileScoreMax: null,
+      });
+    }
+
     return NextResponse.json(submission);
   } catch (error) {
     if (error instanceof SubmissionAccessError) {

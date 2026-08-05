@@ -715,17 +715,7 @@ function ModernFormDesignStep({
               rows={2}
               className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
             />
-          </div>
-
-          {/* Assessment Settings info */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Assessment
-            </label>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-snug text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-              Self-assessment is configured per employee during assignment.
-            </div>
-          </div>
+          </div>  
 
           {/* Additional Remarks toggle */}
           <div className="space-y-1.5">

@@ -26,10 +26,17 @@ export interface DirectAssessmentEmployee {
   parentEntityName: string | null;
 }
 
+export interface DirectAssessmentOverallRemarks {
+  manager1: string | null;
+  manager2: string | null;
+}
+
 export interface DirectAssessmentData {
   templateId: number;
   templateTitle: string;
   selfAssessmentEnabled: boolean;
+  /** Whether the form template has additional_remarks_enabled = TRUE. */
+  additionalRemarksEnabled: boolean;
   questions: QuestionRecord[];
   sections: FormSectionRecord[];
   rootQuestions: QuestionRecord[];
@@ -42,6 +49,11 @@ export interface DirectAssessmentData {
     number,
     EmployeeFormAnswerRecord[]
   >;
+  /**
+   * Map of submissionId → overall remarks (manager1 / manager2). Shares the
+   * same data model as the standard assessment workflow.
+   */
+  overallRemarksBySubmission: Record<number, DirectAssessmentOverallRemarks>;
 }
 
 export async function fetchDirectAssessmentData(
@@ -61,18 +73,28 @@ export async function saveDirectAssessmentScores(
     pointsEarned?: number;
     remarks?: string | null;
   }>,
-): Promise<{ managerAnswers: EmployeeFormAnswerRecord[] }> {
+  overallRemarks?: string | null,
+): Promise<{
+  managerAnswers: EmployeeFormAnswerRecord[];
+  manager1OverallRemarks?: string | null;
+  manager2OverallRemarks?: string | null;
+}> {
   const response = await fetch(
     `/api/submissions/${submissionId}/manager-review`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({
+        answers,
+        ...(overallRemarks !== undefined ? { overallRemarks } : {}),
+      }),
     },
   );
-  return parseResponse<{ managerAnswers: EmployeeFormAnswerRecord[] }>(
-    response,
-  );
+  return parseResponse<{
+    managerAnswers: EmployeeFormAnswerRecord[];
+    manager1OverallRemarks?: string | null;
+    manager2OverallRemarks?: string | null;
+  }>(response);
 }
 
 export async function approveDirectAssessment(

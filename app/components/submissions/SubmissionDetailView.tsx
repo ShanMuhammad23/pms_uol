@@ -268,18 +268,13 @@ export default function SubmissionDetailView({
   const userRole = session?.user?.role;
   const isAdminRole = canReviewSubmissions(userRole);
   const showQuartile = canViewQuartile(userRole);
-  const { canEdit: canEditModule, canView: canViewModule } = useAdditionalAccess(
+  const { canEdit: canEditModule } = useAdditionalAccess(
     session?.user?.id ? Number(session.user.id) : undefined,
     userRole,
   );
   const canEditCreditHours = isAdminRole || canEditModule("CREDIT_HOURS");
   const canEditOric = isAdminRole || canEditModule("ORIC_ADJUSTMENTS");
   const canEditQec = isAdminRole || canEditModule("QEC_ADJUSTMENTS");
-  const hasAnyModuleAccess =
-    canEditCreditHours ||
-    canEditOric ||
-    canEditQec ||
-    (!isAdminRole && (canViewModule("CREDIT_HOURS") || canViewModule("ORIC_ADJUSTMENTS") || canViewModule("QEC_ADJUSTMENTS")));
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
     new Map(),
@@ -1229,6 +1224,7 @@ export default function SubmissionDetailView({
       </div>
             {rows.length > 0 ? (
         <AssessmentSummaryFooter
+          showMarks={false}
           entries={[
             ...(selfAssessmentEnabled
               ? [
@@ -1247,6 +1243,10 @@ export default function SubmissionDetailView({
               totalMarks: data.maxRawScore,
               accentClass:
                 "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+              remarks:
+                (data.additionalRemarksEnabled ?? false)
+                  ? manager1OverallRemarks
+                  : null,
             },
             ...(hasManager2 && showManager2Data
               ? [
@@ -1258,6 +1258,10 @@ export default function SubmissionDetailView({
                     totalMarks: data.maxRawScore,
                     accentClass:
                       "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+                    remarks:
+                      (data.additionalRemarksEnabled ?? false)
+                        ? manager2OverallRemarks
+                        : null,
                   },
                 ]
               : []),
@@ -1278,7 +1282,7 @@ export default function SubmissionDetailView({
         />
       ) : null}
 
-      {(isAdminRole || hasAnyModuleAccess) && rows.length > 0 ? (
+      {isAdminRole && rows.length > 0 ? (
         <ScoreAdjustmentsPanel
           submissionId={data.id}
           scoreO={data.initialScoreNumeric ?? data.rawScore}
