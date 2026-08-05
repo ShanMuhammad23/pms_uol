@@ -39,39 +39,79 @@ const CATEGORY_RANK: Record<string, number> = {
 
 const CATEGORY_COLORS: Record<
   string,
-  { fill: string; text: string; ring: string; box: string }
+  { fill: string; text: string; ring: string }
 > = {
   C0: {
     fill: "bg-slate-900 dark:bg-slate-800",
     text: "text-white",
     ring: "ring-slate-900/20 dark:ring-white/10",
-    box: "bg-slate-100/80 border-slate-200 dark:bg-slate-900/60 dark:border-slate-700",
   },
   C1: {
     fill: "bg-violet-100 dark:bg-violet-950/50",
     text: "text-violet-900 dark:text-violet-100",
     ring: "ring-violet-300/60 dark:ring-violet-700/40",
-    box: "bg-violet-50/70 border-violet-200/80 dark:bg-violet-950/30 dark:border-violet-800/50",
   },
   C2: {
     fill: "bg-sky-100 dark:bg-sky-950/50",
     text: "text-sky-900 dark:text-sky-100",
     ring: "ring-sky-300/60 dark:ring-sky-700/40",
-    box: "bg-sky-50/70 border-sky-200/80 dark:bg-sky-950/30 dark:border-sky-800/50",
   },
   C3: {
     fill: "bg-emerald-100 dark:bg-emerald-950/50",
     text: "text-emerald-900 dark:text-emerald-100",
     ring: "ring-emerald-300/60 dark:ring-emerald-700/40",
-    box: "bg-emerald-50/70 border-emerald-200/80 dark:bg-emerald-950/30 dark:border-emerald-800/50",
   },
 };
+
+const LINE = "border-slate-300 dark:border-slate-600";
 
 function compareEntityNodes(a: EntityTreeNode, b: EntityTreeNode): number {
   const rankA = CATEGORY_RANK[a.categoryCode] ?? 99;
   const rankB = CATEGORY_RANK[b.categoryCode] ?? 99;
   if (rankA !== rankB) return rankA - rankB;
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+}
+
+/**
+ * Include every ancestor of each matched entity up to C0 so filtered views
+ * still render nested under their real org parents.
+ */
+function collectEntitiesWithAncestors(
+  matched: EntityRecord[],
+  all: EntityRecord[],
+): EntityRecord[] {
+  if (matched.length === 0) return [];
+
+  const byId = new Map(all.map((entity) => [entity.id, entity]));
+  const included = new Map<number, EntityRecord>();
+
+  for (const entity of matched) {
+    let current: EntityRecord | undefined = entity;
+    while (current) {
+      if (included.has(current.id)) break;
+      included.set(current.id, current);
+      if (current.categoryCode === "C0" || current.parentEntityId == null) {
+        break;
+      }
+      current = byId.get(current.parentEntityId);
+    }
+  }
+
+  return [...included.values()];
+}
+
+function collectExpandableIds(nodes: EntityTreeNode[]): Set<number> {
+  const ids = new Set<number>();
+  const walk = (list: EntityTreeNode[]) => {
+    for (const node of list) {
+      if (node.children.length > 0) {
+        ids.add(node.id);
+        walk(node.children);
+      }
+    }
+  };
+  walk(nodes);
+  return ids;
 }
 
 function buildEntityTree(entities: EntityRecord[]): EntityTreeNode[] {
@@ -81,7 +121,6 @@ function buildEntityTree(entities: EntityRecord[]): EntityTreeNode[] {
   }
 
   for (const node of byId.values()) {
-    // C0 is always a top-level root — never nest under another entity.
     if (node.categoryCode === "C0") continue;
 
     const parentId = node.parentEntityId;
@@ -90,8 +129,6 @@ function buildEntityTree(entities: EntityRecord[]): EntityTreeNode[] {
     }
   }
 
-  // Roots: C0 nodes, or any node whose parent is outside the current set
-  // (so filtered views still render a coherent forest).
   const roots = [...byId.values()]
     .filter((node) => {
       if (node.categoryCode === "C0") return true;
@@ -124,7 +161,6 @@ function EntityCard({
     fill: "bg-slate-50 dark:bg-slate-800",
     text: "text-text-primary",
     ring: "ring-slate-200 dark:ring-slate-700",
-    box: "bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700",
   };
   const hasChildren = node.children.length > 0;
   const isC0 = node.categoryCode === "C0";
@@ -134,8 +170,9 @@ function EntityCard({
       type="button"
       onClick={hasChildren ? onToggle : undefined}
       disabled={!hasChildren}
+      title={node.name}
       className={cn(
-        "flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left ring-1 transition-colors",
+        "relative z-10 flex w-36 shrink-0 items-start gap-1 rounded-md px-2 py-1.5 text-left ring-1 transition-colors",
         colors.fill,
         colors.text,
         colors.ring,
@@ -147,30 +184,30 @@ function EntityCard({
       {hasChildren ? (
         <span className="mt-0.5 shrink-0 opacity-80">
           {expanded ? (
-            <ChevronDown className="size-3.5" />
+            <ChevronDown className="size-3" />
           ) : (
-            <ChevronRight className="size-3.5" />
+            <ChevronRight className="size-3" />
           )}
         </span>
       ) : (
-        <span className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <span className="mt-0.5 size-3 shrink-0" aria-hidden />
       )}
       <span className="min-w-0 flex-1">
         <span
           className={cn(
-            "block truncate font-semibold leading-snug",
-            isC0 ? "text-sm" : "text-[13px]",
+            "block truncate font-semibold leading-tight",
+            isC0 ? "text-xs" : "text-[11px]",
           )}
         >
           {node.name}
         </span>
         <span
           className={cn(
-            "mt-0.5 block text-[10px] font-medium opacity-80",
+            "mt-px block text-[9px] font-medium leading-tight opacity-80",
             isC0 && "text-slate-300",
           )}
         >
-          {node.categoryCode} · {node.staffCount} staff
+          {node.categoryCode} · {node.staffCount}
           {hasChildren
             ? ` · ${node.children.length} child${node.children.length === 1 ? "" : "ren"}`
             : ""}
@@ -180,61 +217,102 @@ function EntityCard({
   );
 }
 
-function SiblingListBox({
-  parentCategory,
-  nodes,
+/**
+ * Classic org-chart branch: parent on top, children below joined by
+ * vertical + horizontal connector lines.
+ */
+function TreeBranch({
+  node,
   expandedIds,
   onToggle,
-  depth,
+  isRoot = false,
+  isFirst = true,
+  isLast = true,
+  isOnly = true,
 }: {
-  parentCategory: string;
-  nodes: EntityTreeNode[];
+  node: EntityTreeNode;
   expandedIds: Set<number>;
   onToggle: (id: number) => void;
-  depth: number;
+  isRoot?: boolean;
+  isFirst?: boolean;
+  isLast?: boolean;
+  isOnly?: boolean;
 }) {
-  if (nodes.length === 0) return null;
-
-  const boxColors =
-    CATEGORY_COLORS[parentCategory]?.box ??
-    "bg-slate-50 border-slate-200 dark:bg-slate-900/40 dark:border-slate-700";
+  const isExpanded = expandedIds.has(node.id);
+  const hasChildren = node.children.length > 0;
+  const showChildren = hasChildren && isExpanded;
+  const childCount = node.children.length;
 
   return (
-    <div
+    <li
       className={cn(
-        "mt-2 space-y-1.5 rounded-xl border p-2 shadow-sm",
-        boxColors,
-        depth > 0 && "ml-3 border-dashed",
+        "relative flex list-none flex-col items-center px-2",
+        isRoot ? "pt-0" : "pt-5",
       )}
     >
-      {nodes.map((child) => {
-        const isExpanded = expandedIds.has(child.id);
-        const hasKids = child.children.length > 0;
-
-        return (
-          <div key={child.id} className="min-w-0">
-            <EntityCard
-              node={child}
-              expanded={isExpanded}
-              onToggle={() => onToggle(child.id)}
+      {!isRoot ? (
+        <>
+          {/* Vertical stub from crossbar down to this card */}
+          <span
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-0 h-5 w-px -translate-x-1/2 border-l",
+              LINE,
+            )}
+          />
+          {/* Horizontal elbow segment across siblings */}
+          {!isOnly ? (
+            <span
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute top-0 border-t",
+                LINE,
+                isFirst && "left-1/2 right-0",
+                isLast && "left-0 right-1/2",
+                !isFirst && !isLast && "left-0 right-0",
+              )}
             />
-            {hasKids && isExpanded ? (
-              <SiblingListBox
-                parentCategory={child.categoryCode}
-                nodes={child.children}
+          ) : null}
+        </>
+      ) : null}
+
+      <EntityCard
+        node={node}
+        expanded={isExpanded}
+        onToggle={() => onToggle(node.id)}
+      />
+
+      {showChildren ? (
+        <>
+          {/* Stem from parent down to the children row */}
+          <span
+            aria-hidden
+            className={cn("mt-0 block h-4 w-px border-l", LINE)}
+          />
+
+          <ul
+            className="relative flex list-none items-start justify-center p-0"
+            role="group"
+          >
+            {node.children.map((child, index) => (
+              <TreeBranch
+                key={child.id}
+                node={child}
                 expandedIds={expandedIds}
                 onToggle={onToggle}
-                depth={depth + 1}
+                isFirst={index === 0}
+                isLast={index === childCount - 1}
+                isOnly={childCount === 1}
               />
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </li>
   );
 }
 
-function RootColumn({
+function OrgTreeRoot({
   root,
   expandedIds,
   onToggle,
@@ -243,34 +321,15 @@ function RootColumn({
   expandedIds: Set<number>;
   onToggle: (id: number) => void;
 }) {
-  const isExpanded = expandedIds.has(root.id);
-  const hasChildren = root.children.length > 0;
-  const boxColors =
-    CATEGORY_COLORS[root.categoryCode]?.box ??
-    "bg-slate-50 border-slate-200 dark:bg-slate-900/40 dark:border-slate-700";
-
   return (
-    <div
-      className={cn(
-        "flex w-[280px] shrink-0 flex-col rounded-2xl border p-3 shadow-sm",
-        boxColors,
-      )}
-    >
-      <EntityCard
+    <ul className="m-0 flex list-none justify-center p-0" role="tree">
+      <TreeBranch
         node={root}
-        expanded={isExpanded}
-        onToggle={() => onToggle(root.id)}
+        expandedIds={expandedIds}
+        onToggle={onToggle}
+        isRoot
       />
-      {hasChildren && isExpanded ? (
-        <SiblingListBox
-          parentCategory={root.categoryCode}
-          nodes={root.children}
-          expandedIds={expandedIds}
-          onToggle={onToggle}
-          depth={0}
-        />
-      ) : null}
-    </div>
+    </ul>
   );
 }
 
@@ -414,18 +473,27 @@ export default function OrganizationTree() {
     );
   }, []);
 
-  const tree = useMemo(
-    () => buildEntityTree(filteredEntities),
-    [filteredEntities],
+  const treeEntities = useMemo(
+    () => collectEntitiesWithAncestors(filteredEntities, entities ?? []),
+    [filteredEntities, entities],
   );
 
-  // Expand roots whenever the visible forest changes so C1 lists show by default.
+  const tree = useMemo(() => buildEntityTree(treeEntities), [treeEntities]);
+
+  // Expand the visible forest when it changes. With filters active, expand every
+  // ancestor path so matches stay linked under their parents up to C0.
   useEffect(() => {
-    const signature = tree.map((root) => root.id).join(",");
+    const signature = `${hasActiveFilters ? "f" : "a"}:${tree
+      .map((root) => root.id)
+      .join(",")}:${treeEntities.length}`;
     if (signature === treeSignatureRef.current) return;
     treeSignatureRef.current = signature;
-    setExpandedIds(new Set(tree.map((root) => root.id)));
-  }, [tree]);
+    setExpandedIds(
+      hasActiveFilters
+        ? collectExpandableIds(tree)
+        : new Set(tree.map((root) => root.id)),
+    );
+  }, [tree, treeEntities.length, hasActiveFilters]);
 
   const handleToggle = useCallback((id: number) => {
     setExpandedIds((current) => {
@@ -439,14 +507,8 @@ export default function OrganizationTree() {
   const totalCount = entities?.length ?? 0;
   const showTree = !isLoading && !error && tree.length > 0;
   const showNoMatch =
-    !isLoading &&
-    !error &&
-    totalCount > 0 &&
-    filteredEntities.length === 0;
-  const showNoC0 =
-    !isLoading &&
-    !error &&
-    totalCount === 0;
+    !isLoading && !error && totalCount > 0 && filteredEntities.length === 0;
+  const showNoC0 = !isLoading && !error && totalCount === 0;
 
   return (
     <div className="space-y-5">
@@ -460,8 +522,8 @@ export default function OrganizationTree() {
               Organization Tree
             </h2>
             <p className="mt-0.5 text-sm text-foreground/60">
-              Each C0 is a column; children of the same parent stack in a shaded
-              list. Click a node to expand or collapse.
+              Top-down org chart: each parent sits above its children, joined by
+              connector lines. Click a node to expand or collapse.
             </p>
           </div>
         </div>
@@ -500,9 +562,7 @@ export default function OrganizationTree() {
           selectedCategoryCode={selectedCategoryCode}
           onCategoryCodeChange={handleCategoryCodeChange}
           selectedEntityIds={
-            selectedEntityIds === null
-              ? null
-              : selectedEntityIds.map(String)
+            selectedEntityIds === null ? null : selectedEntityIds.map(String)
           }
           onEntityIdsChange={handleEntityIdsChange}
           selectedChildEntityIds={
@@ -576,15 +636,15 @@ export default function OrganizationTree() {
 
         {showTree ? (
           <div
-            className="origin-top-left p-5 transition-transform duration-200"
+            className="origin-top-left p-6 transition-transform duration-200"
             style={{
               transform: `scale(${zoom})`,
               width: `${100 / zoom}%`,
             }}
           >
-            <div className="flex items-start gap-4">
+            <div className="flex flex-wrap items-start justify-center gap-x-10 gap-y-12">
               {tree.map((root) => (
-                <RootColumn
+                <OrgTreeRoot
                   key={root.id}
                   root={root}
                   expandedIds={expandedIds}

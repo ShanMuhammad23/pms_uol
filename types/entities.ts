@@ -5,6 +5,8 @@ export interface EntityRecord {
   categoryCode: string;
   parentEntityId: number | null;
   parentName: string | null;
+  /** Category code of the parent entity, when a parent exists. */
+  parentCategoryCode: string | null;
   /** Users assigned to this entity or any descendant in the org tree. */
   staffCount: number;
   createdAt: string;

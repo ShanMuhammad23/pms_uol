@@ -16,6 +16,7 @@ interface EntityRow {
   category_code: string;
   parent_entity_id: string | null;
   parent_name: string | null;
+  parent_category_code: string | null;
   staff_count: string | number | null;
   created_at: string;
   updated_at: string;
@@ -59,12 +60,14 @@ async function buildEntitySelect(): Promise<string> {
     ec.code AS category_code,
     e.parent_entity_id,
     p.name AS parent_name,
+    pc.code AS parent_category_code,
     ${staffCountSelect},
     e.created_at::text,
     e.updated_at::text
   FROM entities e
   JOIN entity_categories ec ON ec.id = e.entity_category_id
   LEFT JOIN entities p ON p.id = e.parent_entity_id
+  LEFT JOIN entity_categories pc ON pc.id = p.entity_category_id
 `;
 }
 
@@ -86,6 +89,7 @@ function mapEntityRow(row: EntityRow): EntityRecord {
     categoryCode: row.category_code,
     parentEntityId: row.parent_entity_id ? Number(row.parent_entity_id) : null,
     parentName: row.parent_name,
+    parentCategoryCode: row.parent_category_code,
     staffCount: Number(row.staff_count ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,

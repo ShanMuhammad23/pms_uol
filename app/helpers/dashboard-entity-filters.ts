@@ -374,7 +374,8 @@ export function filterEntityRecords(
     return (
       entity.name.toLowerCase().includes(query) ||
       entity.categoryCode.toLowerCase().includes(query) ||
-      (entity.parentName?.toLowerCase().includes(query) ?? false)
+      (entity.parentName?.toLowerCase().includes(query) ?? false) ||
+      (entity.parentCategoryCode?.toLowerCase().includes(query) ?? false)
     );
   });
 }

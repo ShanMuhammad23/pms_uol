@@ -1,9 +1,9 @@
 import type { EntityRecord } from "@/types/entities";
 
 export type EntitiesTableColumnId =
-  | "name"
   | "category"
   | "parent"
+  | "name"
   | "staff"
   | "updated"
   | "actions";
@@ -14,6 +14,8 @@ export type EntitiesTableColumnDef = {
   align?: "left" | "right" | "center";
   /** Marks the column as numeric, enabling GT/LT range filtering. */
   numeric?: boolean;
+  /** Optional fixed width classes for th/td. */
+  widthClass?: string;
   getValue: (row: EntityRecord) => string;
 };
 
@@ -28,12 +30,15 @@ function formatUpdatedAt(value: string): string {
   return date.toLocaleString();
 }
 
+function formatParent(row: EntityRecord): string {
+  if (!row.parentName) return "—";
+  if (row.parentCategoryCode) {
+    return `${row.parentCategoryCode} · ${row.parentName}`;
+  }
+  return row.parentName;
+}
+
 export const ENTITIES_TABLE_COLUMNS: EntitiesTableColumnDef[] = [
-  {
-    id: "name",
-    label: "Name",
-    getValue: (row) => formatNullable(row.name),
-  },
   {
     id: "category",
     label: "Category",
@@ -42,7 +47,13 @@ export const ENTITIES_TABLE_COLUMNS: EntitiesTableColumnDef[] = [
   {
     id: "parent",
     label: "Parent",
-    getValue: (row) => formatNullable(row.parentName),
+    getValue: (row) => formatParent(row),
+  },
+  {
+    id: "name",
+    label: "Name",
+    widthClass: "w-56 min-w-56 max-w-56",
+    getValue: (row) => formatNullable(row.name),
   },
   {
     id: "staff",

@@ -2,16 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Building2, Pencil, Plus, Table2, Trash2, X } from "lucide-react";
+import { Building2, Pencil, Plus, Search, Table2, Trash2, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { EntityListFilterBar } from "@/app/components/entity-categories/EntityListFilterBar";
 import { EntitiesTableColumnHeaderFilter } from "@/app/components/entity-categories/EntitiesTableColumnHeaderFilter";
-import {
-  filterEntityRecords,
-  getDirectChildEntitiesOfParents,
-  getEntitiesForCategoryCode,
-  type MultiFilterSelection,
-} from "@/app/helpers/dashboard-entity-filters";
+import { filterEntityRecords } from "@/app/helpers/dashboard-entity-filters";
 import {
   applyEntitiesMasterFilters,
   EMPTY_ENTITIES_MASTER_FILTER_STATE,
@@ -26,7 +20,6 @@ import {
   type EntitiesTableColumnId,
 } from "@/app/helpers/entities-table-columns";
 import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
-import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { cn } from "@/lib/utils";
 import { fetchEntityCategories } from "@/lib/queries/entity-categories-client";
 import {
@@ -36,7 +29,6 @@ import {
   updateEntity,
 } from "@/lib/queries/entities-client";
 import type { EntityRecord } from "@/types/entities";
-import type { EntityCategoryCode } from "@/types/entity-categories";
 
 type MessageTone = "success" | "error";
 
@@ -66,15 +58,6 @@ export default function EntitiesManager() {
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
   const [activeTab, setActiveTab] = useState<EntitySectionTab>("list");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategoryCode, setSelectedCategoryCode] = useState<
-    EntityCategoryCode | "ALL"
-  >("ALL");
-  const [selectedEntityIds, setSelectedEntityIds] =
-    useState<MultiFilterSelection<number>>(null);
-  const [selectedChildEntityIds, setSelectedChildEntityIds] =
-    useState<MultiFilterSelection<number>>(null);
-  const [selectedParentEntityIds, setSelectedParentEntityIds] =
-    useState<MultiFilterSelection<number>>(null);
   const [masterFilters, setMasterFilters] = useState<EntitiesMasterFilterState>(
     EMPTY_ENTITIES_MASTER_FILTER_STATE,
   );
@@ -162,74 +145,16 @@ export default function EntitiesManager() {
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const isLoading = categoriesLoading || entitiesLoading;
 
-  const categoryEntities = useMemo(
-    () => getEntitiesForCategoryCode(entities ?? [], selectedCategoryCode),
-    [entities, selectedCategoryCode],
-  );
-
-  const entityOptions = useMemo<MultiSelectOption[]>(
-    () =>
-      categoryEntities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: entity.staffCount,
-      })),
-    [categoryEntities],
-  );
-
-  const childEntities = useMemo(
-    () =>
-      getDirectChildEntitiesOfParents(
-        entities ?? [],
-        selectedEntityIds,
-        categoryEntities.map((entity) => entity.id),
-      ),
-    [entities, selectedEntityIds, categoryEntities],
-  );
-
-  const childEntityOptions = useMemo<MultiSelectOption[]>(
-    () =>
-      childEntities.map((entity) => ({
-        value: String(entity.id),
-        label: `${entity.name} (${entity.categoryCode})`,
-        count: entity.staffCount,
-      })),
-    [childEntities],
-  );
-
-  const parentEntityOptions = useMemo<MultiSelectOption[]>(() => {
-    if (!entities) return [];
-    const parentIds = new Set<number>();
-    for (const entity of entities) {
-      if (entity.parentEntityId != null) {
-        parentIds.add(entity.parentEntityId);
-      }
-    }
-    const byId = new Map(entities.map((e) => [e.id, e]));
-    return [...parentIds]
-      .map((id) => byId.get(id))
-      .filter((e): e is EntityRecord => e != null)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((e) => ({ value: String(e.id), label: e.name, count: e.staffCount }));
-  }, [entities]);
-
   const filteredEntities = useMemo(
     () =>
       filterEntityRecords(entities ?? [], {
         searchQuery,
-        categoryCode: selectedCategoryCode,
-        entityIds: selectedEntityIds,
-        childEntityIds: selectedChildEntityIds,
-        parentEntityIds: selectedParentEntityIds,
+        categoryCode: "ALL",
+        entityIds: null,
+        childEntityIds: null,
+        parentEntityIds: null,
       }),
-    [
-      entities,
-      searchQuery,
-      selectedCategoryCode,
-      selectedEntityIds,
-      selectedChildEntityIds,
-      selectedParentEntityIds,
-    ],
+    [entities, searchQuery],
   );
 
   const displayedEntities = useMemo(
@@ -239,18 +164,10 @@ export default function EntitiesManager() {
 
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
-    selectedCategoryCode !== "ALL" ||
-    selectedEntityIds !== null ||
-    selectedChildEntityIds !== null ||
-    selectedParentEntityIds !== null ||
     hasActiveEntitiesMasterFilters(masterFilters);
 
   const clearFilters = useCallback(() => {
     setSearchQuery("");
-    setSelectedCategoryCode("ALL");
-    setSelectedEntityIds(null);
-    setSelectedChildEntityIds(null);
-    setSelectedParentEntityIds(null);
     setMasterFilters(EMPTY_ENTITIES_MASTER_FILTER_STATE);
   }, []);
 
@@ -297,34 +214,6 @@ export default function EntitiesManager() {
     },
     [],
   );
-
-  const handleCategoryCodeChange = useCallback(
-    (value: EntityCategoryCode | "ALL") => {
-      setSelectedCategoryCode(value);
-      setSelectedEntityIds(null);
-      setSelectedChildEntityIds(null);
-    },
-    [],
-  );
-
-  const handleEntityIdsChange = useCallback((values: string[] | null) => {
-    setSelectedEntityIds(
-      values === null ? null : values.map((value) => Number(value)),
-    );
-    setSelectedChildEntityIds(null);
-  }, []);
-
-  const handleChildEntityIdsChange = useCallback((values: string[] | null) => {
-    setSelectedChildEntityIds(
-      values === null ? null : values.map((value) => Number(value)),
-    );
-  }, []);
-
-  const handleParentEntityIdsChange = useCallback((values: string[] | null) => {
-    setSelectedParentEntityIds(
-      values === null ? null : values.map((value) => Number(value)),
-    );
-  }, []);
 
   const parentOptions = useMemo(() => {
     if (!entities) {
@@ -703,65 +592,62 @@ export default function EntitiesManager() {
 
       {!isLoading && !error && entities && entities.length > 0 ? (
         <div className="space-y-4">
-          <EntityListFilterBar
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-            selectedCategoryCode={selectedCategoryCode}
-            onCategoryCodeChange={handleCategoryCodeChange}
-            selectedEntityIds={
-              selectedEntityIds === null
-                ? null
-                : selectedEntityIds.map(String)
-            }
-            onEntityIdsChange={handleEntityIdsChange}
-            selectedChildEntityIds={
-              selectedChildEntityIds === null
-                ? null
-                : selectedChildEntityIds.map(String)
-            }
-            onChildEntityIdsChange={handleChildEntityIdsChange}
-            selectedParentEntityIds={
-              selectedParentEntityIds === null
-                ? null
-                : selectedParentEntityIds.map(String)
-            }
-            onParentEntityIdsChange={handleParentEntityIdsChange}
-            parentEntityOptions={parentEntityOptions}
-            entityOptions={entityOptions}
-            childEntityOptions={childEntityOptions}
-            categories={categories ?? []}
-            categoriesLoading={categoriesLoading}
-            filteredCount={displayedEntities.length}
-            totalCount={entities.length}
-            onClearFilters={clearFilters}
-            hasActiveFilters={hasActiveFilters}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300/80 p-4 dark:border-white/15">
+            <p className="text-sm text-foreground/70">
+              Showing {displayedEntities.length} of {entities.length} entities
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[16rem] flex-1 sm:max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-foreground/50" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search by name or parent…"
+                  className="w-full rounded-lg border border-slate-300 bg-background py-2 pl-10 pr-4 text-sm text-text-primary placeholder:text-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                />
+              </div>
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                >
+                  <X className="size-3.5" />
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
 
           {displayedEntities.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
               <Building2 className="mx-auto size-8 text-foreground/50" />
               <p className="mt-3 text-sm font-medium text-text-primary">
-                No entities match the current filters
+                No entities match the current search
               </p>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-3 text-sm font-medium text-primary hover:underline"
-              >
-                Clear filters
-              </button>
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="mt-3 text-sm font-medium text-primary hover:underline"
+                >
+                  Clear search
+                </button>
+              ) : null}
             </div>
           ) : (
         <div className="overflow-x-auto rounded-md border border-slate-300/80 dark:border-white/15">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full table-fixed text-sm">
             <thead className="bg-primary/5">
               <tr>
                 {ENTITIES_TABLE_COLUMNS.map((column) => (
                   <th
                     key={column.id}
                     className={cn(
-                      "px-4 py-3 font-semibold text-white bg-primary ",
+                      "px-4 py-3 font-semibold text-white bg-primary",
                       column.align === "right" ? "text-right" : "text-left",
+                      column.widthClass,
                     )}
                   >
                     {isEntitiesMasterFilterableColumn(column.id) ? (
@@ -786,42 +672,101 @@ export default function EntitiesManager() {
                   key={entity.id}
                   className="border-t border-slate-300/80 dark:border-white/15"
                 >
-                  <td className="px-4 py-3 font-medium text-text-primary">
-                    {entity.name}
-                  </td>
-                  <td className="px-4 py-3 text-text-primary">
-                    {entity.categoryCode}
-                  </td>
-                  <td className="px-4 py-3 text-text-primary">
-                    {entity.parentName ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-text-primary">
-                    {entity.staffCount}
-                  </td>
-                  <td className="px-4 py-3 text-text-primary">
-                    {new Date(entity.updatedAt).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(entity)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                  {ENTITIES_TABLE_COLUMNS.map((column) => {
+                    if (column.id === "actions") {
+                      return (
+                        <td
+                          key={column.id}
+                          className={cn("px-4 py-3", column.widthClass)}
+                        >
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(entity)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(entity)}
+                              disabled={deleteMutation.isPending}
+                              className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      );
+                    }
+
+                    if (column.id === "parent") {
+                      return (
+                        <td
+                          key={column.id}
+                          className={cn(
+                            "px-4 py-3 text-text-primary",
+                            column.widthClass,
+                          )}
+                        >
+                          {entity.parentName ? (
+                            <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+                              {entity.parentCategoryCode ? (
+                                <span className="text-xs font-medium text-foreground/55">
+                                  {entity.parentCategoryCode}
+                                </span>
+                              ) : null}
+                              <span>{entity.parentName}</span>
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      );
+                    }
+
+                    if (column.id === "name") {
+                      return (
+                        <td
+                          key={column.id}
+                          className={cn(
+                            "truncate px-4 py-3 font-medium text-text-primary",
+                            column.widthClass,
+                          )}
+                          title={entity.name}
+                        >
+                          {entity.name}
+                        </td>
+                      );
+                    }
+
+                    if (column.id === "staff") {
+                      return (
+                        <td
+                          key={column.id}
+                          className={cn(
+                            "px-4 py-3 text-right tabular-nums text-text-primary",
+                            column.widthClass,
+                          )}
+                        >
+                          {entity.staffCount}
+                        </td>
+                      );
+                    }
+
+                    return (
+                      <td
+                        key={column.id}
+                        className={cn(
+                          "px-4 py-3 text-text-primary",
+                          column.align === "right" && "text-right",
+                          column.widthClass,
+                        )}
                       >
-                        <Pencil className="size-3.5" />
-                       
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(entity)}
-                        disabled={deleteMutation.isPending}
-                        className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
-                      >
-                        <Trash2 className="size-3.5" />
-                        
-                      </button>
-                    </div>
-                  </td>
+                        {column.getValue(entity)}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
