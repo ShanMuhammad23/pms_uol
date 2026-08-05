@@ -21,12 +21,15 @@ import {
   formatSubsectionLabel,
   type FormTableRow,
 } from "@/app/helpers/form-table-rows";
-import { ArrowLeft, Save, CheckCircle } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle, MessageSquareText } from "lucide-react";
 import { DirectAssessmentFilterBar } from "@/app/components/dashboard/DirectAssessmentFilterBar";
 import {
   filterDirectAssessmentEmployees,
   useDirectAssessmentFilters,
 } from "@/app/queries/direct-assessment-filters";
+import DirectAssessmentRemarksModal, {
+  type DirectAssessmentRemarksModalValue,
+} from "@/app/components/dashboard/DirectAssessmentRemarksModal";
 
 interface DirectAssessmentSpreadsheetProps {
   templateId: number;
@@ -36,6 +39,11 @@ interface DirectAssessmentSpreadsheetProps {
 type ScoreDraft = {
   pointsEarned: string;
   remarks: string;
+};
+
+type RemarksDraft = {
+  manager1: string;
+  manager2: string;
 };
 
 function clampScore(value: string, maxMarks: number): string {
@@ -96,6 +104,41 @@ function buildInitialDrafts(
   return result;
 }
 
+function buildInitialRemarksDrafts(
+  data: DirectAssessmentData,
+): Record<number, RemarksDraft> {
+  const result: Record<number, RemarksDraft> = {};
+  for (const emp of data.employees) {
+    if (emp.submissionId === 0) continue;
+    const remarks = data.overallRemarksBySubmission[emp.submissionId];
+    result[emp.submissionId] = {
+      manager1: remarks?.manager1 ?? "",
+      manager2: remarks?.manager2 ?? "",
+    };
+  }
+  return result;
+}
+
+/**
+ * Returns the overall remarks value to persist for the given submission,
+ * based on the assessment stage (Manager 1 vs Manager 2). The manager-review
+ * API writes to manager1_overall_remarks or manager2_overall_remarks based on
+ * the submission's manager_level, so we pass the matching draft field. This
+ * keeps Direct Assessment on the same data path as the standard workflow.
+ */
+function overallRemarksForSubmission(
+  data: DirectAssessmentData,
+  remarksDrafts: Record<number, RemarksDraft>,
+  submissionId: number,
+): string | null {
+  const emp = data.employees.find((e) => e.submissionId === submissionId);
+  const draft = remarksDrafts[submissionId];
+  if (!emp || !draft) return null;
+  const value =
+    (emp.managerLevel ?? 1) === 2 ? draft.manager2 : draft.manager1;
+  return value.trim() || null;
+}
+
 export default function DirectAssessmentSpreadsheet({
   templateId,
   onBack,
@@ -105,6 +148,17 @@ export default function DirectAssessmentSpreadsheet({
   const [drafts, setDrafts] = useState<
     Record<number, Record<number, ScoreDraft>>
   >({});
+  const [remarksDrafts, setRemarksDrafts] = useState<
+    Record<number, RemarksDraft>
+  >({});
+  // Modal state for the compact Additional Remarks flow. Only one modal is
+  // open at a time; remarksSubmissionId identifies the active employee.
+  const [remarksModalOpen, setRemarksModalOpen] = useState(false);
+  const [remarksModalSubmissionId, setRemarksModalSubmissionId] = useState<
+    number | null
+  >(null);
+  // Tracks whether the modal is currently saving (separate from score save).
+  const [remarksSaving, setRemarksSaving] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["direct-assessment", templateId],
@@ -132,6 +186,7 @@ export default function DirectAssessmentSpreadsheet({
 
   const initializeDrafts = useCallback((d: DirectAssessmentData) => {
     setDrafts(buildInitialDrafts(d));
+    setRemarksDrafts(buildInitialRemarksDrafts(d));
   }, []);
 
   useEffect(() => {
@@ -162,7 +217,13 @@ export default function DirectAssessmentSpreadsheet({
           };
         });
 
-      return saveDirectAssessmentScores(submissionId, answers);
+      const overallRemarks = overallRemarksForSubmission(
+        data,
+        remarksDrafts,
+        submissionId,
+      );
+
+      return saveDirectAssessmentScores(submissionId, answers, overallRemarks);
     },
     onSuccess: (_result, submissionId) => {
       setSaveMessage(`Saved scores for submission #${submissionId}.`);
@@ -192,7 +253,12 @@ export default function DirectAssessmentSpreadsheet({
               remarks: draft?.remarks?.trim() || null,
             };
           });
-        await saveDirectAssessmentScores(submissionId, answers);
+        const overallRemarks = overallRemarksForSubmission(
+          data,
+          remarksDrafts,
+          submissionId,
+        );
+        await saveDirectAssessmentScores(submissionId, answers, overallRemarks);
       }
       return approveDirectAssessment(submissionId);
     },
@@ -226,6 +292,66 @@ export default function DirectAssessmentSpreadsheet({
       return next;
     });
     setSaveMessage(null);
+  };
+
+  const openRemarksModal = (submissionId: number) => {
+    setRemarksModalSubmissionId(submissionId);
+    setRemarksModalOpen(true);
+  };
+
+  const closeRemarksModal = () => {
+    setRemarksModalOpen(false);
+    setRemarksModalSubmissionId(null);
+  };
+
+  // Persist remarks from the modal via the same saveDirectAssessmentScores
+  // API used by the inline flow. Reuses the existing overallRemarksForSubmission
+  // helper so the manager-level column routing stays identical.
+  const saveRemarksFromModal = async (
+    submissionId: number,
+    value: DirectAssessmentRemarksModalValue,
+  ) => {
+    if (!data) return;
+    setRemarksSaving(true);
+    try {
+      const nextDrafts: Record<number, RemarksDraft> = {
+        ...remarksDrafts,
+        [submissionId]: {
+          manager1: value.manager1,
+          manager2: value.manager2,
+        },
+      };
+      const empDrafts = drafts[submissionId] ?? {};
+      const answers = data.questions
+        .filter(isScoredQuestion)
+        .map((q) => {
+          const draft = empDrafts[q.id];
+          return {
+            questionId: q.id,
+            pointsEarned:
+              draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+            remarks: draft?.remarks?.trim() || null,
+          };
+        });
+      const overallRemarks = overallRemarksForSubmission(
+        data,
+        nextDrafts,
+        submissionId,
+      );
+      await saveDirectAssessmentScores(submissionId, answers, overallRemarks);
+      setRemarksDrafts(nextDrafts);
+      setSaveMessage(`Saved remarks for submission #${submissionId}.`);
+      queryClient.invalidateQueries({
+        queryKey: ["direct-assessment", templateId],
+      });
+      closeRemarksModal();
+    } catch (err) {
+      setSaveMessage(
+        err instanceof Error ? err.message : "Failed to save remarks.",
+      );
+    } finally {
+      setRemarksSaving(false);
+    }
   };
 
   if (isLoading) {
@@ -585,41 +711,140 @@ export default function DirectAssessmentSpreadsheet({
             Review Actions
           </h3>
           <div className="flex flex-wrap gap-2">
-            {editableEmployees.map((emp) => (
-              <div
-                key={emp.submissionId}
-                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
-              >
-                <span className="text-xs font-medium text-text-primary">
-                  {emp.employeeName}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => saveMutation.mutate(emp.submissionId)}
-                  disabled={
-                    saveMutation.isPending || approveMutation.isPending
-                  }
-                  className="inline-flex items-center gap-1 rounded-md border border-violet-300 bg-white px-2 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
+            {editableEmployees.map((emp) => {
+              const empRemarks = remarksDrafts[emp.submissionId] ?? {
+                manager1: "",
+                manager2: "",
+              };
+              const hasRemarks =
+                empRemarks.manager1.trim().length > 0 ||
+                empRemarks.manager2.trim().length > 0;
+              const remarksEnabled =
+                (data.additionalRemarksEnabled ?? false) && rows.length > 0;
+              return (
+                <div
+                  key={emp.submissionId}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
                 >
-                  <Save className="size-3" />
-                  {saveMutation.isPending ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => approveMutation.mutate(emp.submissionId)}
-                  disabled={
-                    saveMutation.isPending || approveMutation.isPending
-                  }
-                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
-                >
-                  <CheckCircle className="size-3" />
-                  {approveMutation.isPending ? "Approving..." : "Approve"}
-                </button>
-              </div>
-            ))}
+                  <span className="text-xs font-medium text-text-primary">
+                    {emp.employeeName}
+                  </span>
+                  {remarksEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => openRemarksModal(emp.submissionId)}
+                      disabled={
+                        saveMutation.isPending ||
+                        approveMutation.isPending ||
+                        remarksSaving
+                      }
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold disabled:opacity-60",
+                        hasRemarks
+                          ? "border-violet-400 bg-violet-50 text-violet-800 hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60"
+                          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/15 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/10",
+                      )}
+                      title={
+                        hasRemarks
+                          ? "Additional remarks already added — click to view/edit"
+                          : "Add additional remarks"
+                      }
+                    >
+                      <MessageSquareText className="size-3" />
+                      Remarks
+                      {hasRemarks ? (
+                        <span
+                          className="ml-0.5 inline-flex h-1.5 w-1.5 rounded-full bg-violet-500 dark:bg-violet-400"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => saveMutation.mutate(emp.submissionId)}
+                    disabled={
+                      saveMutation.isPending || approveMutation.isPending
+                    }
+                    className="inline-flex items-center gap-1 rounded-md border border-violet-300 bg-white px-2 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
+                  >
+                    <Save className="size-3" />
+                    {saveMutation.isPending ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => approveMutation.mutate(emp.submissionId)}
+                    disabled={
+                      saveMutation.isPending || approveMutation.isPending
+                    }
+                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                  >
+                    <CheckCircle className="size-3" />
+                    {approveMutation.isPending ? "Approving..." : "Approve"}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : null}
+
+      <DirectAssessmentRemarksModal
+        open={remarksModalOpen}
+        employeeName={
+          remarksModalSubmissionId != null
+            ? (data.employees.find(
+                (e) => e.submissionId === remarksModalSubmissionId,
+              )?.employeeName ?? "")
+            : ""
+        }
+        employeeId={
+          remarksModalSubmissionId != null
+            ? (data.employees.find(
+                (e) => e.submissionId === remarksModalSubmissionId,
+              )?.employeeId ?? "")
+            : ""
+        }
+        managerLevel={
+          remarksModalSubmissionId != null
+            ? (data.employees.find(
+                (e) => e.submissionId === remarksModalSubmissionId,
+              )?.managerLevel ?? null)
+            : null
+        }
+        manager2UserId={
+          remarksModalSubmissionId != null
+            ? (data.employees.find(
+                (e) => e.submissionId === remarksModalSubmissionId,
+              )?.manager2UserId ?? null)
+            : null
+        }
+        canEdit={
+          remarksModalSubmissionId != null
+            ? Boolean(
+                data.employees.find(
+                  (e) => e.submissionId === remarksModalSubmissionId,
+                )?.canEdit,
+              )
+            : false
+        }
+        additionalRemarksEnabled={data.additionalRemarksEnabled ?? false}
+        initialRemarks={
+          remarksModalSubmissionId != null
+            ? (remarksDrafts[remarksModalSubmissionId] ?? {
+                manager1: "",
+                manager2: "",
+              })
+            : { manager1: "", manager2: "" }
+        }
+        isPending={remarksSaving}
+        onClose={closeRemarksModal}
+        onSave={(value) => {
+          if (remarksModalSubmissionId != null) {
+            saveRemarksFromModal(remarksModalSubmissionId, value);
+          }
+        }}
+      />
     </div>
   );
 }

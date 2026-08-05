@@ -30,10 +30,17 @@ export interface DirectAssessmentEmployee {
   parentEntityName: string | null;
 }
 
+export interface DirectAssessmentOverallRemarks {
+  manager1: string | null;
+  manager2: string | null;
+}
+
 export interface DirectAssessmentData {
   templateId: number;
   templateTitle: string;
   selfAssessmentEnabled: boolean;
+  /** Whether the form template has additional_remarks_enabled = TRUE. */
+  additionalRemarksEnabled: boolean;
   questions: QuestionRecord[];
   sections: FormSectionRecord[];
   rootQuestions: QuestionRecord[];
@@ -48,6 +55,12 @@ export interface DirectAssessmentData {
     number,
     EmployeeFormAnswerRecord[]
   >;
+  /**
+   * Map of submissionId → overall remarks (manager1 / manager2) stored on the
+   * appraisal. Reuses the same columns as the standard assessment workflow so
+   * Direct Assessment and standard assessment share one data model.
+   */
+  overallRemarksBySubmission: Record<number, DirectAssessmentOverallRemarks>;
 }
 
 interface AssignmentRow {
@@ -222,17 +235,61 @@ export async function getDirectAssessmentData(
     }
   }
 
+  // Fetch overall remarks for every submission. Reuses the same
+  // manager1_overall_remarks / manager2_overall_remarks columns as the
+  // standard assessment workflow so both flows share one data model.
+  const overallRemarksBySubmission: Record<
+    number,
+    DirectAssessmentOverallRemarks
+  > = {};
+  const submissionIds = employees
+    .map((e) => e.submissionId)
+    .filter((id) => id !== 0);
+
+  if (submissionIds.length > 0) {
+    await ensureOverallRemarksColumns();
+    const remarksRows = await db.query<{
+      id: string;
+      manager1_overall_remarks: string | null;
+      manager2_overall_remarks: string | null;
+    }>(
+      `SELECT id::text,
+              manager1_overall_remarks,
+              manager2_overall_remarks
+       FROM appraisals
+       WHERE id = ANY($1::bigint[])`,
+      [submissionIds],
+    );
+    for (const row of remarksRows.rows) {
+      const id = Number(row.id);
+      overallRemarksBySubmission[id] = {
+        manager1: row.manager1_overall_remarks ?? null,
+        manager2: row.manager2_overall_remarks ?? null,
+      };
+    }
+  }
+
   return {
     templateId,
     templateTitle: template.title,
     selfAssessmentEnabled: template.selfAssessmentEnabled,
+    additionalRemarksEnabled: template.additionalRemarksEnabled,
     questions,
     sections: template.sections,
     rootQuestions: template.questions,
     employees,
     managerAnswersBySubmission,
     manager1AnswersBySubmission,
+    overallRemarksBySubmission,
   };
+}
+
+async function ensureOverallRemarksColumns(): Promise<void> {
+  await db.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS manager1_overall_remarks TEXT,
+     ADD COLUMN IF NOT EXISTS manager2_overall_remarks TEXT`,
+  );
 }
 
 async function getAnswersForSubmission(

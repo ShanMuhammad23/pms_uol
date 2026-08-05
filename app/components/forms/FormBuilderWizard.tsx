@@ -70,6 +70,7 @@ function draftToTemplateRecord(
   title: string,
   description: string,
   selfAssessmentEnabled: boolean,
+  additionalRemarksEnabled: boolean,
   sections: FormSectionInput[],
   questions: QuestionInput[],
 ): FormTemplateRecord {
@@ -117,6 +118,7 @@ function draftToTemplateRecord(
     targetCategory: null,
     targetSubCategory: null,
     selfAssessmentEnabled,
+    additionalRemarksEnabled,
     sections: recordSections,
     questions: recordQuestions,
     incrementMatrices: [],
@@ -161,6 +163,7 @@ function mapRecordToState(record: FormTemplateRecord) {
     description: record.description ?? "",
     cycleId: record.cycleId,
     selfAssessmentEnabled: record.selfAssessmentEnabled,
+    additionalRemarksEnabled: record.additionalRemarksEnabled,
     sections: normalized.sections,
     questions: normalized.questions,
   };
@@ -219,12 +222,14 @@ interface ModernFormDesignStepProps {
   title: string;
   description: string;
   selfAssessmentEnabled: boolean;
+  additionalRemarksEnabled: boolean;
   sections: FormSectionInput[];
   questions: QuestionInput[];
   errors: Record<string, string>;
   onTitleChange: (title: string) => void;
   onDescriptionChange: (description: string) => void;
   onSelfAssessmentEnabledChange: (enabled: boolean) => void;
+  onAdditionalRemarksEnabledChange: (enabled: boolean) => void;
   onStructureChange: (sections: FormSectionInput[], questions: QuestionInput[]) => void;
 }
 
@@ -232,12 +237,14 @@ function ModernFormDesignStep({
   title,
   description,
   selfAssessmentEnabled,
+  additionalRemarksEnabled,
   sections,
   questions,
   errors,
   onTitleChange,
   onDescriptionChange,
   onSelfAssessmentEnabledChange,
+  onAdditionalRemarksEnabledChange,
   onStructureChange,
 }: ModernFormDesignStepProps) {
   const [activePanel, setActivePanel] = useState<"builder" | "preview">("builder");
@@ -637,8 +644,8 @@ function ModernFormDesignStep({
     [sections, questions],
   );
   const previewTemplate = useMemo(
-    () => draftToTemplateRecord(title, description, selfAssessmentEnabled, sections, questions),
-    [title, description, selfAssessmentEnabled, sections, questions],
+    () => draftToTemplateRecord(title, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions),
+    [title, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions],
   );
 
   return (
@@ -708,16 +715,24 @@ function ModernFormDesignStep({
               rows={2}
               className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
             />
-          </div>
+          </div>  
 
-          {/* Assessment Settings info */}
+          {/* Additional Remarks toggle */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Assessment
+              Additional Remarks
             </label>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-snug text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-              Self-assessment is configured per employee during assignment.
-            </div>
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-snug text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60">
+              <input
+                type="checkbox"
+                checked={additionalRemarksEnabled}
+                onChange={(e) => onAdditionalRemarksEnabledChange(e.target.checked)}
+                className="size-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-slate-600 dark:text-amber-500"
+              />
+              <span>
+                Enable overall assessment remarks for reporting managers (Manager 1 &amp; Manager 2). Employees never see this section.
+              </span>
+            </label>
           </div>
         </div>
 
@@ -1738,6 +1753,7 @@ export default function FormBuilderWizard({
   );
   const [description, setDescription] = useState(initialState?.description ?? "");
   const [selfAssessmentEnabled, setSelfAssessmentEnabled] = useState(initialState?.selfAssessmentEnabled ?? true);
+  const [additionalRemarksEnabled, setAdditionalRemarksEnabled] = useState(initialState?.additionalRemarksEnabled ?? false);
   const [sections, setSections] = useState<FormSectionInput[]>(
     initialState?.sections.map((section) => ({
       ...section,
@@ -1791,6 +1807,7 @@ export default function FormBuilderWizard({
       title: title.trim(),
       description: description.trim(),
       selfAssessmentEnabled,
+      additionalRemarksEnabled,
       sections: normalized.sections,
       questions: normalized.questions,
       ...(cycleId ? { cycleId } : {}),
@@ -1799,6 +1816,7 @@ export default function FormBuilderWizard({
     title,
     description,
     selfAssessmentEnabled,
+    additionalRemarksEnabled,
     sections,
     questions,
     cycleId,
@@ -2020,12 +2038,14 @@ export default function FormBuilderWizard({
             title={title}
             description={description}
             selfAssessmentEnabled={selfAssessmentEnabled}
+            additionalRemarksEnabled={additionalRemarksEnabled}
             sections={sections}
             questions={questions}
             errors={errors}
             onTitleChange={setTitle}
             onDescriptionChange={setDescription}
             onSelfAssessmentEnabledChange={setSelfAssessmentEnabled}
+            onAdditionalRemarksEnabledChange={setAdditionalRemarksEnabled}
             onStructureChange={handleStructureChange}
           />
         ) : (

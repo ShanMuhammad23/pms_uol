@@ -108,7 +108,7 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
           <thead className="bg-primary text-left text-sm font-semibold whitespace-nowrap text-white">
             <tr className="divide-x divide-white/15">
               <th className="px-4 py-3.5">Title</th>
-              <th className="px-4 py-3.5">Assigned Employees</th>
+              <th className="px-2 py-2">Assigned </th>
               <th className="px-4 py-3.5">Cycle</th>
               <th className="px-4 py-3.5">Questions</th>
               <th className="px-4 py-3.5">Actions</th>
@@ -120,15 +120,15 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                 key={template.id}
                 className="divide-x divide-slate-200 dark:divide-neutral-700"
               >
-                <td className="px-4 py-4 font-medium text-slate-900 dark:text-slate-50 whitespace-nowrap">
-                  <p className="font-semibold text-slate-900 dark:text-white">{template.title}</p>
+                <td className="px-4 py-4 font-medium text-slate-900 dark:text-slate-50">
+                  <p className="font-semibold whitespace-nowrap text-slate-900 dark:text-white">{template.title}</p>
                   {template.description ? (
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <p className="mt-0.5 max-w-7xl break-words text-xs text-slate-500 dark:text-slate-400">
                       {template.description}
                     </p>
                   ) : null}
                 </td>
-                <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
+                <td className="px-2 py-2 text-slate-700 dark:text-slate-300">
                   {template.assignedEmployeeCount}
                 </td>
                 <td className="px-4 py-4 text-slate-700 dark:text-slate-300">

@@ -14,6 +14,7 @@ import {
   FormSubmissionError,
   getFormSubmissionById,
   getFormSubmissionSummaryById,
+  updateAppraisalOverallRemarks,
   updateAppraisalRemarks,
   updateAppraisalScoreAdjustments,
   type AppraisalRemarksField,
@@ -77,6 +78,29 @@ export async function GET(_request: Request, context: RouteContext) {
 
     if (!submission) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
+    }
+
+    // RBAC: Score Adjustments & Calibration is a confidential administrative
+    // section. Only HR, Board, and Super Admin (canReviewSubmissions) may view
+    // these fields. Strip them from the response for all other roles
+    // (Employee, Manager 1, Manager 2) even if they can otherwise access the
+    // submission. The frontend additionally does not render the section, but
+    // the backend is the source of truth so these fields never leak.
+    if (!canReviewSubmissions(role)) {
+      return NextResponse.json({
+        ...submission,
+        creditHrsErpScoreAdj: null,
+        pubOricScoreAdj: null,
+        qecScoreAdj: null,
+        calibrationFactor: null,
+        calibratedScoreNumeric: null,
+        initialScoreNumeric: null,
+        canEditScoreAdjustments: false,
+        performanceLevelName: null,
+        quartileName: null,
+        quartileScoreMin: null,
+        quartileScoreMax: null,
+      });
     }
 
     return NextResponse.json(submission);
@@ -195,6 +219,40 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json(updated);
     }
 
+    // Handle overall remarks fields (Manager 1 / Manager 2)
+    const OVERALL_REMARKS_FIELDS = [
+      "manager1OverallRemarks",
+      "manager2OverallRemarks",
+    ] as const;
+
+    const overallField = OVERALL_REMARKS_FIELDS.find((f) => f in body);
+
+    if (overallField) {
+      const rawOverallValue = body[overallField];
+      if (rawOverallValue !== null && typeof rawOverallValue !== "string") {
+        return NextResponse.json(
+          { error: `${overallField} must be a string or null.` },
+          { status: 400 },
+        );
+      }
+
+      const overallValue =
+        typeof rawOverallValue === "string"
+          ? rawOverallValue.trim() || null
+          : null;
+
+      const managerLevel: 1 | 2 =
+        overallField === "manager2OverallRemarks" ? 2 : 1;
+
+      const updated = await updateAppraisalOverallRemarks(
+        submissionId,
+        managerLevel,
+        overallValue,
+      );
+
+      return NextResponse.json(updated);
+    }
+
     // Handle remarks fields
     const field = REMARKS_FIELDS.find((candidate) => candidate in body);
 
@@ -202,7 +260,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json(
         {
           error:
-            "One of remarksEvaluation, remarksCompensation, creditHrsErpScoreAdj, pubOricScoreAdj, qecScoreAdj, calibrationFactor, or calibratedScoreNumeric is required.",
+            "One of remarksEvaluation, remarksCompensation, manager1OverallRemarks, manager2OverallRemarks, creditHrsErpScoreAdj, pubOricScoreAdj, qecScoreAdj, calibrationFactor, or calibratedScoreNumeric is required.",
         },
         { status: 400 },
       );

@@ -26,6 +26,7 @@ interface FormTemplateListRow {
   target_category: EmployeeCategory | null;
   target_sub_category: SubCategory | null;
   self_assessment_enabled: boolean;
+  additional_remarks_enabled: boolean;
   question_count: string;
   appraisal_count: string;
   assigned_employee_count: string;
@@ -42,6 +43,7 @@ interface FormTemplateRow {
   target_category: EmployeeCategory | null;
   target_sub_category: SubCategory | null;
   self_assessment_enabled: boolean;
+  additional_remarks_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +88,18 @@ export class FormTemplateError extends Error {
 
 const APPRAISAL_ANSWER_BLOCK_MESSAGE =
   "This form has appraisal answers linked to questions that would be removed. Delete or archive those answers first, or only edit question text/options in place.";
+
+async function ensureAdditionalRemarksColumns(): Promise<void> {
+  await db.query(
+    `ALTER TABLE form_templates
+     ADD COLUMN IF NOT EXISTS additional_remarks_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+  );
+  await db.query(
+    `ALTER TABLE appraisals
+     ADD COLUMN IF NOT EXISTS manager1_overall_remarks TEXT,
+     ADD COLUMN IF NOT EXISTS manager2_overall_remarks TEXT`,
+  );
+}
 
 async function resolveCycleId(cycleId?: number): Promise<number> {
   if (cycleId) {
@@ -669,6 +683,8 @@ export async function getFormTemplateAppraisalCount(
 }
 
 export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
+  await ensureAdditionalRemarksColumns();
+
   const result = await db.query<FormTemplateListRow>(
     `SELECT
        ft.id,
@@ -679,6 +695,7 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        ft.target_category,
        ft.target_sub_category,
        ft.self_assessment_enabled,
+       ft.additional_remarks_enabled,
        COUNT(DISTINCT fq.id)::text AS question_count,
        COUNT(DISTINCT ap.id)::text AS appraisal_count,
        COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
@@ -702,6 +719,7 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
     targetCategory: row.target_category,
     targetSubCategory: row.target_sub_category,
     selfAssessmentEnabled: row.self_assessment_enabled,
+    additionalRemarksEnabled: row.additional_remarks_enabled,
     questionCount: Number(row.question_count),
     appraisalCount: Number(row.appraisal_count),
     assignedEmployeeCount: Number(row.assigned_employee_count),
@@ -749,6 +767,7 @@ export async function listDirectAssessmentTemplates(scope: {
        ft.target_category,
        ft.target_sub_category,
        ft.self_assessment_enabled,
+       ft.additional_remarks_enabled,
        COUNT(DISTINCT fq.id)::text AS question_count,
        COUNT(DISTINCT ap.id)::text AS appraisal_count,
        COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
@@ -779,6 +798,7 @@ export async function listDirectAssessmentTemplates(scope: {
     targetCategory: row.target_category,
     targetSubCategory: row.target_sub_category,
     selfAssessmentEnabled: row.self_assessment_enabled,
+    additionalRemarksEnabled: row.additional_remarks_enabled,
     questionCount: Number(row.question_count),
     appraisalCount: Number(row.appraisal_count),
     assignedEmployeeCount: Number(row.assigned_employee_count),
@@ -790,6 +810,8 @@ export async function listDirectAssessmentTemplates(scope: {
 export async function getFormTemplateById(
   id: number,
 ): Promise<FormTemplateRecord | null> {
+  await ensureAdditionalRemarksColumns();
+
   const result = await db.query<FormTemplateRow>(
     `SELECT
        ft.id,
@@ -800,6 +822,7 @@ export async function getFormTemplateById(
        ft.target_category,
        ft.target_sub_category,
        ft.self_assessment_enabled,
+       ft.additional_remarks_enabled,
        ft.created_at::text,
        ft.updated_at::text
      FROM form_templates ft
@@ -825,6 +848,7 @@ export async function getFormTemplateById(
     targetCategory: row.target_category,
     targetSubCategory: row.target_sub_category,
     selfAssessmentEnabled: row.self_assessment_enabled,
+    additionalRemarksEnabled: row.additional_remarks_enabled,
     sections: structure.sections,
     questions: structure.questions,
     incrementMatrices: await getIncrementMatricesByCycleId(row.cycle_id),
@@ -852,8 +876,9 @@ export async function createFormTemplate(
          target_category,
          target_sub_category,
          self_assessment_enabled,
+         additional_remarks_enabled,
          created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
       [
         input.title,
@@ -862,6 +887,7 @@ export async function createFormTemplate(
         input.targetCategory ?? null,
         input.targetSubCategory ?? null,
         input.selfAssessmentEnabled,
+        input.additionalRemarksEnabled ?? false,
         createdById ?? null,
       ],
     );
@@ -928,8 +954,9 @@ export async function updateFormTemplate(
            target_category = $4,
            target_sub_category = $5,
            self_assessment_enabled = $6,
+           additional_remarks_enabled = $7,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $7`,
+       WHERE id = $8`,
       [
         input.title,
         input.description || null,
@@ -937,6 +964,7 @@ export async function updateFormTemplate(
         input.targetCategory ?? null,
         input.targetSubCategory ?? null,
         input.selfAssessmentEnabled,
+        input.additionalRemarksEnabled ?? false,
         id,
       ],
     );

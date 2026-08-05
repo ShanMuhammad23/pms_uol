@@ -84,9 +84,17 @@ export async function PUT(request: Request, context: RouteContext) {
       reviewerUserId,
       body.answers,
       detail.questions,
+      {
+        managerLevel: summary.managerLevel ?? 1,
+        overallRemarks: body.overallRemarks,
+      },
     );
 
-    return NextResponse.json({ managerAnswers });
+    return NextResponse.json({
+      managerAnswers,
+      manager1OverallRemarks: detail.manager1OverallRemarks,
+      manager2OverallRemarks: detail.manager2OverallRemarks,
+    });
   } catch (error) {
     if (error instanceof SubmissionAccessError) {
       return submissionAccessErrorResponse(error);
