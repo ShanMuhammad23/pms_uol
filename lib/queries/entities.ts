@@ -6,6 +6,7 @@ import type {
   EntityRecord,
   UpdateEntityInput,
 } from "@/types/entities";
+import { enrichEntitiesWithSubtreeStaffCounts } from "@/app/helpers/dashboard-entity-filters";
 import { normalizeEntityInput } from "@/lib/validation/entities";
 
 interface EntityRow {
@@ -170,7 +171,9 @@ export async function listEntities(): Promise<EntityRecord[]> {
      ORDER BY e.name ASC`,
   );
 
-  return result.rows.map(mapEntityRow);
+  // Staff are usually assigned to leaf/child entities; roll those counts up
+  // so C0/C1 parents show the full subtree headcount.
+  return enrichEntitiesWithSubtreeStaffCounts(result.rows.map(mapEntityRow));
 }
 
 export async function getEntityById(id: number): Promise<EntityRecord | null> {

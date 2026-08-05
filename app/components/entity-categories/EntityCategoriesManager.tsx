@@ -318,18 +318,18 @@ export default function EntityCategoriesManager() {
       {!isLoading && !error && data && data.length > 0 ? (
         <div className="overflow-x-auto rounded-md border border-slate-300/80 dark:border-white/15">
           <table className="min-w-full text-sm">
-            <thead className="bg-primary/5">
+            <thead className="bg-primary text-white">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">
+                <th className="px-4 py-3 text-left font-semibold">
                   Code
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                  Created
+                <th className="px-4 py-3 text-left font-semibold">
+                  Created At
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-text-primary">
-                  Updated
+                <th className="px-4 py-3 text-left font-semibold">
+                  Updated At
                 </th>
-                <th className="px-4 py-3 text-right font-semibold text-text-primary">
+                <th className="px-4 py-3 text-right font-semibold">
                   Actions
                 </th>
               </tr>

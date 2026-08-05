@@ -103,7 +103,20 @@ export function EntityListFilterBar({
             />
           </div>
         </div>
-
+        <MultiSelectFilterDropdown
+          label="Parent"
+          icon={Building2}
+          options={parentEntityOptions}
+          selectedValues={selectedParentEntityIds}
+          onChange={onParentEntityIdsChange}
+          disabled={parentEntityOptions.length === 0}
+          placeholder={
+            parentEntityOptions.length === 0
+              ? "No parent entities"
+              : "All"
+          }
+          searchable={parentEntityOptions.length > 8}
+        />
         <div className="space-y-1.5">
           <label
             htmlFor="entity-list-category-code"
@@ -137,20 +150,7 @@ export function EntityListFilterBar({
           </div>
         </div>
 
-        <MultiSelectFilterDropdown
-          label="Parent"
-          icon={Building2}
-          options={parentEntityOptions}
-          selectedValues={selectedParentEntityIds}
-          onChange={onParentEntityIdsChange}
-          disabled={parentEntityOptions.length === 0}
-          placeholder={
-            parentEntityOptions.length === 0
-              ? "No parent entities"
-              : "All"
-          }
-          searchable={parentEntityOptions.length > 8}
-        />
+      
 
         <MultiSelectFilterDropdown
           label="Entity"

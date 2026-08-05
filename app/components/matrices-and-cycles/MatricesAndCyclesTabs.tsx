@@ -32,10 +32,10 @@ export default function MatricesAndCyclesTabs() {
     <div className="space-y-6">
      
 
-      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03] min-h-screen">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white  dark:border-white/10 dark:bg-white/[0.03] min-h-screen">
       <nav
         aria-label="Matrices and cycles tabs"
-        className="flex gap-1.5 overflow-x-auto rounded-md border border-slate-200 bg-white p-1.5 shadow-sm dark:border-white/10 dark:bg-white/5"
+        className="flex gap-1.5 overflow-x-auto rounded-md border border-slate-200 bg-white   dark:border-white/10 dark:bg-white/5"
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -47,7 +47,7 @@ export default function MatricesAndCyclesTabs() {
               type="button"
               onClick={() => setActiveTab(tab.id)}
               aria-current={isActive ? "page" : undefined}
-              className={`group flex shrink-0 items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-left transition-colors ${
+              className={`group flex shrink-0 items-center gap-2.5  px-3.5 py-2.5 text-left transition-colors ${
                 isActive
                   ? "bg-primary text-white"
                   : "text-foreground/70 hover:bg-primary/5 hover:text-text-primary"
@@ -56,21 +56,14 @@ export default function MatricesAndCyclesTabs() {
               <span
                 className={`flex size-7 shrink-0 items-center justify-center rounded-md transition-colors ${
                   isActive
-                    ? "bg-white/15 text-white"
-                    : "bg-primary/10 text-primary group-hover:bg-primary/15"
+                    ? "bg-primary text-white"
+                    : "text-primary group-hover:bg-primary/15"
                 }`}
               >
                 <Icon className="size-4" />
               </span>
               <span className="flex flex-col">
                 <span className="text-sm font-semibold leading-tight">{tab.label}</span>
-                <span
-                  className={`text-[11px] leading-tight ${
-                    isActive ? "text-white/70" : "text-foreground/50"
-                  }`}
-                >
-                  {tab.description}
-                </span>
               </span>
             </button>
           );

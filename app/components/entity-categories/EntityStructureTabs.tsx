@@ -19,7 +19,7 @@ export default function EntityStructureTabs() {
 
   return (
     <div className="space-y-6">
-      <div className="border-b border-slate-300/80 dark:border-white/15">
+      <div className="border rounded border-slate-300/80 dark:border-white/15">
         <nav
           aria-label="Entity management tabs"
           className="-mb-px flex gap-1 overflow-x-auto"
@@ -36,7 +36,7 @@ export default function EntityStructureTabs() {
                 aria-current={isActive ? "page" : undefined}
                 className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                   isActive
-                    ? "border-primary text-primary"
+                    ? "bg-primary text-white"
                     : "border-transparent text-foreground/70 hover:border-primary/40 hover:text-text-primary"
                 }`}
               >

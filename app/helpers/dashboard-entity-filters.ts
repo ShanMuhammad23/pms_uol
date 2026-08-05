@@ -218,6 +218,51 @@ export function getEntityDescendantIds(
   return descendants;
 }
 
+/**
+ * Replace each entity's direct `staffCount` with self + all descendants.
+ * Input counts must be direct assignments; do not call twice on the same list.
+ */
+export function enrichEntitiesWithSubtreeStaffCounts(
+  entities: EntityRecord[],
+): EntityRecord[] {
+  if (entities.length === 0) {
+    return entities;
+  }
+
+  const directCounts = new Map<number, number>();
+  const childrenByParent = new Map<number, number[]>();
+
+  for (const entity of entities) {
+    directCounts.set(entity.id, entity.staffCount);
+    if (entity.parentEntityId != null) {
+      const siblings = childrenByParent.get(entity.parentEntityId) ?? [];
+      siblings.push(entity.id);
+      childrenByParent.set(entity.parentEntityId, siblings);
+    }
+  }
+
+  const subtreeCache = new Map<number, number>();
+
+  const subtreeTotal = (id: number): number => {
+    const cached = subtreeCache.get(id);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    let total = directCounts.get(id) ?? 0;
+    for (const childId of childrenByParent.get(id) ?? []) {
+      total += subtreeTotal(childId);
+    }
+    subtreeCache.set(id, total);
+    return total;
+  };
+
+  return entities.map((entity) => ({
+    ...entity,
+    staffCount: subtreeTotal(entity.id),
+  }));
+}
+
 export type EntityListFilterState = {
   searchQuery: string;
   categoryCode: EntityCategoryCode | "ALL";

@@ -172,7 +172,7 @@ export default function EntitiesManager() {
       categoryEntities.map((entity) => ({
         value: String(entity.id),
         label: entity.name,
-        count: 0,
+        count: entity.staffCount,
       })),
     [categoryEntities],
   );
@@ -192,7 +192,7 @@ export default function EntitiesManager() {
       childEntities.map((entity) => ({
         value: String(entity.id),
         label: `${entity.name} (${entity.categoryCode})`,
-        count: 0,
+        count: entity.staffCount,
       })),
     [childEntities],
   );
@@ -210,7 +210,7 @@ export default function EntitiesManager() {
       .map((id) => byId.get(id))
       .filter((e): e is EntityRecord => e != null)
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((e) => ({ value: String(e.id), label: e.name, count: 0 }));
+      .map((e) => ({ value: String(e.id), label: e.name, count: e.staffCount }));
   }, [entities]);
 
   const filteredEntities = useMemo(
@@ -809,7 +809,7 @@ export default function EntitiesManager() {
                         className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
                       >
                         <Pencil className="size-3.5" />
-                        Edit
+                       
                       </button>
                       <button
                         type="button"
@@ -818,7 +818,7 @@ export default function EntitiesManager() {
                         className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-60 dark:border-red-900"
                       >
                         <Trash2 className="size-3.5" />
-                        Delete
+                        
                       </button>
                     </div>
                   </td>

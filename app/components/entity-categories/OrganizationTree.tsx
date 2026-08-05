@@ -311,7 +311,7 @@ export default function OrganizationTree() {
       categoryEntities.map((entity) => ({
         value: String(entity.id),
         label: entity.name,
-        count: 0,
+        count: entity.staffCount,
       })),
     [categoryEntities],
   );
@@ -331,7 +331,7 @@ export default function OrganizationTree() {
       childEntities.map((entity) => ({
         value: String(entity.id),
         label: `${entity.name} (${entity.categoryCode})`,
-        count: 0,
+        count: entity.staffCount,
       })),
     [childEntities],
   );
@@ -349,7 +349,7 @@ export default function OrganizationTree() {
       .map((id) => byId.get(id))
       .filter((e): e is EntityRecord => e != null)
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((e) => ({ value: String(e.id), label: e.name, count: 0 }));
+      .map((e) => ({ value: String(e.id), label: e.name, count: e.staffCount }));
   }, [entities]);
 
   const filteredEntities = useMemo(

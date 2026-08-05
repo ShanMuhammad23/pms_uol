@@ -7,6 +7,7 @@ import {
   matchesSubmissionFiltersExcluding,
   type SubmissionFilterState,
 } from "@/app/helpers/dashboard-filters";
+import { getHrApprovalStatus } from "@/app/helpers/dashboard-table-columns";
 import {
   buildBoardApprovalStats,
   buildHrAlignmentStats,
@@ -81,6 +82,9 @@ function buildRatingQuartileCounts(
   for (const submission of submissions) {
     if (!hasAppraisalProgress(submission)) continue;
     if (!isSubmissionEligible(submission)) continue;
+    // Only count employees whose HR review is approved — normalized
+    // score alone must not populate the matrix while HR is pending.
+    if (getHrApprovalStatus(submission) !== "approved") continue;
 
     // Use the shared resolver which computes the normalized score %
     // from Score O + adjustments + calibration factor, then maps it

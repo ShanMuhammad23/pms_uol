@@ -1,5 +1,6 @@
 import type { RatingQuartileMatrixData } from "@/app/helpers/dashboard-types";
 import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
+import { getHrApprovalStatus } from "@/app/helpers/dashboard-table-columns";
 import { isSubmissionEligible } from "@/app/helpers/dashboard-workflow-stats";
 import {
   buildQuartileBandsFromMatrix,
@@ -19,11 +20,13 @@ export function buildRatingQuartileMatrix(
   const sortedMatrix = sortPerformanceMatrix(matrix);
   const columns = getMatrixQuartileColumnHeaders(sortedMatrix);
   // Match the server-side aggregation: only count submissions that have
-  // appraisal progress AND are eligible. Previously this only filtered by
-  // hasAppraisalProgress, which caused the client-side matrix to count
-  // ineligible employees and disagree with the server-side counts.
+  // appraisal progress, are eligible, AND have HR review approved.
+  // Normalized score alone is not enough — pending HR approval must not
+  // populate the matrix.
   const chartSubmissions = filterSubmissionsForCharts(submissions).filter(
-    isSubmissionEligible,
+    (submission) =>
+      isSubmissionEligible(submission) &&
+      getHrApprovalStatus(submission) === "approved",
   );
   const bands = buildQuartileBandsFromMatrix(sortedMatrix);
   const counts = new Map<string, number>();
