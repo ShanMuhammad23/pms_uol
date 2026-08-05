@@ -420,12 +420,12 @@ export default function EntitiesManager() {
             {editingEntity ? (
               <>
                 <Pencil className="size-4" />
-                Update Entity
+                Update Level
               </>
             ) : (
               <>
                 <Plus className="size-4" />
-                Add Entity
+                Add Level
               </>
             )}
           </button>
@@ -456,7 +456,7 @@ export default function EntitiesManager() {
   const renderAddFormCard = () => (
     <div className="rounded-md border border-slate-300/80 p-6 dark:border-white/15">
       <div>
-        <h2 className="text-lg font-semibold text-text-primary">Add Entity</h2>
+        <h2 className="text-lg font-semibold text-text-primary">Add Level</h2>
         <p className="mt-1 text-sm text-foreground/70">
           Create organizational entities linked to a category and optional parent
           entity.
@@ -505,7 +505,7 @@ export default function EntitiesManager() {
                   id="entity-edit-modal-title"
                   className="text-lg font-semibold text-text-primary"
                 >
-                  Edit Entity
+                  Edit Level
                 </h2>
                 <p className="mt-1 text-sm text-foreground/70">
                   Update this entity&apos;s name, category, or parent.
@@ -536,8 +536,8 @@ export default function EntitiesManager() {
         <nav aria-label="Entity section tabs" className="-mb-px flex gap-1">
           {(
             [
-              { id: "list", label: "Entities", icon: Table2 },
-              { id: "add", label: "Add Entity", icon: Plus },
+              { id: "list", label: "Levels", icon: Table2 },
+              { id: "add", label: "Add Level", icon: Plus },
             ] as const
           ).map((tab) => {
             const Icon = tab.icon;
@@ -568,13 +568,13 @@ export default function EntitiesManager() {
 
       {isLoading ? (
         <div className="rounded-md border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
-          Loading entities...
+          Loading levels...
         </div>
       ) : null}
 
       {error ? (
         <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-          Failed to load entities.
+          Failed to load levels.
         </div>
       ) : null}
 
@@ -582,22 +582,19 @@ export default function EntitiesManager() {
         <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
           <Building2 className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">
-            No entities yet
+            No levels yet
           </p>
           <p className="mt-1 text-sm text-foreground/70">
-            Add your first entity from the Add Entity tab.
+            Add your first level from the Add Level tab.
           </p>
         </div>
       ) : null}
 
       {!isLoading && !error && entities && entities.length > 0 ? (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300/80 p-4 dark:border-white/15">
-            <p className="text-sm text-foreground/70">
-              Showing {displayedEntities.length} of {entities.length} entities
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[16rem] flex-1 sm:max-w-sm">
+          <div className="flex flex-wrap items-center  gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[16rem] flex-1 sm:max-w-md">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-foreground/50" />
                 <input
                   type="text"
@@ -618,13 +615,17 @@ export default function EntitiesManager() {
                 </button>
               ) : null}
             </div>
+            <p className="text-sm text-foreground/70">
+              Showing {displayedEntities.length} of {entities.length} levels
+            </p>
+           
           </div>
 
           {displayedEntities.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
               <Building2 className="mx-auto size-8 text-foreground/50" />
               <p className="mt-3 text-sm font-medium text-text-primary">
-                No entities match the current search
+                No levels match the current search
               </p>
               {hasActiveFilters ? (
                 <button

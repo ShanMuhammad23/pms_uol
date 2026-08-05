@@ -166,7 +166,7 @@ export default function EntityCategoriesManager() {
             {editingCategory ? "Edit Category" : "Add Category"}
           </h2>
           <p className="mt-1 text-sm text-foreground/70">
-            Entity categories use codes C1, C2, and C3 as defined in the system
+            Organization levels use codes C1, C2, and C3 as defined in the system
             schema.
           </p>
         </div>
