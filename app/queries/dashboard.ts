@@ -98,6 +98,7 @@ export function useDashboardPage() {
     selectedRoleCategories,
     selectedDesignations,
     selectedFormStates,
+    selectedCardFilter,
     category0Options: baseCategory0Options,
     category0DistributionOptions: baseCategory0DistributionOptions,
     category1Options: baseCategory1Options,
@@ -116,6 +117,7 @@ export function useDashboardPage() {
     handleFormStateChange,
     clearAllFilters,
     filterByFormState,
+    filterByCard,
   } = useDashboardFilters({
     entities,
     designations,
@@ -227,6 +229,7 @@ export function useDashboardPage() {
     selectedRoleCategories,
     selectedDesignations,
     selectedFormStates,
+    selectedCardFilter,
     category0Options,
     category0DistributionOptions,
     category1Options,
@@ -250,6 +253,7 @@ export function useDashboardPage() {
     handleFormStateChange,
     clearAllFilters,
     filterByFormState,
+    filterByCard,
     eligibilityData,
     selfAssessmentStats: overview?.workflow.selfAssessment ?? {
       awaiting: 0,

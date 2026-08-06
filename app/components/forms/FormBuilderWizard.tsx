@@ -7,9 +7,6 @@ import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/app/components/auth/Button";
 import FormEmployeeAssignment from "./FormEmployeeAssignment";
 import FormTemplateView from "./FormTemplateView";
-import FormAssessmentPreview, {
-  type FormPreviewRole,
-} from "./FormAssessmentPreview";
 import {
   createFormTemplate,
   FormTemplateRequestError,
@@ -251,9 +248,6 @@ function ModernFormDesignStep({
   onStructureChange,
 }: ModernFormDesignStepProps) {
   const [activePanel, setActivePanel] = useState<"builder" | "preview">("builder");
-  // "View As" mode for the preview panel. "template" preserves the existing
-  // structural preview; the other options mirror the live assessment screens.
-  const [viewAs, setViewAs] = useState<"template" | FormPreviewRole>("template");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
@@ -804,32 +798,6 @@ function ModernFormDesignStep({
                 Preview
               </button>
             </div>
-            {activePanel === "preview" && (
-              <div className="flex items-center gap-2">
-                <label
-                  htmlFor="view-as-select"
-                  className="text-xs font-medium text-slate-500 dark:text-slate-400"
-                >
-                  View As
-                </label>
-                <div className="relative">
-                  <select
-                    id="view-as-select"
-                    value={viewAs}
-                    onChange={(e) =>
-                      setViewAs(e.target.value as "template" | FormPreviewRole)
-                    }
-                    className="appearance-none rounded-md border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-slate-700 shadow-sm transition-all hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  >
-                    <option value="template">Template Structure</option>
-                    <option value="employee">Employee View</option>
-                    <option value="manager1">Manager 1 View</option>
-                    <option value="manager2">Manager 2 View</option>
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                </div>
-              </div>
-            )}
             {hasErrors && (
               <div className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600 dark:bg-red-900/20 dark:text-red-400">
                 <AlertCircle className="h-3.5 w-3.5" />
@@ -973,10 +941,8 @@ function ModernFormDesignStep({
                 </div>
               )}
             </div>
-          ) : viewAs === "template" ? (
-            <FormTemplateView template={previewTemplate} />
           ) : (
-            <FormAssessmentPreview template={previewTemplate} viewAs={viewAs} />
+            <FormTemplateView template={previewTemplate} />
           )}
         </div>
 

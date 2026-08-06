@@ -136,6 +136,16 @@ export interface FormSubmissionDetail {
   manager2Answers: EmployeeFormAnswerRecord[];
   canEditManagerReview: boolean;
   canEditHrReview: boolean;
+  /**
+   * True when the current viewer is the assigned manager (Manager 1 or
+   * Manager 2) for the submission's current manager_level, regardless of
+   * their system role. This separates "system role permission" from
+   * "assessment assignment permission" — an HR/Board/SuperAdmin user who
+   * is assigned as a manager for the employee is considered the assigned
+   * manager at that level. Used by the frontend to unlock manager score
+   * inputs for admin roles acting as the assigned manager.
+   */
+  isAssignedManagerForCurrentLevel: boolean;
   creditHrsErpScoreAdj: number | null;
   pubOricScoreAdj: number | null;
   qecScoreAdj: number | null;

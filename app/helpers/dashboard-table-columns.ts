@@ -626,6 +626,83 @@ export function getHeadDashboardColumnSections(): DashboardColumnSection[] {
   })).filter((section) => section.columnIds.length > 0);
 }
 
+/**
+ * Fixed column layout for Manager 1 / Manager 2 roles in the Staff Listing.
+ *
+ * Managers do NOT get column management — they always see this predefined
+ * layout with the first four columns frozen (sticky) during horizontal
+ * scrolling. Saved column preferences are ignored for these roles.
+ *
+ * Frozen columns (sticky, in order):
+ *   1. SAP ID        (sapCode)
+ *   2. Employee Name (employeeName)
+ *   3. Designation   (designation)
+ *   4. Status        (status)
+ *
+ * Normal columns (in order):
+ *   5. Applicable Duration (applicableDuration)
+ *   6. Score(O)           (scoreO)
+ *   7. Form               (formAssignment)
+ *   8. Org Level 2        (deptGroupName)
+ *   9. Date of Joining    (dateOfJoining)
+ *  10. UOL Exp            (uolExperience)
+ *  11. Qualification      (qualification)
+ *  12. Subject            (qualificationSubject)
+ *  13. Year               (qualificationYear)
+ *  14. Institute          (qualificationInstitute)
+ *  15. Country            (qualificationCountry)
+ */
+export const MANAGER_FIXED_FROZEN_COLUMN_IDS = [
+  "sapCode",
+  "employeeName",
+  "designation",
+  "status",
+] as const satisfies readonly DashboardTableColumnId[];
+
+export const MANAGER_FIXED_NORMAL_COLUMN_IDS = [
+  "applicableDuration",
+  "scoreO",
+  "formAssignment",
+  "deptGroupName",
+  "dateOfJoining",
+  "uolExperience",
+  "qualification",
+  "qualificationSubject",
+  "qualificationYear",
+  "qualificationInstitute",
+  "qualificationCountry",
+] as const satisfies readonly DashboardTableColumnId[];
+
+/** All visible column IDs for the fixed manager layout, in display order. */
+export const MANAGER_FIXED_COLUMN_IDS: readonly DashboardTableColumnId[] = [
+  ...MANAGER_FIXED_FROZEN_COLUMN_IDS,
+  ...MANAGER_FIXED_NORMAL_COLUMN_IDS,
+];
+
+/** Frozen column IDs for the fixed manager layout. */
+export const MANAGER_FIXED_FROZEN_COLUMNS: readonly DashboardTableColumnDef[] =
+  MANAGER_FIXED_FROZEN_COLUMN_IDS.map((id) => COLUMN_BY_ID[id]);
+
+/** Normal (non-frozen) columns for the fixed manager layout, in order. */
+export const MANAGER_FIXED_NORMAL_COLUMNS: readonly DashboardTableColumnDef[] =
+  MANAGER_FIXED_NORMAL_COLUMN_IDS.map((id) => COLUMN_BY_ID[id]);
+
+/** All column defs for the fixed manager layout, in display order. */
+export const MANAGER_FIXED_COLUMNS: readonly DashboardTableColumnDef[] = [
+  ...MANAGER_FIXED_FROZEN_COLUMNS,
+  ...MANAGER_FIXED_NORMAL_COLUMNS,
+];
+
+export const MANAGER_FIXED_COLUMN_ID_SET = new Set<DashboardTableColumnId>(
+  MANAGER_FIXED_COLUMN_IDS,
+);
+
+export function isManagerFixedColumn(
+  id: DashboardTableColumnId,
+): boolean {
+  return MANAGER_FIXED_COLUMN_ID_SET.has(id);
+}
+
 export const DASHBOARD_TABLE_COLUMN_STORAGE_KEY = "pms-dashboard-table-columns";
 
 export const TOGGLEABLE_DASHBOARD_TABLE_COLUMNS = DASHBOARD_TABLE_COLUMNS.filter(
@@ -708,4 +785,38 @@ export function resolveOrderedColumns(
   );
 
   return [...orderedToggleable, ...pinnedVisible];
+}
+
+/**
+ * Role-based column configuration layer for the Staff Listing table.
+ *
+ * - HR / Board / Super Admin: return the full customizable column set.
+ *   Saved column preferences are honored.
+ * - Manager 1 / Manager 2 (MANAGER role): return the fixed predefined
+ *   layout. Column management is disabled and saved preferences are
+ *   ignored — the manager always sees the same columns in the same order
+ *   with the first four columns frozen.
+ *
+ * Returns the column definitions to render, in display order.
+ */
+export function getStaffListingColumns(
+  role: string | null | undefined,
+): readonly DashboardTableColumnDef[] {
+  if (role === "MANAGER") {
+    return MANAGER_FIXED_COLUMNS;
+  }
+  // HR, BOARD, SUPER_ADMIN (and any future admin role) get the full set.
+  return DASHBOARD_TABLE_COLUMNS;
+}
+
+/**
+ * Whether the given role is allowed to use column management (show/hide,
+ * reorder, resize, freeze/unfreeze, save preferences) on the Staff Listing.
+ *
+ * Managers are excluded — they always see the fixed layout.
+ */
+export function canManageStaffListingColumns(
+  role: string | null | undefined,
+): boolean {
+  return role !== "MANAGER";
 }

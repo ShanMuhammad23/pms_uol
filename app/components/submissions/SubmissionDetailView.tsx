@@ -8,6 +8,7 @@ import {
   saveManagerReview,
   approveHrCalibration,
   saveHrReview,
+  resetFormSubmission,
 } from "@/lib/queries/form-submissions-client";
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
@@ -38,6 +39,7 @@ import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScor
 import QuartileBadge from "@/app/components/dashboard/QuartileBadge";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
@@ -281,6 +283,7 @@ export default function SubmissionDetailView({
   );
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [initialDraftsSnapshot, setInitialDraftsSnapshot] = useState<
     Map<number, ManagerDraft>
   >(new Map());
@@ -502,6 +505,37 @@ export default function SubmissionDetailView({
     },
   });
 
+  const resetFormMutation = useMutation({
+    mutationFn: () => resetFormSubmission(submissionId),
+    onSuccess: (result) => {
+      setSaveMessage("Assessment form has been reset successfully.");
+      // Force a full server refetch instead of manually patching the cache.
+      // The FormSubmissionDetail type has 40+ score/adjustment/remark fields
+      // — manually setting each one in setQueryData is error-prone and was
+      // leaving stale score values (scoreO, manager1Score, manager2Score,
+      // ratingO, ratingN, normalizedScore, salary fields, etc.) visible
+      // after reset. invalidateQueries ensures the next render fetches the
+      // actual post-reset state from the database with every field cleared.
+      queryClient.invalidateQueries({
+        queryKey: ["form-submission", submissionId],
+      });
+      // Also invalidate the list-level queries so dashboard counts update.
+      invalidateStaffListingQueries(queryClient);
+
+      // Debug: log deletion counts returned by the server for verification.
+      console.info(
+        `[ResetForm] submission=${submissionId} ` +
+          `status=${result.status} ` +
+          `deletedAttachments=${result.deletedAttachments} ` +
+          `deletedAnswers=${result.deletedAnswers} ` +
+          `resetAppraisal=${result.resetAppraisal}`,
+      );
+    },
+    onError: (mutationError: Error) => {
+      setSaveMessage(mutationError.message);
+    },
+  });
+
   const answerMap = useMemo(
     () => new Map(data?.answers.map((answer) => [answer.questionId, answer])),
     [data?.answers],
@@ -543,6 +577,14 @@ export default function SubmissionDetailView({
   const editingManager2 =
     isEligible && data?.canEditManagerReview && currentManagerLevel === 2;
   const editingHr = isEligible && (data?.canEditHrReview ?? false);
+  // When an HR/Board/SuperAdmin user is assigned as Manager 1 or Manager 2
+  // for this employee, they must be able to edit manager assessment inputs
+  // just like a regular manager. This flag separates "system role
+  // permission" from "assessment assignment permission" — the
+  // employee-manager assignment determines whether the user can act as
+  // Manager 1 or Manager 2, regardless of their system role.
+  const isAssignedManagerForCurrentLevel =
+    data?.isAssignedManagerForCurrentLevel ?? false;
 
   const hasUnsavedChanges = useMemo(() => {
     if (!editingHr && !data?.canEditManagerReview) return false;
@@ -730,6 +772,38 @@ export default function SubmissionDetailView({
           employeeName={data?.employeeName}
           reason={data?.ineligibilityReason}
         />
+      ) : null}
+
+      {/* Danger Zone — admin only (HR / Board / Super Admin).
+          Backend RBAC is enforced in the API route; this banner is hidden
+          for Manager and Employee roles. Placed at the top so admins see
+          the destructive-action warning before reviewing assessment data. */}
+      {isAdminRole && rows.length > 0 ? (
+        <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-red-200 bg-red-50/70 px-4 py-2.5 dark:border-red-900/60 dark:bg-red-950/20">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300">
+              <AlertTriangle className="size-4" />
+            </span>
+            <div className="leading-tight">
+              <p className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-300">
+                Danger Zone
+              </p>
+              <p className="text-xs text-red-600/90 dark:text-red-400/80">
+                Reset removes all assessment data permanently. This action
+                cannot be undone.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowResetConfirm(true)}
+            disabled={resetFormMutation.isPending}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-950/40"
+          >
+            <RotateCcw className="size-3.5" />
+            {resetFormMutation.isPending ? "Resetting..." : "Reset Form"}
+          </button>
+        </div>
       ) : null}
 
       {data.canEditManagerReview ? (
@@ -1048,10 +1122,10 @@ export default function SubmissionDetailView({
                     </td>
                       </>
                     ) : null}
-                    {/* Manager 1 Score — read-only for admin roles */}
+                    {/* Manager 1 Score — read-only for admin roles unless assigned as Manager 1 */}
                     <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                       {scored ? (
-                        (editingManager1 && !isAdminRole) || (editingHr && !isAdminRole) ? (
+                        (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
                           <input
                             type="number"
                             min={0}
@@ -1077,10 +1151,10 @@ export default function SubmissionDetailView({
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    {/* Manager 1 Remarks — read-only for admin roles */}
+                    {/* Manager 1 Remarks — read-only for admin roles unless assigned as Manager 1 */}
                     <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                       {scored ? (
-                        (editingManager1 && !isAdminRole) || (editingHr && !isAdminRole) ? (
+                        (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
                           <textarea
                             value={managerDraft.remarks}
                             rows={2}
@@ -1108,7 +1182,7 @@ export default function SubmissionDetailView({
                       <>
                         <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                           {scored ? (
-                            (editingManager2 && !isAdminRole) || (editingHr && !isAdminRole) ? (
+                            (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
                               <input
                                 type="number"
                                 min={0}
@@ -1139,7 +1213,7 @@ export default function SubmissionDetailView({
                         </td>
                         <td className="px-2 py-2.5">
                           {scored ? (
-                            (editingManager2 && !isAdminRole) || (editingHr && !isAdminRole) ? (
+                            (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
                               <textarea
                                 value={managerDraft.remarks}
                                 rows={2}
@@ -1307,6 +1381,85 @@ export default function SubmissionDetailView({
           manager2Remarks={data.manager2OverallRemarks}
           hasManager2={hasManager2}
         />
+      ) : null}
+
+      {/* Reset Form confirmation modal — Danger Zone */}
+      {showResetConfirm ? (
+        <div className="no-print fixed inset-0 z-100 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close dialog"
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+            onClick={() => setShowResetConfirm(false)}
+          />
+          <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-red-300 bg-white shadow-2xl dark:border-red-900/70 dark:bg-slate-900">
+            {/* Danger header strip */}
+            <div className="flex items-center gap-3 border-b border-red-200 bg-red-50 px-5 py-3.5 dark:border-red-900/60 dark:bg-red-950/30">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-300">
+                <AlertTriangle className="size-5" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold text-red-700 dark:text-red-300">
+                  Reset Assessment Form?
+                </h2>
+                <p className="text-xs font-medium uppercase tracking-wider text-red-500 dark:text-red-400">
+                  Danger Zone · This action cannot be undone
+                </p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4">
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                This action will permanently remove all assessment data,
+                manager assessments, and adjustments. The submission will
+                return to Self Assessment stage.
+              </p>
+              <ul className="mt-3 space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <li className="flex items-start gap-2">
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-red-400" />
+                  Employee self-assessment answers will be deleted
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-red-400" />
+                  Manager 1 &amp; Manager 2 scores and remarks will be cleared
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-red-400" />
+                  HR/Board score adjustments and calibration will be reset
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-red-400" />
+                  Uploaded attachments will be removed
+                </li>
+              </ul>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                disabled={resetFormMutation.isPending}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  resetFormMutation.mutate();
+                }}
+                disabled={resetFormMutation.isPending}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RotateCcw className="size-3.5" />
+                {resetFormMutation.isPending ? "Resetting..." : "Reset Form"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
 

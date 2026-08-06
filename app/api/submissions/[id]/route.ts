@@ -7,7 +7,10 @@ import {
 import { isHeadRole } from "@/lib/auth/home-path";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
 import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-reviewer";
-import { managerCanReviewSubmission } from "@/app/helpers/manager-review";
+import {
+  isAssignedManagerAtLevel,
+  managerCanReviewSubmission,
+} from "@/app/helpers/manager-review";
 import { canEditModule } from "@/lib/auth/additional-access";
 import type { AdditionalAccessModule } from "@/types/additional-access";
 import {
@@ -68,12 +71,27 @@ export async function GET(_request: Request, context: RouteContext) {
 
     const canEditScoreAdjustments = canReviewSubmissions(role);
 
+    // Determine if the viewer is the assigned manager at the current
+    // manager_level, regardless of their system role. This allows
+    // HR/Board/SuperAdmin users who are assigned as Manager 1 or Manager 2
+    // to edit manager assessment inputs — separating system role permission
+    // from assessment assignment permission.
+    const isAssignedManagerForCurrentLevel =
+      reviewerUserId != null &&
+      Number.isFinite(reviewerUserId) &&
+      isAssignedManagerAtLevel(
+        reviewerUserId,
+        summary,
+        summary.managerLevel ?? 1,
+      );
+
     const submission = await getFormSubmissionById(submissionId, {
       reviewerUserId,
       seedManagerAnswers: canEditManagerReview || canEditHrReview,
       canEditManagerReview,
       canEditHrReview,
       canEditScoreAdjustments,
+      isAssignedManagerForCurrentLevel,
     });
 
     if (!submission) {
@@ -100,8 +118,14 @@ export async function GET(_request: Request, context: RouteContext) {
         quartileName: null,
         quartileScoreMin: null,
         quartileScoreMax: null,
+        isAssignedManagerForCurrentLevel,
       });
     }
+
+    return NextResponse.json({
+      ...submission,
+      isAssignedManagerForCurrentLevel,
+    });
 
     return NextResponse.json(submission);
   } catch (error) {

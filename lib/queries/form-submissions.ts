@@ -991,6 +991,7 @@ export async function getFormSubmissionById(
     canEditManagerReview?: boolean;
     canEditHrReview?: boolean;
     canEditScoreAdjustments?: boolean;
+    isAssignedManagerForCurrentLevel?: boolean;
   },
 ): Promise<FormSubmissionDetail | null> {
   const submissions = await listFormSubmissions();
@@ -1112,6 +1113,9 @@ export async function getFormSubmissionById(
     manager2Answers,
     canEditManagerReview: Boolean(options?.canEditManagerReview),
     canEditHrReview: Boolean(options?.canEditHrReview),
+    isAssignedManagerForCurrentLevel: Boolean(
+      options?.isAssignedManagerForCurrentLevel,
+    ),
     creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,
     pubOricScoreAdj: summary.pubOricScoreAdj,
     qecScoreAdj: summary.qecScoreAdj,
@@ -1713,4 +1717,174 @@ export async function bulkUpdateEmployeeListingFields(
     ...(updatesManager2 ? { manager2UserId: fields.manager2UserId ?? null } : {}),
     ...(updatesAssessmentEligibility ? { assessmentEligibility: fields.assessmentEligibility } : {}),
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Reset Form to Self Assessment                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Permanently reset an appraisal submission back to the Self Assessment
+ * stage. This removes all employee answers, manager answers, attachments,
+ * score adjustments, calibration data, HR/Board approval data, and overall
+ * remarks. The appraisal row itself is preserved (so the employee keeps
+ * their form assignment) but every assessment-related field is cleared.
+ *
+ * An audit log entry is written to the `appraisal_logs` table with
+ * action = 'RESET_FORM' capturing who performed the reset.
+ *
+ * This operation is wrapped in a transaction — if any step fails the entire
+ * reset is rolled back.
+ *
+ * Authorization (HR / Board / Super Admin only) is enforced by the API
+ * route before calling this function.
+ */
+export async function resetFormSubmission(
+  appraisalId: number,
+  resetByUserId: number,
+): Promise<{
+  status: AppraisalStatus;
+  deletedAttachments: number;
+  deletedAnswers: number;
+  resetAppraisal: boolean;
+}> {
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // Capture the employee_id for the audit log before wiping data.
+    const appraisalRow = await client.query<{ employee_id: string }>(
+      `SELECT employee_id::text FROM appraisals WHERE id = $1`,
+      [appraisalId],
+    );
+
+    if (appraisalRow.rows.length === 0) {
+      throw new FormSubmissionError("Submission not found.", 404);
+    }
+
+    const employeeId = Number(appraisalRow.rows[0].employee_id);
+
+    // 1. Delete all answer attachments for this appraisal.
+    const attachmentsResult = await client.query(
+      `DELETE FROM appraisal_answer_attachments WHERE appraisal_id = $1`,
+      [appraisalId],
+    );
+    const deletedAttachments = attachmentsResult.rowCount ?? 0;
+
+    // 2. Delete all answers (employee self-assessment + manager 1/2
+    //    reviews). The filled_by_id column distinguishes who wrote each
+    //    answer, but we remove every row for this appraisal. This clears
+    //    all scores, selected options, text responses, and per-question
+    //    remarks in a single operation.
+    const answersResult = await client.query(
+      `DELETE FROM appraisal_answers WHERE appraisal_id = $1`,
+      [appraisalId],
+    );
+    const deletedAnswers = answersResult.rowCount ?? 0;
+
+    // 3. Reset the appraisal row to a fresh Self Assessment state.
+    //    Clear every assessment-related field: scores, ratings,
+    //    adjustments, calibration, HR/Board approval, compensation,
+    //    remarks, and workflow metadata.
+    const appraisalResult = await client.query(
+      `UPDATE appraisals
+       SET status = 'PENDING_SELF_ASSESSMENT',
+           manager_level = 1,
+           system_raw_score = 0,
+           initial_score_numeric = NULL,
+           initial_rating = NULL,
+           credit_hrs_erp_score_adj = NULL,
+           pub_oric_score_adj = NULL,
+           qec_score_adj = NULL,
+           calibration_factor = NULL,
+           normalized_score = NULL,
+           calibrated_score_numeric = NULL,
+           calibrated_rating = NULL,
+           performance_quartile_id = NULL,
+           is_eligible = NULL,
+           eligibility_status = NULL,
+           applicable_duration = NULL,
+           applicable_duration_factor = NULL,
+           remarks_evaluation = NULL,
+           hr_approval_status = 'pending',
+           current_salary = NULL,
+           previous_salary = NULL,
+           applicable_salary_for_increment = NULL,
+           applicable_matrix = NULL,
+           calculated_increment_percentage = NULL,
+           increment_per_matrix = NULL,
+           approved_increment_percentage = NULL,
+           revised_salary = NULL,
+           revised_salary_ro = NULL,
+           hod_review_comments = NULL,
+           remarks_compensation = NULL,
+           effective_date = NULL,
+           employee_strengths = NULL,
+           employee_weaknesses = NULL,
+           committee_feedback = NULL,
+           next_year_targets = NULL,
+           manager1_overall_remarks = NULL,
+           manager2_overall_remarks = NULL,
+           submitted_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [appraisalId],
+    );
+    const resetAppraisal = (appraisalResult.rowCount ?? 0) > 0;
+
+    // 4. Write an audit log entry to appraisal_logs.
+    //    The table is created in schema.sql but currently unused — this
+    //    is the first operational use. Store the previous status and the
+    //    reset actor in the JSONB columns for traceability.
+    //
+    //    Note: explicit casts ($n::type) are required because the same
+    //    parameter is used in both a typed column context (changed_by_id
+    //    bigint) and inside jsonb_build_object, where PostgreSQL cannot
+    //    infer the type on its own (error 42P08).
+    await client.query(
+      `INSERT INTO appraisal_logs
+         (appraisal_id, changed_by_id, action_performed, old_value, new_value, timestamp)
+       VALUES
+         ($1::bigint, $2::bigint, 'RESET_FORM',
+          jsonb_build_object(
+            'reset_by', $2::bigint,
+            'employee_id', $3::bigint,
+            'reset_at', to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SSOF'),
+            'deleted_attachments', $4::int,
+            'deleted_answers', $5::int
+          ),
+          jsonb_build_object('status', 'PENDING_SELF_ASSESSMENT', 'manager_level', 1),
+          CURRENT_TIMESTAMP)`,
+      [
+        appraisalId,
+        resetByUserId,
+        employeeId,
+        deletedAttachments,
+        deletedAnswers,
+      ],
+    );
+
+    await client.query("COMMIT");
+
+    // Debug logging — verify deletion counts for troubleshooting.
+    console.info(
+      `[resetFormSubmission] appraisal=${appraisalId} ` +
+        `deletedAttachments=${deletedAttachments} ` +
+        `deletedAnswers=${deletedAnswers} ` +
+        `resetAppraisal=${resetAppraisal}`,
+    );
+
+    return {
+      status: "PENDING_SELF_ASSESSMENT",
+      deletedAttachments,
+      deletedAnswers,
+      resetAppraisal,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }

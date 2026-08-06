@@ -10,7 +10,7 @@ import {
   type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
 import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
-import type { FormState } from "@/app/helpers/dashboard-types";
+import type { CardFilterId, FormState } from "@/app/helpers/dashboard-types";
 import type { DashboardFilterParams } from "@/types/dashboard-api";
 import type { EntityRecord } from "@/types/entities";
 
@@ -39,6 +39,38 @@ function formatMultiChipLabel(
   }
 
   return `${prefix}: ${selected.length} selected`;
+}
+
+/** Human-readable label for a dashboard card filter chip. */
+function formatCardFilterChipLabel(cardId: CardFilterId): string {
+  if (cardId.startsWith("eligibility:")) {
+    const status = cardId.slice("eligibility:".length);
+    if (status === "Ineligible") return "Eligibility: N/A";
+    if (status === "Fully Eligible") return "Eligibility: Full";
+    if (status === "Partially Eligible") return "Eligibility: Partial";
+    if (status === "Not Eligible") return "Eligibility: None";
+    return `Eligibility: ${status}`;
+  }
+
+  const [card, number] = cardId.split(":");
+  const cardLabels: Record<string, string> = {
+    selfAssessment: "Self Assessment",
+    manager1: "Manager 1",
+    manager2: "Manager 2",
+    hrAlignment: "HR Alignment",
+    boardApproval: "Board Approval",
+  };
+  const numberLabels: Record<string, string> = {
+    eligible: "Eligible",
+    submitted: "Submitted",
+    reviewed: "Reviewed",
+    aligned: "Aligned",
+    pending: "Pending",
+    approved: "Approved",
+  };
+  const cardLabel = cardLabels[card] ?? card;
+  const numberLabel = numberLabels[number] ?? number;
+  return `${cardLabel}: ${numberLabel}`;
 }
 
 function selectionsEqual<T extends string | number>(
@@ -88,6 +120,8 @@ export function useDashboardFilters({
     useState<MultiFilterSelection<string>>(null);
   const [selectedFormStates, setSelectedFormStates] =
     useState<MultiFilterSelection<FormState>>(null);
+  const [selectedCardFilter, setSelectedCardFilter] =
+    useState<CardFilterId | null>(null);
 
   const category0Entities = useMemo(
     () => getEntitiesForFilterLevels(entities, 0, null),
@@ -127,6 +161,7 @@ export function useDashboardFilters({
       roleCategories: selectedRoleCategories,
       designations: selectedDesignations,
       formStates: selectedFormStates,
+      cardFilter: selectedCardFilter,
     }),
     [
       searchQuery,
@@ -136,6 +171,7 @@ export function useDashboardFilters({
       selectedRoleCategories,
       selectedDesignations,
       selectedFormStates,
+      selectedCardFilter,
     ],
   );
 
@@ -249,6 +285,8 @@ export function useDashboardFilters({
     setSelectedFormStates(
       values === null ? null : (values as FormState[]),
     );
+    // Card filter and formState filter are mutually exclusive.
+    setSelectedCardFilter(null);
   }, []);
 
   const activeFilters = useMemo(() => {
@@ -329,6 +367,14 @@ export function useDashboardFilters({
       });
     }
 
+    if (selectedCardFilter !== null) {
+      filters.push({
+        label: formatCardFilterChipLabel(selectedCardFilter),
+        onRemove: () => setSelectedCardFilter(null),
+        color: "blue",
+      });
+    }
+
     if (searchQuery) {
       filters.push({
         label: `Search: "${searchQuery}"`,
@@ -345,6 +391,7 @@ export function useDashboardFilters({
     selectedRoleCategories,
     selectedDesignations,
     selectedFormStates,
+    selectedCardFilter,
     searchQuery,
     entities,
   ]);
@@ -357,6 +404,7 @@ export function useDashboardFilters({
     setSelectedRoleCategories(null);
     setSelectedDesignations(null);
     setSelectedFormStates(null);
+    setSelectedCardFilter(null);
   }, []);
 
   const filterByFormState = useCallback((state: FormState) => {
@@ -371,6 +419,20 @@ export function useDashboardFilters({
 
       return [state];
     });
+    // Card filter and formState filter are mutually exclusive.
+    setSelectedCardFilter(null);
+  }, []);
+
+  /**
+   * Filter the staff listing by a dashboard card number.
+   * Uses the same predicate that produced the count, so the result count
+   * always matches the clicked number. Clears the formState filter since
+   * the two are mutually exclusive. Toggles off if the same card is clicked
+   * again.
+   */
+  const filterByCard = useCallback((cardId: CardFilterId) => {
+    setSelectedCardFilter((prev) => (prev === cardId ? null : cardId));
+    setSelectedFormStates(null);
   }, []);
 
   return {
@@ -383,6 +445,7 @@ export function useDashboardFilters({
     selectedDesignations,
     selectedFormStates:
       selectedFormStates === null ? null : selectedFormStates.map(String),
+    selectedCardFilter,
     category0Options,
     category0DistributionOptions,
     category1Options,
@@ -401,5 +464,6 @@ export function useDashboardFilters({
     handleFormStateChange,
     clearAllFilters,
     filterByFormState,
+    filterByCard,
   };
 }

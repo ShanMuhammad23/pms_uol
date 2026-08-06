@@ -42,6 +42,42 @@ export function hasSecondManagerReview(managers: EmployeeManagers): boolean {
 }
 
 /**
+ * Returns true when the employee has neither Manager 1 nor Manager 2
+ * assigned. In this case the Manager Review stage is bypassed entirely.
+ */
+export function hasNoAssignedManagers(managers: EmployeeManagers): boolean {
+  return managers.manager1Id == null && managers.manager2Id == null;
+}
+
+/**
+ * Decide the next workflow status after an employee submits their
+ * self-assessment.
+ *
+ * - If at least one manager is assigned → PENDING_HEAD_REVIEW (standard flow).
+ * - If both Manager 1 and Manager 2 are NULL → PENDING_HR_CALIBRATION
+ *   (skip Manager Review, go straight to HR Alignment).
+ *
+ * This is the SINGLE SOURCE OF TRUTH for the self-assessment → next stage
+ * transition. All callers must use this function instead of hardcoding the
+ * status.
+ */
+export function resolveSelfAssessmentAdvance(
+  managers: EmployeeManagers,
+): { managerLevel: number; status: AppraisalStatus } {
+  if (hasNoAssignedManagers(managers)) {
+    return {
+      managerLevel: 1,
+      status: "PENDING_HR_CALIBRATION",
+    };
+  }
+
+  return {
+    managerLevel: 1,
+    status: "PENDING_HEAD_REVIEW",
+  };
+}
+
+/**
  * After a manager approves at `currentManagerLevel`, decide next status/level.
  * Level 2 is used only when the employee has an assigned Manager 2.
  */
@@ -80,15 +116,39 @@ export function managerCanReviewSubmission(
     return false;
   }
 
-  const managers = toEmployeeManagers(submission);
-  const reviewingManagerId = getReviewingManagerUserId(
-    managers,
+  return isAssignedManagerAtLevel(
+    reviewerUserId,
+    submission,
     submission.managerLevel ?? 1,
   );
+}
 
-  return (
-    reviewingManagerId != null && reviewingManagerId === reviewerUserId
-  );
+/**
+ * Check if a user is the assigned manager for a specific manager level,
+ * regardless of their system role. This separates "system role permission"
+ * from "assessment assignment permission" — an HR/Board/SuperAdmin user who
+ * is assigned as Manager 1 or Manager 2 for an employee is considered the
+ * assigned manager at that level.
+ *
+ * Unlike `managerCanReviewSubmission`, this does NOT check the workflow
+ * status — it only checks the person-based assignment.
+ */
+export function isAssignedManagerAtLevel(
+  reviewerUserId: number | null,
+  submission: Pick<
+    FormSubmissionListItem,
+    "manager1UserId" | "manager2UserId"
+  >,
+  managerLevel: number,
+): boolean {
+  if (reviewerUserId == null || !Number.isFinite(reviewerUserId)) {
+    return false;
+  }
+
+  const managers = toEmployeeManagers(submission);
+  const assignedManagerId = getReviewingManagerUserId(managers, managerLevel);
+
+  return assignedManagerId != null && assignedManagerId === reviewerUserId;
 }
 
 /**

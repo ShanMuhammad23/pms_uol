@@ -1,4 +1,17 @@
-import type { FormState } from "@/app/helpers/dashboard-types";
+import type { CardFilterId, FormState } from "@/app/helpers/dashboard-types";
+import {
+  isBoardApprovalApproved,
+  isBoardApprovalPending,
+  isHrAlignmentAligned,
+  isHrAlignmentSubmitted,
+  isManager1Reviewed,
+  isManager1Submitted,
+  isManager2Reviewed,
+  isManager2Submitted,
+  isSelfAssessmentEligible,
+  isSelfAssessmentSubmitted,
+  matchesEligibilityStatus,
+} from "@/app/helpers/dashboard-workflow-stats";
 import {
   getEntityDescendantIds,
   isEntityInCachedSubtree,
@@ -26,8 +39,54 @@ export type SubmissionFilterState = {
   selectedRoleCategories: MultiFilterSelection<string>;
   selectedDesignations: MultiFilterSelection<string>;
   selectedFormStates: MultiFilterSelection<FormState>;
+  selectedCardFilter: CardFilterId | null;
   entities: EntityRecord[];
 };
+
+/**
+ * Returns true if the submission matches the dashboard card filter.
+ * Uses the SAME predicate functions that produce the card counts — this
+ * is the single source of truth ensuring count == filter result count.
+ */
+export function matchesCardFilter(
+  submission: FormSubmissionListItem,
+  cardFilter: CardFilterId | null,
+): boolean {
+  if (cardFilter === null) return true;
+
+  switch (cardFilter) {
+    case "selfAssessment:eligible":
+      return isSelfAssessmentEligible(submission);
+    case "selfAssessment:submitted":
+      return isSelfAssessmentSubmitted(submission);
+    case "manager1:submitted":
+      return isManager1Submitted(submission);
+    case "manager1:reviewed":
+      return isManager1Reviewed(submission);
+    case "manager2:submitted":
+      return isManager2Submitted(submission);
+    case "manager2:reviewed":
+      return isManager2Reviewed(submission);
+    case "hrAlignment:submitted":
+      return isHrAlignmentSubmitted(submission);
+    case "hrAlignment:aligned":
+      return isHrAlignmentAligned(submission);
+    case "boardApproval:pending":
+      return isBoardApprovalPending(submission);
+    case "boardApproval:approved":
+      return isBoardApprovalApproved(submission);
+    default:
+      if (cardFilter.startsWith("eligibility:")) {
+        const status = cardFilter.slice("eligibility:".length) as
+          | "Fully Eligible"
+          | "Partially Eligible"
+          | "Not Eligible"
+          | "Ineligible";
+        return matchesEligibilityStatus(submission, status);
+      }
+      return true;
+  }
+}
 
 export function matchesMultiSelection<T extends string | number>(
   selected: MultiFilterSelection<T>,
@@ -160,6 +219,8 @@ export function matchesSubmissionFilters(
     filters.selectedFormStates,
   );
 
+  const matchesCard = matchesCardFilter(submission, filters.selectedCardFilter);
+
   return (
     matchesSearch &&
     matchesEntity0 &&
@@ -167,7 +228,8 @@ export function matchesSubmissionFilters(
     matchesEntity2 &&
     matchesRoleCategory &&
     matchesDesignation &&
-    matchesFormState
+    matchesFormState &&
+    matchesCard
   );
 }
 
@@ -177,7 +239,8 @@ export type FilterDimension =
   | "category2"
   | "roleCategory"
   | "designation"
-  | "formState";
+  | "formState"
+  | "cardFilter";
 
 export function matchesSubmissionFiltersExcluding(
   submission: FormSubmissionListItem,
@@ -197,5 +260,7 @@ export function matchesSubmissionFiltersExcluding(
     selectedDesignations:
       exclude === "designation" ? null : filters.selectedDesignations,
     selectedFormStates: exclude === "formState" ? null : filters.selectedFormStates,
+    selectedCardFilter:
+      exclude === "cardFilter" ? null : filters.selectedCardFilter,
   });
 }

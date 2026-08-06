@@ -11,6 +11,19 @@ interface ManagerReviewStatCardProps {
   delay: number;
   onClick?: () => void;
   active?: boolean;
+  /** Click handler for Manager 1 Submitted number. */
+  onManager1SubmittedClick?: () => void;
+  /** Click handler for Manager 1 Reviewed number. */
+  onManager1ReviewedClick?: () => void;
+  /** Click handler for Manager 2 Submitted number. */
+  onManager2SubmittedClick?: () => void;
+  /** Click handler for Manager 2 Reviewed number. */
+  onManager2ReviewedClick?: () => void;
+  /** Active states for each number. */
+  manager1SubmittedActive?: boolean;
+  manager1ReviewedActive?: boolean;
+  manager2SubmittedActive?: boolean;
+  manager2ReviewedActive?: boolean;
 }
 
 export function ManagerReviewStatCard({
@@ -19,6 +32,14 @@ export function ManagerReviewStatCard({
   delay,
   onClick,
   active,
+  onManager1SubmittedClick,
+  onManager1ReviewedClick,
+  onManager2SubmittedClick,
+  onManager2ReviewedClick,
+  manager1SubmittedActive,
+  manager1ReviewedActive,
+  manager2SubmittedActive,
+  manager2ReviewedActive,
 }: ManagerReviewStatCardProps) {
   return (
     <motion.div
@@ -62,20 +83,52 @@ export function ManagerReviewStatCard({
         </p>
 
         <p className="min-w-0 truncate text-[10px] text-white/90 sm:text-xs">Submitted</p>
-        <p className="min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg 2xl:text-xl">
+        <button
+          type="button"
+          onClick={onManager1SubmittedClick ?? onClick}
+          className={cn(
+            "min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white transition-all sm:text-lg 2xl:text-xl",
+            onManager1SubmittedClick && "cursor-pointer hover:underline",
+            manager1SubmittedActive && "underline ring-1 ring-white/60 rounded",
+          )}
+        >
           {manager1.awaiting}
-        </p>
-        <p className="min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg 2xl:text-xl">
+        </button>
+        <button
+          type="button"
+          onClick={onManager2SubmittedClick ?? onClick}
+          className={cn(
+            "min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white transition-all sm:text-lg 2xl:text-xl",
+            onManager2SubmittedClick && "cursor-pointer hover:underline",
+            manager2SubmittedActive && "underline ring-1 ring-white/60 rounded",
+          )}
+        >
           {manager2.awaiting}
-        </p>
+        </button>
 
         <p className="min-w-0 truncate text-[10px] text-white/90 sm:text-xs">Reviewed</p>
-        <p className="min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg 2xl:text-xl">
+        <button
+          type="button"
+          onClick={onManager1ReviewedClick ?? onClick}
+          className={cn(
+            "min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white transition-all sm:text-lg 2xl:text-xl",
+            onManager1ReviewedClick && "cursor-pointer hover:underline",
+            manager1ReviewedActive && "underline ring-1 ring-white/60 rounded",
+          )}
+        >
           {manager1.completed}
-        </p>
-        <p className="min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white sm:text-lg 2xl:text-xl">
+        </button>
+        <button
+          type="button"
+          onClick={onManager2ReviewedClick ?? onClick}
+          className={cn(
+            "min-w-0 text-center text-base font-bold tracking-tight tabular-nums text-white transition-all sm:text-lg 2xl:text-xl",
+            onManager2ReviewedClick && "cursor-pointer hover:underline",
+            manager2ReviewedActive && "underline ring-1 ring-white/60 rounded",
+          )}
+        >
           {manager2.completed}
-        </p>
+        </button>
       </div>
     </motion.div>
   );

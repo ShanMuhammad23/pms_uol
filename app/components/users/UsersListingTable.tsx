@@ -17,6 +17,7 @@ import {
 } from "@/app/components/common/ColumnManagementPanel";
 import {
   useColumnConfig,
+  SELECT_COLUMN_WIDTH,
   type ColumnDef,
 } from "@/app/hooks/use-column-config";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
@@ -63,7 +64,7 @@ function columnCellClassName(
 ) {
   return cn(
     "px-2 py-1",
-    "whitespace-nowrap",
+    "whitespace-normal break-words",
     column.align === "right" && "text-right",
     column.align === "center" && "text-center",
     extra,
@@ -75,14 +76,14 @@ const STICKY_EDGE_SHADOW_LEFT =
 
 function stickySelectHeaderClassName() {
   return cn(
-    "sticky left-0 top-0 z-40 border-b border-primary/80 bg-primary px-3 py-3",
+    "sticky left-0 top-0 z-50 border-b border-primary/80 bg-primary px-3 py-3",
     STICKY_EDGE_SHADOW_LEFT,
   );
 }
 
 function stickySelectCellClassName(isSelected: boolean) {
   return cn(
-    "sticky left-0 z-20 border-b border-slate-100 px-2 py-1 dark:border-white/[0.03]",
+    "sticky left-0 z-30 border-b border-slate-100 px-2 py-1 dark:border-white/[0.03]",
     STICKY_EDGE_SHADOW_LEFT,
     isSelected
       ? "bg-amber-50 dark:bg-amber-950"
@@ -131,7 +132,7 @@ function renderCell(
           <Pencil className="h-3.5 w-3.5" />
         </button>
         <span
-          className="block max-w-[180px] truncate text-slate-700 dark:text-slate-300"
+          className="block min-w-0 break-words text-slate-700 dark:text-slate-300"
           title={value === "—" ? undefined : value}
         >
           {value}
@@ -167,7 +168,7 @@ function renderCell(
   return (
     <span
       className={cn(
-        "block max-w-[220px] truncate text-slate-700 dark:text-slate-300",
+        "block min-w-0 break-words text-slate-700 dark:text-slate-300",
         column.id === "employeeName" &&
           "font-semibold text-slate-900 dark:text-white",
       )}
@@ -483,7 +484,14 @@ export function UsersListingTable({
         <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
             <tr className="bg-primary text-white">
-              <th className={stickySelectHeaderClassName()}>
+              <th
+                className={stickySelectHeaderClassName()}
+                style={{
+                  width: SELECT_COLUMN_WIDTH,
+                  minWidth: SELECT_COLUMN_WIDTH,
+                  maxWidth: SELECT_COLUMN_WIDTH,
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={allFilteredSelected}
@@ -558,7 +566,14 @@ export function UsersListingTable({
                       isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
                     )}
                   >
-                    <td className={stickySelectCellClassName(isSelected)}>
+                    <td
+                      className={stickySelectCellClassName(isSelected)}
+                      style={{
+                        width: SELECT_COLUMN_WIDTH,
+                        minWidth: SELECT_COLUMN_WIDTH,
+                        maxWidth: SELECT_COLUMN_WIDTH,
+                      }}
+                    >
                       <input
                         type="checkbox"
                         checked={isSelected}

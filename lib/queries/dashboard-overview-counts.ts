@@ -40,6 +40,7 @@ export function toSubmissionFilterState(
     selectedRoleCategories: filters.roleCategories,
     selectedDesignations: filters.designations,
     selectedFormStates: filters.formStates as FormState[] | null,
+    selectedCardFilter: filters.cardFilter ?? null,
     entities,
   };
 }

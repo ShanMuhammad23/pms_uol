@@ -23,6 +23,25 @@ export interface ColumnDef {
 export interface UseColumnConfigOptions {
   allColumns: readonly ColumnDef[];
   allowedColumnIds?: readonly string[];
+  /**
+   * Whether the table renders the sticky selection-checkbox column at
+   * left-0. When true, frozen-column offsets start at SELECT_COLUMN_WIDTH.
+   * When false (e.g. non-HR roles in the Staff Listing), offsets start at 0
+   * so frozen columns are not pushed past a non-existent checkbox column.
+   * Defaults to true for backward compatibility.
+   */
+  hasSelectColumn?: boolean;
+  /**
+   * When provided, the hook ignores saved server preferences and always
+   * returns this fixed configuration. Used for roles that do not get column
+   * management (e.g. Manager 1 / Manager 2 in the Staff Listing).
+   *
+   * The fixed config is derived from a role-based column layout — see
+   * `getStaffListingColumns` / `MANAGER_FIXED_COLUMNS` in
+   * dashboard-table-columns.ts. No reads or writes to the column-preferences
+   * API occur while this is set.
+   */
+  fixedConfig?: ColumnConfig;
 }
 
 function buildDefaultConfig(
@@ -114,17 +133,22 @@ export function useColumnConfig(
   tableKey: string,
   options: UseColumnConfigOptions,
 ) {
-  const { allColumns, allowedColumnIds } = options;
+  const { allColumns, allowedColumnIds, hasSelectColumn = true, fixedConfig } = options;
   const queryClient = useQueryClient();
   const queryKey = useMemo(
     () => ["column-config", tableKey] as const,
     [tableKey],
   );
 
+  // When fixedConfig is provided, skip the server query entirely — the role
+  // does not get column management and saved preferences are ignored.
+  const isFixed = fixedConfig != null;
+
   const { data: savedConfig } = useQuery<ColumnConfig>({
     queryKey,
     queryFn: () => fetchColumnConfig(tableKey),
     staleTime: Infinity,
+    enabled: !isFixed,
   });
 
   const defaults = useMemo(
@@ -132,14 +156,25 @@ export function useColumnConfig(
     [allColumns, allowedColumnIds],
   );
 
-  const [config, setConfig] = useState<ColumnConfig>(defaults);
+  const [config, setConfig] = useState<ColumnConfig>(
+    fixedConfig ?? defaults,
+  );
   const [hydrated, setHydrated] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
 
   // Sync from server only once (on initial load). After that, local config
   // is the single source of truth — updated only by updateConfig/setColumnWidth.
+  // Skipped entirely when fixedConfig is set.
   useEffect(() => {
+    if (isFixed) {
+      if (!initializedRef.current) {
+        setConfig(fixedConfig);
+        setHydrated(true);
+        initializedRef.current = true;
+      }
+      return;
+    }
     if (initializedRef.current) return;
     if (savedConfig) {
       const isFirstTime =
@@ -155,17 +190,20 @@ export function useColumnConfig(
         void queryClient.setQueryData(queryKey, merged);
       }
     }
-  }, [savedConfig, allColumns, allowedColumnIds, tableKey, queryKey, queryClient]);
+  }, [savedConfig, allColumns, allowedColumnIds, tableKey, queryKey, queryClient, isFixed, fixedConfig]);
 
   // If allColumns or allowedColumnIds change after initialization, re-merge
   // the CURRENT config (not from server) to filter out disallowed columns.
+  // Skipped when fixedConfig is set — the fixed layout is authoritative.
   useEffect(() => {
-    if (!initializedRef.current) return;
+    if (isFixed || !initializedRef.current) return;
     setConfig((current) => mergeWithDefaults(current, allColumns, allowedColumnIds));
-  }, [allColumns, allowedColumnIds]);
+  }, [allColumns, allowedColumnIds, isFixed]);
 
   const persist = useCallback(
     (next: ColumnConfig) => {
+      // Never persist when using a fixed config (managers have no prefs).
+      if (isFixed) return;
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
       }
@@ -173,16 +211,18 @@ export function useColumnConfig(
         void saveColumnConfig(tableKey, next);
       }, 500);
     },
-    [tableKey],
+    [tableKey, isFixed],
   );
 
   const updateConfig = useCallback(
     (next: ColumnConfig) => {
       setConfig(next);
       persist(next);
-      void queryClient.setQueryData(queryKey, next);
+      if (!isFixed) {
+        void queryClient.setQueryData(queryKey, next);
+      }
     },
-    [persist, queryClient, queryKey],
+    [persist, queryClient, queryKey, isFixed],
   );
 
   const setColumnWidth = useCallback(
@@ -264,19 +304,26 @@ export function useColumnConfig(
     [config.frozen, config.visible],
   );
 
-  // Compute sticky left offsets for frozen columns
+  // Compute sticky left offsets for frozen columns.
+  // The starting offset accounts for the checkbox column only when it is
+  // actually rendered (hasSelectColumn). Each frozen column's left offset
+  // equals the cumulative width of all preceding sticky columns.
   const stickyOffsets = useMemo(() => {
     const offsets: Record<string, number> = {};
-    let left = SELECT_COLUMN_WIDTH;
+    let left = hasSelectColumn ? SELECT_COLUMN_WIDTH : 0;
     const byId = new Map(allColumns.map((col) => [col.id, col]));
     for (const id of frozenColumnIds) {
       offsets[id] = left;
       const col = byId.get(id);
-      const w = config.widths[id] ?? col?.width ?? 120;
+      // Use the same width resolution as getColumnWidth to stay in sync with
+      // the actual cell width. Fall back to MIN_COLUMN_WIDTH (not an
+      // arbitrary 120) so the offset never underestimates a column that has
+      // no explicit width and hasn't been resized yet.
+      const w = config.widths[id] ?? col?.width ?? MIN_COLUMN_WIDTH;
       left += w;
     }
     return offsets;
-  }, [allColumns, config.widths, frozenColumnIds]);
+  }, [allColumns, config.widths, frozenColumnIds, hasSelectColumn]);
 
   return {
     config,

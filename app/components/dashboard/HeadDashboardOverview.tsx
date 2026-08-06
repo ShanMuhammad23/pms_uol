@@ -21,7 +21,7 @@ import { FormStatusStatCard } from "@/app/components/dashboard/FormStatusStatCar
 import { ManagerReviewStatCard } from "@/app/components/dashboard/ManagerReviewStatCard";
 import { StatCard } from "@/app/components/dashboard/StatCard";
 import { containerVariants } from "@/app/helpers/dashboard-animations";
-import type { FormState } from "@/app/helpers/dashboard-types";
+import type { CardFilterId } from "@/app/helpers/dashboard-types";
 import type {
   ManagerReviewDualStats,
   WorkflowStageStats,
@@ -32,22 +32,11 @@ interface HeadDashboardOverviewProps {
   eligibilityData: Array<{ name: string; value: number; color: string }>;
   selfAssessmentStats: WorkflowStageStats;
   managerReviewStats: ManagerReviewDualStats;
-  selectedFormStates: string[] | null;
-  onFilterByFormState: (state: FormState) => void;
+  selectedCardFilter: CardFilterId | null;
+  onFilterByCard: (cardId: CardFilterId) => void;
   calibrationData: Array<{ rating: string; quota: number; actual: number }>;
   statsVisible?: boolean;
   chartsVisible?: boolean;
-}
-
-function isFormStateActive(
-  selectedFormStates: string[] | null,
-  state: FormState,
-): boolean {
-  return (
-    selectedFormStates !== null &&
-    selectedFormStates.length === 1 &&
-    selectedFormStates[0] === state
-  );
 }
 
 const panelTransition = {
@@ -59,8 +48,8 @@ export function HeadDashboardOverview({
   eligibilityData,
   selfAssessmentStats,
   managerReviewStats,
-  selectedFormStates,
-  onFilterByFormState,
+  selectedCardFilter,
+  onFilterByCard,
   calibrationData,
   statsVisible = true,
   chartsVisible = true,
@@ -125,7 +114,16 @@ export function HeadDashboardOverview({
             className="grid grid-cols-1 gap-4 overflow-hidden sm:grid-cols-2 lg:items-stretch"
           >
             <FormStatusStatCard delay={0.05} />
-            <EligibilityStatCard data={eligibilityData} delay={0} />
+            <EligibilityStatCard
+              data={eligibilityData}
+              delay={0}
+              onCategoryClick={(name) => onFilterByCard(`eligibility:${name}` as CardFilterId)}
+              activeCategory={
+                selectedCardFilter?.startsWith("eligibility:")
+                  ? selectedCardFilter.slice("eligibility:".length)
+                  : null
+              }
+            />
             <StatCard
               title="Staff Assessment"
               awaiting={selfAssessmentStats.awaiting}
@@ -136,18 +134,23 @@ export function HeadDashboardOverview({
               tone="slate"
               icon={User}
               delay={0.1}
-              onClick={() => onFilterByFormState("PENDING_SELF_ASSESSMENT")}
-              active={isFormStateActive(
-                selectedFormStates,
-                "PENDING_SELF_ASSESSMENT",
-              )}
+              onAwaitingClick={() => onFilterByCard("selfAssessment:eligible")}
+              onCompletedClick={() => onFilterByCard("selfAssessment:submitted")}
+              awaitingActive={selectedCardFilter === "selfAssessment:eligible"}
+              completedActive={selectedCardFilter === "selfAssessment:submitted"}
             />
             <ManagerReviewStatCard
               manager1={managerReviewStats.manager1}
               manager2={managerReviewStats.manager2}
               delay={0.2}
-              onClick={() => onFilterByFormState("PENDING_HEAD_REVIEW")}
-              active={isFormStateActive(selectedFormStates, "PENDING_HEAD_REVIEW")}
+              onManager1SubmittedClick={() => onFilterByCard("manager1:submitted")}
+              onManager1ReviewedClick={() => onFilterByCard("manager1:reviewed")}
+              onManager2SubmittedClick={() => onFilterByCard("manager2:submitted")}
+              onManager2ReviewedClick={() => onFilterByCard("manager2:reviewed")}
+              manager1SubmittedActive={selectedCardFilter === "manager1:submitted"}
+              manager1ReviewedActive={selectedCardFilter === "manager1:reviewed"}
+              manager2SubmittedActive={selectedCardFilter === "manager2:submitted"}
+              manager2ReviewedActive={selectedCardFilter === "manager2:reviewed"}
             />
           </motion.div>
         ) : null}

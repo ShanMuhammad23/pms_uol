@@ -6,10 +6,15 @@ import type { PieLabelRenderProps } from "recharts";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { CustomTooltip } from "@/app/components/dashboard/CustomTooltip";
+import { cn } from "@/lib/utils";
 
 interface EligibilityStatCardProps {
   data: Array<{ name: string; value: number; color: string }>;
   delay: number;
+  /** Called when a specific eligibility category number is clicked. */
+  onCategoryClick?: (entryName: string) => void;
+  /** The currently active eligibility category name (display label), or null. */
+  activeCategory?: string | null;
 }
 
 function renderSlicePercentLabel({
@@ -46,7 +51,7 @@ function renderSlicePercentLabel({
   );
 }
 
-export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
+export function EligibilityStatCard({ data, delay, onCategoryClick, activeCategory }: EligibilityStatCardProps) {
   const [chartReady, setChartReady] = useState(false);
 
   useEffect(() => {
@@ -121,21 +126,35 @@ export function EligibilityStatCard({ data, delay }: EligibilityStatCardProps) {
           </div>
 
           <ul className="min-w-0 flex-1 space-y-1 sm:space-y-1.5">
-            {data.map((entry) => (
-              <li
-                key={entry.name}
-                className="flex items-center justify-between gap-2 text-[10px] sm:text-xs"
-              >
-                <span className="flex min-w-0 items-center gap-1.5 text-white">
-                  <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2"
-                    style={{ backgroundColor: entry.color }}
-                  />
-                  <span className="truncate">{resolveEntryName(entry.name)}</span>
-                </span>
-                <span className="shrink-0 tabular-nums text-white">{entry.value}</span>
-              </li>
-            ))}
+            {data.map((entry) => {
+              const displayName = resolveEntryName(entry.name);
+              const isActive = activeCategory === entry.name;
+              return (
+                <li
+                  key={entry.name}
+                  className="flex items-center justify-between gap-2 text-[10px] sm:text-xs"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 text-white">
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="truncate">{displayName}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onCategoryClick?.(entry.name)}
+                    className={cn(
+                      "shrink-0 tabular-nums text-white transition-all",
+                      onCategoryClick && "cursor-pointer hover:underline",
+                      isActive && "underline ring-1 ring-white/60 rounded px-1",
+                    )}
+                  >
+                    {entry.value}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : (

@@ -71,6 +71,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     selectedRoleCategories,
     selectedDesignations,
     selectedFormStates,
+    selectedCardFilter,
     category0Options,
     category0DistributionOptions,
     category1Options,
@@ -92,7 +93,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     handleDesignationChange,
     handleFormStateChange,
     clearAllFilters,
-    filterByFormState,
+    filterByCard,
     eligibilityData,
     selfAssessmentStats,
     managerReviewStats,
@@ -181,8 +182,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
             eligibilityData={eligibilityData}
             selfAssessmentStats={selfAssessmentStats}
             managerReviewStats={managerReviewStats}
-            selectedFormStates={selectedFormStates}
-            onFilterByFormState={filterByFormState}
+            selectedCardFilter={selectedCardFilter}
+            onFilterByCard={filterByCard}
             calibrationData={filteredCalibrationData}
             statsVisible={statsVisible}
             chartsVisible={chartsVisible}
@@ -205,8 +206,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
                     managerReviewStats={managerReviewStats}
                     hrAlignmentStats={hrAlignmentStats}
                     boardApprovalStats={boardApprovalStats}
-                    selectedFormStates={selectedFormStates}
-                    onFilterByFormState={filterByFormState}
+                    selectedCardFilter={selectedCardFilter}
+                    onFilterByCard={filterByCard}
                   />
                 </motion.div>
               ) : null}

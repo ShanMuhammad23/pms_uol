@@ -23,8 +23,17 @@ interface StatCardProps {
   tone: StatCardTone;
   icon: ElementType;
   delay: number;
+  /** Click handler for the whole card (legacy). */
   onClick?: () => void;
   active?: boolean;
+  /** Click handler for the awaiting number only. */
+  onAwaitingClick?: () => void;
+  /** Click handler for the completed number only. */
+  onCompletedClick?: () => void;
+  /** Whether the awaiting number is the active filter. */
+  awaitingActive?: boolean;
+  /** Whether the completed number is the active filter. */
+  completedActive?: boolean;
 }
 
 export function StatCard({
@@ -38,6 +47,10 @@ export function StatCard({
   delay,
   onClick,
   active,
+  onAwaitingClick,
+  onCompletedClick,
+  awaitingActive,
+  completedActive,
 }: StatCardProps) {
   const tones = {
     navy: {
@@ -97,17 +110,33 @@ export function StatCard({
             <span className="min-w-0 truncate text-[10px] text-white sm:text-xs">
               {awaitingtitle}
             </span>
-            <span className="shrink-0 text-lg font-bold tracking-tight tabular-nums text-white sm:text-xl lg:text-2xl">
+            <button
+              type="button"
+              onClick={onAwaitingClick ?? onClick}
+              className={cn(
+                "shrink-0 rounded text-lg font-bold tracking-tight tabular-nums text-white transition-all sm:text-xl lg:text-2xl",
+                onAwaitingClick && "cursor-pointer hover:underline",
+                awaitingActive && "underline ring-1 ring-white/60 rounded px-1",
+              )}
+            >
               {awaiting}
-            </span>
+            </button>
           </li>
           <li className="flex items-center justify-between gap-2">
             <span className="min-w-0 truncate text-[10px] text-white sm:text-xs">
               {completedtitle}
             </span>
-            <span className="shrink-0 text-lg font-bold tracking-tight tabular-nums text-white sm:text-xl lg:text-2xl">
+            <button
+              type="button"
+              onClick={onCompletedClick ?? onClick}
+              className={cn(
+                "shrink-0 rounded text-lg font-bold tracking-tight tabular-nums text-white transition-all sm:text-xl lg:text-2xl",
+                onCompletedClick && "cursor-pointer hover:underline",
+                completedActive && "underline ring-1 ring-white/60 rounded px-1",
+              )}
+            >
               {completed}
-            </span>
+            </button>
           </li>
         </ul>
       </div>

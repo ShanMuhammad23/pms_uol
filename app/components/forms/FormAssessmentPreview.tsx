@@ -348,7 +348,7 @@ export default function FormAssessmentPreview({
       {/* Assessment table — mirrors EmployeeFormFill / SubmissionDetailView layout */}
       <div className="my-6">
         <div className="overflow-auto rounded-lg border border-slate-200 shadow-sm dark:border-slate-700">
-          <table className="w-full">
+          <table className="w-full min-w-[1100px]">
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-700 dark:bg-slate-800">
                 <th className="border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">

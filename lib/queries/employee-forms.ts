@@ -3,6 +3,10 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { computeAppraisalEligibility } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
+import {
+  resolveSelfAssessmentAdvance,
+  toEmployeeManagers,
+} from "@/app/helpers/manager-review";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import {
   deleteFormAttachmentFile,
@@ -808,15 +812,35 @@ export async function saveEmployeeForm(
         })),
       );
 
+      // Fetch the employee's manager assignments to determine the correct
+      // next workflow status. When both Manager 1 and Manager 2 are NULL,
+      // the Manager Review stage is bypassed and the submission transitions
+      // directly to HR Alignment (PENDING_HR_CALIBRATION).
+      const managerResult = await client.query<{
+        head_id: string | null;
+        manager_2_id: string | null;
+      }>(
+        `SELECT head_id, manager_2_id FROM users WHERE id = $1`,
+        [userId],
+      );
+      const managerRow = managerResult.rows[0];
+      const managers = toEmployeeManagers({
+        headId: managerRow?.head_id ? Number(managerRow.head_id) : null,
+        manager2Id: managerRow?.manager_2_id
+          ? Number(managerRow.manager_2_id)
+          : null,
+      });
+      const advance = resolveSelfAssessmentAdvance(managers);
+
       await client.query(
         `UPDATE appraisals
          SET system_raw_score = $1,
              submitted_at = CURRENT_TIMESTAMP,
-             status = 'PENDING_HEAD_REVIEW',
-             manager_level = 1,
+             status = $2,
+             manager_level = $3,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2`,
-        [rawScore, appraisal.id],
+         WHERE id = $4`,
+        [rawScore, advance.status, advance.managerLevel, appraisal.id],
       );
     } else {
       await client.query(

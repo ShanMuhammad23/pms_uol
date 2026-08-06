@@ -10,6 +10,7 @@ import type {
   DashboardFilterParams,
   FormSubmissionsQueryParams,
 } from "@/types/dashboard-api";
+import type { CardFilterId } from "@/app/helpers/dashboard-types";
 import { APPRAISAL_STATUSES, type AppraisalStatus } from "@/types/forms";
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -43,6 +44,7 @@ export function emptyDashboardFilterParams(): DashboardFilterParams {
     roleCategories: null,
     designations: null,
     formStates: null,
+    cardFilter: null,
   };
 }
 
@@ -65,6 +67,7 @@ export function parseDashboardFilterParams(
     roleCategories: parseCsv(searchParams.get("role")),
     designations: parseCsv(searchParams.get("designation")),
     formStates,
+    cardFilter: (searchParams.get("card") as CardFilterId | null) ?? null,
   };
 }
 
@@ -93,6 +96,10 @@ export function appendDashboardFilterParams(
 
   const formState = serializeCsv(filters.formStates);
   if (formState !== null) params.set("formState", formState);
+
+  if (filters.cardFilter) {
+    params.set("card", filters.cardFilter);
+  }
 }
 
 export function parseMasterFilterParams(

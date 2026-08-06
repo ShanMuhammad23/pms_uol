@@ -13,8 +13,11 @@ import {
 } from "@/app/components/common/ColumnManagementPanel";
 import {
   useColumnConfig,
+  SELECT_COLUMN_WIDTH,
   type ColumnDef,
 } from "@/app/hooks/use-column-config";
+import type { ColumnConfig } from "@/lib/queries/column-widths-client";
+import { isHeadRole } from "@/lib/auth/home-path";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScoreAdjustmentCell";
@@ -48,8 +51,11 @@ import {
   DASHBOARD_TABLE_COLUMNS,
   type DashboardTableColumnDef,
   type DashboardTableColumnId,
+  canManageStaffListingColumns,
   getHrApprovalStatus,
   hasValidNormalizedScore,
+  MANAGER_FIXED_COLUMN_IDS,
+  MANAGER_FIXED_FROZEN_COLUMN_IDS,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { ScoreAdjustmentField } from "@/lib/queries/form-submissions-client";
@@ -100,7 +106,7 @@ function columnCellClassName(
 ) {
   return cn(
     "px-2 py-1",
-    column.wrap ? "whitespace-normal break-words" : "whitespace-nowrap",
+    "whitespace-normal break-words",
     column.align === "right" && "text-right",
     column.align === "center" && "text-center",
     extra,
@@ -112,7 +118,7 @@ const STICKY_EDGE_SHADOW_LEFT =
 
 function stickySelectHeaderClassName() {
   return cn(
-    "sticky left-0 top-0 z-40 border-b border-primary/80 bg-primary px-3 py-3",
+    "sticky left-0 top-0 z-50 border-b border-primary/80 bg-primary px-3 py-3",
     STICKY_EDGE_SHADOW_LEFT,
   );
 }
@@ -122,7 +128,7 @@ function stickySelectCellClassName(
   hrStatus?: "approved" | "review_required" | "pending",
 ) {
   return cn(
-    "sticky left-0 z-20 border-b border-slate-100 px-2 py-1 dark:border-white/[0.03]",
+    "sticky left-0 z-30 border-b border-slate-100 px-2 py-1 dark:border-white/[0.03]",
     STICKY_EDGE_SHADOW_LEFT,
     isSelected
       ? "bg-amber-50 dark:bg-amber-950"
@@ -278,12 +284,7 @@ function renderCell(
         <SubmissionViewControl submission={submission} />
         <EligibilityToggleAction submission={submission} ctx={ctx} />
         <span
-          className={cn(
-            "block text-slate-700 dark:text-slate-300",
-            column.wrap ? "whitespace-normal break-words" : "truncate",
-            !column.width && !column.wrap && "max-w-[220px]",
-          )}
-          style={column.width != null ? { maxWidth: column.width } : undefined}
+          className="block min-w-0 break-words text-slate-700 dark:text-slate-300"
           title={value === "—" ? undefined : value}
         >
           {value}
@@ -608,12 +609,9 @@ function renderCell(
   return (
     <span
       className={cn(
-        "block text-slate-700 dark:text-slate-300",
-        column.wrap ? "whitespace-normal break-words" : "truncate",
-        !column.width && !column.wrap && "max-w-[220px]",
+        "block min-w-0 break-words text-slate-700 dark:text-slate-300",
         columnId === "employeeName" && "font-semibold text-slate-900 dark:text-white",
       )}
-      style={column.width != null ? { maxWidth: column.width } : undefined}
       title={value === "—" ? undefined : value}
     >
       {value}
@@ -629,6 +627,26 @@ export function DashboardSubmissionsTable({
   performanceMatrix,
 }: DashboardSubmissionsTableProps) {
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const isHrRole = canReviewSubmissions(role ?? undefined);
+  const isManagerRole = isHeadRole(role ?? undefined);
+  const canManageColumns = canManageStaffListingColumns(role ?? undefined);
+
+  // Fixed column configuration for Manager 1 / Manager 2 roles.
+  // Managers do not get column management — they always see the predefined
+  // layout with the first four columns frozen. Saved preferences are ignored.
+  const managerFixedConfig = useMemo<ColumnConfig | undefined>(
+    () =>
+      isManagerRole
+        ? {
+            order: [...MANAGER_FIXED_COLUMN_IDS],
+            visible: [...MANAGER_FIXED_COLUMN_IDS],
+            frozen: [...MANAGER_FIXED_FROZEN_COLUMN_IDS],
+            widths: {},
+          }
+        : undefined,
+    [isManagerRole],
+  );
+
   const {
     config,
     defaults: configDefaults,
@@ -642,7 +660,9 @@ export function DashboardSubmissionsTable({
     resetConfig,
   } = useColumnConfig("dashboard-staff-listing", {
     allColumns: DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[],
-    allowedColumnIds,
+    allowedColumnIds: isManagerRole ? MANAGER_FIXED_COLUMN_IDS : allowedColumnIds,
+    hasSelectColumn: isHrRole,
+    fixedConfig: managerFixedConfig,
   });
 
   // Compute the RBAC-filtered column list for the Column Management panel.
@@ -711,7 +731,6 @@ export function DashboardSubmissionsTable({
     return map;
   }, [submissionsPage?.columnCounts]);
 
-  const isHrRole = canReviewSubmissions(role ?? undefined);
   const { data: session } = useSession();
   const { canEdit: canEditModule, permissions } = useAdditionalAccess(
     session?.user?.id ? Number(session.user.id) : undefined,
@@ -1072,10 +1091,12 @@ export function DashboardSubmissionsTable({
             hasActiveFilters={hasActiveFilters}
             onClearAllFilters={handleClearAllFilters}
           />
-          <ColumnManagementPanelTrigger
-            open={columnMgmtOpen}
-            onOpenChange={setColumnMgmtOpen}
-          />
+          {canManageColumns ? (
+            <ColumnManagementPanelTrigger
+              open={columnMgmtOpen}
+              onOpenChange={setColumnMgmtOpen}
+            />
+          ) : null}
           {isHrRole ? (
             <button
               type="button"
@@ -1124,15 +1145,17 @@ export function DashboardSubmissionsTable({
         allowedColumnIds={allowedColumnIds}
       />
 
-      <ColumnManagementPanel
-        open={columnMgmtOpen}
-        onOpenChange={setColumnMgmtOpen}
-        columns={allowedColumns}
-        config={config}
-        defaults={configDefaults}
-        onApply={updateConfig}
-        onReset={resetConfig}
-      />
+      {canManageColumns ? (
+        <ColumnManagementPanel
+          open={columnMgmtOpen}
+          onOpenChange={setColumnMgmtOpen}
+          columns={allowedColumns}
+          config={config}
+          defaults={configDefaults}
+          onApply={updateConfig}
+          onReset={resetConfig}
+        />
+      ) : null}
 
       <TopHorizontalScrollbar
         targetRef={tableScrollRef}
@@ -1147,7 +1170,14 @@ export function DashboardSubmissionsTable({
           <thead>
             <tr className="bg-primary text-white">
               {isHrRole ? (
-                <th className={stickySelectHeaderClassName()}>
+                <th
+                  className={stickySelectHeaderClassName()}
+                  style={{
+                    width: SELECT_COLUMN_WIDTH,
+                    minWidth: SELECT_COLUMN_WIDTH,
+                    maxWidth: SELECT_COLUMN_WIDTH,
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={allFilteredSelected}
@@ -1249,7 +1279,14 @@ export function DashboardSubmissionsTable({
                       )}
                     >
                       {isHrRole ? (
-                        <td className={stickySelectCellClassName(isSelected, getHrApprovalStatus(submission))}>
+                        <td
+                          className={stickySelectCellClassName(isSelected, getHrApprovalStatus(submission))}
+                          style={{
+                            width: SELECT_COLUMN_WIDTH,
+                            minWidth: SELECT_COLUMN_WIDTH,
+                            maxWidth: SELECT_COLUMN_WIDTH,
+                          }}
+                        >
                           <input
                             type="checkbox"
                             checked={isSelected}

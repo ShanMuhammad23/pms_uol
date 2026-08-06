@@ -46,6 +46,7 @@ export async function fetchFormSubmissions(): Promise<FormSubmissionListItem[]> 
       roleCategories: null,
       designations: null,
       formStates: null,
+      cardFilter: null,
     },
     masterFilters: { text: {}, multi: {}, numeric: {} },
   });
@@ -180,6 +181,34 @@ export async function setHrReviewRequired(
   });
 
   return parseResponse<{ hrApprovalStatus: string }>(response);
+}
+
+/**
+ * Permanently reset a submission back to the Self Assessment stage.
+ * Removes all answers, manager reviews, score adjustments, calibration
+ * data, and HR/Board approval data. Only HR / Board / Super Admin may
+ * perform this action (enforced server-side).
+ *
+ * Returns deletion counts for verification/debugging.
+ */
+export async function resetFormSubmission(
+  id: number,
+): Promise<{
+  status: FormSubmissionDetail["status"];
+  deletedAttachments: number;
+  deletedAnswers: number;
+  resetAppraisal: boolean;
+}> {
+  const response = await fetch(`/api/submissions/${id}/reset-form`, {
+    method: "POST",
+  });
+
+  return parseResponse<{
+    status: FormSubmissionDetail["status"];
+    deletedAttachments: number;
+    deletedAnswers: number;
+    resetAppraisal: boolean;
+  }>(response);
 }
 
 export async function saveHrReview(

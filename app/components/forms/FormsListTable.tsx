@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText } from "lucide-react";
+import { Eye, FileText } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/lib/queries/forms-client";
 import type { FormTemplateListItem } from "@/types/forms";
 import FormActionsDropdown from "./FormActionsDropdown";
+import { ViewFormAsModal } from "./ViewFormAsModal";
 
 interface FormsListTableProps {
   templates: FormTemplateListItem[];
@@ -19,6 +20,10 @@ interface FormsListTableProps {
 export default function FormsListTable({ templates, canEdit = true }: FormsListTableProps) {
   const queryClient = useQueryClient();
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [viewAsTarget, setViewAsTarget] = useState<{
+    id: number;
+    title: string;
+  } | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["form-templates"],
@@ -165,20 +170,44 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                   </div>
                 </td>
                 <td className="px-4 py-4 text-center whitespace-nowrap">
-                  <FormActionsDropdown
-                    templateId={template.id}
-                    templateTitle={template.title}
-                    appraisalCount={template.appraisalCount}
-                    onDelete={handleDelete}
-                    deletePending={deleteMutation.isPending}
-                    canEdit={canEdit}
-                  />
+                  <div className="inline-flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setViewAsTarget({
+                          id: template.id,
+                          title: template.title,
+                        })
+                      }
+                      title="View Form As"
+                      aria-label="View Form As"
+                      className="inline-flex items-center justify-center rounded-lg border border-slate-300 p-1.5 text-slate-600 transition-colors hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 dark:border-white/15 dark:text-slate-300 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
+                    >
+                      <Eye className="size-4" />
+                    </button>
+                    <FormActionsDropdown
+                      templateId={template.id}
+                      templateTitle={template.title}
+                      appraisalCount={template.appraisalCount}
+                      onDelete={handleDelete}
+                      deletePending={deleteMutation.isPending}
+                      canEdit={canEdit}
+                    />
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <ViewFormAsModal
+        key={viewAsTarget?.id ?? "closed"}
+        open={viewAsTarget != null}
+        templateId={viewAsTarget?.id ?? null}
+        templateTitle={viewAsTarget?.title ?? ""}
+        onClose={() => setViewAsTarget(null)}
+      />
     </div>
   );
 }

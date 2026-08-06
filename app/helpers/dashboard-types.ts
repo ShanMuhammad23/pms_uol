@@ -21,6 +21,27 @@ export type EligibilityStatus =
   | "Not Eligible"
   | "Ineligible";
 
+/**
+ * Identifies which dashboard card number was clicked, so the staff listing
+ * can be filtered using the exact same predicate that produced the count.
+ *
+ * Format: "{cardId}:{numberId}" — e.g. "selfAssessment:submitted".
+ * The `eligibility:` variant carries the raw EligibilityStatus value
+ * (e.g. "eligibility:Fully Eligible").
+ */
+export type CardFilterId =
+  | `eligibility:${EligibilityStatus}`
+  | "selfAssessment:eligible"
+  | "selfAssessment:submitted"
+  | "manager1:submitted"
+  | "manager1:reviewed"
+  | "manager2:submitted"
+  | "manager2:reviewed"
+  | "hrAlignment:submitted"
+  | "hrAlignment:aligned"
+  | "boardApproval:pending"
+  | "boardApproval:approved";
+
 export type RatingQuartileMatrixCell = {
   id: number | null;
   label: string;
