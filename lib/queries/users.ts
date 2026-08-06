@@ -9,6 +9,10 @@ import type {
   UserRecord,
 } from "@/types/users";
 import { normalizeUserInput } from "@/lib/validation/users";
+import {
+  MANAGER_ELIGIBLE_ROLES,
+  isManagerEligibleRole,
+} from "@/app/helpers/manager-eligibility";
 
 interface UserRow {
   id: string;
@@ -31,7 +35,6 @@ interface UserRow {
   head_name: string | null;
   manager_2_id: string | null;
   manager_2_name: string | null;
-  is_manager_eligible: boolean;
   qualification: string | null;
   qualification_year: string | null;
   qualification_subject: string | null;
@@ -47,7 +50,6 @@ let cachedUserOrgMode: UserOrgMode | null = null;
 let cachedExcelColumns: boolean | null = null;
 let cachedQualificationsTable: boolean | null = null;
 let manager2ColumnEnsured = false;
-let managerEligibleColumnEnsured = false;
 
 export async function ensureManager2Column(): Promise<void> {
   if (manager2ColumnEnsured) {
@@ -59,18 +61,6 @@ export async function ensureManager2Column(): Promise<void> {
   );
 
   manager2ColumnEnsured = true;
-}
-
-export async function ensureManagerEligibleColumn(): Promise<void> {
-  if (managerEligibleColumnEnsured) {
-    return;
-  }
-
-  await db.query(
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_manager_eligible BOOLEAN NOT NULL DEFAULT FALSE`,
-  );
-
-  managerEligibleColumnEnsured = true;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -194,7 +184,6 @@ function buildUserSelect(
       CONCAT(h.first_name, ' ', h.last_name) AS head_name,
       u.manager_2_id,
       CONCAT(m2.first_name, ' ', m2.last_name) AS manager_2_name,
-      u.is_manager_eligible,
       ${qualSelect}
       u.is_active,
       u.created_at::text
@@ -237,7 +226,6 @@ function mapUserRow(row: UserRow): UserRecord {
     headName: row.head_name,
     manager2Id: row.manager_2_id ? Number(row.manager_2_id) : null,
     manager2Name: row.manager_2_name,
-    isManagerEligible: row.is_manager_eligible,
     qualification: row.qualification,
     qualificationYear: row.qualification_year,
     qualificationSubject: row.qualification_subject,
@@ -304,8 +292,8 @@ async function assertValidManager(
   const isUnchanged =
     previousManagerId !== undefined && managerId === previousManagerId;
 
-  const result = await db.query<{ is_manager_eligible: boolean }>(
-    `SELECT is_manager_eligible FROM users WHERE id = $1`,
+  const result = await db.query<{ system_role: string }>(
+    `SELECT system_role FROM users WHERE id = $1`,
     [managerId],
   );
 
@@ -313,9 +301,9 @@ async function assertValidManager(
     throw new UserError(`${label} user not found.`, 404);
   }
 
-  if (!isUnchanged && !result.rows[0].is_manager_eligible) {
+  if (!isUnchanged && !isManagerEligibleRole(result.rows[0].system_role)) {
     throw new UserError(
-      `${label} is not designated as a manager. Set their Manager Role to "Yes" first.`,
+      `${label} must have a System Role of Manager, HR, Board, or Super Admin.`,
       400,
     );
   }
@@ -336,36 +324,41 @@ async function assertValidManagers(
 }
 
 /**
- * Returns users designated as manager-eligible (Manager Role = Yes).
+ * Returns users whose System Role makes them eligible for Manager 1 / Manager 2
+ * assignment (Manager, HR, Board, Super Admin).
  * Used as the single source of truth for populating Manager 1/2 dropdowns.
  */
 export async function listEligibleManagers(): Promise<UserRecord[]> {
   await ensureManager2Column();
-  await ensureManagerEligibleColumn();
 
   const [mode, excelReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
   ]);
+  const rolesPlaceholder = MANAGER_ELIGIBLE_ROLES.map(
+    (_, i) => `$${i + 1}`,
+  ).join(", ");
   const result = await db.query<UserRow>(
     `${buildUserSelect(mode, excelReady, false)}
-     WHERE u.is_manager_eligible = TRUE
+     WHERE u.system_role IN (${rolesPlaceholder})
      ORDER BY u.last_name ASC, u.first_name ASC`,
+    MANAGER_ELIGIBLE_ROLES as unknown as string[],
   );
 
   return result.rows.map(mapUserRow);
 }
 
 /**
- * Validates that a user is manager-eligible. Used by bulk update paths
- * where per-user "previous value" tracking is not feasible.
+ * Validates that a user's System Role makes them eligible to be assigned as
+ * a manager. Used by bulk update paths where per-user "previous value"
+ * tracking is not feasible.
  */
 export async function assertManagerEligible(
   managerId: number,
   label: string,
 ): Promise<void> {
-  const result = await db.query<{ is_manager_eligible: boolean }>(
-    `SELECT is_manager_eligible FROM users WHERE id = $1`,
+  const result = await db.query<{ system_role: string }>(
+    `SELECT system_role FROM users WHERE id = $1`,
     [managerId],
   );
 
@@ -373,9 +366,9 @@ export async function assertManagerEligible(
     throw new UserError(`${label} user not found.`, 404);
   }
 
-  if (!result.rows[0].is_manager_eligible) {
+  if (!isManagerEligibleRole(result.rows[0].system_role)) {
     throw new UserError(
-      `${label} is not designated as a manager. Set their Manager Role to "Yes" first.`,
+      `${label} must have a System Role of Manager, HR, Board, or Super Admin.`,
       400,
     );
   }
@@ -393,7 +386,6 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 
 export async function listUsers(): Promise<UserRecord[]> {
   await ensureManager2Column();
-  await ensureManagerEligibleColumn();
 
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
@@ -413,7 +405,6 @@ export async function listUsers(): Promise<UserRecord[]> {
  */
 export async function listUsersOverview(): Promise<UserRecord[]> {
   await ensureManager2Column();
-  await ensureManagerEligibleColumn();
 
   const [mode, excelReady] = await Promise.all([
     getUserOrgMode(),
@@ -441,7 +432,6 @@ export async function listUsersByEmployeeIds(
   }
 
   await ensureManager2Column();
-  await ensureManagerEligibleColumn();
 
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
@@ -466,7 +456,6 @@ export async function listUsersByEmployeeIds(
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
   await ensureManager2Column();
-  await ensureManagerEligibleColumn();
 
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
@@ -488,7 +477,6 @@ export async function getUserById(id: number): Promise<UserRecord | null> {
 
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {
   await ensureManager2Column();
-  await ensureManagerEligibleColumn();
 
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
@@ -514,7 +502,6 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
     mode === "entity" ? "entity_id" : "department_id",
     "head_id",
     "manager_2_id",
-    "is_manager_eligible",
     "is_active",
   ];
   const values: unknown[] = [
@@ -529,7 +516,6 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
     normalized.entityId,
     normalized.headId,
     normalized.manager2Id,
-    normalized.isManagerEligible,
     normalized.isActive,
   ];
 
@@ -609,7 +595,6 @@ export async function updateUser(
   input: UpdateUserInput,
 ): Promise<UserRecord> {
   await ensureManager2Column();
-  await ensureManagerEligibleColumn();
 
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
@@ -669,11 +654,6 @@ export async function updateUser(
 
   values.push(normalized.manager2Id);
   setClauses.push(`manager_2_id = $${values.length}`);
-
-  if (normalized.isManagerEligible !== undefined) {
-    values.push(normalized.isManagerEligible);
-    setClauses.push(`is_manager_eligible = $${values.length}`);
-  }
 
   values.push(normalized.isActive);
   setClauses.push(`is_active = $${values.length}`);

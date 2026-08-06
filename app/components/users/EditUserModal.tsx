@@ -49,7 +49,6 @@ interface EditUserFormState {
   entityId: string;
   headId: string;
   manager2Id: string;
-  isManagerEligible: boolean;
   qualification: string;
   qualificationYear: string;
   qualificationSubject: string;
@@ -72,7 +71,6 @@ function toFormState(user: UserRecord): EditUserFormState {
     entityId: user.entityId ? String(user.entityId) : "",
     headId: user.headId ? String(user.headId) : "",
     manager2Id: user.manager2Id ? String(user.manager2Id) : "",
-    isManagerEligible: user.isManagerEligible,
     qualification: user.qualification ?? "",
     qualificationYear: user.qualificationYear ?? "",
     qualificationSubject: user.qualificationSubject ?? "",
@@ -227,6 +225,18 @@ export function EditUserModal({
     setAccessSaving(true);
     try {
       await saveUserAdditionalAccess(user.id, validPerms);
+      // Refetch the persisted permissions so the checkbox state is
+      // synchronized with the database — the save endpoint returns the
+      // full permission set, but we refetch to guarantee the UI matches
+      // the actual database state (single source of truth).
+      const refreshedPerms = await fetchUserAdditionalAccess(user.id);
+      const refreshedMap = Object.fromEntries(
+        ADDITIONAL_ACCESS_MODULES.map((m) => [m, null]),
+      ) as Record<AdditionalAccessModule, AdditionalAccessLevel | null>;
+      for (const p of refreshedPerms) {
+        refreshedMap[p.module] = p.accessLevel;
+      }
+      setAdditionalAccess(refreshedMap);
     } catch {
       // non-fatal: user profile still saves
     } finally {
@@ -248,7 +258,6 @@ export function EditUserModal({
         entityId: form.entityId ? Number(form.entityId) : null,
         headId: form.headId ? Number(form.headId) : null,
         manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
-        isManagerEligible: form.isManagerEligible,
         qualification: form.qualification.trim() || null,
         qualificationYear: yearValue ? Number(yearValue) : null,
         qualificationSubject: form.qualificationSubject.trim() || null,
@@ -511,28 +520,6 @@ export function EditUserModal({
                           {USER_ROLE_LABELS[role]}
                         </option>
                       ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Manager Role" htmlFor="edit-user-manager-role">
-                    <select
-                      id="edit-user-manager-role"
-                      value={form.isManagerEligible ? "yes" : "no"}
-                      onChange={(event) =>
-                        setForm((current) =>
-                          current
-                            ? {
-                                ...current,
-                                isManagerEligible: event.target.value === "yes",
-                              }
-                            : current,
-                        )
-                      }
-                      disabled={isSubmitting}
-                      className={inputClassName}
-                    >
-                      <option value="no">No</option>
-                      <option value="yes">Yes</option>
                     </select>
                   </Field>
 

@@ -15,7 +15,7 @@ Key design principles observed:
 
 1. **Database is the source of truth for authorization** — JWT tokens are refreshed from PostgreSQL on every request.
 2. **Dual org-mode support** — the system can run in legacy `department_id` mode or modern `entity_id` mode and detects which at runtime.
-3. **Manager eligibility is explicit** — only users with `is_manager_eligible = TRUE` can appear in manager dropdowns (with a fallback that preserves existing assignments).
+3. **Manager eligibility is role-based** — users with System Role MANAGER, HR, BOARD, or SUPER_ADMIN can appear in manager dropdowns (with a fallback that preserves existing assignments).
 4. **RBAC is primary, Additional Access is supplementary** — SUPER_ADMIN / HR / BOARD always win; MANAGER and EMPLOYEE roles can be extended per module.
 5. **Hard-coded role hierarchy** — there is no dynamic permission table; roles are an enum and helpers are hard-coded around `ROLE_PERMISSION_SETS`.
 
@@ -101,7 +101,6 @@ CREATE TABLE users (
     entity_id BIGINT REFERENCES entities(id) ON DELETE RESTRICT,
     head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 1
     manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 2
-    is_manager_eligible BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
@@ -123,7 +122,7 @@ CREATE TABLE users (
 | `entity_id` | Modern hierarchical org assignment (replaces department_id in newer deployments) |
 | `head_id` | Self-referential FK: Manager 1 for appraisal reviews |
 | `manager_2_id` | Self-referential FK: optional Manager 2 for second-level reviews |
-| `is_manager_eligible` | Gate for manager dropdowns; only eligible users can be assigned as Manager 1/2 |
+| `system_role` | Determines manager eligibility — MANAGER/HR/BOARD/SUPER_ADMIN can be assigned as Manager 1/2 |
 | `is_active` | Soft lock; inactive users cannot authenticate |
 | `created_at` | Audit trail |
 
@@ -368,7 +367,6 @@ Server validation in `lib/validation/users.ts`:
 | `designation` | No | free text, trimmed or null |
 | `roleCategory` | No | free text, trimmed or null |
 | `dateOfJoining` | No | valid ISO date or null |
-| `isManagerEligible` | No | boolean, default false |
 | `isActive` | No | boolean, default true |
 | `qualification*` | No | stored in `employee_qualifications` as primary |
 
@@ -376,7 +374,7 @@ Server validation in `lib/validation/users.ts`:
 
 - Email is normalized to lowercase before insert.
 - Password hashed with `bcrypt` (10 rounds).
-- `headId` and `manager2Id` must point to users where `is_manager_eligible = TRUE`.
+- `headId` and `manager2Id` must point to users whose `system_role` is MANAGER, HR, BOARD, or SUPER_ADMIN.
 - Manager 1 and Manager 2 cannot be the same person.
 - If the entity column is missing, the system falls back to `department_id`.
 - Creation also optionally assigns form templates and additional access in a follow-up step in the UI.
@@ -384,7 +382,6 @@ Server validation in `lib/validation/users.ts`:
 ### 5.4 Default Values
 
 - `system_role` defaults to `EMPLOYEE`.
-- `is_manager_eligible` defaults to `FALSE`.
 - `is_active` defaults to `TRUE`.
 - Optional text fields become `NULL` if blank.
 
@@ -405,8 +402,7 @@ Every field listed in the `UpdateUserInput` schema is editable:
 - `empCategory`, `empSubCategory`
 - `entityId` — organization reassignment
 - `headId` (Manager 1) — must be manager-eligible unless unchanged
-- `manager2Id` (Manager 2) — must be manager-eligible unless unchanged; cannot equal headId
-- `isManagerEligible` — controls whether user appears in manager dropdowns
+- `manager2Id` (Manager 2) — must have an eligible System Role unless unchanged; cannot equal headId
 - `designation`, `roleCategory`, `gradeGroup`, `dateOfJoining`
 - `qualification*` fields — upserted into `employee_qualifications`
 - `isActive` — lock/unlock account
@@ -452,7 +448,7 @@ The codebase is dual-mode to support migration. New deployments should use `enti
 
 - Field: `users.head_id`
 - Purpose: Direct reporting manager; primary reviewer for appraisals.
-- Assignment: Only users with `is_manager_eligible = TRUE` appear in the Manager 1 dropdown.
+- Assignment: Only users with System Role MANAGER/HR/BOARD/SUPER_ADMIN appear in the Manager 1 dropdown.
 
 ### 8.2 Manager 2
 
@@ -801,9 +797,9 @@ graph TD
 ## 17. Business Rules
 
 1. **Who can create/edit/delete users:** SUPER_ADMIN, HR, and BOARD via `requireSuperAdmin*` helpers; user creation/editing UI is limited to `/dashboard/users`.
-2. **Who can assign managers:** Only in user create/edit; requires target manager to have `is_manager_eligible = TRUE` (or be unchanged legacy).
+2. **Who can assign managers:** Only in user create/edit; requires target manager to have System Role MANAGER/HR/BOARD/SUPER_ADMIN (or be unchanged legacy).
 3. **Who can assign roles:** Same as user editing.
-4. **Manager Role restrictions:** Only `is_manager_eligible = TRUE` users appear in Manager 1/2 dropdowns.
+4. **Manager eligibility:** Only users with System Role MANAGER/HR/BOARD/SUPER_ADMIN appear in Manager 1/2 dropdowns.
 5. **Additional Access restrictions:** Only SUPER_ADMIN can grant; HR/BOARD always have EDIT on all modules.
 6. **Eligibility rules:** `date_of_joining` drives runtime eligibility; can be overridden via `assessment_eligibility` and `ineligibility_reason`.
 7. **Direct Assessment rules:** Only users in `direct_score_entry_assignments` for the active cycle; editable by admin or assigned manager at `PENDING_HEAD_REVIEW`.
@@ -904,7 +900,7 @@ sequenceDiagram
     Admin->>EditUserModal: select Manager 1
     EditUserModal->>SearchableManagerSelect: filter options
     SearchableManagerSelect->>UsersManager: filterManagerEligibleUsers
-    UsersManager->>UsersManager: keep is_manager_eligible=true OR currentId
+    UsersManager->>UsersManager: keep system_role IN (MANAGER,HR,BOARD,SUPER_ADMIN) OR currentId
     UsersManager-->>SearchableManagerSelect: eligible managers
     Admin->>EditUserModal: select Manager 2
     EditUserModal->>EditUserModal: disable same-as-Manager-1
@@ -941,7 +937,7 @@ sequenceDiagram
 
 - **User profile fields** — replace PMS-specific `emp_category`, `emp_sub_category`, `grade_group`, `date_of_joining`, `designation`, `role_category` with a configurable `profile_fields` JSONB or a per-project schema.
 - **Organization hierarchy** — keep the `entities`/`entity_categories` model but make category codes configurable (not hard-coded C1/C2/C3).
-- **Manager concept** — keep `head_id` / `manager_2_id` and `is_manager_eligible`, but allow renaming for IREB's org vocabulary.
+- **Manager concept** — keep `head_id` / `manager_2_id`; eligibility is now determined by `system_role` (MANAGER/HR/BOARD/SUPER_ADMIN), not a separate flag.
 - **Additional access modules** — make the module list configurable per project instead of hard-coding `FORMS`, `CREDIT_HOURS`, `ORIC_ADJUSTMENTS`, `QEC_ADJUSTMENTS`.
 - **Role enum** — keep 5 roles if suitable, but make `USER_ROLES` and `ROLE_PERMISSION_SETS` project-configurable.
 
@@ -1029,7 +1025,6 @@ CREATE TABLE users (
     entity_id BIGINT REFERENCES entities(id) ON DELETE RESTRICT,
     head_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
     manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
-    is_manager_eligible BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     profile JSONB DEFAULT '{}',  -- project-specific fields
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP

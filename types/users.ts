@@ -46,8 +46,6 @@ export interface UserRecord {
   /** Manager 2 — second-level appraisal reviewer (editable per user). */
   manager2Id: number | null;
   manager2Name: string | null;
-  /** Designates whether this user can be assigned as Manager 1 or Manager 2. */
-  isManagerEligible: boolean;
   qualification: string | null;
   qualificationYear: string | null;
   qualificationSubject: string | null;
@@ -72,7 +70,6 @@ export interface CreateUserInput {
   entityId?: number | null;
   headId?: number | null;
   manager2Id?: number | null;
-  isManagerEligible?: boolean;
   qualification?: string | null;
   qualificationYear?: number | null;
   qualificationSubject?: string | null;
@@ -101,7 +98,6 @@ export interface UpdateUserInput {
   qualificationSubject?: string | null;
   qualificationInstitute?: string | null;
   qualificationCountry?: string | null;
-  isManagerEligible?: boolean;
   isActive?: boolean;
 }
 

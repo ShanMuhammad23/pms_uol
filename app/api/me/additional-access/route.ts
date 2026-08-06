@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { getUserAdditionalAccess } from "@/lib/auth/additional-access";
 
+// This route reads the session (cookies) to identify the current user.
+// Without force-dynamic, Next.js may statically cache the response at
+// build time, causing all users to receive the same stale permissions.
+export const dynamic = "force-dynamic";
+
 /**
  * Self-service endpoint: returns the current user's own additional-access
  * permissions. No Super Admin required — a user can always read their own

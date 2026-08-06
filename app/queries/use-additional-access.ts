@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchUserAdditionalAccess } from "@/lib/queries/additional-access-client";
+import { fetchMyAdditionalAccess } from "@/lib/queries/additional-access-client";
 import type { AdditionalAccessPermission } from "@/types/additional-access";
 import {
   canEditModuleClient,
@@ -21,7 +21,7 @@ export function useAdditionalAccess(
 ) {
   const { data: permissions = [] } = useQuery({
     queryKey: ["additional-access", userId],
-    queryFn: () => fetchUserAdditionalAccess(userId!),
+    queryFn: () => fetchMyAdditionalAccess(),
     enabled: !!userId,
   });
 

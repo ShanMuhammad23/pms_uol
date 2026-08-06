@@ -121,6 +121,10 @@ interface ScoreAdjustmentsPanelProps {
   canEditCreditHours?: boolean;
   canEditOric?: boolean;
   canEditQec?: boolean;
+  /** Calibration factor is admin-only — non-admin users with additional
+      access can edit their specific adjustment columns but NOT the
+      calibration factor. Defaults to true for backward compatibility. */
+  canEditCalibrationFactor?: boolean;
   performanceLevelName: string | null;
   quartileName: string | null;
 }
@@ -137,6 +141,7 @@ function ScoreAdjustmentsPanel({
   canEditCreditHours = true,
   canEditOric = true,
   canEditQec = true,
+  canEditCalibrationFactor = true,
   performanceLevelName,
   quartileName,
 }: ScoreAdjustmentsPanelProps) {
@@ -232,6 +237,7 @@ function ScoreAdjustmentsPanel({
               field="calibrationFactor"
               value={calibrationFactor}
               disabled={disabled}
+              canEdit={canEditCalibrationFactor}
               mode="decimal"
             />
           </div>
@@ -270,13 +276,27 @@ export default function SubmissionDetailView({
   const userRole = session?.user?.role;
   const isAdminRole = canReviewSubmissions(userRole);
   const showQuartile = canViewQuartile(userRole);
-  const { canEdit: canEditModule } = useAdditionalAccess(
+  const { canEdit: canEditModule, canView: canViewModule } = useAdditionalAccess(
     session?.user?.id ? Number(session.user.id) : undefined,
     userRole,
   );
+  // Additional Access permissions extend the user's default role-based
+  // column visibility. A user with CREDIT_HOURS / ORIC_ADJUSTMENTS /
+  // QEC_ADJUSTMENTS additional access can view and edit those adjustment
+  // columns even if they are not an admin role (e.g., a Manager with
+  // additional access). These are additive — they never remove access.
+  const canViewCreditHours = isAdminRole || canViewModule("CREDIT_HOURS");
+  const canViewOric = isAdminRole || canViewModule("ORIC_ADJUSTMENTS");
+  const canViewQec = isAdminRole || canViewModule("QEC_ADJUSTMENTS");
   const canEditCreditHours = isAdminRole || canEditModule("CREDIT_HOURS");
   const canEditOric = isAdminRole || canEditModule("ORIC_ADJUSTMENTS");
   const canEditQec = isAdminRole || canEditModule("QEC_ADJUSTMENTS");
+  // The Score Adjustments panel is visible to admin roles OR any user who
+  // has at least one additional-access adjustment permission (view or edit).
+  // This ensures additional access permissions are never ignored by the
+  // default role-based visibility logic.
+  const canViewAnyAdjustment =
+    isAdminRole || canViewCreditHours || canViewOric || canViewQec;
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
     new Map(),
@@ -1356,7 +1376,7 @@ export default function SubmissionDetailView({
         />
       ) : null}
 
-      {isAdminRole && rows.length > 0 ? (
+      {canViewAnyAdjustment && rows.length > 0 ? (
         <ScoreAdjustmentsPanel
           submissionId={data.id}
           scoreO={data.initialScoreNumeric ?? data.rawScore}
@@ -1365,10 +1385,23 @@ export default function SubmissionDetailView({
           pubOricScoreAdj={data.pubOricScoreAdj}
           qecScoreAdj={data.qecScoreAdj}
           calibrationFactor={data.calibrationFactor}
-          canEdit={data.canEditScoreAdjustments && isEligible}
+          // The panel's canEdit controls the `disabled` flag which, when
+          // true, renders ALL cells as "—". For admin roles this comes from
+          // the API (canEditScoreAdjustments). For non-admin users with
+          // additional access, we enable the panel when they have EDIT-level
+          // access on any adjustment module — the per-cell canEdit props
+          // (canEditCreditHours etc.) still gate individual columns.
+          canEdit={
+            isEligible &&
+            (data.canEditScoreAdjustments ||
+              canEditCreditHours ||
+              canEditOric ||
+              canEditQec)
+          }
           canEditCreditHours={canEditCreditHours}
           canEditOric={canEditOric}
           canEditQec={canEditQec}
+          canEditCalibrationFactor={isAdminRole}
           performanceLevelName={data.performanceLevelName}
           quartileName={data.quartileName}
         />

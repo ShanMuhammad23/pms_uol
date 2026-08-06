@@ -74,7 +74,6 @@ interface UserFormState {
   entityId: string;
   headId: string;
   manager2Id: string;
-  isManagerEligible: boolean;
   qualification: string;
   qualificationYear: string;
   qualificationSubject: string;
@@ -96,7 +95,6 @@ const emptyForm: UserFormState = {
   entityId: "",
   headId: "",
   manager2Id: "",
-  isManagerEligible: false,
   qualification: "",
   qualificationYear: "",
   qualificationSubject: "",
@@ -211,7 +209,6 @@ export default function UsersManager() {
         headName: null,
         manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
         manager2Name: null,
-        isManagerEligible: form.isManagerEligible,
         qualification: form.qualification || null,
         qualificationYear: form.qualificationYear || null,
         qualificationSubject: form.qualificationSubject || null,
@@ -385,7 +382,6 @@ export default function UsersManager() {
         entityId: form.entityId ? Number(form.entityId) : null,
         headId: form.headId ? Number(form.headId) : null,
         manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
-        isManagerEligible: form.isManagerEligible,
         qualification: form.qualification.trim() || null,
         qualificationYear: yearValue ? Number(yearValue) : null,
         qualificationSubject: form.qualificationSubject.trim() || null,
@@ -635,24 +631,6 @@ export default function UsersManager() {
                   {USER_ROLE_LABELS[role]}
                 </option>
               ))}
-            </select>
-          </Field>
-
-          <Field label="Manager Role" htmlFor="user-manager-role">
-            <select
-              id="user-manager-role"
-              value={form.isManagerEligible ? "yes" : "no"}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  isManagerEligible: event.target.value === "yes",
-                }))
-              }
-              disabled={isSubmitting}
-              className={inputClassName}
-            >
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
             </select>
           </Field>
 

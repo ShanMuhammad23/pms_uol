@@ -6,6 +6,7 @@ import {
 } from "@/lib/queries/form-submissions";
 import { canEditModule } from "@/lib/auth/additional-access";
 import type { AdditionalAccessModule } from "@/types/additional-access";
+import { USER_ROLES } from "@/types/users";
 
 function parseOptionalTextField(
   body: Record<string, unknown>,
@@ -103,6 +104,22 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const systemRole =
+      "systemRole" in body
+        ? { provided: true as const, value: body.systemRole as string | null }
+        : { provided: false as const, value: null };
+
+    if (
+      systemRole.provided &&
+      systemRole.value !== null &&
+      !USER_ROLES.includes(systemRole.value as typeof USER_ROLES[number])
+    ) {
+      return NextResponse.json(
+        { error: `systemRole must be one of: ${USER_ROLES.join(", ")}.` },
+        { status: 400 },
+      );
+    }
+
     const fields: Record<string, unknown> = {};
 
     if (roleCategory.provided) fields.roleCategory = roleCategory.value;
@@ -121,6 +138,7 @@ export async function PATCH(request: Request) {
     if (manager1UserId.provided) fields.manager1UserId = manager1UserId.value;
     if (manager2UserId.provided) fields.manager2UserId = manager2UserId.value;
     if (assessmentEligibility.provided) fields.assessmentEligibility = assessmentEligibility.value;
+    if (systemRole.provided) fields.systemRole = systemRole.value;
 
     if (Object.keys(fields).length === 0) {
       return NextResponse.json(

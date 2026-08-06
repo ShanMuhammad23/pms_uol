@@ -55,7 +55,6 @@ CREATE TABLE users (
     department_id INT REFERENCES departments(id) ON DELETE RESTRICT,
     head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 1
     manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 2
-    is_manager_eligible BOOLEAN NOT NULL DEFAULT FALSE, -- Designates eligibility for Manager 1/2 assignment
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

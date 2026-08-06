@@ -1375,6 +1375,7 @@ export async function bulkUpdateEmployeeListingFields(
     manager1UserId?: number | null;
     manager2UserId?: number | null;
     assessmentEligibility?: boolean;
+    systemRole?: string | null;
   },
 ): Promise<{
   updatedCount: number;
@@ -1395,6 +1396,7 @@ export async function bulkUpdateEmployeeListingFields(
   manager1UserId?: number | null;
   manager2UserId?: number | null;
   assessmentEligibility?: boolean;
+  systemRole?: string | null;
 }> {
   const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
 
@@ -1418,6 +1420,7 @@ export async function bulkUpdateEmployeeListingFields(
   const updatesManager1 = "manager1UserId" in fields;
   const updatesManager2 = "manager2UserId" in fields;
   const updatesAssessmentEligibility = "assessmentEligibility" in fields;
+  const updatesSystemRole = "systemRole" in fields;
 
   const hasAnyUpdate =
     updatesRole ||
@@ -1435,7 +1438,8 @@ export async function bulkUpdateEmployeeListingFields(
     updatesCalFr ||
     updatesManager1 ||
     updatesManager2 ||
-    updatesAssessmentEligibility;
+    updatesAssessmentEligibility ||
+    updatesSystemRole;
 
   if (!hasAnyUpdate) {
     throw new FormSubmissionError(
@@ -1494,6 +1498,10 @@ export async function bulkUpdateEmployeeListingFields(
   if (updatesAssessmentEligibility) {
     userValues.push(fields.assessmentEligibility);
     userSetClauses.push(`assessment_eligibility = $${++paramIdx}`);
+  }
+  if (updatesSystemRole) {
+    userValues.push(fields.systemRole ?? null);
+    userSetClauses.push(`system_role = $${++paramIdx}`);
   }
 
   let updatedUserIds: string[] = [];

@@ -312,6 +312,7 @@ export async function bulkUpdateEmployeeListingFields(
     manager1UserId?: number | null;
     manager2UserId?: number | null;
     assessmentEligibility?: boolean;
+    systemRole?: string | null;
   },
 ): Promise<{
   updatedCount: number;

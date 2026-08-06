@@ -11,7 +11,7 @@ import {
   isAssignedManagerAtLevel,
   managerCanReviewSubmission,
 } from "@/app/helpers/manager-review";
-import { canEditModule } from "@/lib/auth/additional-access";
+import { canEditModule, canViewModule } from "@/lib/auth/additional-access";
 import type { AdditionalAccessModule } from "@/types/additional-access";
 import {
   FormSubmissionError,
@@ -99,17 +99,40 @@ export async function GET(_request: Request, context: RouteContext) {
     }
 
     // RBAC: Score Adjustments & Calibration is a confidential administrative
-    // section. Only HR, Board, and Super Admin (canReviewSubmissions) may view
-    // these fields. Strip them from the response for all other roles
-    // (Employee, Manager 1, Manager 2) even if they can otherwise access the
-    // submission. The frontend additionally does not render the section, but
-    // the backend is the source of truth so these fields never leak.
+    // section. By default, only HR, Board, and Super Admin (canReviewSubmissions)
+    // may view these fields. However, non-admin users who have been granted
+    // Additional Access permissions (CREDIT_HOURS, ORIC_ADJUSTMENTS,
+    // QEC_ADJUSTMENTS) may view the specific adjustment values they have
+    // permission for. Fields they don't have access to are still stripped.
+    //
+    // Additional Access permissions are ADDITIVE — they extend the user's
+    // default role-based visibility, never restrict it.
     if (!canReviewSubmissions(role)) {
+      const viewerUserId = reviewerUserId;
+      const canViewCreditHours =
+        viewerUserId != null &&
+        (await canViewModule(viewerUserId, "CREDIT_HOURS", role));
+      const canViewOric =
+        viewerUserId != null &&
+        (await canViewModule(viewerUserId, "ORIC_ADJUSTMENTS", role));
+      const canViewQec =
+        viewerUserId != null &&
+        (await canViewModule(viewerUserId, "QEC_ADJUSTMENTS", role));
+
       return NextResponse.json({
         ...submission,
-        creditHrsErpScoreAdj: null,
-        pubOricScoreAdj: null,
-        qecScoreAdj: null,
+        // Only preserve adjustment values the viewer has explicit permission
+        // to see. All others are stripped to prevent data leakage.
+        creditHrsErpScoreAdj: canViewCreditHours
+          ? submission.creditHrsErpScoreAdj
+          : null,
+        pubOricScoreAdj: canViewOric
+          ? submission.pubOricScoreAdj
+          : null,
+        qecScoreAdj: canViewQec ? submission.qecScoreAdj : null,
+        // Calibration factor, calibrated score, and performance level are
+        // admin-only — they depend on the full adjustment set and are never
+        // exposed to non-admin users regardless of additional access.
         calibrationFactor: null,
         calibratedScoreNumeric: null,
         initialScoreNumeric: null,

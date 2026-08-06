@@ -17,6 +17,7 @@ import { assignFormTemplateToEmployees, fetchFormTemplatesForDashboard } from "@
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { fetchUsersOverview } from "@/lib/queries/users-client";
 import type { UserRecord } from "@/types/users";
+import { USER_ROLES, USER_ROLE_LABELS } from "@/types/users";
 import type { FormTemplateListItem } from "@/types/forms";
 import type { EntityRecord } from "@/types/entities";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
@@ -49,7 +50,8 @@ type FieldKey =
   | "calibrationFactor"
   | "manager1UserId"
   | "manager2UserId"
-  | "assessmentEligibility";
+  | "assessmentEligibility"
+  | "systemRole";
 
 const TEXT_FIELDS: { key: FieldKey; label: string; placeholder: string }[] = [
   { key: "roleCategory", label: "Role Category", placeholder: "Enter role category" },
@@ -155,6 +157,15 @@ export function BulkEditStaffModal({
     [],
   );
 
+  const systemRoleSelectOptions = useMemo(
+    () =>
+      USER_ROLES.map((role) => ({
+        value: role,
+        label: USER_ROLE_LABELS[role],
+      })),
+    [],
+  );
+
   const filteredFormTemplates = useMemo(() => {
     const q = formSearch.trim().toLowerCase();
     if (!q) return formTemplates ?? [];
@@ -203,6 +214,9 @@ export function BulkEditStaffModal({
     }
     if (assessmentEligibility !== "") {
       fields.assessmentEligibility = assessmentEligibility === "true";
+    }
+    if (selectValues.systemRole !== undefined) {
+      fields.systemRole = selectValues.systemRole || null;
     }
 
     return fields;
@@ -263,6 +277,7 @@ export function BulkEditStaffModal({
           ...(fields.manager1UserId != null ? { manager1UserId: fields.manager1UserId as number } : {}),
           ...(fields.manager2UserId != null ? { manager2UserId: fields.manager2UserId as number } : {}),
           ...(fields.assessmentEligibility !== undefined ? { assessmentEligibility: fields.assessmentEligibility as boolean } : {}),
+          ...(fields.systemRole != null ? { systemRole: fields.systemRole as string } : {}),
         };
       });
 
@@ -280,6 +295,7 @@ export function BulkEditStaffModal({
           ...(fields.qualificationCountry != null ? { qualificationCountry: fields.qualificationCountry as string } : {}),
           ...(fields.manager1UserId != null ? { headId: fields.manager1UserId as number } : {}),
           ...(fields.manager2UserId != null ? { manager2Id: fields.manager2UserId as number } : {}),
+          ...(fields.systemRole != null ? { systemRole: fields.systemRole as UserRecord["systemRole"] } : {}),
         };
       };
 
@@ -583,6 +599,27 @@ export function BulkEditStaffModal({
                   options={eligibilitySelectOptions}
                   onChange={(next) =>
                     setAssessmentEligibility(next as "" | "true" | "false")
+                  }
+                  disabled={saveMutation.isPending}
+                  placeholder="— Keep existing —"
+                  emptyOptionLabel="— Keep existing —"
+                  className={cn(
+                    saveMutation.isPending && "opacity-70",
+                  )}
+                />
+              </label>
+
+              {/* System Role */}
+              <label className="block space-y-1.5">
+                <span className={labelClassName}>System Role</span>
+                <SearchableSelect
+                  value={selectValues.systemRole ?? ""}
+                  options={systemRoleSelectOptions}
+                  onChange={(next) =>
+                    setSelectValues((prev) => ({
+                      ...prev,
+                      systemRole: next || undefined,
+                    }))
                   }
                   disabled={saveMutation.isPending}
                   placeholder="— Keep existing —"

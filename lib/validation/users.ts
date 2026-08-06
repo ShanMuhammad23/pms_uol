@@ -209,7 +209,6 @@ export function normalizeUserInput(
   entityId: number | null;
   headId: number | null;
   manager2Id: number | null;
-  isManagerEligible: boolean | undefined;
   qualification: string | null | undefined;
   qualificationYear: number | null | undefined;
   qualificationSubject: string | null | undefined;
@@ -242,7 +241,6 @@ export function normalizeUserInput(
     entityId: entityId ?? null,
     headId: headId ?? null,
     manager2Id: manager2Id ?? null,
-    isManagerEligible: body.isManagerEligible ?? false,
     qualification: parseOptionalString(body.qualification),
     qualificationYear: parseOptionalYear(body.qualificationYear),
     qualificationSubject: parseOptionalString(body.qualificationSubject),
