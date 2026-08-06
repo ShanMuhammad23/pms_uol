@@ -1,0 +1,603 @@
+"use client";
+
+import { Fragment, useMemo } from "react";
+import type {
+  FormTemplateRecord,
+  QuestionRecord,
+} from "@/types/forms";
+import { flattenAllQuestions } from "@/types/forms";
+import {
+  buildFormTableRows,
+  formatSectionLabel,
+  formatSubsectionLabel,
+  type FormTableRow,
+} from "@/app/helpers/form-table-rows";
+import { isScoredQuestion } from "@/app/helpers/form-questions";
+import { cn } from "@/lib/utils";
+import OverallRemarksSection from "./OverallRemarksSection";
+import AssessmentSummaryFooter, {
+  type AssessmentSummaryEntry,
+} from "./AssessmentSummaryFooter";
+
+/**
+ * Which live assessment screen the preview should mirror.
+ *
+ * - "employee"  -> mirrors EmployeeFormFill (Self Assessment)
+ * - "manager1"  -> mirrors SubmissionDetailView at managerLevel = 1
+ * - "manager2"  -> mirrors SubmissionDetailView at managerLevel = 2
+ */
+export type FormPreviewRole = "employee" | "manager1" | "manager2";
+
+interface FormAssessmentPreviewProps {
+  template: FormTemplateRecord;
+  viewAs: FormPreviewRole;
+}
+
+/**
+ * Mock answer shape — mirrors EmployeeFormAnswerRecord but is purely visual.
+ * Never persisted; only used to populate the preview so the layout matches
+ * the live assessment screens.
+ */
+interface MockAnswer {
+  questionId: number;
+  pointsEarned: number | null;
+  remarks: string | null;
+  selectedOptionLabel: string | null;
+}
+
+const SAMPLE_REMARKS = [
+  "Consistently meets expectations across all assigned responsibilities.",
+  "Strong collaboration and timely delivery on key initiatives.",
+  "Demonstrates ownership and follows through on commitments.",
+  "Could improve cross-team communication and proactive updates.",
+];
+
+/**
+ * Build mock answers for a given role. The values are deterministic per
+ * question id so the preview is stable across re-renders and view switches.
+ */
+function buildMockAnswers(
+  questions: QuestionRecord[],
+  role: FormPreviewRole,
+  selfAssessmentEnabled: boolean,
+): MockAnswer[] {
+  return questions.map((q, idx) => {
+    const scored = isScoredQuestion(q);
+    const isHodOnly = !q.selfAssessmentEnabled || !selfAssessmentEnabled;
+    const max = q.totalMarks;
+    // Deterministic sample score: ~70-80% of max, rounded to nearest 0.5.
+    const sampleScore =
+      max > 0 ? Math.round((max * 0.75) * 2) / 2 : 0;
+
+    if (role === "employee") {
+      // Employees only answer self-assessment-enabled, scored questions.
+      if (isHodOnly || !scored) {
+        return {
+          questionId: q.id,
+          pointsEarned: null,
+          remarks: null,
+          selectedOptionLabel: null,
+        };
+      }
+      return {
+        questionId: q.id,
+        pointsEarned: sampleScore,
+        remarks: SAMPLE_REMARKS[idx % SAMPLE_REMARKS.length],
+        selectedOptionLabel: null,
+      };
+    }
+
+    // Managers — mirror the live fallback chain.
+    // Manager 1: own answer (live view falls back to self-assessment when
+    // empty, but the preview always shows a populated sample).
+    // Manager 2: own answer (live view falls back to Manager 1 then self).
+    const manager1Answer: MockAnswer = !q.hodAssessmentEnabled
+      ? {
+          questionId: q.id,
+          pointsEarned: null,
+          remarks: null,
+          selectedOptionLabel: null,
+        }
+      : {
+          questionId: q.id,
+          pointsEarned: Math.round((max * 0.85) * 2) / 2,
+          remarks:
+            role === "manager1"
+              ? "Reviewed and confirmed. Performance aligns with rating."
+              : "Manager 1 review complete — score reflects observed delivery.",
+          selectedOptionLabel: null,
+        };
+
+    if (role === "manager1") {
+      return manager1Answer;
+    }
+
+    // Manager 2: own answer, falling back to Manager 1 when HOD assessment
+    // is disabled for this question.
+    if (!q.hodAssessmentEnabled) {
+      return manager1Answer;
+    }
+    return {
+      questionId: q.id,
+      pointsEarned: Math.round((max * 0.9) * 2) / 2,
+      remarks:
+        "Independent review completed. Agree with Manager 1 assessment with minor adjustment.",
+      selectedOptionLabel: null,
+    };
+  });
+}
+
+function answerFor(
+  answers: MockAnswer[],
+  questionId: number,
+): MockAnswer | undefined {
+  return answers.find((a) => a.questionId === questionId);
+}
+
+function sumPoints(answers: MockAnswer[]): number {
+  return answers.reduce((acc, a) => acc + (a.pointsEarned ?? 0), 0);
+}
+
+/**
+ * Read-only score cell mirroring the live assessment display.
+ */
+function ScoreCell({
+  value,
+  max,
+  isHodOnly,
+  scored,
+  accent,
+}: {
+  value: number | null;
+  max: number;
+  isHodOnly: boolean;
+  scored: boolean;
+  accent: "self" | "manager1" | "manager2";
+}) {
+  if (!scored) {
+    return <span className="tabular-nums text-slate-400">—</span>;
+  }
+  if (isHodOnly && accent === "self") {
+    return (
+      <span className="text-xs text-slate-400" title="To be filled by HOD">
+        N/A
+      </span>
+    );
+  }
+  if (value == null) {
+    return <span className="text-xs text-slate-400">—</span>;
+  }
+  const accentClass = {
+    self: "text-sky-700 dark:text-sky-300",
+    manager1: "text-violet-700 dark:text-violet-300",
+    manager2: "text-indigo-700 dark:text-indigo-300",
+  }[accent];
+  return (
+    <span className={cn("tabular-nums font-medium", accentClass)}>
+      {value}
+      <span className="text-xs font-normal text-slate-400"> / {max}</span>
+    </span>
+  );
+}
+
+function RemarksCell({
+  value,
+  accent,
+}: {
+  value: string | null;
+  accent: "self" | "manager1" | "manager2";
+}) {
+  if (!value || !value.trim()) {
+    return <span className="text-xs italic text-slate-400">—</span>;
+  }
+  const accentClass = {
+    self: "text-slate-600 dark:text-slate-300",
+    manager1: "text-violet-700 dark:text-violet-300",
+    manager2: "text-indigo-700 dark:text-indigo-300",
+  }[accent];
+  return (
+    <p className={cn("max-w-[220px] break-words text-xs leading-snug", accentClass)}>
+      {value}
+    </p>
+  );
+}
+
+/**
+ * Read-only attachment placeholder cell. Mirrors the live AttachmentList
+ * visual without requiring real files.
+ */
+function AttachmentPreviewCell() {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+        <span className="size-1.5 rounded-full bg-slate-400" />
+        sample-evidence.pdf
+      </span>
+    </div>
+  );
+}
+
+export default function FormAssessmentPreview({
+  template,
+  viewAs,
+}: FormAssessmentPreviewProps) {
+  const allQuestions = useMemo(() => flattenAllQuestions(template), [template]);
+  const rows = useMemo(
+    () => buildFormTableRows(template.sections, template.questions),
+    [template],
+  );
+
+  const selfAssessmentEnabled = template.selfAssessmentEnabled;
+  const additionalRemarksEnabled = template.additionalRemarksEnabled;
+
+  // Manager 2 is "assigned" in the preview so the Mgr 2 columns are visible
+  // in the Manager 2 view (mirrors live behavior when manager_2_id is set).
+  const hasManager2 = viewAs === "manager2";
+
+  // Mock answers per role — built once per template/viewAs combination.
+  const employeeAnswers = useMemo(
+    () => buildMockAnswers(allQuestions, "employee", selfAssessmentEnabled),
+    [allQuestions, selfAssessmentEnabled],
+  );
+  const manager1Answers = useMemo(
+    () => buildMockAnswers(allQuestions, "manager1", selfAssessmentEnabled),
+    [allQuestions, selfAssessmentEnabled],
+  );
+  const manager2Answers = useMemo(
+    () => buildMockAnswers(allQuestions, "manager2", selfAssessmentEnabled),
+    [allQuestions, selfAssessmentEnabled],
+  );
+
+  // Score totals for the summary footer.
+  const maxScore = useMemo(
+    () =>
+      allQuestions.reduce((acc, q) => acc + (isScoredQuestion(q) ? q.totalMarks : 0), 0),
+    [allQuestions],
+  );
+  const selfTotal = sumPoints(employeeAnswers);
+  const manager1Total = sumPoints(manager1Answers);
+  const manager2Total = sumPoints(manager2Answers);
+
+  const summaryEntries: AssessmentSummaryEntry[] = useMemo(() => {
+    if (viewAs === "employee") {
+      return [
+        {
+          label: "Self Assessment",
+          awardedMarks: selfTotal,
+          totalMarks: maxScore,
+          accentClass: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200",
+        },
+      ];
+    }
+    const entries: AssessmentSummaryEntry[] = [];
+    if (selfAssessmentEnabled) {
+      entries.push({
+        label: "Self Assessment",
+        awardedMarks: selfTotal,
+        totalMarks: maxScore,
+        accentClass: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200",
+      });
+    }
+    entries.push({
+      label: "Manager 1",
+      awardedMarks: manager1Total,
+      totalMarks: maxScore,
+      accentClass: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-200",
+    });
+    if (hasManager2) {
+      entries.push({
+        label: "Manager 2",
+        awardedMarks: manager2Total,
+        totalMarks: maxScore,
+        accentClass: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200",
+      });
+    }
+    return entries;
+  }, [
+    viewAs,
+    selfAssessmentEnabled,
+    hasManager2,
+    selfTotal,
+    manager1Total,
+    manager2Total,
+    maxScore,
+  ]);
+
+  // Mock overall remarks for the Additional Remarks section.
+  const mockManager1Remarks =
+    "Overall performance is strong. The employee consistently delivers on assigned KPIs and demonstrates ownership of their role.";
+  const mockManager2Remarks =
+    "I concur with Manager 1's assessment. The employee shows steady growth and is ready for additional responsibilities.";
+
+  // Column visibility — mirrors EmployeeFormFill / SubmissionDetailView logic.
+  // Employees never see any manager columns. Managers always see Manager 1
+  // columns; Manager 2 columns appear only in the Manager 2 view.
+  const isEmployeeView = viewAs === "employee";
+  const showSelfColumns = selfAssessmentEnabled;
+  const showManager1Columns = !isEmployeeView;
+  const showManager2Columns = hasManager2 && !isEmployeeView;
+
+  // Colspan for section/subsection header rows.
+  // Base columns: Sr, KPIs, Weight, Attachments = 4
+  // +2 if showSelfColumns (Self Score, Self Remarks)
+  // +2 if showManager1Columns (Mgr 1 Score, Mgr 1 Remarks)
+  // +2 if showManager2Columns (Mgr 2 Score, Mgr 2 Remarks)
+  const headerColSpan =
+    4 +
+    (showSelfColumns ? 2 : 0) +
+    (showManager1Columns ? 2 : 0) +
+    (showManager2Columns ? 2 : 0);
+
+  return (
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
+      {/* Header — mirrors the live assessment header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold break-words text-text-primary">
+            {template.title}
+          </h2>
+          {template.description ? (
+            <p className="mt-1 text-sm text-foreground/70">{template.description}</p>
+          ) : null}
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            Preview · {isEmployeeView ? "Employee View" : viewAs === "manager1" ? "Manager 1 View" : "Manager 2 View"}
+          </p>
+        </div>
+      </div>
+
+      {/* Assessment table — mirrors EmployeeFormFill / SubmissionDetailView layout */}
+      <div className="my-6">
+        <div className="overflow-auto rounded-lg border border-slate-200 shadow-sm dark:border-slate-700">
+          <table className="w-full">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-slate-700 dark:bg-slate-800">
+                <th className="border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                  Sr
+                </th>
+                <th className="min-w-[280px] border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                  Key Performance Indicators (KPIs)
+                </th>
+                <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                  Weight
+                </th>
+                {showSelfColumns ? (
+                  <>
+                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                      Self Score
+                    </th>
+                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                      Self Remarks
+                    </th>
+                  </>
+                ) : null}
+                {showManager1Columns ? (
+                  <>
+                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                      Mgr 1 Score
+                    </th>
+                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                      Mgr 1 Remarks
+                    </th>
+                  </>
+                ) : null}
+                {showManager2Columns ? (
+                  <>
+                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                      Mgr 2 Score
+                    </th>
+                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                      Mgr 2 Remarks
+                    </th>
+                  </>
+                ) : null}
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                  Attachments
+                </th>
+              </tr>
+            </thead>
+            <tbody className="text-sm">
+              {rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={headerColSpan}
+                    className="px-3 py-8 text-center text-sm text-slate-400"
+                  >
+                    No questions defined.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, rowIdx) => {
+                  const { question } = row;
+                  const isEvenRow = rowIdx % 2 === 0;
+                  return (
+                    <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
+                      {row.isFirstInSection && row.sectionTitle ? (
+                        <tr className="bg-slate-100 dark:bg-slate-800/60">
+                          <td
+                            colSpan={headerColSpan}
+                            className="px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-200"
+                          >
+                            {formatSectionLabel(row)}
+                          </td>
+                        </tr>
+                      ) : null}
+                      {row.isFirstInSubsection && row.subsectionTitle ? (
+                        <tr className="bg-slate-50 dark:bg-slate-800/40">
+                          <td
+                            colSpan={headerColSpan}
+                            className="px-3 py-2 pl-8 text-xs font-bold text-slate-600 dark:text-slate-300"
+                          >
+                            {formatSubsectionLabel(row)}
+                          </td>
+                        </tr>
+                      ) : null}
+                      {row.isHeaderOnly ? (
+                        <tr className="bg-slate-50/40 dark:bg-slate-800/20">
+                          <td
+                            colSpan={headerColSpan}
+                            className="px-3 py-2 pl-10 text-xs italic text-slate-400"
+                          >
+                            No questions in this subsection
+                          </td>
+                        </tr>
+                      ) : (
+                        <QuestionPreviewRow
+                          row={row}
+                          isEvenRow={isEvenRow}
+                          showSelfColumns={showSelfColumns}
+                          showManager1Columns={showManager1Columns}
+                          showManager2Columns={showManager2Columns}
+                          selfAssessmentEnabled={selfAssessmentEnabled}
+                          employeeAnswer={answerFor(employeeAnswers, question!.id)}
+                          manager1Answer={answerFor(manager1Answers, question!.id)}
+                          manager2Answer={answerFor(manager2Answers, question!.id)}
+                        />
+                      )}
+                    </Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Score summary footer — mirrors AssessmentSummaryFooter usage in live views */}
+      <AssessmentSummaryFooter entries={summaryEntries} showMarks={false} />
+
+      {/* Additional Remarks — mirrors OverallRemarksSection usage.
+          Employees never see this. Managers see it only when enabled. */}
+      {!isEmployeeView && additionalRemarksEnabled ? (
+        <OverallRemarksSection
+          enabled={additionalRemarksEnabled}
+          manager1Remarks={mockManager1Remarks}
+          manager2Remarks={hasManager2 ? mockManager2Remarks : null}
+          hasManager2={hasManager2}
+          canEditManager1={false}
+          canEditManager2={false}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface QuestionPreviewRowProps {
+  row: FormTableRow;
+  isEvenRow: boolean;
+  showSelfColumns: boolean;
+  showManager1Columns: boolean;
+  showManager2Columns: boolean;
+  selfAssessmentEnabled: boolean;
+  employeeAnswer?: MockAnswer;
+  manager1Answer?: MockAnswer;
+  manager2Answer?: MockAnswer;
+}
+
+function QuestionPreviewRow({
+  row,
+  isEvenRow,
+  showSelfColumns,
+  showManager1Columns,
+  showManager2Columns,
+  selfAssessmentEnabled,
+  employeeAnswer,
+  manager1Answer,
+  manager2Answer,
+}: QuestionPreviewRowProps) {
+  const question = row.question!;
+  const scored = isScoredQuestion(question);
+  const isHodOnly =
+    !question.selfAssessmentEnabled || !selfAssessmentEnabled;
+
+  const rowBg = isEvenRow
+    ? "bg-white dark:bg-slate-900/40"
+    : "bg-slate-50/40 dark:bg-slate-800/20";
+
+  return (
+    <tr className={cn("align-top border-b border-slate-100 dark:border-slate-700/40", rowBg)}>
+      <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
+        {row.sr}
+      </td>
+      <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+        <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
+          {question.questionText}
+          {question.isRequired ? (
+            <span className="ml-1 text-red-500" title="Required">*</span>
+          ) : null}
+        </p>
+        {question.options.length > 0 ? (
+          <ul className="mt-1 space-y-0.5">
+            {question.options.map((opt) => (
+              <li
+                key={opt.id}
+                className="text-[11px] text-slate-500 dark:text-slate-400"
+              >
+                ○ {opt.optionLabel}{" "}
+                <span className="text-slate-400">({opt.pointsAssigned} pts)</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </td>
+      <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-xs text-slate-600 dark:border-slate-700/40 dark:text-slate-300">
+        {scored ? question.totalMarks : "—"}
+      </td>
+
+      {showSelfColumns ? (
+        <>
+          <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
+            <ScoreCell
+              value={employeeAnswer?.pointsEarned ?? null}
+              max={question.totalMarks}
+              isHodOnly={isHodOnly}
+              scored={scored}
+              accent="self"
+            />
+          </td>
+          <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+            <RemarksCell value={employeeAnswer?.remarks ?? null} accent="self" />
+          </td>
+        </>
+      ) : null}
+
+      {/* Manager 1 — hidden in Employee view (employees never see manager columns) */}
+      {showManager1Columns ? (
+        <>
+          <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
+            <ScoreCell
+              value={manager1Answer?.pointsEarned ?? null}
+              max={question.totalMarks}
+              isHodOnly={!question.hodAssessmentEnabled}
+              scored={scored}
+              accent="manager1"
+            />
+          </td>
+          <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+            <RemarksCell value={manager1Answer?.remarks ?? null} accent="manager1" />
+          </td>
+        </>
+      ) : null}
+
+      {showManager2Columns ? (
+        <>
+          <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
+            <ScoreCell
+              value={manager2Answer?.pointsEarned ?? null}
+              max={question.totalMarks}
+              isHodOnly={!question.hodAssessmentEnabled}
+              scored={scored}
+              accent="manager2"
+            />
+          </td>
+          <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+            <RemarksCell value={manager2Answer?.remarks ?? null} accent="manager2" />
+          </td>
+        </>
+      ) : null}
+
+      <td className="px-3 py-2.5">
+        <AttachmentPreviewCell />
+      </td>
+    </tr>
+  );
+}
