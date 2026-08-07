@@ -538,87 +538,151 @@ function ModernFormDesignStep({
     );
   };
 
-  const moveSubsection = (subsectionClientId: string, sourceSectionClientId: string, targetSectionClientId: string, insertIndex: number) => {
+  const moveSubsection = (subsectionClientId: string, sourceSectionClientId: string, targetSectionClientId: string, insertLayoutIndex: number) => {
     const sourceSection = sections.find(s => s.clientId === sourceSectionClientId);
     if (!sourceSection) return;
-    const sourceSubIndex = sourceSection.subsections.findIndex(sub => sub.clientId === subsectionClientId);
-    if (sourceSubIndex < 0) return;
-    const movedSubsection = sourceSection.subsections[sourceSubIndex];
+    const movedSubsection = sourceSection.subsections.find(sub => sub.clientId === subsectionClientId);
+    if (!movedSubsection) return;
 
+    // Find source layout index for same-section adjustment
+    const sourceLayout = sourceSection.layout ?? [];
+    const sourceLayoutIndex = sourceLayout.findIndex(
+      item => item.kind === "subsection" && item.clientId === subsectionClientId,
+    );
+
+    // Remove from source section (both subsections array and layout)
     let nextSections = sections.map(s => {
       if (s.clientId !== sourceSectionClientId) return s;
-      const nextSubsections = s.subsections.filter((_, i) => i !== sourceSubIndex);
-      return { ...s, subsections: nextSubsections.map((sub, i) => ({ ...sub, sortOrder: i })) };
+      return {
+        ...s,
+        subsections: s.subsections.filter(sub => sub.clientId !== subsectionClientId),
+        layout: (s.layout ?? []).filter(
+          item => !(item.kind === "subsection" && item.clientId === subsectionClientId),
+        ),
+      };
     });
 
+    // Adjust target layout index for same-section removal
+    let targetIndex = insertLayoutIndex;
+    if (sourceSectionClientId === targetSectionClientId && sourceLayoutIndex >= 0 && sourceLayoutIndex < insertLayoutIndex) {
+      targetIndex = insertLayoutIndex - 1;
+    }
+
+    // Insert into target section's layout
     const targetSection = nextSections.find(s => s.clientId === targetSectionClientId);
     if (!targetSection) return;
 
-    let targetSubIndex = insertIndex;
-    if (sourceSectionClientId === targetSectionClientId && sourceSubIndex < insertIndex) {
-      targetSubIndex -= 1;
-    }
+    const targetLayout = [...(targetSection.layout ?? [])];
+    const clampedIndex = Math.max(0, Math.min(targetIndex, targetLayout.length));
+    targetLayout.splice(clampedIndex, 0, { kind: "subsection" as const, clientId: subsectionClientId });
 
-    const nextSubsections = [...targetSection.subsections];
-    nextSubsections.splice(targetSubIndex, 0, { ...movedSubsection, sortOrder: targetSubIndex });
-    const finalSubsections = nextSubsections.map((sub, i) => ({ ...sub, sortOrder: i }));
+    nextSections = nextSections.map(s => {
+      if (s.clientId !== targetSectionClientId) return s;
+      return {
+        ...s,
+        subsections: [...s.subsections, movedSubsection],
+        layout: targetLayout,
+      };
+    });
 
-    nextSections = nextSections.map(s => s.clientId === targetSectionClientId ? { ...s, subsections: finalSubsections } : s);
     commitStructure(nextSections, questions);
   };
 
-  const moveSection = (sectionClientId: string, insertIndex: number) => {
-    const sourceIndex = sections.findIndex(s => s.clientId === sectionClientId);
-    if (sourceIndex < 0) return;
-    const nextSections = [...sections];
-    const [moved] = nextSections.splice(sourceIndex, 1);
-    let targetIndex = insertIndex;
-    if (sourceIndex < insertIndex) targetIndex -= 1;
-    nextSections.splice(targetIndex, 0, moved);
-    commitStructure(nextSections, questions);
+  const moveSection = (sectionClientId: string, insertLayoutIndex: number) => {
+    // Build the current root layout to determine interleaved positions
+    const layout = buildRootLayoutOrder(sections, questions);
+    const sourceLayoutIndex = layout.findIndex(
+      item => item.kind === "section" && item.clientId === sectionClientId,
+    );
+    if (sourceLayoutIndex < 0) return;
+
+    // Remove the section from the layout
+    const removed = layout[sourceLayoutIndex];
+    const remainingLayout = layout.filter((_, i) => i !== sourceLayoutIndex);
+
+    // Adjust target layout index for removal
+    let targetIndex = insertLayoutIndex;
+    if (sourceLayoutIndex < insertLayoutIndex) {
+      targetIndex = insertLayoutIndex - 1;
+    }
+
+    const clampedIndex = Math.max(0, Math.min(targetIndex, remainingLayout.length));
+    const newLayout = [...remainingLayout];
+    newLayout.splice(clampedIndex, 0, removed);
+
+    // Reassign sortOrder to all root items based on the new layout
+    const sectionMap = new Map(sections.map(s => [s.clientId, s]));
+    const questionMap = new Map(questions.map(q => [q.clientId, q]));
+    const nextSections: FormSectionInput[] = [];
+    const nextQuestions: QuestionInput[] = [];
+    let sortOrder = 0;
+    for (const item of newLayout) {
+      if (item.kind === "section") {
+        const s = sectionMap.get(item.clientId);
+        if (s) { nextSections.push({ ...s, sortOrder }); sortOrder++; }
+      } else {
+        const q = questionMap.get(item.clientId);
+        if (q) { nextQuestions.push({ ...q, sortOrder }); sortOrder++; }
+      }
+    }
+
+    commitStructure(nextSections, nextQuestions);
   };
 
   const moveQuestion = useCallback(
     (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => {
       let movedQuestion: QuestionInput | null = null;
-      let sourceIdx = -1;
+      let sourceLayoutIndex = -1;
+      let sourceRootLayoutIndex = -1;
       let nextSections = [...sections];
       let nextQuestions = [...questions];
 
-      // Step 1: Extract question from source and record original index
+      // Step 1: Extract question from source, tracking layout index for adjustment
       if (source.sectionClientId === null) {
-        sourceIdx = nextQuestions.findIndex(q => q.clientId === questionClientId);
+        // Source is root — track root layout index for same-list adjustment
+        const fullRootLayout = buildRootLayoutOrder(sections, questions);
+        sourceRootLayoutIndex = fullRootLayout.findIndex(
+          item => item.kind === "question" && item.clientId === questionClientId,
+        );
+        const sourceIdx = nextQuestions.findIndex(q => q.clientId === questionClientId);
         if (sourceIdx >= 0) {
           movedQuestion = nextQuestions[sourceIdx];
           nextQuestions = nextQuestions.filter(q => q.clientId !== questionClientId);
         }
       } else {
+        // Source is a section
         nextSections = nextSections.map(s => {
           if (s.clientId !== source.sectionClientId) return s;
           if (source.subsectionClientId === null) {
-            sourceIdx = s.questions.findIndex(q => q.clientId === questionClientId);
-            if (sourceIdx >= 0) {
-              movedQuestion = s.questions[sourceIdx];
+            // Source is section direct question — remove from layout too
+            const q = s.questions.find(qq => qq.clientId === questionClientId);
+            if (q) {
+              movedQuestion = q;
+              sourceLayoutIndex = (s.layout ?? []).findIndex(
+                item => item.kind === "question" && item.clientId === questionClientId,
+              );
               return {
                 ...s,
-                questions: s.questions
-                  .filter(q => q.clientId !== questionClientId)
-                  .map((q, i) => ({ ...q, sortOrder: i })),
+                questions: s.questions.filter(qq => qq.clientId !== questionClientId),
+                layout: (s.layout ?? []).filter(
+                  item => !(item.kind === "question" && item.clientId === questionClientId),
+                ),
               };
             }
           } else {
+            // Source is subsection question
             return {
               ...s,
               subsections: s.subsections.map(sub => {
                 if (sub.clientId !== source.subsectionClientId) return sub;
-                sourceIdx = sub.questions.findIndex(q => q.clientId === questionClientId);
-                if (sourceIdx >= 0) {
-                  movedQuestion = sub.questions[sourceIdx];
+                const q = sub.questions.find(qq => qq.clientId === questionClientId);
+                if (q) {
+                  movedQuestion = q;
                   return {
                     ...sub,
                     questions: sub.questions
-                      .filter(q => q.clientId !== questionClientId)
-                      .map((q, i) => ({ ...q, sortOrder: i })),
+                      .filter(qq => qq.clientId !== questionClientId)
+                      .map((qq, i) => ({ ...qq, sortOrder: i })),
                   };
                 }
                 return sub;
@@ -632,50 +696,77 @@ function ModernFormDesignStep({
       if (!movedQuestion) return;
       const moved = movedQuestion;
 
-      // Step 2: Compute insert index (default to end if not specified)
-      const isSameList =
-        source.sectionClientId === target.sectionClientId &&
-        source.subsectionClientId === target.subsectionClientId;
+      // Step 2: Insert at target
+      if (target.sectionClientId === null) {
+        // Target is root — insertIndex is a root layout index
+        const layout = buildRootLayoutOrder(nextSections, nextQuestions);
+        let targetLayoutIndex = target.insertIndex ?? layout.length;
 
-      let insertIdx = target.insertIndex;
-      if (insertIdx === undefined) {
-        if (target.sectionClientId === null) {
-          insertIdx = nextQuestions.length;
-        } else {
-          const targetSection = nextSections.find(s => s.clientId === target.sectionClientId);
-          if (target.subsectionClientId === null) {
-            insertIdx = targetSection?.questions.length ?? 0;
+        // Adjust for same-list removal (root question moved within root)
+        if (source.sectionClientId === null && sourceRootLayoutIndex >= 0 && sourceRootLayoutIndex < targetLayoutIndex) {
+          targetLayoutIndex = targetLayoutIndex - 1;
+        }
+
+        const clampedIndex = Math.max(0, Math.min(targetLayoutIndex, layout.length));
+        const newLayout = [...layout];
+        newLayout.splice(clampedIndex, 0, { kind: "question" as const, clientId: questionClientId });
+
+        // Reassign sortOrder to all root items
+        const sectionMap = new Map(nextSections.map(s => [s.clientId, s]));
+        const questionMap = new Map(nextQuestions.map(q => [q.clientId, q]));
+        questionMap.set(questionClientId, moved);
+
+        const reorderedSections: FormSectionInput[] = [];
+        const reorderedQuestions: QuestionInput[] = [];
+        let sortOrder = 0;
+        for (const item of newLayout) {
+          if (item.kind === "section") {
+            const s = sectionMap.get(item.clientId);
+            if (s) { reorderedSections.push({ ...s, sortOrder }); sortOrder++; }
           } else {
-            const targetSub = targetSection?.subsections.find(sub => sub.clientId === target.subsectionClientId);
-            insertIdx = targetSub?.questions.length ?? 0;
+            const q = questionMap.get(item.clientId);
+            if (q) { reorderedQuestions.push({ ...q, sortOrder }); sortOrder++; }
           }
         }
-      } else if (isSameList && sourceIdx >= 0 && sourceIdx < insertIdx) {
-        insertIdx = insertIdx - 1;
-      }
+        nextSections = reorderedSections;
+        nextQuestions = reorderedQuestions;
+      } else if (target.subsectionClientId === null) {
+        // Target is section direct question — update layout field
+        const targetSection = nextSections.find(s => s.clientId === target.sectionClientId);
+        if (!targetSection) return;
 
-      // Step 3: Insert at target position
-      if (target.sectionClientId === null) {
-        const newQuestions = [...nextQuestions];
-        newQuestions.splice(insertIdx, 0, { ...moved, sortOrder: insertIdx });
-        nextQuestions = newQuestions.map((q, i) => ({ ...q, sortOrder: i }));
-      } else {
+        const targetLayout = [...(targetSection.layout ?? [])];
+        let insertIdx = target.insertIndex ?? targetLayout.length;
+
+        // Adjust for same-section removal (layout index shift)
+        if (source.sectionClientId === target.sectionClientId &&
+            source.subsectionClientId === null &&
+            sourceLayoutIndex >= 0 && sourceLayoutIndex < insertIdx) {
+          insertIdx = insertIdx - 1;
+        }
+
+        const clampedIndex = Math.max(0, Math.min(insertIdx, targetLayout.length));
+        targetLayout.splice(clampedIndex, 0, { kind: "question" as const, clientId: questionClientId });
+
         nextSections = nextSections.map(s => {
           if (s.clientId !== target.sectionClientId) return s;
-          if (target.subsectionClientId === null) {
-            const newQs = [...s.questions];
-            newQs.splice(insertIdx, 0, { ...moved, sortOrder: insertIdx });
-            return {
-              ...s,
-              questions: newQs.map((q, i) => ({ ...q, sortOrder: i })),
-            };
-          }
+          return {
+            ...s,
+            questions: [...s.questions, moved],
+            layout: targetLayout,
+          };
+        });
+      } else {
+        // Target is subsection question — insert into subsection's questions array
+        const insertIdx = target.insertIndex ?? 0;
+        nextSections = nextSections.map(s => {
+          if (s.clientId !== target.sectionClientId) return s;
           return {
             ...s,
             subsections: s.subsections.map(sub => {
               if (sub.clientId !== target.subsectionClientId) return sub;
               const newQs = [...sub.questions];
-              newQs.splice(insertIdx, 0, { ...moved, sortOrder: insertIdx });
+              newQs.splice(insertIdx, 0, moved);
               return {
                 ...sub,
                 questions: newQs.map((q, i) => ({ ...q, sortOrder: i })),
@@ -899,7 +990,7 @@ function ModernFormDesignStep({
 
               {rootLayout.length > 0 && (
                 <div className="space-y-4">
-                  {rootLayout.map((item) => {
+                  {rootLayout.map((item, rootIdx) => {
                     if (item.kind === "section") {
                       const sectionIndex = sections.findIndex(
                         (section) => section.clientId === item.clientId,
@@ -914,6 +1005,7 @@ function ModernFormDesignStep({
                           key={section.clientId}
                           section={section}
                           index={sectionIndex}
+                          rootLayoutIndex={rootIdx}
                           isExpanded={expandedSections.has(section.clientId)}
                           onToggle={() => toggleSection(section.clientId)}
                           errors={errors}
@@ -948,6 +1040,7 @@ function ModernFormDesignStep({
                         key={question.clientId}
                         question={question}
                         index={questionIndex}
+                        layoutIndex={rootIdx}
                         errorPrefix={`question-${questionIndex}`}
                         errors={errors}
                         sourceLocation={{ sectionClientId: null, subsectionClientId: null }}
@@ -960,6 +1053,7 @@ function ModernFormDesignStep({
                             insertIndex,
                           });
                         }}
+                        onDropSection={(dragSectionClientId, insertIndex) => moveSection(dragSectionClientId, insertIndex)}
                         formSelfAssessmentEnabled={selfAssessmentEnabled}
                       />
                     );
@@ -980,7 +1074,15 @@ function ModernFormDesignStep({
                     setDragOverTarget(null);
                     try {
                       const data = JSON.parse(e.dataTransfer.getData("application/json"));
-                      moveQuestion(data.questionClientId, data.source, { sectionClientId: null, subsectionClientId: null, insertIndex: questions.length });
+                      if (data.kind === "section") {
+                        moveSection(data.sectionClientId, rootLayout.length);
+                      } else if (data.questionClientId) {
+                        moveQuestion(data.questionClientId, data.source, {
+                          sectionClientId: null,
+                          subsectionClientId: null,
+                          insertIndex: rootLayout.length,
+                        });
+                      }
                     } catch { /* ignore */ }
                   }}
                   className={cn(
@@ -990,7 +1092,7 @@ function ModernFormDesignStep({
                       : "border-indigo-200 text-indigo-400 dark:border-indigo-600/30 dark:text-indigo-500"
                   )}
                 >
-                  Drop here to move question to root level
+                  Drop here to move question or section to root level
                 </div>
               )}
             </div>
@@ -1033,6 +1135,7 @@ function ModernFormDesignStep({
 function SubsectionCard({
   subsection,
   subsectionIndex,
+  layoutIndex,
   sectionIndex,
   sectionClientId,
   errors,
@@ -1047,6 +1150,7 @@ function SubsectionCard({
 }: {
   subsection: FormSubsectionInput;
   subsectionIndex: number;
+  layoutIndex: number;
   sectionIndex: number;
   sectionClientId: string;
   errors: Record<string, string>;
@@ -1056,7 +1160,7 @@ function SubsectionCard({
   onRemoveQuestion: (qId: string) => void;
   onUpdateQuestion: (qId: string, updates: Partial<QuestionInput>) => void;
   onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
-  onDropSubsection: (dragSubsectionClientId: string, sourceSectionClientId: string, insertIndex: number) => void;
+  onDropSubsection: (dragSubsectionClientId: string, sourceSectionClientId: string, insertLayoutIndex: number) => void;
   formSelfAssessmentEnabled?: boolean;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -1083,11 +1187,18 @@ function SubsectionCard({
         setDragOverPos(null);
         try {
           const data = JSON.parse(e.dataTransfer.getData("application/json"));
+          const rect = e.currentTarget.getBoundingClientRect();
+          const midpoint = rect.top + rect.height / 2;
+          const targetLayoutIndex = e.clientY < midpoint ? layoutIndex : layoutIndex + 1;
           if (data.kind === "subsection" && data.subsectionClientId !== subsection.clientId) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const midpoint = rect.top + rect.height / 2;
-            const insertIndex = e.clientY < midpoint ? subsectionIndex : subsectionIndex + 1;
-            onDropSubsection(data.subsectionClientId, data.sourceSectionClientId, insertIndex);
+            onDropSubsection(data.subsectionClientId, data.sourceSectionClientId, targetLayoutIndex);
+          } else if (data.questionClientId) {
+            // Drop question before/after this subsection → make it a direct section question
+            onMoveQuestion(data.questionClientId, data.source, {
+              sectionClientId,
+              subsectionClientId: null,
+              insertIndex: targetLayoutIndex,
+            });
           }
         } catch { /* ignore */ }
       }}
@@ -1138,7 +1249,7 @@ function SubsectionCard({
         <div className="flex items-center gap-1">
           <button
             onClick={onAddQuestion}
-            className="rounded p-1 text-teal-400 hover:bg-teal-100 hover:text-teal-700 dark:text-teal-400 dark:hover:bg-teal-800/40"
+            className="rounded p-1 text-sky-400 hover:bg-sky-100 hover:text-sky-700 dark:text-sky-400 dark:hover:bg-sky-800/40"
             title="Add question"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -1168,14 +1279,17 @@ function SubsectionCard({
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           setDragOver(false);
           try {
             const data = JSON.parse(e.dataTransfer.getData("application/json"));
-            onMoveQuestion(data.questionClientId, data.source, {
-              sectionClientId,
-              subsectionClientId: subsection.clientId,
-              insertIndex: subsection.questions.length,
-            });
+            if (data.questionClientId) {
+              onMoveQuestion(data.questionClientId, data.source, {
+                sectionClientId,
+                subsectionClientId: subsection.clientId,
+                insertIndex: subsection.questions.length,
+              });
+            }
           } catch { /* ignore */ }
         }}
         className={cn(
@@ -1206,8 +1320,8 @@ function SubsectionCard({
         ))}
 
         {subsection.questions.length === 0 && (
-          <div className="rounded-lg border border-dashed border-indigo-200 py-5 text-center dark:border-indigo-500/30">
-            <p className="text-xs text-indigo-400 dark:text-indigo-400/70">No questions — drag here or click Add Question</p>
+          <div className="rounded-lg border border-dashed border-sky-200 py-5 text-center dark:border-sky-500/30">
+            <p className="text-xs text-sky-400 dark:text-sky-400/70">No questions — drag here or click Add Question</p>
           </div>
         )}
       </div>
@@ -1218,6 +1332,7 @@ function SubsectionCard({
 function SectionCard({
   section,
   index,
+  rootLayoutIndex,
   isExpanded,
   onToggle,
   errors,
@@ -1236,6 +1351,8 @@ function SectionCard({
 }: {
   section: FormSectionInput;
   index: number;
+  /** Position of this section in the root layout (for root-level question drops). */
+  rootLayoutIndex: number;
   isExpanded: boolean;
   onToggle: () => void;
   errors: Record<string, string>;
@@ -1245,7 +1362,7 @@ function SectionCard({
   onAddSubsection: () => void;
   onRemoveSubsection: (subId: string) => void;
   onDropSection: (dragSectionClientId: string, insertIndex: number) => void;
-  onDropSubsection: (dragSubsectionClientId: string, sourceSectionClientId: string, insertIndex: number) => void;
+  onDropSubsection: (dragSubsectionClientId: string, sourceSectionClientId: string, insertLayoutIndex: number) => void;
   onAddQuestionToSubsection: (subId: string) => void;
   onRemoveQuestion: (qId: string) => void;
   onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
@@ -1301,9 +1418,22 @@ function SectionCard({
           try {
             const data = JSON.parse(e.dataTransfer.getData("application/json"));
             if (data.kind === "section") {
-              onDropSection(data.sectionClientId, isAfter ? index + 1 : index);
+              onDropSection(data.sectionClientId, isAfter ? rootLayoutIndex + 1 : rootLayoutIndex);
             } else if (data.kind === "subsection") {
-              onDropSubsection(data.subsectionClientId, data.sourceSectionClientId, section.subsections.length);
+              // Move subsection into this section (append to end of layout)
+              const sectionLayout = buildSectionLayoutOrder(
+                section.subsections,
+                section.questions,
+                section.layout,
+              );
+              onDropSubsection(data.subsectionClientId, data.sourceSectionClientId, sectionLayout.length);
+            } else if (data.questionClientId) {
+              // Drop question before/after this section at root level
+              onMoveQuestion(data.questionClientId, data.source, {
+                sectionClientId: null,
+                subsectionClientId: null,
+                insertIndex: isAfter ? rootLayoutIndex + 1 : rootLayoutIndex,
+              });
             }
           } catch { /* ignore */ }
         }}
@@ -1365,7 +1495,7 @@ function SectionCard({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onAddQuestion(); }}
-            className="rounded p-1.5 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-800/40 dark:hover:text-indigo-200"
+            className="rounded p-1.5 text-sky-400 hover:bg-sky-100 hover:text-sky-700 dark:text-sky-400 dark:hover:bg-sky-800/40 dark:hover:text-sky-200"
             title="Add question"
           >
             <Plus className="h-4 w-4" />
@@ -1407,7 +1537,22 @@ function SectionCard({
               setSectionDragOver(false);
               try {
                 const data = JSON.parse(e.dataTransfer.getData("application/json"));
-                onMoveQuestion(data.questionClientId, data.source, { sectionClientId: section.clientId, subsectionClientId: null, insertIndex: section.questions.length });
+                const sectionLayout = buildSectionLayoutOrder(
+                  section.subsections,
+                  section.questions,
+                  section.layout,
+                );
+                if (data.kind === "subsection") {
+                  // Move subsection into this section (append to end of layout)
+                  onDropSubsection(data.subsectionClientId, data.sourceSectionClientId, sectionLayout.length);
+                } else if (data.questionClientId) {
+                  // Move question as direct section question (append to end of layout)
+                  onMoveQuestion(data.questionClientId, data.source, {
+                    sectionClientId: section.clientId,
+                    subsectionClientId: null,
+                    insertIndex: sectionLayout.length,
+                  });
+                }
               } catch { /* ignore */ }
             }}
             className={cn(
@@ -1432,7 +1577,7 @@ function SectionCard({
                 );
               }
 
-              return sectionLayout.map((item) => {
+              return sectionLayout.map((item, layoutIdx) => {
                 if (item.kind === "subsection") {
                   const sub = section.subsections.find(s => s.clientId === item.clientId);
                   if (!sub) return null;
@@ -1443,6 +1588,7 @@ function SectionCard({
                       key={sub.clientId}
                       subsection={sub}
                       subsectionIndex={subIndex}
+                      layoutIndex={layoutIdx}
                       sectionIndex={index}
                       sectionClientId={section.clientId}
                       errors={errors}
@@ -1454,8 +1600,8 @@ function SectionCard({
                       onRemoveQuestion={onRemoveQuestion}
                       onUpdateQuestion={onUpdateQuestion}
                       onMoveQuestion={onMoveQuestion}
-                      onDropSubsection={(dragSubsectionClientId, sourceSectionClientId, insertIndex) =>
-                        onDropSubsection(dragSubsectionClientId, sourceSectionClientId, insertIndex)
+                      onDropSubsection={(dragSubsectionClientId, sourceSectionClientId, insertLayoutIndex) =>
+                        onDropSubsection(dragSubsectionClientId, sourceSectionClientId, insertLayoutIndex)
                       }
                       formSelfAssessmentEnabled={formSelfAssessmentEnabled}
                     />
@@ -1471,6 +1617,7 @@ function SectionCard({
                     key={question.clientId}
                     question={question}
                     index={qIdx}
+                    layoutIndex={layoutIdx}
                     errorPrefix={`section-${index}-question-${qIdx}`}
                     errors={errors}
                     sourceLocation={{ sectionClientId: section.clientId, subsectionClientId: null }}
@@ -1483,6 +1630,9 @@ function SectionCard({
                         insertIndex,
                       });
                     }}
+                    onDropSubsection={(dragSubsectionClientId, sourceSectionClientId, insertLayoutIndex) =>
+                      onDropSubsection(dragSubsectionClientId, sourceSectionClientId, insertLayoutIndex)
+                    }
                     compact
                     formSelfAssessmentEnabled={formSelfAssessmentEnabled}
                   />
@@ -1502,7 +1652,7 @@ function SectionCard({
             </button>
             <button
               onClick={onAddQuestion}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-indigo-300 px-3 py-2 text-xs font-medium text-indigo-600 transition-all hover:border-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:border-indigo-400 dark:hover:bg-indigo-900/30"
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-sky-300 px-3 py-2 text-xs font-medium text-sky-600 transition-all hover:border-sky-500 hover:bg-sky-50 hover:text-sky-700 dark:border-sky-500/40 dark:text-sky-300 dark:hover:border-sky-400 dark:hover:bg-sky-900/30"
             >
               <Plus className="h-3.5 w-3.5" />
               Add Question
@@ -1517,23 +1667,30 @@ function SectionCard({
 function QuestionCard({
   question,
   index,
+  layoutIndex,
   errorPrefix,
   errors,
   sourceLocation,
   onRemove,
   onChange,
   onDropQuestion,
+  onDropSubsection,
+  onDropSection,
   compact = false,
   formSelfAssessmentEnabled = true,
 }: {
   question: QuestionInput;
   index: number;
+  /** Position in the interleaved layout (for section context). Defaults to `index`. */
+  layoutIndex?: number;
   errorPrefix: string;
   errors: Record<string, string>;
   sourceLocation: QuestionLocation;
   onRemove: () => void;
   onChange: (updates: Partial<QuestionInput>) => void;
   onDropQuestion?: (dragData: { questionClientId: string; source: QuestionLocation }, insertIndex: number) => void;
+  onDropSubsection?: (dragSubsectionClientId: string, sourceSectionClientId: string, insertIndex: number) => void;
+  onDropSection?: (dragSectionClientId: string, insertIndex: number) => void;
   compact?: boolean;
   formSelfAssessmentEnabled?: boolean;
 }) {
@@ -1543,6 +1700,8 @@ function QuestionCard({
   const hasError = textError || typeError || marksError;
   const showOptions = questionNeedsOptions(question.inputType);
   const [dragOverPos, setDragOverPos] = useState<"before" | "after" | null>(null);
+  const dropLayoutIndex = layoutIndex ?? index;
+  const canAcceptDrop = !!(onDropQuestion || onDropSubsection || onDropSection);
 
   useEffect(() => {
     const handleDragEnd = () => setDragOverPos(null);
@@ -1560,7 +1719,7 @@ function QuestionCard({
   return (
     <div
       onDragOver={(e) => {
-        if (!onDropQuestion) return;
+        if (!canAcceptDrop) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         const rect = e.currentTarget.getBoundingClientRect();
@@ -1568,30 +1727,36 @@ function QuestionCard({
         setDragOverPos(e.clientY < midpoint ? "before" : "after");
       }}
       onDragLeave={(e) => {
-        if (!onDropQuestion) return;
+        if (!canAcceptDrop) return;
         const relatedTarget = e.relatedTarget as Node | null;
         if (relatedTarget && e.currentTarget.contains(relatedTarget)) return;
         setDragOverPos(null);
       }}
       onDrop={(e) => {
-        if (!onDropQuestion) return;
+        if (!canAcceptDrop) return;
         e.preventDefault();
         e.stopPropagation();
         const rect = e.currentTarget.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
         const isAfter = e.clientY >= midpoint;
-        const insertIndex = isAfter ? index + 1 : index;
+        const insertIndex = isAfter ? dropLayoutIndex + 1 : dropLayoutIndex;
         setDragOverPos(null);
         try {
           const data = JSON.parse(e.dataTransfer.getData("application/json"));
-          onDropQuestion(data, insertIndex);
+          if (data.kind === "subsection" && onDropSubsection) {
+            onDropSubsection(data.subsectionClientId, data.sourceSectionClientId, insertIndex);
+          } else if (data.kind === "section" && onDropSection) {
+            onDropSection(data.sectionClientId, insertIndex);
+          } else if (data.questionClientId && onDropQuestion) {
+            onDropQuestion(data, insertIndex);
+          }
         } catch { /* ignore */ }
       }}
       className={cn(
       "group relative rounded-lg border p-3 transition-all shadow-sm",
       hasError
         ? "border-red-300 bg-red-50/60 dark:border-red-700/50 dark:bg-red-950/20"
-        : "border-teal-200 bg-teal-50/50 hover:border-teal-300 hover:shadow-md hover:shadow-teal-100/40 dark:border-teal-500/25 dark:bg-teal-950/30 dark:hover:border-teal-400/35",
+        : "border-sky-200 bg-sky-50/50 hover:border-sky-300 hover:shadow-md hover:shadow-sky-100/40 dark:border-sky-500/25 dark:bg-sky-950/30 dark:hover:border-sky-400/35",
       dragOverPos === "before" && "rounded-t-none border-t-2 border-t-primary",
       dragOverPos === "after" && "rounded-b-none border-b-2 border-b-primary",
     )}>
@@ -1611,12 +1776,12 @@ function QuestionCard({
             }));
             e.dataTransfer.effectAllowed = "move";
           }}
-          className="mt-1 flex cursor-grab items-center text-teal-300 hover:text-teal-600 active:cursor-grabbing dark:text-teal-600 dark:hover:text-teal-300"
+          className="mt-1 flex cursor-grab items-center text-sky-300 hover:text-sky-600 active:cursor-grabbing dark:text-sky-600 dark:hover:text-sky-300"
           title="Drag to move question"
         >
           <GripVertical className="h-4 w-4" />
         </div>
-        <div className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-teal-200 text-[10px] font-bold text-teal-800 dark:bg-teal-800/50 dark:text-teal-200">
+        <div className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-sky-200 text-[10px] font-bold text-sky-800 dark:bg-sky-800/50 dark:text-sky-200">
           {index + 1}
         </div>
         
@@ -1629,7 +1794,7 @@ function QuestionCard({
               placeholder="Enter question text..."
               className={cn(
                 "flex-1 bg-transparent text-sm outline-none",
-                textError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-teal-900 placeholder:text-teal-400 dark:text-teal-50 dark:placeholder:text-teal-500"
+                textError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-sky-900 placeholder:text-sky-400 dark:text-sky-50 dark:placeholder:text-sky-500"
               )}
             />
             {!question.noMarks && (
@@ -1643,7 +1808,7 @@ function QuestionCard({
                   "w-20 rounded border px-2 py-1 text-right text-xs outline-none bg-white/70 dark:bg-slate-900/50",
                   marksError
                     ? "border-red-400 text-red-700 dark:border-red-700 dark:text-red-400"
-                    : "border-teal-200 text-teal-800 dark:border-teal-600/40 dark:text-teal-100"
+                    : "border-sky-200 text-sky-800 dark:border-sky-600/40 dark:text-sky-100"
                 )}
               />
             )}
@@ -1653,7 +1818,7 @@ function QuestionCard({
             "flex flex-wrap items-end gap-3",
           )}>
             <div className="w-40 shrink-0">
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
                 Question Type
               </label>
               <select
@@ -1662,10 +1827,10 @@ function QuestionCard({
                   onChange(applyQuestionInputTypeChange(question, e.target.value as QuestionInput["inputType"]))
                 }
                 className={cn(
-                  "h-8 w-full rounded border px-2 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-200/40 bg-white/70 dark:bg-slate-900/50 dark:focus:ring-teal-700/30",
+                  "h-8 w-full rounded border px-2 text-xs outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-200/40 bg-white/70 dark:bg-slate-900/50 dark:focus:ring-sky-700/30",
                   typeError
                     ? "border-red-400 dark:border-red-700"
-                    : "border-teal-200 dark:border-teal-600/40"
+                    : "border-sky-200 dark:border-sky-600/40"
                 )}
               >
                 {FIELD_TYPES.map((type) => (
@@ -1677,40 +1842,40 @@ function QuestionCard({
             </div>
 
             <div className="flex flex-wrap items-end gap-3">
-              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
+              <label className="inline-flex items-center gap-1.5 text-xs text-sky-800 dark:text-sky-200">
                 <input
                   type="checkbox"
                   checked={question.isRequired}
                   onChange={(e) => onChange({ isRequired: e.target.checked })}
-                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
+                  className="size-3.5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 dark:border-sky-500 dark:text-sky-400"
                 />
                 Required
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
+              <label className="inline-flex items-center gap-1.5 text-xs text-sky-800 dark:text-sky-200">
                 <input
                   type="checkbox"
                   checked={question.selfAssessmentEnabled}
                   onChange={(e) => onChange({ selfAssessmentEnabled: e.target.checked })}
                   disabled={!formSelfAssessmentEnabled}
-                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 disabled:opacity-40 dark:border-teal-500 dark:text-teal-400"
+                  className="size-3.5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 disabled:opacity-40 dark:border-sky-500 dark:text-sky-400"
                 />
                 Self Assessment
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
+              <label className="inline-flex items-center gap-1.5 text-xs text-sky-800 dark:text-sky-200">
                 <input
                   type="checkbox"
                   checked={question.hodAssessmentEnabled}
                   onChange={(e) => onChange({ hodAssessmentEnabled: e.target.checked })}
-                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
+                  className="size-3.5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 dark:border-sky-500 dark:text-sky-400"
                 />
                 HOD Assessment
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-teal-800 dark:text-teal-200">
+              <label className="inline-flex items-center gap-1.5 text-xs text-sky-800 dark:text-sky-200">
                 <input
                   type="checkbox"
                   checked={question.noMarks}
                   onChange={(e) => handleNoMarksChange(e.target.checked)}
-                  className="size-3.5 rounded border-teal-400 text-teal-600 focus:ring-teal-400 dark:border-teal-500 dark:text-teal-400"
+                  className="size-3.5 rounded border-sky-400 text-sky-600 focus:ring-sky-400 dark:border-sky-500 dark:text-sky-400"
                 />
                 No Marks
               </label>
@@ -1740,7 +1905,7 @@ function QuestionCard({
                   <div className={cn(
                     "h-3.5 w-3.5 border",
                     question.inputType === "CHECKBOX" ? "rounded-sm" : "rounded-full",
-                    "border-teal-300 dark:border-teal-600"
+                    "border-sky-300 dark:border-sky-600"
                   )} />
                   <input
                     type="text"
@@ -1751,7 +1916,7 @@ function QuestionCard({
                       onChange({ options: newOptions });
                     }}
                     placeholder={`Option ${oIdx + 1}`}
-                    className="flex-1 bg-transparent text-xs outline-none text-teal-900 placeholder:text-teal-400 dark:text-teal-100 dark:placeholder:text-teal-500"
+                    className="flex-1 bg-transparent text-xs outline-none text-sky-900 placeholder:text-sky-400 dark:text-sky-100 dark:placeholder:text-sky-500"
                   />
                   <input
                     type="number"
@@ -1766,7 +1931,7 @@ function QuestionCard({
                       onChange({ options: newOptions });
                     }}
                     placeholder="Pts"
-                    className="w-14 rounded border border-teal-200 bg-white/70 px-1.5 py-0.5 text-right text-xs outline-none dark:border-teal-600/40 dark:bg-slate-900/50"
+                    className="w-14 rounded border border-sky-200 bg-white/70 px-1.5 py-0.5 text-right text-xs outline-none dark:border-sky-600/40 dark:bg-slate-900/50"
                   />
                   <button
                     type="button"
@@ -1774,7 +1939,7 @@ function QuestionCard({
                       const newOptions = question.options.filter((_, i) => i !== oIdx);
                       onChange({ options: newOptions });
                     }}
-                    className="text-teal-400 hover:text-red-600 dark:text-teal-500 dark:hover:text-red-400"
+                    className="text-sky-400 hover:text-red-600 dark:text-sky-500 dark:hover:text-red-400"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -1794,7 +1959,7 @@ function QuestionCard({
         <button
           type="button"
           onClick={onRemove}
-          className="mt-1 opacity-0 transition-opacity group-hover:opacity-100 text-teal-400 hover:text-red-600 dark:text-teal-500 dark:hover:text-red-400"
+          className="mt-1 opacity-0 transition-opacity group-hover:opacity-100 text-sky-400 hover:text-red-600 dark:text-sky-500 dark:hover:text-red-400"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
