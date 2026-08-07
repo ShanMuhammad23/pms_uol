@@ -13,6 +13,7 @@ import {
   type FormTableRow,
 } from "@/app/helpers/form-table-rows";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
+import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import { cn } from "@/lib/utils";
 import OverallRemarksSection from "./OverallRemarksSection";
 import AssessmentSummaryFooter, {
@@ -34,9 +35,10 @@ interface FormAssessmentPreviewProps {
 }
 
 /**
- * Mock answer shape — mirrors EmployeeFormAnswerRecord but is purely visual.
+ * Empty answer shape — mirrors EmployeeFormAnswerRecord but is purely visual.
  * Never persisted; only used to populate the preview so the layout matches
- * the live assessment screens.
+ * the live assessment screens. All values are null/empty so the preview
+ * shows a blank, unfilled form — not a completed assessment.
  */
 interface MockAnswer {
   questionId: number;
@@ -45,86 +47,21 @@ interface MockAnswer {
   selectedOptionLabel: string | null;
 }
 
-const SAMPLE_REMARKS = [
-  "Consistently meets expectations across all assigned responsibilities.",
-  "Strong collaboration and timely delivery on key initiatives.",
-  "Demonstrates ownership and follows through on commitments.",
-  "Could improve cross-team communication and proactive updates.",
-];
-
 /**
- * Build mock answers for a given role. The values are deterministic per
- * question id so the preview is stable across re-renders and view switches.
+ * Build empty answers for a given role. All scores, remarks, and selections
+ * are null so the preview reflects an unfilled form. The purpose of the
+ * preview is to verify layout, visibility, and role-based permissions —
+ * not to show sample data.
  */
-function buildMockAnswers(
+function buildEmptyAnswers(
   questions: QuestionRecord[],
-  role: FormPreviewRole,
-  selfAssessmentEnabled: boolean,
 ): MockAnswer[] {
-  return questions.map((q, idx) => {
-    const scored = isScoredQuestion(q);
-    const isHodOnly = !q.selfAssessmentEnabled || !selfAssessmentEnabled;
-    const max = q.totalMarks;
-    // Deterministic sample score: ~70-80% of max, rounded to nearest 0.5.
-    const sampleScore =
-      max > 0 ? Math.round((max * 0.75) * 2) / 2 : 0;
-
-    if (role === "employee") {
-      // Employees only answer self-assessment-enabled, scored questions.
-      if (isHodOnly || !scored) {
-        return {
-          questionId: q.id,
-          pointsEarned: null,
-          remarks: null,
-          selectedOptionLabel: null,
-        };
-      }
-      return {
-        questionId: q.id,
-        pointsEarned: sampleScore,
-        remarks: SAMPLE_REMARKS[idx % SAMPLE_REMARKS.length],
-        selectedOptionLabel: null,
-      };
-    }
-
-    // Managers — mirror the live fallback chain.
-    // Manager 1: own answer (live view falls back to self-assessment when
-    // empty, but the preview always shows a populated sample).
-    // Manager 2: own answer (live view falls back to Manager 1 then self).
-    const manager1Answer: MockAnswer = !q.hodAssessmentEnabled
-      ? {
-          questionId: q.id,
-          pointsEarned: null,
-          remarks: null,
-          selectedOptionLabel: null,
-        }
-      : {
-          questionId: q.id,
-          pointsEarned: Math.round((max * 0.85) * 2) / 2,
-          remarks:
-            role === "manager1"
-              ? "Reviewed and confirmed. Performance aligns with rating."
-              : "Manager 1 review complete — score reflects observed delivery.",
-          selectedOptionLabel: null,
-        };
-
-    if (role === "manager1") {
-      return manager1Answer;
-    }
-
-    // Manager 2: own answer, falling back to Manager 1 when HOD assessment
-    // is disabled for this question.
-    if (!q.hodAssessmentEnabled) {
-      return manager1Answer;
-    }
-    return {
-      questionId: q.id,
-      pointsEarned: Math.round((max * 0.9) * 2) / 2,
-      remarks:
-        "Independent review completed. Agree with Manager 1 assessment with minor adjustment.",
-      selectedOptionLabel: null,
-    };
-  });
+  return questions.map((q) => ({
+    questionId: q.id,
+    pointsEarned: null,
+    remarks: null,
+    selectedOptionLabel: null,
+  }));
 }
 
 function answerFor(
@@ -203,17 +140,12 @@ function RemarksCell({
 }
 
 /**
- * Read-only attachment placeholder cell. Mirrors the live AttachmentList
- * visual without requiring real files.
+ * Read-only attachment placeholder cell. Shows an empty state — the preview
+ * is a blank form, not a completed assessment with attachments.
  */
 function AttachmentPreviewCell() {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-        <span className="size-1.5 rounded-full bg-slate-400" />
-        sample-evidence.pdf
-      </span>
-    </div>
+    <span className="text-xs italic text-slate-400">—</span>
   );
 }
 
@@ -234,18 +166,18 @@ export default function FormAssessmentPreview({
   // in the Manager 2 view (mirrors live behavior when manager_2_id is set).
   const hasManager2 = viewAs === "manager2";
 
-  // Mock answers per role — built once per template/viewAs combination.
+  // Empty answers per role — the preview shows a blank, unfilled form.
   const employeeAnswers = useMemo(
-    () => buildMockAnswers(allQuestions, "employee", selfAssessmentEnabled),
-    [allQuestions, selfAssessmentEnabled],
+    () => buildEmptyAnswers(allQuestions),
+    [allQuestions],
   );
   const manager1Answers = useMemo(
-    () => buildMockAnswers(allQuestions, "manager1", selfAssessmentEnabled),
-    [allQuestions, selfAssessmentEnabled],
+    () => buildEmptyAnswers(allQuestions),
+    [allQuestions],
   );
   const manager2Answers = useMemo(
-    () => buildMockAnswers(allQuestions, "manager2", selfAssessmentEnabled),
-    [allQuestions, selfAssessmentEnabled],
+    () => buildEmptyAnswers(allQuestions),
+    [allQuestions],
   );
 
   // Score totals for the summary footer.
@@ -303,11 +235,10 @@ export default function FormAssessmentPreview({
     maxScore,
   ]);
 
-  // Mock overall remarks for the Additional Remarks section.
-  const mockManager1Remarks =
-    "Overall performance is strong. The employee consistently delivers on assigned KPIs and demonstrates ownership of their role.";
-  const mockManager2Remarks =
-    "I concur with Manager 1's assessment. The employee shows steady growth and is ready for additional responsibilities.";
+  // Overall remarks are empty in preview mode — the preview shows a blank,
+  // unfilled form, not a completed assessment.
+  const mockManager1Remarks: string | null = null;
+  const mockManager2Remarks: string | null = null;
 
   // Column visibility — mirrors EmployeeFormFill / SubmissionDetailView logic.
   // Employees never see any manager columns. Managers always see Manager 1
@@ -521,9 +452,7 @@ function QuestionPreviewRow({
       <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
         <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
           {question.questionText}
-          {question.isRequired ? (
-            <span className="ml-1 text-red-500" title="Required">*</span>
-          ) : null}
+          <QuestionRequiredIndicator isRequired={question.isRequired} />
         </p>
         {question.options.length > 0 ? (
           <ul className="mt-1 space-y-0.5">

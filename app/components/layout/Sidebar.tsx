@@ -17,12 +17,16 @@ import {
   PanelLeftOpen,
   Settings2,
   Shield,
+  TableProperties,
   Users,
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { useSidebar } from "@/app/components/layout/sidebar-context";
 import { isEmployeeRole } from "@/lib/auth/home-path";
-import { isAdminRole } from "@/lib/auth/submission-review-roles";
+import {
+  canAccessDashboardSubmissions,
+  isAdminRole,
+} from "@/lib/auth/submission-review-roles";
 import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
 import { useAdditionalAccess } from "@/app/queries/use-additional-access";
@@ -77,8 +81,10 @@ const Sidebar = () => {
   const { collapsed, toggle } = useSidebar();
   const user = session?.user;
   const isEmployee = isEmployeeRole(user?.role);
+  const canBulkReview = canAccessDashboardSubmissions(user?.role);
   const isDashboard = pathname === "/dashboard";
   const isMyForms = pathname.startsWith("/dashboard/my-forms");
+  const isBulkReview = pathname.startsWith("/dashboard/bulk-assessment");
   const isOrgAdmin = isAdminRole(user?.role);
   const isTrueSuperAdmin = user?.role === "SUPER_ADMIN";
   const { canView } = useAdditionalAccess(
@@ -290,6 +296,20 @@ const Sidebar = () => {
                   {!collapsed ? "My Forms" : null}
                 </Link>
               </li>
+
+              {canBulkReview ? (
+                <li>
+                  <Link
+                    href="/dashboard/bulk-assessment"
+                    aria-current={isBulkReview ? "page" : undefined}
+                    title="Bulk Assessment Review"
+                    className={navLinkClass(isBulkReview)}
+                  >
+                    <TableProperties className="size-4 shrink-0" />
+                    {!collapsed ? "Bulk Assessment Review" : null}
+                  </Link>
+                </li>
+              ) : null}
 
               {showAdminDropdown ? (
                 <li className="pt-2">

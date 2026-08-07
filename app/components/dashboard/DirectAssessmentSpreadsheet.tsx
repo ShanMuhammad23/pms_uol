@@ -10,6 +10,7 @@ import {
 } from "@/lib/queries/direct-assessment-client";
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
+import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import {
   type QuestionRecord,
 } from "@/types/forms";
@@ -609,6 +610,7 @@ export default function DirectAssessmentSpreadsheet({
                       <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
                       <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
                         {question!.questionText}
+                        <QuestionRequiredIndicator isRequired={question!.isRequired} />
                       </p>
                     </td>
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">

@@ -25,6 +25,7 @@ import {
   formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
+import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import OverallRemarksSection, {
   OverallRemarksPrintSection,
 } from "@/app/components/forms/OverallRemarksSection";
@@ -1107,6 +1108,7 @@ export default function SubmissionDetailView({
                     <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
                       <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
                         {question!.questionText}
+                        <QuestionRequiredIndicator isRequired={question!.isRequired} />
                       </p>
                     </td>
                     <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">

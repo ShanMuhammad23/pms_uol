@@ -739,6 +739,453 @@ export async function getFormSubmissionSummaryById(
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Bulk Review Queue                                                           */
+/* -------------------------------------------------------------------------- */
+
+export interface BulkReviewQueueItem {
+  id: number;
+  employeeId: string;
+  employeeName: string;
+  employeeEmail: string;
+  designation: string | null;
+  entityId: number | null;
+  entityName: string | null;
+  parentEntityName: string | null;
+  orgLevel1Name: string | null;
+  orgLevel2Name: string | null;
+  templateId: number | null;
+  templateTitle: string | null;
+  status: AppraisalStatus;
+  managerLevel: number | null;
+  manager1UserId: number | null;
+  manager2UserId: number | null;
+  submittedAt: string | null;
+  selfAssessmentEnabled: boolean;
+  assessmentEligibility: boolean;
+}
+
+/**
+ * Returns submissions pending review by the given manager user ID.
+ * Reuses `listFormSubmissions` (which already enforces staff visibility)
+ * and filters in-memory for `PENDING_HEAD_REVIEW` where the viewer is the
+ * assigned manager at the current manager_level.
+ */
+export async function listBulkReviewQueue(
+  reviewerUserId: number,
+): Promise<BulkReviewQueueItem[]> {
+  const submissions = await listFormSubmissions({
+    managedByUserId: reviewerUserId,
+  });
+
+  return submissions
+    .filter((s) => s.status === "PENDING_HEAD_REVIEW")
+    .filter((s) =>
+      isAssignedManagerAtLevelInline(reviewerUserId, s, s.managerLevel ?? 1),
+    )
+    .filter((s) => s.assessmentEligibility)
+    .map((s) => ({
+      id: s.id,
+      employeeId: s.employeeId,
+      employeeName: s.employeeName,
+      employeeEmail: s.employeeEmail,
+      designation: s.designation,
+      entityId: s.entityId,
+      entityName: s.entityName,
+      parentEntityName: s.parentEntityName,
+      orgLevel1Name: s.orgLevel1Name,
+      orgLevel2Name: s.orgLevel2Name,
+      templateId: s.templateId,
+      templateTitle: s.templateTitle,
+      status: s.status,
+      managerLevel: s.managerLevel,
+      manager1UserId: s.manager1UserId ?? null,
+      manager2UserId: s.manager2UserId ?? null,
+      submittedAt: s.submittedAt,
+      selfAssessmentEnabled: s.selfAssessmentEnabled,
+      assessmentEligibility: s.assessmentEligibility,
+    }));
+}
+
+/** Inline version to avoid a circular import with manager-review helper. */
+function isAssignedManagerAtLevelInline(
+  reviewerUserId: number,
+  submission: Pick<FormSubmissionListItem, "manager1UserId" | "manager2UserId">,
+  managerLevel: number,
+): boolean {
+  const m1 = submission.manager1UserId ?? null;
+  const m2 = submission.manager2UserId ?? null;
+  const assigned = managerLevel <= 1 ? m1 : m2;
+  return assigned != null && assigned === reviewerUserId;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Bulk Review Question Data                                                   */
+/* -------------------------------------------------------------------------- */
+
+export interface BulkReviewQuestionRow {
+  submissionId: number;
+  employeeId: string;
+  employeeName: string;
+  /** Self-assessment score for this question (null when self-assessment disabled). */
+  selfScore: number | null;
+  /** Self-assessment remarks for this question (used as draft fallback). */
+  selfRemarks: string | null;
+  /** Current manager's saved score for this question. */
+  managerScore: number | null;
+  /** Current manager's saved remarks for this question. */
+  managerRemarks: string | null;
+  /** Manager 1's saved score (used as fallback for Manager 2 drafts). */
+  manager1Score: number | null;
+  /** Manager 1's saved remarks (used as fallback for Manager 2 drafts). */
+  manager1Remarks: string | null;
+}
+
+export interface BulkReviewQuestionData {
+  questionId: number;
+  questionText: string;
+  totalMarks: number;
+  isRequired: boolean;
+  sectionTitle: string | null;
+  rows: BulkReviewQuestionRow[];
+}
+
+/**
+ * Returns question-by-question data for the selected submissions.
+ * Loads the template once (all submissions must share the same template),
+ * then fetches self-assessment and manager answers for each submission.
+ */
+export async function getBulkReviewQuestionData(
+  submissionIds: number[],
+  reviewerUserId: number,
+): Promise<{
+  questions: BulkReviewQuestionData[];
+  submissions: Array<{
+    id: number;
+    employeeId: string;
+    employeeName: string;
+    managerLevel: number | null;
+    status: AppraisalStatus;
+  }>;
+}> {
+  if (submissionIds.length === 0) {
+    return { questions: [], submissions: [] };
+  }
+
+  // Fetch all submissions and filter to the ones the reviewer can access.
+  const all = await listFormSubmissions({ managedByUserId: reviewerUserId });
+  const selected = all.filter(
+    (s) =>
+      submissionIds.includes(s.id) &&
+      s.status === "PENDING_HEAD_REVIEW" &&
+      s.assessmentEligibility &&
+      isAssignedManagerAtLevelInline(reviewerUserId, s, s.managerLevel ?? 1),
+  );
+
+  if (selected.length === 0) {
+    return { questions: [], submissions: [] };
+  }
+
+  // All selected submissions should share the same template (same cycle).
+  // Use the first one's template.
+  const templateId = selected[0].templateId;
+  if (!templateId) {
+    return { questions: [], submissions: [] };
+  }
+
+  const template = await getFormTemplateById(templateId);
+  if (!template) {
+    return { questions: [], submissions: [] };
+  }
+
+  const allQuestions = flattenAllQuestions(template);
+  const scoredQuestions = allQuestions.filter((q) => isScoredQuestion(q));
+
+  // Build a section-title lookup.
+  const sectionTitleByQuestionId = new Map<number, string | null>();
+  for (const section of template.sections) {
+    for (const q of section.questions) {
+      sectionTitleByQuestionId.set(q.id, section.title);
+    }
+    for (const sub of section.subsections) {
+      for (const q of sub.questions) {
+        sectionTitleByQuestionId.set(q.id, sub.title);
+      }
+    }
+  }
+
+  // For each submission, fetch self-assessment answers and the reviewer's answers.
+  const submissionMeta: Array<{
+    id: number;
+    employeeId: string;
+    employeeName: string;
+    employeeUserId: number;
+    manager1UserId: number | null;
+    managerLevel: number | null;
+    status: AppraisalStatus;
+  }> = [];
+
+  for (const s of selected) {
+    const empResult = await db.query<{ user_id: string }>(
+      `SELECT ap.employee_id::text AS user_id
+       FROM appraisals ap
+       INNER JOIN users u ON u.id = ap.employee_id
+       WHERE ap.id = $1`,
+      [s.id],
+    );
+    const employeeUserId = Number(empResult.rows[0]?.user_id);
+    if (!employeeUserId) continue;
+
+    submissionMeta.push({
+      id: s.id,
+      employeeId: s.employeeId,
+      employeeName: s.employeeName,
+      employeeUserId,
+      manager1UserId: s.manager1UserId ?? null,
+      managerLevel: s.managerLevel,
+      status: s.status,
+    });
+  }
+
+  // Batch-fetch answers: self-assessment + reviewer answers per submission.
+  const questionsData: BulkReviewQuestionData[] = [];
+
+  for (const q of scoredQuestions) {
+    const rows: BulkReviewQuestionRow[] = [];
+
+    for (const meta of submissionMeta) {
+      // Self-assessment answers
+      const selfResult = await db.query<{
+        points_earned: string;
+        remarks: string | null;
+      }>(
+        `SELECT points_earned::text, remarks FROM appraisal_answers
+         WHERE appraisal_id = $1 AND question_id = $2 AND filled_by_id = $3`,
+        [meta.id, q.id, meta.employeeUserId],
+      );
+      const selfScore =
+        selfResult.rows.length > 0
+          ? Number(selfResult.rows[0].points_earned)
+          : null;
+      const selfRemarks = selfResult.rows[0]?.remarks ?? null;
+
+      // Reviewer (manager) answers
+      const mgrResult = await db.query<{
+        points_earned: string;
+        remarks: string | null;
+      }>(
+        `SELECT points_earned::text, remarks FROM appraisal_answers
+         WHERE appraisal_id = $1 AND question_id = $2 AND filled_by_id = $3`,
+        [meta.id, q.id, reviewerUserId],
+      );
+      const managerScore =
+        mgrResult.rows.length > 0
+          ? Number(mgrResult.rows[0].points_earned)
+          : null;
+      const managerRemarks = mgrResult.rows[0]?.remarks ?? null;
+
+      // Manager 1 answers — used as fallback for Manager 2 drafts, mirroring
+      // the individual assessment flow's buildManagerDraftMap logic.
+      let manager1Score: number | null = null;
+      let manager1Remarks: string | null = null;
+      if (
+        meta.managerLevel === 2 &&
+        meta.manager1UserId != null &&
+        meta.manager1UserId !== reviewerUserId
+      ) {
+        const m1Result = await db.query<{
+          points_earned: string;
+          remarks: string | null;
+        }>(
+          `SELECT points_earned::text, remarks FROM appraisal_answers
+           WHERE appraisal_id = $1 AND question_id = $2 AND filled_by_id = $3`,
+          [meta.id, q.id, meta.manager1UserId],
+        );
+        manager1Score =
+          m1Result.rows.length > 0
+            ? Number(m1Result.rows[0].points_earned)
+            : null;
+        manager1Remarks = m1Result.rows[0]?.remarks ?? null;
+      }
+
+      rows.push({
+        submissionId: meta.id,
+        employeeId: meta.employeeId,
+        employeeName: meta.employeeName,
+        selfScore: s_selfScoreEnabled(selected, meta.id)
+          ? selfScore
+          : null,
+        selfRemarks: s_selfScoreEnabled(selected, meta.id)
+          ? selfRemarks
+          : null,
+        managerScore,
+        managerRemarks,
+        manager1Score,
+        manager1Remarks,
+      });
+    }
+
+    questionsData.push({
+      questionId: q.id,
+      questionText: q.questionText,
+      totalMarks: q.totalMarks,
+      isRequired: q.isRequired,
+      sectionTitle: sectionTitleByQuestionId.get(q.id) ?? null,
+      rows,
+    });
+  }
+
+  return {
+    questions: questionsData,
+    submissions: submissionMeta.map((m) => ({
+      id: m.id,
+      employeeId: m.employeeId,
+      employeeName: m.employeeName,
+      managerLevel: m.managerLevel,
+      status: m.status,
+    })),
+  };
+}
+
+/** Check if self-assessment is enabled for a submission by id. */
+function s_selfScoreEnabled(
+  submissions: FormSubmissionListItem[],
+  submissionId: number,
+): boolean {
+  return (
+    submissions.find((s) => s.id === submissionId)?.selfAssessmentEnabled ??
+    false
+  );
+}
+
+/**
+ * Save manager scores for a single question across multiple submissions.
+ * Reuses the same validation logic as `saveManagerReviewAnswers`.
+ */
+export async function saveBulkReviewQuestionScores(
+  reviewerUserId: number,
+  questionId: number,
+  entries: Array<{
+    submissionId: number;
+    pointsEarned: number;
+    remarks?: string | null;
+  }>,
+  templateQuestions: QuestionRecord[],
+): Promise<{ savedCount: number }> {
+  const question = templateQuestions.find((q) => q.id === questionId);
+  if (!question || !isScoredQuestion(question)) {
+    throw new FormSubmissionError(
+      "Question not found or is not a scored question.",
+      404,
+    );
+  }
+
+  await db.query(
+    `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
+  );
+
+  let savedCount = 0;
+
+  for (const entry of entries) {
+    const pointsEarned = Number(entry.pointsEarned ?? 0);
+    if (
+      Number.isNaN(pointsEarned) ||
+      pointsEarned < 0 ||
+      pointsEarned > Number(question.totalMarks)
+    ) {
+      throw new FormSubmissionError(
+        `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
+      );
+    }
+
+    const remarks =
+      typeof entry.remarks === "string"
+        ? entry.remarks.trim() || null
+        : null;
+
+    await db.query(
+      `INSERT INTO appraisal_answers (
+         appraisal_id,
+         question_id,
+         filled_by_id,
+         text_response,
+         selected_option_id,
+         points_earned,
+         remarks
+       ) VALUES ($1, $2, $3, NULL, NULL, $4, $5)
+       ON CONFLICT (appraisal_id, question_id, filled_by_id)
+       DO UPDATE SET
+         points_earned = EXCLUDED.points_earned,
+         remarks = EXCLUDED.remarks,
+         updated_at = CURRENT_TIMESTAMP`,
+      [entry.submissionId, questionId, reviewerUserId, pointsEarned, remarks],
+    );
+
+    savedCount += 1;
+  }
+
+  return { savedCount };
+}
+
+/**
+ * Finish (approve) the manager review for multiple submissions.
+ * Reuses `approveManagerReview` for each submission, enforcing the same
+ * status-transition logic as the individual review flow.
+ */
+export async function finishBulkReview(
+  reviewerUserId: number,
+  submissionIds: number[],
+): Promise<{
+  approved: Array<{ id: number; managerLevel: number; status: AppraisalStatus }>;
+  skipped: Array<{ id: number; reason: string }>;
+}> {
+  const all = await listFormSubmissions({ managedByUserId: reviewerUserId });
+  const accessible = new Set(
+    all
+      .filter(
+        (s) =>
+          s.status === "PENDING_HEAD_REVIEW" &&
+          s.assessmentEligibility &&
+          isAssignedManagerAtLevelInline(
+            reviewerUserId,
+            s,
+            s.managerLevel ?? 1,
+          ),
+      )
+      .map((s) => s.id),
+  );
+
+  const approved: Array<{
+    id: number;
+    managerLevel: number;
+    status: AppraisalStatus;
+  }> = [];
+  const skipped: Array<{ id: number; reason: string }> = [];
+
+  for (const id of submissionIds) {
+    if (!accessible.has(id)) {
+      skipped.push({
+        id,
+        reason: "Submission is not available for review or already processed.",
+      });
+      continue;
+    }
+
+    try {
+      const result = await approveManagerReview(id);
+      approved.push({ id, ...result });
+    } catch (error) {
+      const reason =
+        error instanceof FormSubmissionError
+          ? error.message
+          : "Failed to approve submission.";
+      skipped.push({ id, reason });
+    }
+  }
+
+  return { approved, skipped };
+}
+
 async function seedManagerAnswersFromSource(
   appraisalId: number,
   reviewerUserId: number,

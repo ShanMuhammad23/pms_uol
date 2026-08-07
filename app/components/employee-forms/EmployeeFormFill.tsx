@@ -30,6 +30,7 @@ import {
   formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
+import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
 import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
@@ -613,6 +614,7 @@ export default function EmployeeFormFill({
                               <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
                                 <p className="max-w-[420px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
                                   {question!.questionText}
+                                  <QuestionRequiredIndicator isRequired={question!.isRequired} />
                                 </p>
                                 {question!.options.length > 0 ? (
                                   <ul className="mt-1.5 space-y-0.5">
