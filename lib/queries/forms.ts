@@ -16,6 +16,7 @@ import type {
   QuestionOptionInput,
   SubCategory,
 } from "@/types/forms";
+import { buildSectionLayoutOrder } from "@/types/forms";
 
 interface FormTemplateListRow {
   id: string;
@@ -474,28 +475,52 @@ async function syncFormStructure(
     const sectionId = await upsertSection(templateId, section, null, client);
     sectionIds.add(sectionId);
 
-    for (const question of section.questions) {
-      const qId = await syncQuestion(templateId, question, sectionId, client);
-      questionIds.add(qId);
-    }
+    // Assign shared sort_order to subsections and direct questions based on
+    // the section layout. This preserves the interleaved creation order.
+    const layout = buildSectionLayoutOrder(
+      section.subsections,
+      section.questions,
+      section.layout,
+    );
+    const subMap = new Map(section.subsections.map((s) => [s.clientId, s]));
+    const qMap = new Map(section.questions.map((q) => [q.clientId, q]));
+    let sharedSortOrder = 0;
 
-    for (const subsection of section.subsections) {
-      const subsectionId = await upsertSection(
-        templateId,
-        subsection,
-        sectionId,
-        client,
-      );
-      sectionIds.add(subsectionId);
+    for (const item of layout) {
+      if (item.kind === "subsection") {
+        const sub = subMap.get(item.clientId);
+        if (!sub) continue;
 
-      for (const question of subsection.questions) {
+        const subsectionId = await upsertSection(
+          templateId,
+          { ...sub, sortOrder: sharedSortOrder },
+          sectionId,
+          client,
+        );
+        sectionIds.add(subsectionId);
+
+        for (const question of sub.questions) {
+          const qId = await syncQuestion(
+            templateId,
+            question,
+            subsectionId,
+            client,
+          );
+          questionIds.add(qId);
+        }
+        sharedSortOrder += 1;
+      } else {
+        const q = qMap.get(item.clientId);
+        if (!q) continue;
+
         const qId = await syncQuestion(
           templateId,
-          question,
-          subsectionId,
+          { ...q, sortOrder: sharedSortOrder },
+          sectionId,
           client,
         );
         questionIds.add(qId);
+        sharedSortOrder += 1;
       }
     }
   }
@@ -542,27 +567,51 @@ async function insertSectionsAndQuestions(
 
     const sectionId = Number(sectionResult.rows[0].id);
 
-    for (const question of section.questions) {
-      await insertQuestionWithOptions(templateId, question, sectionId, client);
-    }
+    // Assign shared sort_order to subsections and direct questions based on
+    // the section layout. This preserves the interleaved creation order.
+    const layout = buildSectionLayoutOrder(
+      section.subsections,
+      section.questions,
+      section.layout,
+    );
+    const subMap = new Map(section.subsections.map((s) => [s.clientId, s]));
+    const qMap = new Map(section.questions.map((q) => [q.clientId, q]));
+    let sharedSortOrder = 0;
 
-    for (const subsection of section.subsections) {
-      const subsectionResult = await client.query<{ id: string }>(
-        `INSERT INTO form_sections (template_id, parent_section_id, title, sort_order)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
-        [templateId, sectionId, subsection.title, subsection.sortOrder],
-      );
+    for (const item of layout) {
+      if (item.kind === "subsection") {
+        const sub = subMap.get(item.clientId);
+        if (!sub) continue;
 
-      const subsectionId = Number(subsectionResult.rows[0].id);
+        const subsectionResult = await client.query<{ id: string }>(
+          `INSERT INTO form_sections (template_id, parent_section_id, title, sort_order)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id`,
+          [templateId, sectionId, sub.title, sharedSortOrder],
+        );
 
-      for (const question of subsection.questions) {
+        const subsectionId = Number(subsectionResult.rows[0].id);
+
+        for (const question of sub.questions) {
+          await insertQuestionWithOptions(
+            templateId,
+            question,
+            subsectionId,
+            client,
+          );
+        }
+        sharedSortOrder += 1;
+      } else {
+        const q = qMap.get(item.clientId);
+        if (!q) continue;
+
         await insertQuestionWithOptions(
           templateId,
-          question,
-          subsectionId,
+          { ...q, sortOrder: sharedSortOrder },
+          sectionId,
           client,
         );
+        sharedSortOrder += 1;
       }
     }
   }
@@ -691,6 +740,7 @@ async function getFormStructureForTemplate(
 
   for (const section of topLevelSections) {
     const sectionId = Number(section.id);
+    const sectionQuestions = questionsBySectionId.get(sectionId) ?? [];
     const subsections = sectionsResult.rows
       .filter((row) => row.parent_section_id === section.id)
       .map((subsection) => ({
@@ -700,12 +750,45 @@ async function getFormStructureForTemplate(
         questions: questionsBySectionId.get(Number(subsection.id)) ?? [],
       }));
 
+    // Build the interleaved layout by merging subsections and direct
+    // questions by their sort_order values (shared pool). This preserves
+    // the creation order instead of grouping subsections before questions.
+    type LayoutItem = {
+      kind: "subsection" | "question";
+      id: number;
+      sortOrder: number;
+      tie: number;
+    };
+    const layoutItems: LayoutItem[] = [
+      ...subsections.map((sub, i) => ({
+        kind: "subsection" as const,
+        id: sub.id,
+        sortOrder: sub.sortOrder,
+        tie: i,
+      })),
+      ...sectionQuestions.map((q, i) => ({
+        kind: "question" as const,
+        id: q.id,
+        sortOrder: q.sortOrder,
+        tie: i,
+      })),
+    ];
+
+    layoutItems.sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      if (a.kind === b.kind) return a.tie - b.tie;
+      return a.kind === "subsection" ? -1 : 1;
+    });
+
+    const layout = layoutItems.map(({ kind, id }) => ({ kind, id }));
+
     sections.push({
       id: sectionId,
       title: section.title,
       sortOrder: section.sort_order,
       subsections,
-      questions: questionsBySectionId.get(sectionId) ?? [],
+      questions: sectionQuestions,
+      layout,
     });
   }
 

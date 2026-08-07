@@ -21,7 +21,6 @@ import type {
 import {
   flattenAllQuestions,
   type FormTemplateRecord,
-  type QuestionRecord,
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
 import {
@@ -43,13 +42,11 @@ interface EmployeeFormFillProps {
 }
 
 function buildPreviewDetail(template: FormTemplateRecord): EmployeeFormDetail {
+  // Match the backend's calculateMaxRawScore: sum ALL scored questions
+  // regardless of selfAssessmentEnabled or isRequired status. This ensures
+  // the preview shows the same total as the live assessment flow.
   const maxRawScore = flattenAllQuestions(template)
-    .filter(
-      (question) =>
-        Number(question.totalMarks) > 0 &&
-        template.selfAssessmentEnabled &&
-        question.selfAssessmentEnabled,
-    )
+    .filter((question) => Number(question.totalMarks) > 0)
     .reduce((sum, question) => sum + Number(question.totalMarks), 0);
 
   return {
@@ -209,13 +206,11 @@ export default function EmployeeFormFill({
       return 0;
     }
 
+    // Match the backend's calculateMaxRawScore: sum ALL scored questions
+    // regardless of selfAssessmentEnabled or isRequired status. This ensures
+    // the displayed total matches the form's configured max marks.
     const fromTemplate = flattenAllQuestions(data.template)
-      .filter(
-        (question) =>
-          isScoredQuestion(question) &&
-          data.selfAssessmentEnabled &&
-          question.selfAssessmentEnabled,
-      )
+      .filter(isScoredQuestion)
       .reduce((sum, question) => sum + Number(question.totalMarks), 0);
 
     return fromTemplate > 0 ? fromTemplate : (data.maxRawScore ?? 0);
@@ -580,14 +575,14 @@ export default function EmployeeFormFill({
                         </tr>
                       ) : null}
                       {row.isFirstInSubsection && row.subsectionTitle ? (
-                        <tr className="bg-amber-50/50 dark:bg-amber-950/10">
-                          <td colSpan={6} className="form-section-header-cell pl-8 text-xs font-bold text-amber-700 dark:text-amber-300">
+                        <tr className="bg-teal-50/60 dark:bg-teal-950/20">
+                          <td colSpan={6} className="form-section-header-cell pl-8 text-xs font-bold text-teal-700 dark:text-teal-300">
                             {formatSubsectionLabel(row)}
                           </td>
                         </tr>
                       ) : null}
                       {row.isHeaderOnly ? (
-                        <tr className="bg-amber-50/40 dark:bg-amber-950/10">
+                        <tr className="bg-teal-50/40 dark:bg-teal-950/10">
                           <td colSpan={6} className="px-3 py-2 pl-10 text-xs italic text-amber-400 dark:text-amber-400/70">
                             No questions in this subsection
                           </td>

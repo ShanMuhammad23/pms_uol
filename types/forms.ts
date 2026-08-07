@@ -173,6 +173,15 @@ export interface FormSubsectionInput {
   questions: QuestionInput[];
 }
 
+/**
+ * Ordered layout item within a section — defines the interleaved display
+ * order of subsections and direct questions. Mirrors the root-level layout
+ * concept (FormRootLayoutItem) but for section children.
+ */
+export type FormSectionLayoutInputItem =
+  | { kind: "subsection"; clientId: string }
+  | { kind: "question"; clientId: string };
+
 export interface FormSectionInput {
   id?: number;
   clientId: string;
@@ -180,6 +189,12 @@ export interface FormSectionInput {
   sortOrder: number;
   subsections: FormSubsectionInput[];
   questions: QuestionInput[];
+  /**
+   * Ordered list of subsection/question clientIds defining the interleaved
+   * display order within this section. When absent, falls back to
+   * subsections-first then questions (legacy behavior).
+   */
+  layout?: FormSectionLayoutInputItem[];
 }
 
 export interface FormSubsectionRecord {
@@ -189,12 +204,26 @@ export interface FormSubsectionRecord {
   questions: QuestionRecord[];
 }
 
+/**
+ * Ordered layout item within a section (record form) — defines the
+ * interleaved display order of subsections and direct questions.
+ */
+export type FormSectionLayoutRecordItem =
+  | { kind: "subsection"; id: number }
+  | { kind: "question"; id: number };
+
 export interface FormSectionRecord {
   id: number;
   title: string;
   sortOrder: number;
   subsections: FormSubsectionRecord[];
   questions: QuestionRecord[];
+  /**
+   * Ordered list of subsection/question IDs defining the interleaved
+   * display order within this section. When absent, falls back to
+   * subsections-first then questions (legacy behavior).
+   */
+  layout?: FormSectionLayoutRecordItem[];
 }
 
 export interface IncrementMatrixInput {
@@ -365,6 +394,7 @@ export function createEmptySection(sortOrder: number): FormSectionInput {
     sortOrder,
     subsections: [],
     questions: [],
+    layout: [],
   };
 }
 
@@ -392,9 +422,10 @@ export function getNextRootSortOrder(
   return Math.max(...values) + 1;
 }
 
-function compareRootLayoutEntries<T extends { sortOrder: number; tie: number; kind: "section" | "question" }>(
+function compareLayoutEntries<T extends { sortOrder: number; tie: number; kind: string }>(
   left: T,
   right: T,
+  firstKind: string,
 ): number {
   if (left.sortOrder !== right.sortOrder) {
     return left.sortOrder - right.sortOrder;
@@ -404,7 +435,15 @@ function compareRootLayoutEntries<T extends { sortOrder: number; tie: number; ki
     return left.tie - right.tie;
   }
 
-  return left.kind === "section" ? -1 : 1;
+  return left.kind === firstKind ? -1 : 1;
+}
+
+/** Backward-compatible comparator for root-level layout (sections before questions on tie). */
+function compareRootLayoutEntries<T extends { sortOrder: number; tie: number; kind: "section" | "question" }>(
+  left: T,
+  right: T,
+): number {
+  return compareLayoutEntries(left, right, "section");
 }
 
 export function buildRootLayoutOrder(
@@ -489,6 +528,131 @@ export function normalizeRootFormStructure(
   }
 
   return { sections: nextSections, questions: nextQuestions };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Section-level layout helpers                                               */
+/*                                                                            */
+/* These mirror the root-level layout helpers but operate within a single     */
+/* section, defining the interleaved order of subsections and direct          */
+/* questions. When a section has a `layout` field, it is used directly.       */
+/* When absent (legacy data), subsections and questions are merged by their   */
+/* sort_order values using a shared sort_order pool.                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Build the interleaved layout for a section from its subsections and
+ * questions (input form). Uses the `layout` field if present, otherwise
+ * merges by sort_order.
+ */
+export function buildSectionLayoutOrder(
+  subsections: FormSubsectionInput[],
+  questions: QuestionInput[],
+  layout?: FormSectionLayoutInputItem[],
+): FormSectionLayoutInputItem[] {
+  if (layout && layout.length > 0) {
+    return layout;
+  }
+
+  // Legacy fallback: merge by sort_order using a shared pool.
+  const items = [
+    ...subsections.map((sub, index) => ({
+      kind: "subsection" as const,
+      clientId: sub.clientId,
+      sortOrder: sub.sortOrder,
+      tie: index,
+    })),
+    ...questions.map((q, index) => ({
+      kind: "question" as const,
+      clientId: q.clientId,
+      sortOrder: q.sortOrder,
+      tie: index,
+    })),
+  ];
+
+  items.sort((a, b) => compareLayoutEntries(a, b, "subsection"));
+
+  return items.map(({ kind, clientId }) => ({ kind, clientId }));
+}
+
+/**
+ * Build the interleaved layout for a section from its subsections and
+ * questions (record form). Uses the `layout` field if present, otherwise
+ * merges by sort_order.
+ */
+export function buildSectionLayoutOrderFromRecord(
+  subsections: FormSubsectionRecord[],
+  questions: QuestionRecord[],
+  layout?: FormSectionLayoutRecordItem[],
+): FormSectionLayoutRecordItem[] {
+  if (layout && layout.length > 0) {
+    return layout;
+  }
+
+  // Legacy fallback: merge by sort_order using a shared pool.
+  const items = [
+    ...subsections.map((sub, index) => ({
+      kind: "subsection" as const,
+      id: sub.id,
+      sortOrder: sub.sortOrder,
+      tie: index,
+    })),
+    ...questions.map((q, index) => ({
+      kind: "question" as const,
+      id: q.id,
+      sortOrder: q.sortOrder,
+      tie: index,
+    })),
+  ];
+
+  items.sort((a, b) => compareLayoutEntries(a, b, "subsection"));
+
+  return items.map(({ kind, id }) => ({ kind, id }));
+}
+
+/**
+ * Normalize a section's internal layout: assign sequential sort_order
+ * values to subsections and questions based on their position in the
+ * layout. This ensures the shared sort_order pool is consistent.
+ */
+export function normalizeSectionLayout(
+  section: FormSectionInput,
+): FormSectionInput {
+  const layout = buildSectionLayoutOrder(
+    section.subsections,
+    section.questions,
+    section.layout,
+  );
+
+  const subMap = new Map(section.subsections.map((s) => [s.clientId, s]));
+  const qMap = new Map(section.questions.map((q) => [q.clientId, q]));
+
+  const nextSubs: FormSubsectionInput[] = [];
+  const nextQs: QuestionInput[] = [];
+  let sortOrder = 0;
+
+  for (const item of layout) {
+    if (item.kind === "subsection") {
+      const sub = subMap.get(item.clientId);
+      if (sub) {
+        nextSubs.push({ ...sub, sortOrder });
+        sortOrder += 1;
+      }
+    } else {
+      const q = qMap.get(item.clientId);
+      if (q) {
+        nextQs.push({ ...q, sortOrder });
+        sortOrder += 1;
+      }
+    }
+  }
+
+  return {
+    ...section,
+    subsections: nextSubs,
+    questions: nextQs,
+    layout,
+  };
 }
 
 export function countAllQuestions(

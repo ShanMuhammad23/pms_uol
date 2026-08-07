@@ -33,6 +33,7 @@ import {
   FIELD_TYPE_LABELS,
   applyQuestionInputTypeChange,
   buildRootLayoutOrder,
+  buildSectionLayoutOrder,
   createEmptySection,
   getNextRootSortOrder,
   mapQuestionRecordToInput,
@@ -94,18 +95,38 @@ function draftToTemplateRecord(
     })),
   });
 
-  const recordSections: FormSectionRecord[] = sections.map((s) => ({
-    id: s.id ?? nextId(),
-    title: s.title,
-    sortOrder: s.sortOrder,
-    subsections: s.subsections.map((sub): FormSubsectionRecord => ({
+  const recordSections: FormSectionRecord[] = sections.map((s) => {
+    const sectionId = s.id ?? nextId();
+    const mappedSubsections = s.subsections.map((sub): FormSubsectionRecord => ({
       id: sub.id ?? nextId(),
       title: sub.title,
       sortOrder: sub.sortOrder,
       questions: sub.questions.map(mapQuestion),
-    })),
-    questions: s.questions.map(mapQuestion),
-  }));
+    }));
+    const mappedQuestions = s.questions.map(mapQuestion);
+
+    // Build id-based layout from clientId-based layout.
+    const subIdByClientId = new Map(mappedSubsections.map((sub) => [sub.id, sub.id]));
+    const subIdLookup = new Map(s.subsections.map((sub, i) => [sub.clientId, mappedSubsections[i].id]));
+    const qIdLookup = new Map(s.questions.map((q, i) => [q.clientId, mappedQuestions[i].id]));
+    const sectionLayout = (s.layout ?? []).map((item) => {
+      if (item.kind === "subsection") {
+        const id = subIdLookup.get(item.clientId);
+        return id ? { kind: "subsection" as const, id } : null;
+      }
+      const id = qIdLookup.get(item.clientId);
+      return id ? { kind: "question" as const, id } : null;
+    }).filter((item): item is { kind: "subsection"; id: number } | { kind: "question"; id: number } => item !== null);
+
+    return {
+      id: sectionId,
+      title: s.title,
+      sortOrder: s.sortOrder,
+      subsections: mappedSubsections,
+      questions: mappedQuestions,
+      layout: sectionLayout,
+    };
+  });
 
   const recordQuestions: QuestionRecord[] = questions.map(mapQuestion);
 
@@ -141,20 +162,48 @@ interface FormBuilderWizardProps {
 }
 
 function mapRecordToState(record: FormTemplateRecord) {
-  const mappedSections = record.sections.map((section) => ({
-    clientId: createClientId(),
-    id: section.id,
-    title: section.title,
-    sortOrder: section.sortOrder,
-    questions: section.questions.map(mapQuestionRecordToInput),
-    subsections: section.subsections.map((subsection) => ({
+  const mappedSections = record.sections.map((section) => {
+    const sectionClientId = createClientId();
+    const mappedSubsections = section.subsections.map((subsection) => ({
       clientId: createClientId(),
       id: subsection.id,
       title: subsection.title,
       sortOrder: subsection.sortOrder,
       questions: subsection.questions.map(mapQuestionRecordToInput),
-    })),
-  }));
+    }));
+    const mappedSectionQuestions = section.questions.map(mapQuestionRecordToInput);
+
+    // Build clientId-based layout from the record's id-based layout.
+    const subClientIdById = new Map(
+      mappedSubsections.map((sub) => [sub.id!, sub.clientId]),
+    );
+    const qClientIdById = new Map(
+      mappedSectionQuestions.map((q) => [q.id!, q.clientId]),
+    );
+    const sectionLayout = (section.layout ?? [])
+      .map((item) => {
+        if (item.kind === "subsection") {
+          const clientId = subClientIdById.get(item.id);
+          return clientId ? { kind: "subsection" as const, clientId } : null;
+        }
+        const clientId = qClientIdById.get(item.id);
+        return clientId ? { kind: "question" as const, clientId } : null;
+      })
+      .filter(
+        (item): item is { kind: "subsection"; clientId: string } | { kind: "question"; clientId: string } =>
+          item !== null,
+      );
+
+    return {
+      clientId: sectionClientId,
+      id: section.id,
+      title: section.title,
+      sortOrder: section.sortOrder,
+      questions: mappedSectionQuestions,
+      subsections: mappedSubsections,
+      layout: sectionLayout,
+    };
+  });
   const mappedQuestions = record.questions.map(mapQuestionRecordToInput);
   const normalized = normalizeRootFormStructure(mappedSections, mappedQuestions);
 
@@ -356,12 +405,11 @@ function ModernFormDesignStep({
       sections.map(s => {
         if (s.clientId === sectionClientId) {
           const nextSortOrder = s.questions.length === 0 ? 0 : Math.max(...s.questions.map(q => q.sortOrder)) + 1;
+          const newQ = createEmptyQuestion(nextSortOrder);
           return {
             ...s,
-            questions: [
-              ...s.questions,
-              createEmptyQuestion(nextSortOrder),
-            ],
+            questions: [...s.questions, newQ],
+            layout: [...(s.layout ?? []), { kind: "question" as const, clientId: newQ.clientId }],
           };
         }
         return s;
@@ -391,6 +439,9 @@ function ModernFormDesignStep({
             .filter(q => q.clientId !== questionClientId)
             .map((question, sortOrder) => ({ ...question, sortOrder })),
         })),
+        layout: (s.layout ?? []).filter(
+          item => !(item.kind === "question" && item.clientId === questionClientId),
+        ),
       })),
       questions,
     );
@@ -427,12 +478,11 @@ function ModernFormDesignStep({
       sections.map(s => {
         if (s.clientId === sectionClientId) {
           const nextSortOrder = s.subsections.length === 0 ? 0 : Math.max(...s.subsections.map(sub => sub.sortOrder)) + 1;
+          const newSub = createEmptySubsection(nextSortOrder);
           return {
             ...s,
-            subsections: [
-              ...s.subsections,
-              createEmptySubsection(nextSortOrder),
-            ],
+            subsections: [...s.subsections, newSub],
+            layout: [...(s.layout ?? []), { kind: "subsection" as const, clientId: newSub.clientId }],
           };
         }
         return s;
@@ -450,6 +500,9 @@ function ModernFormDesignStep({
             subsections: s.subsections
               .filter(sub => sub.clientId !== subsectionClientId)
               .map((sub, sortOrder) => ({ ...sub, sortOrder })),
+            layout: (s.layout ?? []).filter(
+              item => !(item.kind === "subsection" && item.clientId === subsectionClientId),
+            ),
           };
         }
         return s;
@@ -1041,8 +1094,8 @@ function SubsectionCard({
       className={cn(
         "relative rounded-md border p-3 transition-all",
         titleError
-          ? "border-amber-300 bg-amber-50/50 dark:border-amber-600/50 dark:bg-amber-950/30"
-          : "border-indigo-200/70 bg-white shadow-sm hover:border-indigo-300 dark:border-indigo-500/30 dark:bg-slate-900/40",
+          ? "border-red-300 bg-red-50/50 dark:border-red-600/50 dark:bg-red-950/30"
+          : "border-teal-200/70 bg-teal-50/30 shadow-sm hover:border-teal-300 dark:border-teal-500/30 dark:bg-teal-950/20",
         dragOverPos === "before" && "rounded-t-none border-t-2 border-t-primary",
         dragOverPos === "after" && "rounded-b-none border-b-2 border-b-primary"
       )}
@@ -1064,12 +1117,12 @@ function SubsectionCard({
             }));
             e.dataTransfer.effectAllowed = "move";
           }}
-          className="mt-1 flex cursor-grab items-center text-amber-300 hover:text-amber-600 active:cursor-grabbing dark:text-amber-500 dark:hover:text-amber-300"
+          className="mt-1 flex cursor-grab items-center text-teal-300 hover:text-teal-600 active:cursor-grabbing dark:text-teal-500 dark:hover:text-teal-300"
           title="Drag to move subsection"
         >
           <GripVertical className="h-4 w-4" />
         </div>
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-amber-100 text-[10px] font-bold text-amber-700 dark:bg-amber-800/50 dark:text-amber-200">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-teal-100 text-[10px] font-bold text-teal-700 dark:bg-teal-800/50 dark:text-teal-200">
           {sectionIndex + 1}.{subsectionIndex + 1}
         </div>
         <input
@@ -1079,20 +1132,20 @@ function SubsectionCard({
           placeholder="Subsection Title"
           className={cn(
             "min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none",
-            titleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400" : "text-indigo-900 placeholder:text-indigo-400 dark:text-indigo-100"
+            titleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400" : "text-teal-900 placeholder:text-teal-400 dark:text-teal-100"
           )}
         />
         <div className="flex items-center gap-1">
           <button
             onClick={onAddQuestion}
-            className="rounded p-1 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-800/40"
+            className="rounded p-1 text-teal-400 hover:bg-teal-100 hover:text-teal-700 dark:text-teal-400 dark:hover:bg-teal-800/40"
             title="Add question"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={onRemove}
-            className="rounded p-1 text-indigo-400 hover:bg-red-100 hover:text-red-600 dark:text-indigo-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+            className="rounded p-1 text-teal-400 hover:bg-red-100 hover:text-red-600 dark:text-teal-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
             title="Delete subsection"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -1340,37 +1393,8 @@ function SectionCard({
             </p>
           )}
 
-          {section.subsections.length > 0 && (
-            <div className="mb-4 space-y-3">
-              <h5 className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
-                Subsections
-              </h5>
-              {section.subsections.map((sub, subIndex) => (
-                <SubsectionCard
-                  key={sub.clientId}
-                  subsection={sub}
-                  subsectionIndex={subIndex}
-                  sectionIndex={index}
-                  sectionClientId={section.clientId}
-                  errors={errors}
-                  onUpdate={(updates) => onUpdate({
-                    subsections: section.subsections.map(s => s.clientId === sub.clientId ? { ...s, ...updates } : s),
-                  })}
-                  onRemove={() => onRemoveSubsection(sub.clientId)}
-                  onAddQuestion={() => onAddQuestionToSubsection(sub.clientId)}
-                  onRemoveQuestion={onRemoveQuestion}
-                  onUpdateQuestion={onUpdateQuestion}
-                  onMoveQuestion={onMoveQuestion}
-                  onDropSubsection={(dragSubsectionClientId, sourceSectionClientId, insertIndex) =>
-                    onDropSubsection(dragSubsectionClientId, sourceSectionClientId, insertIndex)
-                  }
-                  formSelfAssessmentEnabled={formSelfAssessmentEnabled}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Section Questions - Drop Target */}
+          {/* Interleaved section children — subsections and direct questions
+              rendered in creation order using the section layout. */}
           <div
             onDragOver={(e) => {
               e.preventDefault();
@@ -1391,33 +1415,80 @@ function SectionCard({
               sectionDragOver && "ring-2 ring-primary/40 bg-primary/5"
             )}
           >
-            {section.questions.map((question, qIdx) => (
-              <QuestionCard
-                key={question.clientId}
-                question={question}
-                index={qIdx}
-                errorPrefix={`section-${index}-question-${qIdx}`}
-                errors={errors}
-                sourceLocation={{ sectionClientId: section.clientId, subsectionClientId: null }}
-                onRemove={() => onRemoveQuestion(question.clientId)}
-                onChange={(updates) => onUpdateQuestion(question.clientId, updates)}
-                onDropQuestion={(dragData, insertIndex) => {
-                  onMoveQuestion(dragData.questionClientId, dragData.source, {
-                    sectionClientId: section.clientId,
-                    subsectionClientId: null,
-                    insertIndex,
-                  });
-                }}
-                compact
-                formSelfAssessmentEnabled={formSelfAssessmentEnabled}
-              />
-            ))}
-            
-            {section.questions.length === 0 && (
-              <div className="rounded-lg border border-dashed border-indigo-200 py-6 text-center dark:border-indigo-500/30">
-                <p className="text-xs text-indigo-400 dark:text-indigo-400/70">No questions yet — drag here or click Add Question</p>
-              </div>
-            )}
+            {(() => {
+              const sectionLayout = buildSectionLayoutOrder(
+                section.subsections,
+                section.questions,
+                section.layout,
+              );
+              let qCounter = 0;
+              let subCounter = 0;
+
+              if (sectionLayout.length === 0) {
+                return (
+                  <div className="rounded-lg border border-dashed border-indigo-200 py-6 text-center dark:border-indigo-500/30">
+                    <p className="text-xs text-indigo-400 dark:text-indigo-400/70">No questions or subsections yet — add using the buttons below</p>
+                  </div>
+                );
+              }
+
+              return sectionLayout.map((item) => {
+                if (item.kind === "subsection") {
+                  const sub = section.subsections.find(s => s.clientId === item.clientId);
+                  if (!sub) return null;
+                  const subIndex = subCounter++;
+
+                  return (
+                    <SubsectionCard
+                      key={sub.clientId}
+                      subsection={sub}
+                      subsectionIndex={subIndex}
+                      sectionIndex={index}
+                      sectionClientId={section.clientId}
+                      errors={errors}
+                      onUpdate={(updates) => onUpdate({
+                        subsections: section.subsections.map(s => s.clientId === sub.clientId ? { ...s, ...updates } : s),
+                      })}
+                      onRemove={() => onRemoveSubsection(sub.clientId)}
+                      onAddQuestion={() => onAddQuestionToSubsection(sub.clientId)}
+                      onRemoveQuestion={onRemoveQuestion}
+                      onUpdateQuestion={onUpdateQuestion}
+                      onMoveQuestion={onMoveQuestion}
+                      onDropSubsection={(dragSubsectionClientId, sourceSectionClientId, insertIndex) =>
+                        onDropSubsection(dragSubsectionClientId, sourceSectionClientId, insertIndex)
+                      }
+                      formSelfAssessmentEnabled={formSelfAssessmentEnabled}
+                    />
+                  );
+                }
+
+                const question = section.questions.find(q => q.clientId === item.clientId);
+                if (!question) return null;
+                const qIdx = qCounter++;
+
+                return (
+                  <QuestionCard
+                    key={question.clientId}
+                    question={question}
+                    index={qIdx}
+                    errorPrefix={`section-${index}-question-${qIdx}`}
+                    errors={errors}
+                    sourceLocation={{ sectionClientId: section.clientId, subsectionClientId: null }}
+                    onRemove={() => onRemoveQuestion(question.clientId)}
+                    onChange={(updates) => onUpdateQuestion(question.clientId, updates)}
+                    onDropQuestion={(dragData, insertIndex) => {
+                      onMoveQuestion(dragData.questionClientId, dragData.source, {
+                        sectionClientId: section.clientId,
+                        subsectionClientId: null,
+                        insertIndex,
+                      });
+                    }}
+                    compact
+                    formSelfAssessmentEnabled={formSelfAssessmentEnabled}
+                  />
+                );
+              });
+            })()}
           </div>
 
           {/* Action Bar */}

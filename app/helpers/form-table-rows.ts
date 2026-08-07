@@ -1,5 +1,6 @@
 import {
   buildRootLayoutOrderFromRecord,
+  buildSectionLayoutOrderFromRecord,
   type FormSectionRecord,
   type FormSubsectionRecord,
   type QuestionRecord,
@@ -83,29 +84,24 @@ export function buildFormTableRows(
     }
   };
 
-  const collectSectionQuestions = (
+  const collectSectionQuestion = (
     section: FormSectionRecord,
     currentSectionNumber: number,
+    question: QuestionRecord,
   ) => {
-    const startIdx = rows.length;
-
-    section.questions.forEach((question) => {
-      sr += 1;
-      rows.push({
-        sr,
-        sectionTitle: section.title,
-        sectionNumber: currentSectionNumber,
-        subsectionTitle: null,
-        subsectionNumber: null,
-        question,
-        isFirstInSection: false,
-        isFirstInSubsection: false,
-        sectionRowCount: 0,
-        isHeaderOnly: false,
-      });
+    sr += 1;
+    rows.push({
+      sr,
+      sectionTitle: section.title,
+      sectionNumber: currentSectionNumber,
+      subsectionTitle: null,
+      subsectionNumber: null,
+      question,
+      isFirstInSection: false,
+      isFirstInSubsection: false,
+      sectionRowCount: 0,
+      isHeaderOnly: false,
     });
-
-    return startIdx;
   };
 
   rootLayout.forEach((item) => {
@@ -116,10 +112,28 @@ export function buildFormTableRows(
       sectionNumber += 1;
       const sectionStartIdx = rows.length;
 
-      section.subsections.forEach((sub, subIndex) =>
-        collectSubsectionQuestions(section, sub, sectionNumber, subIndex),
+      // Use the section layout to interleave subsections and direct questions
+      // in their creation order, instead of grouping subsections first.
+      const sectionLayout = buildSectionLayoutOrderFromRecord(
+        section.subsections,
+        section.questions,
+        section.layout,
       );
-      collectSectionQuestions(section, sectionNumber);
+
+      let subCounter = 0;
+
+      for (const layoutItem of sectionLayout) {
+        if (layoutItem.kind === "subsection") {
+          const sub = section.subsections.find((s) => s.id === layoutItem.id);
+          if (!sub) continue;
+          collectSubsectionQuestions(section, sub, sectionNumber, subCounter);
+          subCounter += 1;
+        } else {
+          const question = section.questions.find((q) => q.id === layoutItem.id);
+          if (!question) continue;
+          collectSectionQuestion(section, sectionNumber, question);
+        }
+      }
 
       if (rows.length > sectionStartIdx) {
         rows[sectionStartIdx].isFirstInSection = true;

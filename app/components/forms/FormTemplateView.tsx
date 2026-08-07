@@ -126,14 +126,14 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                         </tr>
                       ) : null}
                       {row.isFirstInSubsection && row.subsectionTitle ? (
-                        <tr className="bg-indigo-50/70 dark:bg-indigo-900/20">
-                          <td colSpan={7} className="form-section-header-cell pl-8 text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                        <tr className="bg-teal-50/60 dark:bg-teal-950/20">
+                          <td colSpan={7} className="form-section-header-cell pl-8 text-xs font-bold text-teal-700 dark:text-teal-300">
                             {formatSubsectionLabel(row)}
                           </td>
                         </tr>
                       ) : null}
                       {row.isHeaderOnly ? (
-                        <tr className="bg-indigo-50/40 dark:bg-indigo-950/10">
+                        <tr className="bg-teal-50/40 dark:bg-teal-950/10">
                           <td colSpan={7} className="px-3 py-2 pl-10 text-xs italic text-indigo-400 dark:text-indigo-400/70">
                             No questions in this subsection
                           </td>

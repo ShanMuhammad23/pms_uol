@@ -353,17 +353,17 @@ export default function FormAssessmentPreview({
                         </tr>
                       ) : null}
                       {row.isFirstInSubsection && row.subsectionTitle ? (
-                        <tr className="bg-slate-50 dark:bg-slate-800/40">
+                        <tr className="bg-teal-50/60 dark:bg-teal-950/20">
                           <td
                             colSpan={headerColSpan}
-                            className="px-3 py-2 pl-8 text-xs font-bold text-slate-600 dark:text-slate-300"
+                            className="px-3 py-2 pl-8 text-xs font-bold text-teal-700 dark:text-teal-300"
                           >
                             {formatSubsectionLabel(row)}
                           </td>
                         </tr>
                       ) : null}
                       {row.isHeaderOnly ? (
-                        <tr className="bg-slate-50/40 dark:bg-slate-800/20">
+                        <tr className="bg-teal-50/40 dark:bg-teal-950/10">
                           <td
                             colSpan={headerColSpan}
                             className="px-3 py-2 pl-10 text-xs italic text-slate-400"
