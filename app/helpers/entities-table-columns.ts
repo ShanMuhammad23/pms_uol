@@ -42,17 +42,19 @@ export const ENTITIES_TABLE_COLUMNS: EntitiesTableColumnDef[] = [
   {
     id: "category",
     label: "Category",
+    widthClass: "w-[12%]",
     getValue: (row) => formatNullable(row.categoryCode),
   },
   {
     id: "parent",
     label: "Parent",
+    widthClass: "w-[24%]",
     getValue: (row) => formatParent(row),
   },
   {
     id: "name",
     label: "Name",
-    widthClass: "w-56 min-w-56 max-w-56",
+    widthClass: "w-[26%]",
     getValue: (row) => formatNullable(row.name),
   },
   {
@@ -60,17 +62,20 @@ export const ENTITIES_TABLE_COLUMNS: EntitiesTableColumnDef[] = [
     label: "Staff",
     align: "right",
     numeric: true,
+    widthClass: "w-[8%]",
     getValue: (row) => String(row.staffCount),
   },
   {
     id: "updated",
     label: "Updated",
+    widthClass: "w-[18%]",
     getValue: (row) => formatUpdatedAt(row.updatedAt),
   },
   {
     id: "actions",
     label: "Actions",
     align: "right",
+    widthClass: "w-[12%]",
     getValue: () => "",
   },
 ];
