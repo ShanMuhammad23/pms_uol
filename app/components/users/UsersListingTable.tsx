@@ -4,11 +4,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
+  List,
   Pencil,
   Search,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
 import { ResizableHeader } from "@/app/components/common/ResizableHeader";
 import {
@@ -20,6 +21,7 @@ import {
   SELECT_COLUMN_WIDTH,
   type ColumnDef,
 } from "@/app/hooks/use-column-config";
+import { useVirtualRows } from "@/app/hooks/use-virtual-rows";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
 import { UsersMasterFilter } from "@/app/components/users/UsersMasterFilter";
 import { UsersTableColumnHeaderFilter } from "@/app/components/users/UsersTableColumnHeaderFilter";
@@ -42,10 +44,11 @@ import {
 import { useUsersByEmployeeIdsQuery } from "@/app/queries/users";
 import type { UserRecord } from "@/types/users";
 import { ExcelExportButton } from "@/app/components/common/ExcelExportButton";
-import { ClearAllFiltersButton } from "@/app/components/common/ClearAllFiltersButton";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
+/** Server-side cap on employee IDs per request (see /api/admin/users route). */
+const MAX_EMPLOYEE_IDS = 200;
 
 interface UsersListingTableProps {
   /** Filter-bar-filtered overview rows (drives facets + page ID selection). */
@@ -55,6 +58,13 @@ interface UsersListingTableProps {
   onDelete: (user: UserRecord) => void;
   deletePending?: boolean;
   onClearAllFilters: () => void;
+  /** Called once on mount (and when the handler changes) to register the
+   * table's combined clear-all handler with the parent so it can be wired
+   * to the global Clear All Filters button in the filter bar. */
+  onRegisterClearAll?: (clearFn: () => void) => void;
+  /** Called whenever the table's combined hasActiveFilters flag changes so
+   * the parent can show/hide the global Clear All Filters button. */
+  onActiveFiltersChange?: (active: boolean) => void;
 }
 
 
@@ -186,8 +196,12 @@ export function UsersListingTable({
   onDelete,
   deletePending = false,
   onClearAllFilters,
+  onRegisterClearAll,
+  onActiveFiltersChange,
 }: UsersListingTableProps) {
   const [page, setPage] = useState(1);
+  const [showAll, setShowAll] = useState(false);
+  const [hasFullDataset, setHasFullDataset] = useState(false);
   const [masterFilters, setMasterFilters] = useState<UsersMasterFilterState>(
     EMPTY_USERS_MASTER_FILTER_STATE,
   );
@@ -222,33 +236,57 @@ export function UsersListingTable({
   );
 
   const totalCount = masterFilteredUsers.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  // When Show All is active OR we have a cached full dataset, always fetch
+  // all employee IDs (page 1, all records). This keeps the query key
+  // identical so React Query returns the cached response without refetching
+  // when the user toggles between Show All and Show Paginated.
+  const useFullDataset = showAll || hasFullDataset;
+  const queryPageSize = useFullDataset ? totalCount : PAGE_SIZE;
+  const queryPage = useFullDataset ? 1 : page;
+
+  // Display page size: PAGE_SIZE for paginated view, totalCount for Show All.
+  const displayPageSize = showAll ? totalCount : PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(totalCount / displayPageSize));
 
   useEffect(() => {
     setPage(1);
-  }, [users, masterFilters]);
+  }, [users, masterFilters, showAll]);
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
+  // Invalidate the full-dataset cache when filters change.
+  useEffect(() => {
+    setHasFullDataset(false);
+  }, [users, masterFilters]);
+
   const pageEmployeeIds = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
+    const start = (queryPage - 1) * queryPageSize;
     return masterFilteredUsers
-      .slice(start, start + PAGE_SIZE)
+      .slice(start, start + queryPageSize)
+      .slice(0, MAX_EMPLOYEE_IDS)
       .map((user) => user.employeeId);
-  }, [masterFilteredUsers, page]);
+  }, [masterFilteredUsers, queryPage, queryPageSize]);
 
   const pageOverviewUsers = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return masterFilteredUsers.slice(start, start + PAGE_SIZE);
-  }, [masterFilteredUsers, page]);
+    const start = (queryPage - 1) * queryPageSize;
+    return masterFilteredUsers.slice(start, start + queryPageSize);
+  }, [masterFilteredUsers, queryPage, queryPageSize]);
 
   const {
     data: pageUsersFromApi,
     isLoading: pageUsersLoading,
     isFetching: pageUsersFetching,
   } = useUsersByEmployeeIdsQuery(pageEmployeeIds);
+
+  // Cache the full dataset once Show All data arrives.
+  useEffect(() => {
+    if (showAll && pageUsersFromApi) {
+      setHasFullDataset(true);
+    }
+  }, [showAll, pageUsersFromApi]);
 
   const paginatedUsers = useMemo(() => {
     if (!pageUsersFromApi || pageUsersFromApi.length === 0) {
@@ -259,11 +297,30 @@ export function UsersListingTable({
       pageUsersFromApi.map((user) => [user.employeeId, user]),
     );
 
-    return pageEmployeeIds.map(
-      (employeeId, index) =>
-        byEmployeeId.get(employeeId) ?? pageOverviewUsers[index],
+    return pageOverviewUsers.map(
+      (overviewUser) =>
+        byEmployeeId.get(overviewUser.employeeId) ?? overviewUser,
     );
-  }, [pageUsersFromApi, pageEmployeeIds, pageOverviewUsers]);
+  }, [pageUsersFromApi, pageOverviewUsers]);
+
+  // When using the cached full dataset in paginated mode, slice the
+  // all-records response to show only the current page.
+  const displayUsers = useMemo(() => {
+    if (useFullDataset && !showAll) {
+      const start = (page - 1) * PAGE_SIZE;
+      return paginatedUsers.slice(start, start + PAGE_SIZE);
+    }
+    return paginatedUsers;
+  }, [paginatedUsers, useFullDataset, showAll, page]);
+
+  // Virtualize rows in Show All mode to avoid rendering thousands of DOM
+  // rows simultaneously. In paginated mode (50 rows) virtualization is
+  // disabled and all rows render normally.
+  const virtualRows = useVirtualRows({
+    count: displayUsers.length,
+    estimateSize: 33,
+    enabled: showAll,
+  });
 
   useEffect(() => {
     const available = new Set(masterFilteredUsers.map((row) => row.employeeId));
@@ -298,9 +355,9 @@ export function UsersListingTable({
     filteredEmployeeIds.every((id) => selectedEmployeeIds.has(id));
   const someFilteredSelected = selectedCount > 0 && !allFilteredSelected;
 
-  const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
-  const showPagination = totalCount > 0;
+  const rangeStart = totalCount === 0 ? 0 : (page - 1) * displayPageSize + 1;
+  const rangeEnd = Math.min(page * displayPageSize, totalCount);
+  const showPagination = !showAll && totalCount > 0;
   const pageBusy = pageEmployeeIds.length > 0 && (pageUsersLoading || pageUsersFetching);
 
 
@@ -379,18 +436,26 @@ export function UsersListingTable({
     });
   };
 
-  const clearMasterFilters = () => {
+  const clearMasterFilters = useCallback(() => {
     setMasterFilters(EMPTY_USERS_MASTER_FILTER_STATE);
-  };
+  }, []);
 
-  const handleClearAllFilters = () => {
+  const handleClearAllFilters = useCallback(() => {
     clearMasterFilters();
     onClearAllFilters();
-  };
+  }, [clearMasterFilters, onClearAllFilters]);
 
   const masterFilterActiveCount = countActiveUsersMasterFilters(masterFilters);
   const orgFiltersActive = allUsers != null && users.length !== allUsers.length;
   const hasActiveFilters = masterFilterActiveCount > 0 || orgFiltersActive;
+
+  useEffect(() => {
+    onRegisterClearAll?.(handleClearAllFilters);
+  }, [handleClearAllFilters, onRegisterClearAll]);
+
+  useEffect(() => {
+    onActiveFiltersChange?.(hasActiveFilters);
+  }, [hasActiveFilters, onActiveFiltersChange]);
 
   return (
     <motion.div
@@ -449,10 +514,16 @@ export function UsersListingTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <ClearAllFiltersButton
-            hasActiveFilters={hasActiveFilters}
-            onClearAllFilters={handleClearAllFilters}
-          />
+          <button
+            type="button"
+            onClick={() => setShowAll((prev) => !prev)}
+            disabled={totalCount === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.04]"
+            title={showAll ? "Return to paginated view" : "Show all records in a single page"}
+          >
+            <List className="h-3.5 w-3.5" />
+            {showAll ? "Show Paginated" : "Show All"}
+          </button>
           <ColumnManagementPanelTrigger
             open={columnMgmtOpen}
             onOpenChange={setColumnMgmtOpen}
@@ -480,7 +551,10 @@ export function UsersListingTable({
         </div>
       </div>
 
-      <div className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain">
+      <div
+        ref={virtualRows.enabled ? virtualRows.scrollRef : undefined}
+        className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain"
+      >
         <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
             <tr className="bg-primary text-white">
@@ -547,82 +621,169 @@ export function UsersListingTable({
             </tr>
           </thead>
           <tbody>
-            <AnimatePresence>
-              {paginatedUsers.map((user, index) => {
-                const isSelected = selectedEmployeeIds.has(user.employeeId);
-                return (
-                  <motion.tr
-                    key={user.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{
-                      duration: 0.35,
-                      delay: Math.min(index, 10) * 0.02,
-                      ease: [0.23, 1, 0.32, 1],
-                    }}
-                    className={cn(
-                      "group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
-                      isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
-                    )}
-                  >
-                    <td
-                      className={stickySelectCellClassName(isSelected)}
-                      style={{
-                        width: SELECT_COLUMN_WIDTH,
-                        minWidth: SELECT_COLUMN_WIDTH,
-                        maxWidth: SELECT_COLUMN_WIDTH,
-                      }}
+            {virtualRows.enabled ? (
+              <>
+                {virtualRows.virtualItems.length > 0 ? (
+                  <tr style={{ height: virtualRows.virtualItems[0].start }} />
+                ) : null}
+                {virtualRows.virtualItems.map((virtualItem) => {
+                  const user = displayUsers[virtualItem.index];
+                  if (!user) return null;
+                  const isSelected = selectedEmployeeIds.has(user.employeeId);
+                  return (
+                    <tr
+                      key={user.id}
+                      data-index={virtualItem.index}
+                      className={cn(
+                        "group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
+                        isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
+                      )}
                     >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleEmployeeSelection(user.employeeId)}
-                        aria-label={`Select ${user.firstName} ${user.lastName}`}
-                        className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20 dark:bg-slate-950"
-                      />
-                    </td>
-                    {visibleOrderedColumns.map((column) => {
-                      const col = column as UsersTableColumnDef;
-                      const value = col.getValue(user);
-                      const savedWidth = getColumnWidth(col.id, col.width);
-                      const isFrozen = frozenSet.has(col.id);
-                      return (
-                        <td
-                          key={col.id}
-                          className={cn(
-                            columnCellClassName(
+                      <td
+                        className={stickySelectCellClassName(isSelected)}
+                        style={{
+                          width: SELECT_COLUMN_WIDTH,
+                          minWidth: SELECT_COLUMN_WIDTH,
+                          maxWidth: SELECT_COLUMN_WIDTH,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleEmployeeSelection(user.employeeId)}
+                          aria-label={`Select ${user.firstName} ${user.lastName}`}
+                          className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20 dark:bg-slate-950"
+                        />
+                      </td>
+                      {visibleOrderedColumns.map((column) => {
+                        const col = column as UsersTableColumnDef;
+                        const value = col.getValue(user);
+                        const savedWidth = getColumnWidth(col.id, col.width);
+                        const isFrozen = frozenSet.has(col.id);
+                        return (
+                          <td
+                            key={col.id}
+                            className={cn(
+                              columnCellClassName(
+                                col,
+                                "align-middle border-b border-slate-100 dark:border-white/[0.03]",
+                              ),
+                              isFrozen && "sticky",
+                              isFrozen && (
+                                isSelected
+                                  ? "bg-amber-50 dark:bg-amber-950"
+                                  : "bg-white group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-slate-800"
+                              ),
+                              col.id === lastFrozenColumnId && "border-r-2 border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:border-white/20",
+                            )}
+                            style={{
+                              ...(savedWidth != null ? { width: savedWidth, minWidth: savedWidth, maxWidth: savedWidth } : {}),
+                              ...(isFrozen ? { left: stickyOffsets[col.id], zIndex: 20 } : {}),
+                            }}
+                          >
+                            {renderCell(
                               col,
-                              "align-middle border-b border-slate-100 dark:border-white/[0.03]",
-                            ),
-                            isFrozen && "sticky",
-                            isFrozen && (
-                              isSelected
-                                ? "bg-amber-50 dark:bg-amber-950"
-                                : "bg-white group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-slate-800"
-                            ),
-                            col.id === lastFrozenColumnId && "border-r-2 border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:border-white/20",
-                          )}
-                          style={{
-                            ...(savedWidth != null ? { width: savedWidth, minWidth: savedWidth, maxWidth: savedWidth } : {}),
-                            ...(isFrozen ? { left: stickyOffsets[col.id], zIndex: 20 } : {}),
-                          }}
-                        >
-                          {renderCell(
-                            col,
-                            user,
-                            value,
-                            onEdit,
-                            onDelete,
-                            deletePending,
-                          )}
-                        </td>
-                      );
-                    })}
-                  </motion.tr>
-                );
-              })}
-            </AnimatePresence>
+                              user,
+                              value,
+                              onEdit,
+                              onDelete,
+                              deletePending,
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                {virtualRows.virtualItems.length > 0 ? (
+                  <tr
+                    style={{
+                      height:
+                        virtualRows.totalSize -
+                        (virtualRows.virtualItems[virtualRows.virtualItems.length - 1]?.start ?? 0) -
+                        (virtualRows.virtualItems[virtualRows.virtualItems.length - 1]?.size ?? 0),
+                    }}
+                  />
+                ) : null}
+              </>
+            ) : (
+              <AnimatePresence>
+                {displayUsers.map((user, index) => {
+                  const isSelected = selectedEmployeeIds.has(user.employeeId);
+                  return (
+                    <motion.tr
+                      key={user.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{
+                        duration: 0.35,
+                        delay: Math.min(index, 10) * 0.02,
+                        ease: [0.23, 1, 0.32, 1],
+                      }}
+                      className={cn(
+                        "group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
+                        isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
+                      )}
+                    >
+                      <td
+                        className={stickySelectCellClassName(isSelected)}
+                        style={{
+                          width: SELECT_COLUMN_WIDTH,
+                          minWidth: SELECT_COLUMN_WIDTH,
+                          maxWidth: SELECT_COLUMN_WIDTH,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleEmployeeSelection(user.employeeId)}
+                          aria-label={`Select ${user.firstName} ${user.lastName}`}
+                          className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20 dark:bg-slate-950"
+                        />
+                      </td>
+                      {visibleOrderedColumns.map((column) => {
+                        const col = column as UsersTableColumnDef;
+                        const value = col.getValue(user);
+                        const savedWidth = getColumnWidth(col.id, col.width);
+                        const isFrozen = frozenSet.has(col.id);
+                        return (
+                          <td
+                            key={col.id}
+                            className={cn(
+                              columnCellClassName(
+                                col,
+                                "align-middle border-b border-slate-100 dark:border-white/[0.03]",
+                              ),
+                              isFrozen && "sticky",
+                              isFrozen && (
+                                isSelected
+                                  ? "bg-amber-50 dark:bg-amber-950"
+                                  : "bg-white group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-slate-800"
+                              ),
+                              col.id === lastFrozenColumnId && "border-r-2 border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:border-white/20",
+                            )}
+                            style={{
+                              ...(savedWidth != null ? { width: savedWidth, minWidth: savedWidth, maxWidth: savedWidth } : {}),
+                              ...(isFrozen ? { left: stickyOffsets[col.id], zIndex: 20 } : {}),
+                            }}
+                          >
+                            {renderCell(
+                              col,
+                              user,
+                              value,
+                              onEdit,
+                              onDelete,
+                              deletePending,
+                            )}
+                          </td>
+                        );
+                      })}
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
+            )}
           </tbody>
         </table>
       </div>

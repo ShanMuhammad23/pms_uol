@@ -184,18 +184,7 @@ export function buildUsersMasterFilterOptions(
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
-  if (
-    USERS_MASTER_FILTER_DATABASE_UNIQUE_COLUMN_IDS.has(column.id) &&
-    allUsers
-  ) {
-    for (const user of allUsers) {
-      const value = column.getValue(user);
-      if (!counts.has(value)) {
-        counts.set(value, 0);
-      }
-    }
-  }
-
+  // Keep currently selected values visible even if other filters zero them out.
   if (selectedValues) {
     for (const value of selectedValues) {
       if (!counts.has(value)) {
@@ -203,9 +192,6 @@ export function buildUsersMasterFilterOptions(
       }
     }
   }
-
-  const includeZeroCountOptions =
-    USERS_MASTER_FILTER_DATABASE_UNIQUE_COLUMN_IDS.has(column.id);
 
   return [...counts.entries()]
     .map(([value, count]) => ({
@@ -215,9 +201,7 @@ export function buildUsersMasterFilterOptions(
     }))
     .filter(
       (option) =>
-        option.count > 0 ||
-        selectedValues?.includes(option.value) ||
-        includeZeroCountOptions,
+        option.count > 0 || selectedValues?.includes(option.value),
     )
     .sort((left, right) => {
       if (left.value === "—") return 1;

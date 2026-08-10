@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Table2, Users } from "lucide-react";
-import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { EditUserModal } from "@/app/components/users/EditUserModal";
@@ -162,6 +162,15 @@ export default function UsersManager() {
     entities,
     designations,
   });
+
+  const tableClearAllRef = useRef<(() => void) | null>(null);
+  const [tableHasActiveFilters, setTableHasActiveFilters] = useState(false);
+  const registerTableClearAll = useCallback((clearFn: () => void) => {
+    tableClearAllRef.current = clearFn;
+  }, []);
+  const globalClearAllFilters = useCallback(() => {
+    tableClearAllRef.current?.();
+  }, []);
 
   const headOptions = useMemo(() => {
     return filterManagerEligibleUsers(users);
@@ -997,6 +1006,8 @@ export default function UsersManager() {
             activeFilters={activeFilters}
             onClearAllFilters={clearAllFilters}
             showFormStatus={false}
+            hasGlobalActiveFilters={tableHasActiveFilters}
+            onGlobalClearAllFilters={globalClearAllFilters}
           />
 
           <UsersListingTable
@@ -1006,6 +1017,8 @@ export default function UsersManager() {
             onDelete={handleDelete}
             deletePending={deleteMutation.isPending}
             onClearAllFilters={clearAllFilters}
+            onRegisterClearAll={registerTableClearAll}
+            onActiveFiltersChange={setTableHasActiveFilters}
           />
 
           <EditUserModal

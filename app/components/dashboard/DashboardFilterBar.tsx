@@ -11,6 +11,7 @@ import {
   Tags,
 } from "lucide-react";
 import { Category0DistributionBar } from "@/app/components/dashboard/Category0DistributionBar";
+import { ClearAllFiltersButton } from "@/app/components/common/ClearAllFiltersButton";
 import { FilterChip, type FilterChipColor } from "@/app/components/dashboard/FilterChip";
 import {
   MultiSelectFilterDropdown,
@@ -53,6 +54,14 @@ interface DashboardFilterBarProps {
   entitiesLoading: boolean;
   activeFilters: ActiveFilter[];
   onClearAllFilters: () => void;
+  /**
+   * When provided, a global "Clear All Filters" button (with confirmation
+   * modal) is rendered at the top of this filter section. This should clear
+   * BOTH the organization/master filters above AND any table-level header
+   * filters, matching the behaviour of the previous in-table button.
+   */
+  hasGlobalActiveFilters?: boolean;
+  onGlobalClearAllFilters?: () => void;
 }
 
 export function DashboardFilterBar({
@@ -81,6 +90,8 @@ export function DashboardFilterBar({
   entitiesLoading,
   activeFilters,
   onClearAllFilters,
+  hasGlobalActiveFilters,
+  onGlobalClearAllFilters,
 }: DashboardFilterBarProps) {
   const [filtersVisible, setFiltersVisible] = useState(true);
 
@@ -104,6 +115,15 @@ export function DashboardFilterBar({
       transition={{ delay: 0.55 }}
       className="mb-6 space-y-4"
     >
+      {onGlobalClearAllFilters ? (
+        <div className="flex justify-end">
+          <ClearAllFiltersButton
+            hasActiveFilters={hasGlobalActiveFilters ?? false}
+            onClearAllFilters={onGlobalClearAllFilters}
+          />
+        </div>
+      ) : null}
+
       <div className="rounded-md border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
         <div className="flex items-center gap-3 px-4 py-2">
           <Category0DistributionBar

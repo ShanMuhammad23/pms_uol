@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ClipboardList, LayoutDashboard } from "lucide-react";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
@@ -105,6 +105,15 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     matrixForDistribution,
   } = useDashboardPage();
 
+  const tableClearAllRef = useRef<(() => void) | null>(null);
+  const [tableHasActiveFilters, setTableHasActiveFilters] = useState(false);
+  const registerTableClearAll = useCallback((clearFn: () => void) => {
+    tableClearAllRef.current = clearFn;
+  }, []);
+  const globalClearAllFilters = useCallback(() => {
+    tableClearAllRef.current?.();
+  }, []);
+
   return (
     <div className="relative min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
       {canAccessDirectAssessment ? (
@@ -175,6 +184,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           entitiesLoading={entitiesLoading || overviewLoading}
           activeFilters={activeFilters}
           onClearAllFilters={clearAllFilters}
+          hasGlobalActiveFilters={tableHasActiveFilters}
+          onGlobalClearAllFilters={globalClearAllFilters}
         />
 
         {isHead ? (
@@ -242,6 +253,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           allowedColumnIds={allowedColumnIds}
           role={role}
           performanceMatrix={matrixForDistribution}
+          onRegisterClearAll={registerTableClearAll}
+          onActiveFiltersChange={setTableHasActiveFilters}
         />
       </div>
         </>

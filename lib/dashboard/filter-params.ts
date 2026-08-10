@@ -147,7 +147,7 @@ export function parseFormSubmissionsQueryParams(
   const pageSizeRaw = Number(searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE);
   const pageSize =
     Number.isFinite(pageSizeRaw) && pageSizeRaw > 0
-      ? Math.min(5000, Math.floor(pageSizeRaw))
+      ? Math.min(100000, Math.floor(pageSizeRaw))
       : DEFAULT_PAGE_SIZE;
 
   return {

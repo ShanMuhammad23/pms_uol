@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, Pencil, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
 import { ResizableHeader } from "@/app/components/common/ResizableHeader";
@@ -16,6 +16,7 @@ import {
   SELECT_COLUMN_WIDTH,
   type ColumnDef,
 } from "@/app/hooks/use-column-config";
+import { useVirtualRows } from "@/app/hooks/use-virtual-rows";
 import type { ColumnConfig } from "@/lib/queries/column-widths-client";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
@@ -75,7 +76,6 @@ import { resolveSubmissionPerformanceQuartile } from "@/lib/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import { ExcelExportButton } from "@/app/components/common/ExcelExportButton";
-import { ClearAllFiltersButton } from "@/app/components/common/ClearAllFiltersButton";
 import { HrApprovalConfirmModal, type HrApprovalAction } from "@/app/components/dashboard/HrApprovalConfirmModal";
 import {
   getPerformanceLevelColor,
@@ -88,6 +88,8 @@ import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFi
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
+/** Page size used when "Show All" is enabled. The server caps pageSize at 100000. */
+const SHOW_ALL_PAGE_SIZE = 100000;
 
 interface DashboardSubmissionsTableProps {
   filterParams: DashboardFilterParams;
@@ -98,6 +100,13 @@ interface DashboardSubmissionsTableProps {
   role?: string | null;
   /** Performance matrix for resolving quartile labels in sync with the matrix table. */
   performanceMatrix?: PerformanceLevelWithQuartiles[];
+  /** Called once on mount (and when the handler changes) to register the
+   * table's combined clear-all handler with the parent so it can be wired
+   * to the global Clear All Filters button in the filter bar. */
+  onRegisterClearAll?: (clearFn: () => void) => void;
+  /** Called whenever the table's combined hasActiveFilters flag changes so
+   * the parent can show/hide the global Clear All Filters button. */
+  onActiveFiltersChange?: (active: boolean) => void;
 }
 
 function columnCellClassName(
@@ -625,6 +634,8 @@ export function DashboardSubmissionsTable({
   allowedColumnIds,
   role,
   performanceMatrix,
+  onRegisterClearAll,
+  onActiveFiltersChange,
 }: DashboardSubmissionsTableProps) {
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const isHrRole = canReviewSubmissions(role ?? undefined);
@@ -677,6 +688,8 @@ export function DashboardSubmissionsTable({
   }, [allowedColumnIds]);
 
   const [page, setPage] = useState(1);
+  const [showAll, setShowAll] = useState(false);
+  const [hasFullDataset, setHasFullDataset] = useState(false);
   const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
     EMPTY_MASTER_FILTER_STATE,
   );
@@ -698,21 +711,62 @@ export function DashboardSubmissionsTable({
   }>({ open: false, action: "approve", submissionId: 0 });
   const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
 
+  // When Show All is active OR we have a cached full dataset, always request
+  // page 1 with SHOW_ALL_PAGE_SIZE. This keeps the query key identical so
+  // React Query returns the cached full-dataset response without refetching
+  // when the user toggles between Show All and Show Paginated.
+  const useFullDataset = showAll || hasFullDataset;
+  const queryPage = useFullDataset ? 1 : page;
+  const queryPageSize = useFullDataset ? SHOW_ALL_PAGE_SIZE : PAGE_SIZE;
+
   const {
     data: submissionsPage,
     isLoading,
     error,
   } = useFormSubmissionsQuery({
-    page,
-    pageSize: PAGE_SIZE,
+    page: queryPage,
+    pageSize: queryPageSize,
     filters: filterParams,
     masterFilters,
   });
 
-  const submissions = Array.isArray(submissionsPage?.items)
+  const allSubmissions = Array.isArray(submissionsPage?.items)
     ? submissionsPage.items
     : [];
   const totalCount = submissionsPage?.total ?? 0;
+
+  // Cache the full dataset once Show All data arrives so subsequent toggles
+  // to Show Paginated can reuse the cached response (no refetch).
+  useEffect(() => {
+    if (showAll && submissionsPage) {
+      setHasFullDataset(true);
+    }
+  }, [showAll, submissionsPage]);
+
+  // Invalidate the full-dataset cache when filters change so the next
+  // Show All fetches fresh data for the new filter state.
+  useEffect(() => {
+    setHasFullDataset(false);
+  }, [filterParams, masterFilters]);
+
+  // When using the cached full dataset in paginated mode, slice the
+  // all-records response to show only the current page.
+  const submissions = useMemo(() => {
+    if (useFullDataset && !showAll) {
+      const start = (page - 1) * PAGE_SIZE;
+      return allSubmissions.slice(start, start + PAGE_SIZE);
+    }
+    return allSubmissions;
+  }, [allSubmissions, useFullDataset, showAll, page]);
+
+  // Virtualize rows in Show All mode to avoid rendering thousands of DOM
+  // rows simultaneously. In paginated mode virtualization is disabled.
+  const virtualRows = useVirtualRows({
+    count: submissions.length,
+    estimateSize: 33,
+    enabled: showAll,
+  });
+
   const matchingEmployeeIds = submissionsPage?.matchingEmployeeIds;
   const columnCountsById = useMemo(() => {
     const map: Partial<Record<DashboardTableColumnId, MultiSelectOption[]>> =
@@ -909,17 +963,24 @@ export function DashboardSubmissionsTable({
     [frozenColumnIds],
   );
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  // Display page size: PAGE_SIZE for paginated view, totalCount for Show All.
+  // When the full dataset is cached, pagination math still uses PAGE_SIZE.
+  const displayPageSize = showAll ? totalCount : PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(totalCount / displayPageSize));
 
   useEffect(() => {
     setPage(1);
-  }, [filterParams]);
+  }, [filterParams, showAll]);
 
+  // Don't sync page from server response when using the full dataset —
+  // the query always requests page 1, but the user's page is managed
+  // client-side and used to slice the cached data.
   useEffect(() => {
+    if (useFullDataset) return;
     if (submissionsPage?.page != null && submissionsPage.page !== page) {
       setPage(submissionsPage.page);
     }
-  }, [submissionsPage?.page, page]);
+  }, [submissionsPage?.page, page, useFullDataset]);
 
   useEffect(() => {
     if (!matchingEmployeeIds) {
@@ -950,9 +1011,9 @@ export function DashboardSubmissionsTable({
   const someFilteredSelected =
     selectedCount > 0 && !allFilteredSelected;
 
-  const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
-  const showPagination = !isLoading && !error && totalCount > 0;
+  const rangeStart = totalCount === 0 ? 0 : (page - 1) * displayPageSize + 1;
+  const rangeEnd = Math.min(page * displayPageSize, totalCount);
+  const showPagination = !showAll && !isLoading && !error && totalCount > 0;
 
   const toggleEmployeeSelection = (employeeId: string) => {
     setSelectedEmployeeIds((current) => {
@@ -1031,15 +1092,15 @@ export function DashboardSubmissionsTable({
     });
   };
 
-  const clearMasterFilters = () => {
+  const clearMasterFilters = useCallback(() => {
     setPage(1);
     setMasterFilters(EMPTY_MASTER_FILTER_STATE);
-  };
+  }, []);
 
-  const handleClearAllFilters = () => {
+  const handleClearAllFilters = useCallback(() => {
     clearMasterFilters();
     onClearAllFilters();
-  };
+  }, [clearMasterFilters, onClearAllFilters]);
 
   const hasActiveFilters =
     masterFilterActiveCount > 0 ||
@@ -1050,6 +1111,14 @@ export function DashboardSubmissionsTable({
     filterParams.roleCategories !== null ||
     filterParams.designations !== null ||
     filterParams.formStates !== null;
+
+  useEffect(() => {
+    onRegisterClearAll?.(handleClearAllFilters);
+  }, [handleClearAllFilters, onRegisterClearAll]);
+
+  useEffect(() => {
+    onActiveFiltersChange?.(hasActiveFilters);
+  }, [hasActiveFilters, onActiveFiltersChange]);
 
   return (
     <motion.div
@@ -1082,14 +1151,20 @@ export function DashboardSubmissionsTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAll((prev) => !prev)}
+            disabled={totalCount === 0 && !showAll}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.04]"
+            title={showAll ? "Return to paginated view" : "Show all records in a single page"}
+          >
+            <List className="h-3.5 w-3.5" />
+            {showAll ? "Show Paginated" : "Show All"}
+          </button>
           <StaffListingMasterFilterTrigger
             open={masterFilterOpen}
             onOpenChange={setMasterFilterOpen}
             activeCount={masterFilterActiveCount}
-          />
-          <ClearAllFiltersButton
-            hasActiveFilters={hasActiveFilters}
-            onClearAllFilters={handleClearAllFilters}
           />
           {canManageColumns ? (
             <ColumnManagementPanelTrigger
@@ -1163,7 +1238,12 @@ export function DashboardSubmissionsTable({
       />
 
       <div
-        ref={tableScrollRef}
+        ref={(el) => {
+          tableScrollRef.current = el;
+          if (virtualRows.enabled) {
+            virtualRows.scrollRef.current = el;
+          }
+        }}
         className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain"
       >
         <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">
@@ -1244,6 +1324,141 @@ export function DashboardSubmissionsTable({
                   Failed to load submissions.
                 </td>
               </tr>
+            ) : virtualRows.enabled ? (
+              <>
+                {virtualRows.virtualItems.length > 0 ? (
+                  <tr style={{ height: virtualRows.virtualItems[0].start }} />
+                ) : null}
+                {virtualRows.virtualItems.map((virtualItem) => {
+                  const submission = submissions[virtualItem.index];
+                  if (!submission) return null;
+                  const isSelected = selectedEmployeeIds.has(
+                    submission.employeeId,
+                  );
+                  return (
+                    <tr
+                      key={`${submission.employeeId}-${submission.id}`}
+                      data-index={virtualItem.index}
+                      className={cn(
+                        "group transition-colors",
+                        !submission.assessmentEligibility
+                          ? "bg-rose-200/70 dark:bg-rose-900/40"
+                          : isSelected
+                            ? "bg-amber-50/60 dark:bg-amber-500/5"
+                            : getHrApprovalStatus(submission) === "approved"
+                              ? "bg-emerald-100/70 dark:bg-emerald-900/20"
+                              : getHrApprovalStatus(submission) === "review_required"
+                                ? "bg-orange-100/70 dark:bg-orange-900/20"
+                                : "hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
+                        !submission.assessmentEligibility && isSelected &&
+                          "bg-rose-300/70 dark:bg-rose-800/40",
+                        !submission.assessmentEligibility &&
+                          "hover:bg-rose-300/60 dark:hover:bg-rose-800/30",
+                      )}
+                    >
+                      {isHrRole ? (
+                        <td
+                          className={stickySelectCellClassName(isSelected, getHrApprovalStatus(submission))}
+                          style={{
+                            width: SELECT_COLUMN_WIDTH,
+                            minWidth: SELECT_COLUMN_WIDTH,
+                            maxWidth: SELECT_COLUMN_WIDTH,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() =>
+                              toggleEmployeeSelection(submission.employeeId)
+                            }
+                            aria-label={`Select ${submission.employeeName}`}
+                            className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20 dark:bg-slate-950"
+                          />
+                        </td>
+                      ) : null}
+                      {visibleColumns.map((column) => {
+                        const value = column.getValue(submission);
+                        const savedWidth = getColumnWidth(column.id, column.width);
+                        const isFrozen = frozenSet.has(column.id);
+                        const pending = pendingScoreChanges[submission.id];
+                        const cellCtx: RenderCellContext = {
+                          isHrRole: isHrRole,
+                          pendingChanges: pending ?? {},
+                          hasPending: pending != null && Object.keys(pending).length > 0,
+                          onBufferedChange: handleBufferedChange(submission.id),
+                          onSave: () => hrSaveMutation.mutate(submission.id),
+                          onCancel: handleCancelScoreChanges(submission.id),
+                          onApprove: () =>
+                            setHrApprovalModal({
+                              open: true,
+                              action: "approve",
+                              submissionId: submission.id,
+                            }),
+                          onReviewRequired: () =>
+                            setHrApprovalModal({
+                              open: true,
+                              action: "review_required",
+                              submissionId: submission.id,
+                            }),
+                          isSaving: hrSaveMutation.isPending,
+                          isApproving: hrApproveMutation.isPending,
+                          isReviewing: hrReviewRequiredMutation.isPending,
+                          canApprove:
+                            submission.status === "PENDING_HR_CALIBRATION" ||
+                            submission.status === "PENDING_BOARD_APPROVAL",
+                          hasValidScore: hasValidNormalizedScore(submission),
+                          quartileBands,
+                          sortedMatrix,
+                          onToggleAssessmentEligibility: (submission: FormSubmissionListItem) =>
+                            setEligibilityModalState({ open: true, submission, error: null }),
+                          isTogglingEligibility: eligibilityToggleMutation.isPending,
+                          editableModules,
+                        };
+                        return (
+                          <td
+                            key={column.id}
+                            className={cn(
+                              columnCellClassName(
+                                column,
+                                "align-middle border-b border-slate-100 dark:border-white/[0.03]",
+                              ),
+                              isFrozen && "sticky",
+                              isFrozen && (
+                                !submission.assessmentEligibility
+                                  ? "bg-rose-200 dark:bg-rose-900"
+                                  : isSelected
+                                    ? "bg-amber-50 dark:bg-amber-950"
+                                    : getHrApprovalStatus(submission) === "approved"
+                                      ? "bg-emerald-100 dark:bg-emerald-950"
+                                      : getHrApprovalStatus(submission) === "review_required"
+                                        ? "bg-orange-100 dark:bg-orange-950"
+                                        : "bg-white group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-slate-800"
+                              ),
+                              column.id === lastFrozenColumnId && "border-r-2 border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:border-white/20",
+                            )}
+                            style={{
+                              ...(savedWidth != null ? { width: savedWidth, minWidth: savedWidth, maxWidth: savedWidth } : {}),
+                              ...(isFrozen ? { left: stickyOffsets[column.id], zIndex: 20 } : {}),
+                            }}
+                          >
+                            {renderCell(column, submission, value, cellCtx)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                {virtualRows.virtualItems.length > 0 ? (
+                  <tr
+                    style={{
+                      height:
+                        virtualRows.totalSize -
+                        (virtualRows.virtualItems[virtualRows.virtualItems.length - 1]?.start ?? 0) -
+                        (virtualRows.virtualItems[virtualRows.virtualItems.length - 1]?.size ?? 0),
+                    }}
+                  />
+                ) : null}
+              </>
             ) : (
               <AnimatePresence>
                 {submissions.map((submission, index) => {

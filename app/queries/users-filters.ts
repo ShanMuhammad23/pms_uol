@@ -332,20 +332,21 @@ export function useUsersPageFilters({
     const counts = new Map<string, number>();
 
     for (const user of deferredUsers) {
-      const value = formatRoleCategoryValue(user.roleCategory);
       if (
-        matchesUserPageFiltersExcluding(
+        !matchesUserPageFiltersExcluding(
           user,
           deferredFilterState,
           "roleCategory",
         )
       ) {
-        counts.set(value, (counts.get(value) ?? 0) + 1);
-      } else if (!counts.has(value)) {
-        counts.set(value, 0);
+        continue;
       }
+
+      const value = formatRoleCategoryValue(user.roleCategory);
+      counts.set(value, (counts.get(value) ?? 0) + 1);
     }
 
+    // Keep currently selected values visible even if other filters zero them out.
     if (selectedRoleCategories) {
       for (const value of selectedRoleCategories) {
         if (!counts.has(value)) {
@@ -360,6 +361,10 @@ export function useUsersPageFilters({
         label: value,
         count,
       }))
+      .filter(
+        (option) =>
+          option.count > 0 || selectedRoleCategories?.includes(option.value),
+      )
       .sort(sortRoleOptions);
   }, [deferredUsers, deferredFilterState, selectedRoleCategories]);
 
