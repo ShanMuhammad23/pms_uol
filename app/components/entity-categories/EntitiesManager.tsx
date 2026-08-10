@@ -639,7 +639,12 @@ export default function EntitiesManager() {
             </div>
           ) : (
         <div className="overflow-x-auto rounded-md border border-slate-300/80 dark:border-white/15">
-          <table className="min-w-full table-fixed text-sm">
+          <table className="w-full min-w-[56rem] table-fixed text-sm">
+            <colgroup>
+              {ENTITIES_TABLE_COLUMNS.map((column) => (
+                <col key={column.id} className={column.widthClass} />
+              ))}
+            </colgroup>
             <thead className="bg-primary/5">
               <tr>
                 {ENTITIES_TABLE_COLUMNS.map((column) => (
@@ -648,7 +653,6 @@ export default function EntitiesManager() {
                     className={cn(
                       "px-4 py-3 font-semibold text-white bg-primary",
                       column.align === "right" ? "text-right" : "text-left",
-                      column.widthClass,
                     )}
                   >
                     {isEntitiesMasterFilterableColumn(column.id) ? (
@@ -678,7 +682,7 @@ export default function EntitiesManager() {
                       return (
                         <td
                           key={column.id}
-                          className={cn("px-4 py-3", column.widthClass)}
+                          className="px-4 py-3"
                         >
                           <div className="flex items-center justify-end gap-2">
                             <button
@@ -705,19 +709,23 @@ export default function EntitiesManager() {
                       return (
                         <td
                           key={column.id}
-                          className={cn(
-                            "px-4 py-3 text-text-primary",
-                            column.widthClass,
-                          )}
+                          className="truncate px-4 py-3 text-text-primary"
+                          title={
+                            entity.parentName
+                              ? entity.parentCategoryCode
+                                ? `${entity.parentCategoryCode} · ${entity.parentName}`
+                                : entity.parentName
+                              : undefined
+                          }
                         >
                           {entity.parentName ? (
-                            <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+                            <span className="inline-flex max-w-full items-baseline gap-x-1.5 overflow-hidden">
                               {entity.parentCategoryCode ? (
-                                <span className="text-xs font-medium text-foreground/55">
+                                <span className="shrink-0 text-xs font-medium text-foreground/55">
                                   {entity.parentCategoryCode}
                                 </span>
                               ) : null}
-                              <span>{entity.parentName}</span>
+                              <span className="truncate">{entity.parentName}</span>
                             </span>
                           ) : (
                             "—"
@@ -730,10 +738,7 @@ export default function EntitiesManager() {
                       return (
                         <td
                           key={column.id}
-                          className={cn(
-                            "truncate px-4 py-3 font-medium text-text-primary",
-                            column.widthClass,
-                          )}
+                          className="truncate px-4 py-3 font-medium text-text-primary"
                           title={entity.name}
                         >
                           {entity.name}
@@ -745,10 +750,7 @@ export default function EntitiesManager() {
                       return (
                         <td
                           key={column.id}
-                          className={cn(
-                            "px-4 py-3 text-right tabular-nums text-text-primary",
-                            column.widthClass,
-                          )}
+                          className="px-4 py-3 text-right tabular-nums text-text-primary"
                         >
                           {entity.staffCount}
                         </td>
@@ -759,10 +761,10 @@ export default function EntitiesManager() {
                       <td
                         key={column.id}
                         className={cn(
-                          "px-4 py-3 text-text-primary",
+                          "truncate px-4 py-3 text-text-primary",
                           column.align === "right" && "text-right",
-                          column.widthClass,
                         )}
+                        title={column.getValue(entity)}
                       >
                         {column.getValue(entity)}
                       </td>

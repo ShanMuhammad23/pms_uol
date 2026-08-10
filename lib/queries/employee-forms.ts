@@ -487,7 +487,7 @@ function validateAnswers(
       continue;
     }
 
-    if (submit && isScored && !answer) {
+    if (submit && isScored && question.isRequired && !answer) {
       throw new EmployeeFormError(
         `Enter a score for "${question.questionText.slice(0, 80)}".`,
       );
@@ -504,6 +504,16 @@ function validateAnswers(
     }
 
     if (isScored) {
+      // Optional scored questions may be skipped (or have remarks only)
+      if (answer.pointsEarned === undefined || answer.pointsEarned === null) {
+        if (question.isRequired) {
+          throw new EmployeeFormError(
+            `Enter a score for "${question.questionText.slice(0, 80)}".`,
+          );
+        }
+        continue;
+      }
+
       const value = Number(answer.pointsEarned);
       if (Number.isNaN(value)) {
         throw new EmployeeFormError(
@@ -783,7 +793,11 @@ export async function saveEmployeeForm(
       const formSelfAssessmentEnabled = selfAssessmentEnabled;
 
       for (const question of getTemplateQuestions(template).filter(
-        (q) => isScoredQuestion(q) && formSelfAssessmentEnabled && q.selfAssessmentEnabled,
+        (q) =>
+          isScoredQuestion(q) &&
+          formSelfAssessmentEnabled &&
+          q.selfAssessmentEnabled &&
+          q.isRequired,
       )) {
         const saved = savedAnswers.find(
           (answer) => answer.questionId === question.id,

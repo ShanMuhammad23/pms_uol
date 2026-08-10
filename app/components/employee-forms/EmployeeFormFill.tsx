@@ -307,11 +307,18 @@ export default function EmployeeFormFill({
       }
 
       const answer = answers[question.id];
-      if (!answer || answer.pointsEarned === "") {
+      const hasScore = Boolean(answer && answer.pointsEarned !== "");
+
+      // Optional questions can be left blank
+      if (!question.isRequired && !hasScore) {
+        continue;
+      }
+
+      if (!hasScore) {
         return `Enter a score for question ${question.questionText.slice(0, 60)}...`;
       }
 
-      const score = Number(answer.pointsEarned);
+      const score = Number(answer!.pointsEarned);
       if (Number.isNaN(score) || score < 0 || score > question.totalMarks) {
         return `Score must be between 0 and ${question.totalMarks} for "${question.questionText.slice(0, 60)}..."`;
       }

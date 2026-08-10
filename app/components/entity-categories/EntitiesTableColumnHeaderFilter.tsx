@@ -404,12 +404,12 @@ export function EntitiesTableColumnHeaderFilter({
         className={cn(
           "inline-flex h-5 w-5 items-center justify-center rounded transition-colors",
           active
-            ? "bg-primary/15 text-primary"
-            : "text-foreground/45 hover:bg-primary/10 hover:text-primary",
-          open && !active && "bg-primary/10 text-primary",
+            ? "bg-white text-black"
+            : "text-white/70 hover:bg-white/15 hover:text-white",
+          open && !active && "bg-white/15 text-white",
         )}
       >
-        <Filter className="h-3 w-3 text-white" />
+        <Filter className="h-3 w-3" />
       </button>
       {menu}
     </div>
