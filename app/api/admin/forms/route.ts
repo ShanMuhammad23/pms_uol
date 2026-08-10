@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  requireModuleViewApi,
+  requireModuleEditApi,
+} from "@/lib/auth/require-module-api";
 import {
   createFormTemplate,
   FormTemplateError,
@@ -8,7 +11,6 @@ import {
 } from "@/lib/queries/forms";
 import { validateFormTemplateInput } from "@/lib/validation/forms";
 import type { FormTemplateInput } from "@/types/forms";
-import { canViewModule, canEditModule } from "@/lib/auth/additional-access";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 
@@ -23,21 +25,9 @@ function formTemplateErrorResponse(error: FormTemplateError) {
 }
 
 export async function GET() {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleViewApi("FORMS");
   if (auth instanceof NextResponse) {
-    // Check additional-access: FORMS module view permission
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return auth;
-    }
-    const allowed = await canViewModule(
-      Number(session.user.id),
-      "FORMS",
-      session.user.role,
-    );
-    if (!allowed) {
-      return auth;
-    }
+    return auth;
   }
 
   try {
@@ -53,21 +43,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("FORMS");
   if (auth instanceof NextResponse) {
-    // Check additional-access: FORMS module edit permission
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return auth;
-    }
-    const allowed = await canEditModule(
-      Number(session.user.id),
-      "FORMS",
-      session.user.role,
-    );
-    if (!allowed) {
-      return auth;
-    }
+    return auth;
   }
 
   try {

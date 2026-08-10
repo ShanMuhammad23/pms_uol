@@ -55,6 +55,7 @@ import {
   canManageStaffListingColumns,
   getHrApprovalStatus,
   hasValidNormalizedScore,
+  HEAD_DASHBOARD_TABLE_COLUMN_IDS,
   MANAGER_FIXED_COLUMN_IDS,
   MANAGER_FIXED_FROZEN_COLUMN_IDS,
 } from "@/app/helpers/dashboard-table-columns";
@@ -642,20 +643,43 @@ export function DashboardSubmissionsTable({
   const isManagerRole = isHeadRole(role ?? undefined);
   const canManageColumns = canManageStaffListingColumns(role ?? undefined);
 
+  // For Manager role, the base column set is the fixed manager layout.
+  // Additional-access columns (Credit Hours, ORIC, QEC) from the parent
+  // are merged in so that managers with those permissions can see them.
+  // Only columns beyond the HEAD base set are added — the HEAD base set
+  // includes columns that are intentionally excluded from the Manager's
+  // fixed layout (e.g. roleCategory, facultyName, eligible).
+  const managerAllowedColumnIds = useMemo(() => {
+    if (!isManagerRole) return allowedColumnIds;
+    const base = new Set<string>(MANAGER_FIXED_COLUMN_IDS);
+    if (allowedColumnIds) {
+      const headBase = new Set<string>(HEAD_DASHBOARD_TABLE_COLUMN_IDS);
+      for (const id of allowedColumnIds) {
+        // Only add columns that are NOT in the HEAD base set — these are
+        // the additional-access columns (creditHrsErpAdj, pubOricScoreAdj, etc.)
+        if (!headBase.has(id) && !base.has(id)) {
+          base.add(id);
+        }
+      }
+    }
+    return [...base] as DashboardTableColumnId[];
+  }, [isManagerRole, allowedColumnIds]);
+
   // Fixed column configuration for Manager 1 / Manager 2 roles.
   // Managers do not get column management — they always see the predefined
   // layout with the first four columns frozen. Saved preferences are ignored.
+  // Additional-access columns are appended after the fixed columns.
   const managerFixedConfig = useMemo<ColumnConfig | undefined>(
     () =>
-      isManagerRole
+      isManagerRole && managerAllowedColumnIds
         ? {
-            order: [...MANAGER_FIXED_COLUMN_IDS],
-            visible: [...MANAGER_FIXED_COLUMN_IDS],
+            order: [...managerAllowedColumnIds],
+            visible: [...managerAllowedColumnIds],
             frozen: [...MANAGER_FIXED_FROZEN_COLUMN_IDS],
             widths: {},
           }
         : undefined,
-    [isManagerRole],
+    [isManagerRole, managerAllowedColumnIds],
   );
 
   const {
@@ -671,7 +695,7 @@ export function DashboardSubmissionsTable({
     resetConfig,
   } = useColumnConfig("dashboard-staff-listing", {
     allColumns: DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[],
-    allowedColumnIds: isManagerRole ? MANAGER_FIXED_COLUMN_IDS : allowedColumnIds,
+    allowedColumnIds: managerAllowedColumnIds,
     hasSelectColumn: isHrRole,
     fixedConfig: managerFixedConfig,
   });
@@ -680,12 +704,12 @@ export function DashboardSubmissionsTable({
   // This ensures restricted columns never appear in the panel, even if
   // previously saved preferences reference them.
   const allowedColumns = useMemo(() => {
-    if (!allowedColumnIds) return DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[];
-    const allowed = new Set<string>(allowedColumnIds);
+    if (!managerAllowedColumnIds) return DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[];
+    const allowed = new Set<string>(managerAllowedColumnIds);
     return (DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[]).filter((col) =>
       allowed.has(col.id),
     );
-  }, [allowedColumnIds]);
+  }, [managerAllowedColumnIds]);
 
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -1217,7 +1241,7 @@ export function DashboardSubmissionsTable({
         onMultiChange={handleMasterMultiChange}
         onNumericChange={handleMasterNumericChange}
         onClearAll={clearMasterFilters}
-        allowedColumnIds={allowedColumnIds}
+        allowedColumnIds={managerAllowedColumnIds}
       />
 
       {canManageColumns ? (

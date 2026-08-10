@@ -1,9 +1,9 @@
 import MatricesAndCyclesTabs from "@/app/components/matrices-and-cycles/MatricesAndCyclesTabs";
-import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { requireModuleViewPage } from "@/lib/auth/require-module-page";
 import { LibraryBig } from "lucide-react";
 
 export default async function MatricesAndCyclesPage() {
-  await requireSuperAdminSession();
+  await requireModuleViewPage("MATRICES_AND_CYCLES");
 
   return (
     <div className="space-y-8 text-text-primary">

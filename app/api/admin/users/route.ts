@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  requireModuleViewApi,
+  requireModuleEditApi,
+} from "@/lib/auth/require-module-api";
 import { createUser, listUsers, listUsersByEmployeeIds, UserError } from "@/lib/queries/users";
 import { validateCreateUserInput } from "@/lib/validation/users";
 import type { CreateUserInput } from "@/types/users";
@@ -9,7 +12,7 @@ export const dynamic = "force-dynamic";
 const MAX_EMPLOYEE_IDS = 200;
 
 export async function GET(request: NextRequest) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleViewApi("USERS");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -40,7 +43,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("USERS");
   if (auth instanceof NextResponse) {
     return auth;
   }

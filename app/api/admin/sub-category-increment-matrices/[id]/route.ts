@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import { requireModuleEditApi } from "@/lib/auth/require-module-api";
 import {
   deleteSubCategoryIncrementMatrix,
   SubCategoryIncrementMatrixError,
@@ -13,7 +13,7 @@ interface RouteContext {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -65,7 +65,7 @@ export async function PUT(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }

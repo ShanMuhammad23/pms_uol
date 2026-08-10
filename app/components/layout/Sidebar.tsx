@@ -45,7 +45,7 @@ const ADMIN_LINKS = [
     label: "Users",
     icon: Users,
     match: (pathname: string) => pathname.startsWith("/dashboard/users"),
-    module: undefined as AdditionalAccessModule | undefined,
+    module: "USERS" as AdditionalAccessModule | undefined,
   },
   {
     href: "/dashboard/matrices-and-cycles",
@@ -53,7 +53,7 @@ const ADMIN_LINKS = [
     icon: Grid3X3,
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/matrices-and-cycles"),
-    module: undefined as AdditionalAccessModule | undefined,
+    module: "MATRICES_AND_CYCLES" as AdditionalAccessModule | undefined,
   },
   {
     href: "/dashboard/entity-categories",
@@ -61,7 +61,7 @@ const ADMIN_LINKS = [
     icon: Building2,
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/entity-categories"),
-    module: undefined as AdditionalAccessModule | undefined,
+    module: "ORGANIZATION_LEVELS" as AdditionalAccessModule | undefined,
   },
 ] as const;
 

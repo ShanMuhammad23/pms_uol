@@ -25,6 +25,9 @@ import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { cn } from "@/lib/utils";
 
+/** Sentinel value representing "None" (clear manager) in select dropdowns. */
+const NONE_SENTINEL = "__none__";
+
 interface BulkEditStaffModalProps {
   open: boolean;
   selectedEmployeeIds: string[];
@@ -145,7 +148,10 @@ export function BulkEditStaffModal({
   );
 
   const managerSelectOptions = useMemo(
-    () => managerOptions.map((m) => ({ value: String(m.id), label: m.label })),
+    () => [
+      { value: NONE_SENTINEL, label: "None" },
+      ...managerOptions.map((m) => ({ value: String(m.id), label: m.label })),
+    ],
     [managerOptions],
   );
 
@@ -201,15 +207,23 @@ export function BulkEditStaffModal({
       }
     }
     if (selectValues.manager1UserId !== undefined) {
-      const parsed = Number(selectValues.manager1UserId);
-      if (Number.isFinite(parsed)) {
-        fields.manager1UserId = parsed;
+      if (selectValues.manager1UserId === NONE_SENTINEL) {
+        fields.manager1UserId = null;
+      } else {
+        const parsed = Number(selectValues.manager1UserId);
+        if (Number.isFinite(parsed)) {
+          fields.manager1UserId = parsed;
+        }
       }
     }
     if (selectValues.manager2UserId !== undefined) {
-      const parsed = Number(selectValues.manager2UserId);
-      if (Number.isFinite(parsed)) {
-        fields.manager2UserId = parsed;
+      if (selectValues.manager2UserId === NONE_SENTINEL) {
+        fields.manager2UserId = null;
+      } else {
+        const parsed = Number(selectValues.manager2UserId);
+        if (Number.isFinite(parsed)) {
+          fields.manager2UserId = parsed;
+        }
       }
     }
     if (assessmentEligibility !== "") {
@@ -274,8 +288,8 @@ export function BulkEditStaffModal({
           ...(fields.pubOricScoreAdj != null ? { pubOricScoreAdj: fields.pubOricScoreAdj as number } : {}),
           ...(fields.qecScoreAdj != null ? { qecScoreAdj: fields.qecScoreAdj as number } : {}),
           ...(fields.calibrationFactor != null ? { calibrationFactor: fields.calibrationFactor as number } : {}),
-          ...(fields.manager1UserId != null ? { manager1UserId: fields.manager1UserId as number } : {}),
-          ...(fields.manager2UserId != null ? { manager2UserId: fields.manager2UserId as number } : {}),
+          ...(fields.manager1UserId !== undefined ? { manager1UserId: fields.manager1UserId as number | null } : {}),
+          ...(fields.manager2UserId !== undefined ? { manager2UserId: fields.manager2UserId as number | null } : {}),
           ...(fields.assessmentEligibility !== undefined ? { assessmentEligibility: fields.assessmentEligibility as boolean } : {}),
           ...(fields.systemRole != null ? { systemRole: fields.systemRole as string } : {}),
         };
@@ -293,8 +307,8 @@ export function BulkEditStaffModal({
           ...(fields.qualificationSubject != null ? { qualificationSubject: fields.qualificationSubject as string } : {}),
           ...(fields.qualificationInstitute != null ? { qualificationInstitute: fields.qualificationInstitute as string } : {}),
           ...(fields.qualificationCountry != null ? { qualificationCountry: fields.qualificationCountry as string } : {}),
-          ...(fields.manager1UserId != null ? { headId: fields.manager1UserId as number } : {}),
-          ...(fields.manager2UserId != null ? { manager2Id: fields.manager2UserId as number } : {}),
+          ...(fields.manager1UserId !== undefined ? { headId: fields.manager1UserId as number | null } : {}),
+          ...(fields.manager2UserId !== undefined ? { manager2Id: fields.manager2UserId as number | null } : {}),
           ...(fields.systemRole != null ? { systemRole: fields.systemRole as UserRecord["systemRole"] } : {}),
         };
       };

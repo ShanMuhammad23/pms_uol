@@ -7,6 +7,7 @@ import { type FormEvent, type ReactNode, useCallback, useMemo, useRef, useState 
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { EditUserModal } from "@/app/components/users/EditUserModal";
+import { RoleAccessSelect } from "@/app/components/users/RoleAccessSelect";
 import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
 import { UsersListingTable } from "@/app/components/users/UsersListingTable";
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
@@ -37,16 +38,12 @@ import {
 import { cn } from "@/lib/utils";
 import type { FormTemplateListItem } from "@/types/forms";
 import {
-  ADDITIONAL_ACCESS_LEVEL_LABELS,
-  ADDITIONAL_ACCESS_MODULE_LABELS,
   ADDITIONAL_ACCESS_MODULES,
   type AdditionalAccessLevel,
   type AdditionalAccessModule,
   type AdditionalAccessPermission,
 } from "@/types/additional-access";
 import {
-  USER_ROLE_LABELS,
-  USER_ROLES,
   type CreateUserInput,
   type UserRecord,
   type UserRole,
@@ -623,24 +620,19 @@ export default function UsersManager() {
           </Field>
 
           <Field label="System Role" htmlFor="user-system-role">
-            <select
+            <RoleAccessSelect
               id="user-system-role"
               value={form.systemRole}
-              onChange={(event) =>
+              onRoleChange={(role) =>
                 setForm((current) => ({
                   ...current,
-                  systemRole: event.target.value as UserRole,
+                  systemRole: role,
                 }))
               }
+              additionalAccess={additionalAccess}
+              onAdditionalAccessChange={setAdditionalAccess}
               disabled={isSubmitting}
-              className={inputClassName}
-            >
-              {USER_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {USER_ROLE_LABELS[role]}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
 
           <Field label="Manager 1" htmlFor="user-head">
@@ -793,67 +785,6 @@ export default function UsersManager() {
               />
               Active account
             </label>
-          </div>
-        </div>
-
-        <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-foreground/70">
-            Additional Access
-          </span>
-          <p className="mt-0.5 text-xs text-foreground/50">
-            Grant module-level permissions supplementary to the user&rsquo;s role.
-          </p>
-          <div className="mt-1.5 rounded-lg border border-slate-300/80 bg-background p-3 dark:border-white/15">
-            <div className="space-y-2">
-              {ADDITIONAL_ACCESS_MODULES.map((module) => {
-                const currentLevel = additionalAccess[module];
-                return (
-                  <div
-                    key={module}
-                    className="flex items-center gap-3 text-sm"
-                  >
-                    <label className="inline-flex items-center gap-2 text-text-primary">
-                      <input
-                        type="checkbox"
-                        checked={currentLevel !== null}
-                        onChange={(e) =>
-                          setAdditionalAccess((prev) => ({
-                            ...prev,
-                            [module]: e.target.checked ? "VIEW_ONLY" : null,
-                          }))
-                        }
-                        disabled={isSubmitting}
-                        className="size-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-white/15"
-                      />
-                      <span className="font-medium">
-                        {ADDITIONAL_ACCESS_MODULE_LABELS[module]}
-                      </span>
-                    </label>
-                    {currentLevel !== null ? (
-                      <select
-                        value={currentLevel}
-                        onChange={(e) =>
-                          setAdditionalAccess((prev) => ({
-                            ...prev,
-                            [module]: e.target.value as AdditionalAccessLevel,
-                          }))
-                        }
-                        disabled={isSubmitting}
-                        className="rounded border border-slate-300 bg-background px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-                      >
-                        {(["VIEW_ONLY", "EDIT"] as AdditionalAccessLevel[]).map(
-                          (level) => (
-                            <option key={level} value={level}>
-                              {ADDITIONAL_ACCESS_LEVEL_LABELS[level]}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </div>
 

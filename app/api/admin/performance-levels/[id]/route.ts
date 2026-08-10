@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  requireModuleViewApi,
+  requireModuleEditApi,
+} from "@/lib/auth/require-module-api";
 import {
   deletePerformanceLevel,
   getPerformanceLevelById,
@@ -14,7 +17,7 @@ interface RouteContext {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleViewApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -47,7 +50,7 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -86,7 +89,7 @@ export async function PUT(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }

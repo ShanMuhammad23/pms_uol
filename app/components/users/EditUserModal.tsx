@@ -7,8 +7,6 @@ import { useQuery } from "@tanstack/react-query";
 import type { EntityRecord } from "@/types/entities";
 import type { FormTemplateListItem } from "@/types/forms";
 import {
-  USER_ROLE_LABELS,
-  USER_ROLES,
   type UpdateUserInput,
   type UserRecord,
   type UserRole,
@@ -17,11 +15,10 @@ import { fetchFormTemplatesForDashboard } from "@/lib/queries/forms-client";
 import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
+import { RoleAccessSelect } from "@/app/components/users/RoleAccessSelect";
 import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import {
   ADDITIONAL_ACCESS_MODULES,
-  ADDITIONAL_ACCESS_MODULE_LABELS,
-  ADDITIONAL_ACCESS_LEVEL_LABELS,
   type AdditionalAccessLevel,
   type AdditionalAccessModule,
   type AdditionalAccessPermission,
@@ -526,28 +523,20 @@ export function EditUserModal({
                   </Field>
 
                   <Field label="System Role" htmlFor="edit-user-system-role">
-                    <select
+                    <RoleAccessSelect
                       id="edit-user-system-role"
                       value={form.systemRole}
-                      onChange={(event) =>
+                      onRoleChange={(role) =>
                         setForm((current) =>
                           current
-                            ? {
-                                ...current,
-                                systemRole: event.target.value as UserRole,
-                              }
+                            ? { ...current, systemRole: role }
                             : current,
                         )
                       }
-                      disabled={isSubmitting}
-                      className={inputClassName}
-                    >
-                      {USER_ROLES.map((role) => (
-                        <option key={role} value={role}>
-                          {USER_ROLE_LABELS[role]}
-                        </option>
-                      ))}
-                    </select>
+                      additionalAccess={additionalAccess}
+                      onAdditionalAccessChange={setAdditionalAccess}
+                      disabled={isSubmitting || accessSaving}
+                    />
                   </Field>
 
                   <Field label="Manager 1" htmlFor="edit-user-head">
@@ -732,68 +721,6 @@ export function EditUserModal({
                       />
                       Active account
                     </label>
-                  </div>
-                </div>
-
-                {/* Additional Access */}
-                <div className="sm:col-span-2 lg:col-span-3">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Additional Access
-                  </span>
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Grant module-level permissions supplementary to the user&rsquo;s role.
-                  </p>
-                  <div className="mt-1.5 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-slate-950">
-                    <div className="space-y-2">
-                      {ADDITIONAL_ACCESS_MODULES.map((module) => {
-                        const currentLevel = additionalAccess[module];
-                        return (
-                          <div
-                            key={module}
-                            className="flex items-center gap-3 text-sm"
-                          >
-                            <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                              <input
-                                type="checkbox"
-                                checked={currentLevel !== null}
-                                onChange={(e) =>
-                                  setAdditionalAccess((prev) => ({
-                                    ...prev,
-                                    [module]: e.target.checked ? "VIEW_ONLY" : null,
-                                  }))
-                                }
-                                disabled={isSubmitting || accessSaving}
-                                className="size-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-white/20"
-                              />
-                              <span className="font-medium">
-                                {ADDITIONAL_ACCESS_MODULE_LABELS[module]}
-                              </span>
-                            </label>
-                            {currentLevel !== null && (
-                              <select
-                                value={currentLevel}
-                                onChange={(e) =>
-                                  setAdditionalAccess((prev) => ({
-                                    ...prev,
-                                    [module]: e.target.value as AdditionalAccessLevel,
-                                  }))
-                                }
-                                disabled={isSubmitting || accessSaving}
-                                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-white/15 dark:bg-slate-900 dark:text-slate-300"
-                              >
-                                {(["VIEW_ONLY", "EDIT"] as AdditionalAccessLevel[]).map(
-                                  (level) => (
-                                    <option key={level} value={level}>
-                                      {ADDITIONAL_ACCESS_LEVEL_LABELS[level]}
-                                    </option>
-                                  ),
-                                )}
-                              </select>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
                   </div>
                 </div>
 

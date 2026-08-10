@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  requireModuleViewApi,
+  requireModuleEditApi,
+} from "@/lib/auth/require-module-api";
 import {
   deleteFormTemplate,
   FormTemplateError,
@@ -9,7 +12,6 @@ import {
 } from "@/lib/queries/forms";
 import { validateFormTemplateInput } from "@/lib/validation/forms";
 import type { FormTemplateInput } from "@/types/forms";
-import { canViewModule, canEditModule } from "@/lib/auth/additional-access";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 
@@ -40,13 +42,8 @@ function formTemplateErrorResponse(error: FormTemplateError) {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const auth = await requireSuperAdminApi();
-  if (auth instanceof NextResponse) {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) return auth;
-    const allowed = await canViewModule(Number(session.user.id), "FORMS", session.user.role);
-    if (!allowed) return auth;
-  }
+  const auth = await requireModuleViewApi("FORMS");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await context.params;
   const templateId = Number(id);
@@ -73,13 +70,8 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
-  const auth = await requireSuperAdminApi();
-  if (auth instanceof NextResponse) {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) return auth;
-    const allowed = await canEditModule(Number(session.user.id), "FORMS", session.user.role);
-    if (!allowed) return auth;
-  }
+  const auth = await requireModuleEditApi("FORMS");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await context.params;
   const templateId = Number(id);
@@ -132,13 +124,8 @@ export async function PUT(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const auth = await requireSuperAdminApi();
-  if (auth instanceof NextResponse) {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) return auth;
-    const allowed = await canEditModule(Number(session.user.id), "FORMS", session.user.role);
-    if (!allowed) return auth;
-  }
+  const auth = await requireModuleEditApi("FORMS");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await context.params;
   const templateId = Number(id);

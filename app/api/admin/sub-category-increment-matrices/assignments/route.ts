@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  requireModuleViewApi,
+  requireModuleEditApi,
+} from "@/lib/auth/require-module-api";
 import {
   assignIncrementMatrixToEmployees,
   listEmployeeIncrementMatrixAssignments,
@@ -8,7 +11,7 @@ import {
 } from "@/lib/queries/sub-category-increment-matrices";
 
 export async function GET(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleViewApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -97,7 +100,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import { requireModuleViewApi } from "@/lib/auth/require-module-api";
 import { listUsersOverview } from "@/lib/queries/users";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleViewApi("USERS");
   if (auth instanceof NextResponse) {
     return auth;
   }

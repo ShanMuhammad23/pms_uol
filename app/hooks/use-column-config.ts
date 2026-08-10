@@ -168,8 +168,11 @@ export function useColumnConfig(
   // Skipped entirely when fixedConfig is set.
   useEffect(() => {
     if (isFixed) {
+      // Always apply the current fixedConfig — it may change when
+      // additional-access permissions load asynchronously (e.g. a
+      // Manager's column set expands after permissions are fetched).
+      setConfig(fixedConfig);
       if (!initializedRef.current) {
-        setConfig(fixedConfig);
         setHydrated(true);
         initializedRef.current = true;
       }

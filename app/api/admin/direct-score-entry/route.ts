@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  requireModuleViewApi,
+  requireModuleEditApi,
+} from "@/lib/auth/require-module-api";
 import {
   assignDirectScoreEntryToEmployees,
   FormTemplateError,
@@ -26,7 +29,7 @@ function parseEmployeeIds(body: { employeeIds?: unknown }): string[] | NextRespo
 }
 
 export async function GET() {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleViewApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -47,7 +50,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -75,7 +78,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
   }

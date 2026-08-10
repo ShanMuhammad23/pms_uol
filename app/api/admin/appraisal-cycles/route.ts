@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  requireModuleViewApi,
+  requireModuleEditApi,
+} from "@/lib/auth/require-module-api";
 import {
   createAppraisalCycle,
   listAppraisalCycles,
@@ -7,7 +10,7 @@ import {
 import type { CreateAppraisalCycleInput } from "@/types/forms";
 
 export async function GET() {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleViewApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -25,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
   }

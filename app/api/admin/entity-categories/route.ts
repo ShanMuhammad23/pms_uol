@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireSuperAdminApi } from "@/lib/auth/require-super-admin";
+import {
+  requireModuleViewApi,
+  requireModuleEditApi,
+} from "@/lib/auth/require-module-api";
 import {
   createEntityCategory,
   EntityCategoryError,
@@ -9,7 +12,7 @@ import { validateCreateEntityCategoryInput } from "@/lib/validation/entity-categ
 import type { CreateEntityCategoryInput } from "@/types/entity-categories";
 
 export async function GET() {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleViewApi("ORGANIZATION_LEVELS");
   if (auth instanceof NextResponse) {
     return auth;
   }
@@ -27,7 +30,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSuperAdminApi();
+  const auth = await requireModuleEditApi("ORGANIZATION_LEVELS");
   if (auth instanceof NextResponse) {
     return auth;
   }

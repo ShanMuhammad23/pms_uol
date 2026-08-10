@@ -27,6 +27,9 @@ export const ADDITIONAL_ACCESS_MODULE_COLUMNS: Record<
   CREDIT_HOURS: ["creditHrsErpAdj"],
   ORIC_ADJUSTMENTS: ["pubOricScoreAdj"],
   QEC_ADJUSTMENTS: ["qecScoreAdj"],
+  USERS: [],
+  MATRICES_AND_CYCLES: [],
+  ORGANIZATION_LEVELS: [],
 };
 
 export function getHrApprovalStatus(row: FormSubmissionListItem): HrApprovalStatus {

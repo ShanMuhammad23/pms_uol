@@ -1,8 +1,8 @@
 import UsersManager from "@/app/components/users/UsersManager";
-import { requireSuperAdminSession } from "@/lib/auth/require-super-admin";
+import { requireModuleViewPage } from "@/lib/auth/require-module-page";
 
 export default async function UsersPage() {
-  await requireSuperAdminSession();
+  await requireModuleViewPage("USERS");
 
   return (
     <div className="space-y-6 text-text-primary">

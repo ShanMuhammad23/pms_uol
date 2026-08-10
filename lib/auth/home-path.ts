@@ -24,14 +24,20 @@ export function isEmployeeAllowedDashboardPath(pathname: string): boolean {
     return true;
   }
 
-  // Allow employees through to /dashboard/forms paths.
-  // Server-side page guards (requireModuleViewPage/requireModuleEditPage)
-  // enforce actual authorization via additional-access permissions.
-  if (
-    pathname === "/dashboard/forms" ||
-    pathname.startsWith("/dashboard/forms/")
-  ) {
-    return true;
+  // Allow employees through to module pages that may be granted via
+  // additional-access permissions. Server-side page guards
+  // (requireModuleViewPage/requireModuleEditPage) enforce actual
+  // authorization via additional-access permissions.
+  const modulePrefixes = [
+    "/dashboard/forms",
+    "/dashboard/users",
+    "/dashboard/matrices-and-cycles",
+    "/dashboard/entity-categories",
+  ];
+  for (const prefix of modulePrefixes) {
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+      return true;
+    }
   }
 
   return false;
