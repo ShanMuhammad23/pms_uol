@@ -4,10 +4,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Pencil, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  getUserOrgLevel1,
-  getUserOrgLevel2,
-} from "@/app/helpers/users-table-columns";
 import type { EntityRecord } from "@/types/entities";
 import type { FormTemplateListItem } from "@/types/forms";
 import {
@@ -22,7 +18,6 @@ import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-clien
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
 import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
-import { cn } from "@/lib/utils";
 import {
   ADDITIONAL_ACCESS_MODULES,
   ADDITIONAL_ACCESS_MODULE_LABELS,
@@ -188,15 +183,39 @@ export function EditUserModal({
     [entities],
   );
 
-  const orgPreviewUser = useMemo(() => {
-    if (!user || !form) return null;
-    return {
-      ...user,
-      entityId: form.entityId ? Number(form.entityId) : null,
-      entityName: selectedEntity?.name ?? null,
-      parentEntityName: selectedEntity?.parentName ?? null,
-    } satisfies UserRecord;
-  }, [user, form, selectedEntity]);
+  // Org Level 1 = top-level entities (no parent).
+  const orgLevel1Options = useMemo(
+    () =>
+      entities
+        .filter((entity) => entity.parentEntityId === null)
+        .map((entity) => ({
+          value: String(entity.id),
+          label: entity.name,
+        })),
+    [entities],
+  );
+
+  // Org Level 2 = child entities under the selected Org Level 1.
+  const orgLevel2Options = useMemo(() => {
+    if (!selectedEntity) return [];
+    const parentId = selectedEntity.parentEntityId ?? selectedEntity.id;
+    return entities
+      .filter((entity) => entity.parentEntityId === parentId)
+      .map((entity) => ({
+        value: String(entity.id),
+        label: entity.name,
+      }));
+  }, [entities, selectedEntity]);
+
+  // Derived selection for the two org-level dropdowns.
+  const orgLevel1Value = selectedEntity
+    ? selectedEntity.parentEntityId
+      ? String(selectedEntity.parentEntityId)
+      : String(selectedEntity.id)
+    : "";
+  const orgLevel2Value = selectedEntity?.parentEntityId
+    ? String(selectedEntity.id)
+    : "";
 
   if (!open || !user || !form) {
     return null;
@@ -458,26 +477,34 @@ export function EditUserModal({
                   </Field>
 
                   <Field label="ORG Level 1" htmlFor="edit-user-org-1">
-                    <input
+                    <SearchableSelect
                       id="edit-user-org-1"
-                      type="text"
-                      readOnly
-                      value={
-                        orgPreviewUser ? getUserOrgLevel1(orgPreviewUser) : "—"
+                      value={orgLevel1Value}
+                      options={orgLevel1Options}
+                      onChange={(next) =>
+                        setForm((current) =>
+                          current ? { ...current, entityId: next } : current,
+                        )
                       }
-                      className={cn(inputClassName, "bg-slate-50 dark:bg-slate-900")}
+                      disabled={isSubmitting}
+                      placeholder="None"
+                      emptyOptionLabel="None"
                     />
                   </Field>
 
                   <Field label="ORG Level 2" htmlFor="edit-user-org-2">
-                    <input
+                    <SearchableSelect
                       id="edit-user-org-2"
-                      type="text"
-                      readOnly
-                      value={
-                        orgPreviewUser ? getUserOrgLevel2(orgPreviewUser) : "—"
+                      value={orgLevel2Value}
+                      options={orgLevel2Options}
+                      onChange={(next) =>
+                        setForm((current) =>
+                          current ? { ...current, entityId: next } : current,
+                        )
                       }
-                      className={cn(inputClassName, "bg-slate-50 dark:bg-slate-900")}
+                      disabled={isSubmitting}
+                      placeholder="None"
+                      emptyOptionLabel="None"
                     />
                   </Field>
 
