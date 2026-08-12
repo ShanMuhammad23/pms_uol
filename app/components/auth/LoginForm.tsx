@@ -143,14 +143,21 @@ export function LoginForm() {
         </p>
       </header>
 
+      <div className="mb-1 flex items-center gap-2">
+        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+          Recommended
+        </span>
+      </div>
+
       <Button
         variant="social"
         isLoading={isGoogleLoading}
         disabled={isAnyLoading}
         onClick={handleGoogleSignIn}
-        aria-label="Continue with Google"
+        aria-label="Continue with Google — recommended sign-in method"
+        className="!h-12 shadow-md border-slate-300 dark:border-white/20 " 
         icon={
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
             <path d="M21.8 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.5c-.2 1.3-.9 2.5-2 3.3v2.8h3.2c1.9-1.8 3.1-4.4 3.1-8.1Z" />
             <path d="M12 22c2.7 0 5-1 6.7-2.6l-3.2-2.8c-.9.6-2 .9-3.5.9-2.6 0-4.8-1.8-5.6-4.2H3.1v2.9A10 10 0 0 0 12 22Z" />
             <path d="M6.4 13.3A6 6 0 0 1 6.1 12c0-.5.1-.9.2-1.3V7.8H3.1A10 10 0 0 0 2 12c0 1.7.4 3.3 1.1 4.7l3.3-2.9Z" />
@@ -161,7 +168,7 @@ export function LoginForm() {
         Continue with Google
       </Button>
 
-      <Divider text="Or sign in with email" />
+      <Divider text="OR" />
 
       <AnimatePresence>
         {authMessage && (
@@ -251,11 +258,11 @@ export function LoginForm() {
         <div className="pt-2">
           <Button
             type="submit"
-            variant="primary"
+            variant="outline"
             isLoading={isCredentialsLoading}
             disabled={isAnyLoading}
             icon={<GraduationCap className="h-4 w-4" />}
-            aria-label="Sign in with credentials"
+            aria-label="Sign in with email and password"
           >
             Sign In to Portal
           </Button>
