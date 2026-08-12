@@ -44,49 +44,6 @@ interface AppraisalRow {
   system_raw_score: string;
 }
 
-let remarksColumnReady: boolean | null = null;
-let attachmentsTableReady: boolean | null = null;
-
-async function ensureRemarksColumn(client?: PoolClient): Promise<void> {
-  if (remarksColumnReady) {
-    return;
-  }
-
-  const executor = client ?? db;
-  await executor.query(
-    `ALTER TABLE appraisal_answers
-     ADD COLUMN IF NOT EXISTS remarks TEXT`,
-  );
-  remarksColumnReady = true;
-}
-
-async function ensureAttachmentsTable(client?: PoolClient): Promise<void> {
-  if (attachmentsTableReady) {
-    return;
-  }
-
-  const executor = client ?? db;
-  await executor.query(`
-    CREATE TABLE IF NOT EXISTS appraisal_answer_attachments (
-      id BIGSERIAL PRIMARY KEY,
-      appraisal_id BIGINT NOT NULL REFERENCES appraisals(id) ON DELETE CASCADE,
-      question_id BIGINT NOT NULL REFERENCES form_questions(id) ON DELETE CASCADE,
-      filled_by_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      original_filename TEXT NOT NULL,
-      stored_filename TEXT NOT NULL,
-      relative_path TEXT NOT NULL,
-      mime_type TEXT,
-      size_bytes BIGINT NOT NULL DEFAULT 0,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  await executor.query(`
-    CREATE INDEX IF NOT EXISTS idx_answer_attachments_lookup
-      ON appraisal_answer_attachments (appraisal_id, question_id, filled_by_id)
-  `);
-  attachmentsTableReady = true;
-}
-
 export class EmployeeFormError extends Error {
   constructor(
     message: string,
@@ -308,8 +265,6 @@ async function getAnswersForAppraisal(
   client?: PoolClient,
 ): Promise<EmployeeFormAnswerRecord[]> {
   const executor = client ?? db;
-  await ensureRemarksColumn(client);
-  await ensureAttachmentsTable(client);
 
   const result = await executor.query<{
     question_id: string;
@@ -358,7 +313,6 @@ export async function listAttachmentsForAppraisal(
   client?: PoolClient,
 ): Promise<EmployeeFormAnswerAttachment[]> {
   const executor = client ?? db;
-  await ensureAttachmentsTable(client);
 
   const result = await executor.query<{
     id: string;
@@ -608,87 +562,32 @@ function normalizeAnswer(
 export async function listAssignedFormsForUser(
   userId: number,
 ): Promise<AssignedFormListItem[]> {
-  // Two queries total (eligibility + assignments⋈appraisals). Avoids the old
-  // N+1 that opened one pool checkout per assigned form via Promise.all.
-  const [eligibilityCtx, result] = await Promise.all([
-    getUserAssessmentEligibilityContext(userId),
-    db.query<{
-      id: string;
-      title: string;
-      description: string | null;
-      question_count: string;
-      self_assessment_disabled: boolean;
-      fiscal_year: number;
-      appraisal_id: string | null;
-      appraisal_status: string | null;
-      submitted_at: string | null;
-      appraisal_updated_at: string | null;
-      system_raw_score: string | null;
-    }>(
-      `SELECT
-         ft.id,
-         ft.title,
-         ft.description,
-         efa.self_assessment_disabled,
-         ac.fiscal_year,
-         COUNT(fq.id)::text AS question_count,
-         a.id AS appraisal_id,
-         a.status AS appraisal_status,
-         a.submitted_at::text AS submitted_at,
-         a.updated_at::text AS appraisal_updated_at,
-         a.system_raw_score
-       FROM employee_form_assignments efa
-       INNER JOIN form_templates ft ON ft.id = efa.template_id
-       INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
-       LEFT JOIN form_questions fq ON fq.template_id = ft.id
-       LEFT JOIN appraisals a
-         ON a.template_id = ft.id
-        AND a.employee_id = efa.employee_id
-       WHERE efa.employee_id = $1
-       GROUP BY
-         ft.id,
-         efa.self_assessment_disabled,
-         ac.fiscal_year,
-         a.id,
-         a.status,
-         a.submitted_at,
-         a.updated_at,
-         a.system_raw_score
-       ORDER BY ft.id DESC`,
-      [userId],
-    ),
-  ]);
+  const explicitAssignments = await listExplicitlyAssignedTemplatesForUser(userId);
+  const eligibilityCtx = await getUserAssessmentEligibilityContext(userId);
 
-  return result.rows.map((row) => {
-    const selfAssessmentEnabled = !row.self_assessment_disabled;
-    const appraisal: AppraisalRow | null = row.appraisal_id
-      ? {
-          id: row.appraisal_id,
-          status: row.appraisal_status ?? "",
-          submitted_at: row.submitted_at,
-          updated_at: row.appraisal_updated_at ?? "",
-          system_raw_score: row.system_raw_score ?? "0",
-        }
-      : null;
-    const eligibility = resolveEmployeeAssessmentEligibility(
-      eligibilityCtx,
-      Number(row.fiscal_year),
-    );
+  return Promise.all(
+    explicitAssignments.map(async (assigned) => {
+      const appraisal = await getAppraisalForUserTemplate(userId, assigned.templateId);
+      const eligibility = resolveEmployeeAssessmentEligibility(
+        eligibilityCtx,
+        assigned.fiscalYear,
+      );
 
-    return {
-      templateId: Number(row.id),
-      title: row.title,
-      description: row.description,
-      questionCount: Number(row.question_count),
-      status: resolveAppraisalWorkflowStatus(appraisal, selfAssessmentEnabled),
-      selfAssessmentEnabled,
-      submittedAt: appraisal?.submitted_at ?? null,
-      updatedAt: appraisal?.updated_at ?? null,
-      eligibilityStatus: eligibility.eligibilityStatus,
-      canFillAssessment: eligibility.canFillAssessment,
-      ineligibilityReason: eligibility.ineligibilityReason,
-    } satisfies AssignedFormListItem;
-  });
+      return {
+        templateId: assigned.templateId,
+        title: assigned.title,
+        description: assigned.description,
+        questionCount: assigned.questionCount,
+        status: resolveAppraisalWorkflowStatus(appraisal, assigned.selfAssessmentEnabled),
+        selfAssessmentEnabled: assigned.selfAssessmentEnabled,
+        submittedAt: appraisal?.submitted_at ?? null,
+        updatedAt: appraisal?.updated_at ?? null,
+        eligibilityStatus: eligibility.eligibilityStatus,
+        canFillAssessment: eligibility.canFillAssessment,
+        ineligibilityReason: eligibility.ineligibilityReason,
+      } satisfies AssignedFormListItem;
+    }),
+  );
 }
 
 export async function getEmployeeFormDetail(
@@ -808,7 +707,6 @@ export async function saveEmployeeForm(
       const normalized = normalizeAnswer(template, answer);
       normalizedAnswers.push({ questionId: answer.questionId, normalized });
 
-      await ensureRemarksColumn(client);
       await client.query(
         `INSERT INTO appraisal_answers (
            appraisal_id,
@@ -979,8 +877,6 @@ export async function addEmployeeFormAttachment(
 
   try {
     await client.query("BEGIN");
-    await ensureRemarksColumn(client);
-    await ensureAttachmentsTable(client);
 
     const existing = await getAppraisalForUserTemplate(
       userId,
@@ -1077,7 +973,6 @@ export async function getEmployeeFormAttachmentForDownload(
   mimeType: string | null;
 }> {
   await assertTemplateAssignedToUser(userId, templateId);
-  await ensureAttachmentsTable();
 
   const result = await db.query<{
     relative_path: string;
@@ -1119,7 +1014,6 @@ export async function deleteEmployeeFormAttachment(
   attachmentId: number,
 ): Promise<void> {
   await assertTemplateAssignedToUser(userId, templateId);
-  await ensureAttachmentsTable();
 
   const appraisal = await getAppraisalForUserTemplate(userId, templateId);
   if (!appraisal) {
@@ -1172,7 +1066,6 @@ export async function getSubmissionAttachmentForDownload(
   originalFilename: string;
   mimeType: string | null;
 }> {
-  await ensureAttachmentsTable();
 
   const result = await db.query<{
     relative_path: string;

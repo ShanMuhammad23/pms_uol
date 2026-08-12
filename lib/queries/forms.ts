@@ -94,30 +94,6 @@ export class FormTemplateError extends Error {
 const APPRAISAL_ANSWER_BLOCK_MESSAGE =
   "This form has appraisal answers linked to questions that would be removed. Delete or archive those answers first, or only edit question text/options in place.";
 
-async function ensureAdditionalRemarksColumns(): Promise<void> {
-  await db.query(
-    `ALTER TABLE form_templates
-     ADD COLUMN IF NOT EXISTS additional_remarks_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
-  );
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS manager1_overall_remarks TEXT,
-     ADD COLUMN IF NOT EXISTS manager2_overall_remarks TEXT`,
-  );
-}
-
-async function ensureFormTemplateUpdatedByColumn(): Promise<void> {
-  await db.query(
-    `ALTER TABLE form_templates
-     ADD COLUMN IF NOT EXISTS updated_by BIGINT REFERENCES users(id)`,
-  );
-}
-
-async function ensureFormTemplateSchema(): Promise<void> {
-  await ensureAdditionalRemarksColumns();
-  await ensureFormTemplateUpdatedByColumn();
-}
-
 function mapFormTemplateListItem(row: FormTemplateListRow): FormTemplateListItem {
   const firstName = row.updated_by_first_name?.trim() ?? "";
   const lastName = row.updated_by_last_name?.trim() ?? "";
@@ -809,8 +785,8 @@ export async function getFormTemplateAppraisalCount(
 }
 
 export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
-  await ensureFormTemplateSchema();
-
+  // Pre-aggregate child counts. Joining questions × appraisals × assignments
+  // before GROUP BY creates a cartesian product (e.g. 38×405×406 ≈ 6M rows).
   const result = await db.query<FormTemplateListRow>(
     `SELECT
        ft.id,
@@ -822,9 +798,9 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        ft.target_sub_category,
        ft.self_assessment_enabled,
        ft.additional_remarks_enabled,
-       COUNT(DISTINCT fq.id)::text AS question_count,
-       COUNT(DISTINCT ap.id)::text AS appraisal_count,
-       COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
+       COALESCE(qc.question_count, '0') AS question_count,
+       COALESCE(apc.appraisal_count, '0') AS appraisal_count,
+       COALESCE(efa.assigned_employee_count, '0') AS assigned_employee_count,
        ft.created_at::text,
        ft.updated_at::text,
        ft.updated_by::text,
@@ -834,15 +810,21 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN users ub ON ub.id = ft.updated_by
-     LEFT JOIN form_questions fq ON fq.template_id = ft.id
-     LEFT JOIN appraisals ap ON ap.template_id = ft.id
-     LEFT JOIN employee_form_assignments efa ON efa.template_id = ft.id
-     GROUP BY
-       ft.id,
-       ac.fiscal_year,
-       ub.first_name,
-       ub.last_name,
-       ub.employee_id
+     LEFT JOIN (
+       SELECT template_id, COUNT(*)::text AS question_count
+       FROM form_questions
+       GROUP BY template_id
+     ) qc ON qc.template_id = ft.id
+     LEFT JOIN (
+       SELECT template_id, COUNT(*)::text AS appraisal_count
+       FROM appraisals
+       GROUP BY template_id
+     ) apc ON apc.template_id = ft.id
+     LEFT JOIN (
+       SELECT template_id, COUNT(DISTINCT employee_id)::text AS assigned_employee_count
+       FROM employee_form_assignments
+       GROUP BY template_id
+     ) efa ON efa.template_id = ft.id
      ORDER BY ft.updated_at DESC`,
   );
 
@@ -853,8 +835,6 @@ export async function listDirectAssessmentTemplates(scope: {
   reviewerUserId: number;
   headEntityId: number | null;
 }): Promise<FormTemplateListItem[]> {
-  await ensureFormTemplateSchema();
-
   const { reviewerUserId, headEntityId } = scope;
 
   const scopedEntityIds =
@@ -891,8 +871,8 @@ export async function listDirectAssessmentTemplates(scope: {
        ft.target_sub_category,
        ft.self_assessment_enabled,
        ft.additional_remarks_enabled,
-       COUNT(DISTINCT fq.id)::text AS question_count,
-       COUNT(DISTINCT ap.id)::text AS appraisal_count,
+       COALESCE(qc.question_count, '0') AS question_count,
+       COALESCE(apc.appraisal_count, '0') AS appraisal_count,
        COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
        ft.created_at::text,
        ft.updated_at::text,
@@ -903,8 +883,16 @@ export async function listDirectAssessmentTemplates(scope: {
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN users ub ON ub.id = ft.updated_by
-     LEFT JOIN form_questions fq ON fq.template_id = ft.id
-     LEFT JOIN appraisals ap ON ap.template_id = ft.id
+     LEFT JOIN (
+       SELECT template_id, COUNT(*)::text AS question_count
+       FROM form_questions
+       GROUP BY template_id
+     ) qc ON qc.template_id = ft.id
+     LEFT JOIN (
+       SELECT template_id, COUNT(*)::text AS appraisal_count
+       FROM appraisals
+       GROUP BY template_id
+     ) apc ON apc.template_id = ft.id
      INNER JOIN employee_form_assignments efa ON efa.template_id = ft.id
      INNER JOIN users u ON u.id = efa.employee_id
        AND u.is_active = TRUE
@@ -917,7 +905,9 @@ export async function listDirectAssessmentTemplates(scope: {
        ac.fiscal_year,
        ub.first_name,
        ub.last_name,
-       ub.employee_id
+       ub.employee_id,
+       qc.question_count,
+       apc.appraisal_count
      ORDER BY ft.updated_at DESC`,
     visibilityParams,
   );
@@ -928,8 +918,6 @@ export async function listDirectAssessmentTemplates(scope: {
 export async function getFormTemplateById(
   id: number,
 ): Promise<FormTemplateRecord | null> {
-  await ensureFormTemplateSchema();
-
   const result = await db.query<FormTemplateRow>(
     `SELECT
        ft.id,
@@ -979,7 +967,6 @@ export async function createFormTemplate(
   input: FormTemplateInput,
   createdById?: number,
 ): Promise<FormTemplateRecord> {
-  await ensureFormTemplateSchema();
   const client = await db.connect();
 
   try {
@@ -1041,7 +1028,6 @@ export async function updateFormTemplate(
   input: FormTemplateInput,
   updatedById?: number,
 ): Promise<FormTemplateRecord> {
-  await ensureFormTemplateSchema();
   const client = await db.connect();
 
   try {

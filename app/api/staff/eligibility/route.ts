@@ -3,17 +3,6 @@ import { requireSubmissionReviewerApi } from "@/lib/auth/require-submission-revi
 import { db } from "@/lib/db";
 import { FormSubmissionError } from "@/lib/queries/form-submissions";
 
-async function ensureAssessmentEligibilityColumn(): Promise<void> {
-  await db.query(
-    `ALTER TABLE users
-     ADD COLUMN IF NOT EXISTS assessment_eligibility BOOLEAN NOT NULL DEFAULT TRUE`,
-  );
-  await db.query(
-    `ALTER TABLE users
-     ADD COLUMN IF NOT EXISTS ineligibility_reason TEXT`,
-  );
-}
-
 export async function PATCH(request: Request) {
   const auth = await requireSubmissionReviewerApi();
   if (auth instanceof NextResponse) {
@@ -21,8 +10,6 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    await ensureAssessmentEligibilityColumn();
-
     const body = (await request.json()) as Record<string, unknown>;
 
     if (!Array.isArray(body.employeeIds) || body.employeeIds.length === 0) {

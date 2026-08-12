@@ -247,7 +247,6 @@ export async function getDirectAssessmentData(
     .filter((id) => id !== 0);
 
   if (submissionIds.length > 0) {
-    await ensureOverallRemarksColumns();
     const remarksRows = await db.query<{
       id: string;
       manager1_overall_remarks: string | null;
@@ -282,14 +281,6 @@ export async function getDirectAssessmentData(
     manager1AnswersBySubmission,
     overallRemarksBySubmission,
   };
-}
-
-async function ensureOverallRemarksColumns(): Promise<void> {
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS manager1_overall_remarks TEXT,
-     ADD COLUMN IF NOT EXISTS manager2_overall_remarks TEXT`,
-  );
 }
 
 async function getAnswersForSubmission(

@@ -5,7 +5,6 @@ import { db } from "@/lib/db";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
 import type { StaffListScope } from "@/lib/queries/staff-list-scope";
-import { ensureManager2Column } from "@/lib/queries/users";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
 
@@ -71,39 +70,6 @@ async function hasRoleCategoryColumn(): Promise<boolean> {
   );
 
   return Boolean(result.rows[0]?.exists);
-}
-
-async function ensureManagerLevelColumn(): Promise<void> {
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS manager_level INT NOT NULL DEFAULT 1`,
-  );
-}
-
-async function ensureEligibilityColumns(): Promise<void> {
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS eligibility_status VARCHAR(30),
-     ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(3, 1)`,
-  );
-}
-
-async function ensureAssessmentEligibilityColumn(): Promise<void> {
-  await db.query(
-    `ALTER TABLE users
-     ADD COLUMN IF NOT EXISTS assessment_eligibility BOOLEAN NOT NULL DEFAULT TRUE`,
-  );
-  await db.query(
-    `ALTER TABLE users
-     ADD COLUMN IF NOT EXISTS ineligibility_reason TEXT`,
-  );
-}
-
-async function ensureHrApprovalStatusColumn(): Promise<void> {
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS hr_approval_status VARCHAR(20) DEFAULT 'pending'`,
-  );
 }
 
 function toNumber(value: string | number | null | undefined): number | null {
@@ -258,11 +224,6 @@ export async function listDashboardOverview(
     hasExcelSheetColumns(),
     hasRoleCategoryColumn(),
     getEligibilityContext(),
-    ensureManagerLevelColumn(),
-    ensureEligibilityColumns(),
-    ensureManager2Column(),
-    ensureAssessmentEligibilityColumn(),
-    ensureHrApprovalStatusColumn(),
   ]);
 
   const designationSelect = excelReady

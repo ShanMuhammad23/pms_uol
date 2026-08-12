@@ -29,7 +29,8 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
     queryKey: ["form-templates"],
     queryFn: fetchFormTemplates,
     initialData: templates,
-    refetchOnMount: "always",
+    // SSR already loaded templates; avoid an immediate duplicate /api/admin/forms hit.
+    staleTime: 30_000,
   });
 
   useEffect(() => {

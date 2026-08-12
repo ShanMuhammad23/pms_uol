@@ -49,19 +49,6 @@ type UserOrgMode = "entity" | "department";
 let cachedUserOrgMode: UserOrgMode | null = null;
 let cachedExcelColumns: boolean | null = null;
 let cachedQualificationsTable: boolean | null = null;
-let manager2ColumnEnsured = false;
-
-export async function ensureManager2Column(): Promise<void> {
-  if (manager2ColumnEnsured) {
-    return;
-  }
-
-  await db.query(
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL`,
-  );
-
-  manager2ColumnEnsured = true;
-}
 
 async function hasExcelSheetColumns(): Promise<boolean> {
   if (cachedExcelColumns !== null) {
@@ -329,8 +316,6 @@ async function assertValidManagers(
  * Used as the single source of truth for populating Manager 1/2 dropdowns.
  */
 export async function listEligibleManagers(): Promise<UserRecord[]> {
-  await ensureManager2Column();
-
   const [mode, excelReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -385,8 +370,6 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
-  await ensureManager2Column();
-
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -404,8 +387,6 @@ export async function listUsers(): Promise<UserRecord[]> {
  * Slim user rows for filter facets / head pickers (no qualifications join).
  */
 export async function listUsersOverview(): Promise<UserRecord[]> {
-  await ensureManager2Column();
-
   const [mode, excelReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -431,8 +412,6 @@ export async function listUsersByEmployeeIds(
     return [];
   }
 
-  await ensureManager2Column();
-
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -455,8 +434,6 @@ export async function listUsersByEmployeeIds(
 
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
-  await ensureManager2Column();
-
   const [mode, excelReady, qualsReady] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
@@ -476,8 +453,6 @@ export async function getUserById(id: number): Promise<UserRecord | null> {
 }
 
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {
-  await ensureManager2Column();
-
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
   const [excelReady, qualsReady] = await Promise.all([
@@ -594,8 +569,6 @@ export async function updateUser(
   id: number,
   input: UpdateUserInput,
 ): Promise<UserRecord> {
-  await ensureManager2Column();
-
   const normalized = normalizeUserInput(input);
   const mode = await getUserOrgMode();
   const [excelReady, qualsReady] = await Promise.all([

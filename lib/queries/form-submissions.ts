@@ -27,7 +27,7 @@ import {
   toEmployeeManagers,
 } from "@/app/helpers/manager-review";
 import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
-import { assertManagerEligible, ensureManager2Column } from "@/lib/queries/users";
+import { assertManagerEligible } from "@/lib/queries/users";
 import type { StaffListScope } from "@/lib/queries/staff-list-scope";
 
 export class FormSubmissionError extends Error {
@@ -137,13 +137,6 @@ async function hasRoleCategoryColumn(): Promise<boolean> {
   return Boolean(result.rows[0]?.exists);
 }
 
-async function ensureManagerLevelColumn(): Promise<void> {
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS manager_level INT NOT NULL DEFAULT 1`,
-  );
-}
-
 async function hasQualificationsTable(): Promise<boolean> {
   const result = await db.query<{ exists: boolean }>(
     `SELECT EXISTS (
@@ -171,17 +164,6 @@ async function hasAssessmentEligibilityColumn(): Promise<boolean> {
   return Boolean(result.rows[0]?.exists);
 }
 
-async function ensureAssessmentEligibilityColumn(): Promise<void> {
-  await db.query(
-    `ALTER TABLE users
-     ADD COLUMN IF NOT EXISTS assessment_eligibility BOOLEAN NOT NULL DEFAULT TRUE`,
-  );
-  await db.query(
-    `ALTER TABLE users
-     ADD COLUMN IF NOT EXISTS ineligibility_reason TEXT`,
-  );
-}
-
 function toNumber(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
@@ -192,10 +174,6 @@ async function getAnswersForSubmission(
   appraisalId: number,
   filledById: number,
 ): Promise<EmployeeFormAnswerRecord[]> {
-  await db.query(
-    `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
-  );
-
   const result = await db.query<{
     question_id: string;
     text_response: string | null;
@@ -387,33 +365,6 @@ async function getEligibilityContext(): Promise<{
   };
 }
 
-async function ensureEligibilityColumns(): Promise<void> {
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS eligibility_status VARCHAR(30),
-     ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(3, 1)`,
-  );
-}
-
-async function ensureHrApprovalStatusColumn(): Promise<void> {
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS hr_approval_status VARCHAR(20) DEFAULT 'pending'`,
-  );
-}
-
-async function ensureOverallRemarksColumns(): Promise<void> {
-  await db.query(
-    `ALTER TABLE appraisals
-     ADD COLUMN IF NOT EXISTS manager1_overall_remarks TEXT,
-     ADD COLUMN IF NOT EXISTS manager2_overall_remarks TEXT`,
-  );
-  await db.query(
-    `ALTER TABLE form_templates
-     ADD COLUMN IF NOT EXISTS additional_remarks_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
-  );
-}
-
 function formatReferenceDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -436,12 +387,6 @@ export async function listFormSubmissions(
     hasQualificationsTable(),
     getActiveFinancialYearQuartileBands(),
     getEligibilityContext(),
-    ensureManagerLevelColumn(),
-    ensureEligibilityColumns(),
-    ensureManager2Column(),
-    ensureAssessmentEligibilityColumn(),
-    ensureHrApprovalStatusColumn(),
-    ensureOverallRemarksColumns(),
   ]);
 
   const roleCategorySelect = roleCategoryReady
@@ -690,8 +635,6 @@ export async function getFormSubmissionSummaryById(
     | "ineligibilityReason"
   > | null
 > {
-  await ensureManager2Column();
-  await ensureAssessmentEligibilityColumn();
 
   const result = await db.query<{
     id: string;
@@ -1080,10 +1023,6 @@ export async function saveBulkReviewQuestionScores(
     );
   }
 
-  await db.query(
-    `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
-  );
-
   let savedCount = 0;
 
   for (const entry of entries) {
@@ -1205,10 +1144,6 @@ async function seedManagerAnswersFromSource(
     return;
   }
 
-  await db.query(
-    `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
-  );
-
   for (const answer of sourceAnswers) {
     await db.query(
       `INSERT INTO appraisal_answers (
@@ -1243,10 +1178,6 @@ export async function saveManagerReviewAnswers(
   },
 ): Promise<EmployeeFormAnswerRecord[]> {
   const questionById = new Map(templateQuestions.map((q) => [q.id, q]));
-
-  await db.query(
-    `ALTER TABLE appraisal_answers ADD COLUMN IF NOT EXISTS remarks TEXT`,
-  );
 
   for (const answer of answers) {
     const question = questionById.get(answer.questionId);
@@ -1293,7 +1224,6 @@ export async function saveManagerReviewAnswers(
   // Only write to the column matching the current manager level so Manager 2
   // never overwrites Manager 1 remarks (and vice versa).
   if (options?.overallRemarks !== undefined) {
-    await ensureOverallRemarksColumns();
     const trimmedRemarks =
       typeof options.overallRemarks === "string"
         ? options.overallRemarks.trim() || null
@@ -1319,8 +1249,6 @@ export async function approveManagerReview(appraisalId: number): Promise<{
   managerLevel: number;
   status: AppraisalStatus;
 }> {
-  await Promise.all([ensureManagerLevelColumn(), ensureManager2Column()]);
-
   const current = await db.query<{
     status: AppraisalStatus;
     manager_level: number;
@@ -1742,7 +1670,6 @@ export async function updateAppraisalOverallRemarks(
   manager1OverallRemarks: string | null;
   manager2OverallRemarks: string | null;
 }> {
-  await ensureOverallRemarksColumns();
 
   const column =
     managerLevel === 1 ? "manager1_overall_remarks" : "manager2_overall_remarks";
