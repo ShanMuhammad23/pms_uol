@@ -22,6 +22,11 @@ export function buildEligibilityDataFromCounts(
   }));
 }
 
+/**
+ * Performance Rating Curve series:
+ * - Quota: institutional % × eligible employee count
+ * - Actual: counts from ratingDistribution (HR-approved alignments only)
+ */
 export function buildCalibrationDataFromCounts(
   ratingDistribution: CountOption[],
   quotas?: Array<{ rating: string; quota: number }> | null,

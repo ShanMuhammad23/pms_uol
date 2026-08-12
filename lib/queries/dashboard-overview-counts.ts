@@ -114,6 +114,9 @@ function buildRatingDistribution(
   for (const submission of submissions) {
     if (!hasAppraisalProgress(submission)) continue;
     if (!isSubmissionEligible(submission)) continue;
+    // Match Rating × Quartile Matrix / Performance Rating Curve Actual:
+    // only HR-approved alignments contribute to the distribution.
+    if (getHrApprovalStatus(submission) !== "approved") continue;
 
     const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
     if (!resolved) continue;

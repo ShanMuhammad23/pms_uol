@@ -1118,25 +1118,58 @@ export async function updateFormTemplate(
 export async function deleteFormTemplate(id: number): Promise<{
   appraisalCount: number;
 }> {
-  const appraisalResult = await db.query<{ count: string }>(
-    `SELECT COUNT(*)::text AS count
-     FROM appraisals
-     WHERE template_id = $1`,
-    [id],
-  );
+  const client = await db.connect();
 
-  const appraisalCount = Number(appraisalResult.rows[0]?.count ?? 0);
+  try {
+    await client.query("BEGIN");
 
-  const result = await db.query(
-    `DELETE FROM form_templates WHERE id = $1 RETURNING id`,
-    [id],
-  );
+    const appraisalResult = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM appraisals
+       WHERE template_id = $1`,
+      [id],
+    );
 
-  if (result.rows.length === 0) {
-    throw new FormTemplateError("Form template not found.", 404);
+    const appraisalCount = Number(appraisalResult.rows[0]?.count ?? 0);
+
+    // Unassign only removes draft appraisals. Submitted ones keep answers that
+    // RESTRICT-block form_questions deletion (and thus template CASCADE).
+    // Clear answer rows for this template's questions first; appraisals stay
+    // and get template_id SET NULL when the template row is removed.
+    await client.query(
+      `DELETE FROM appraisal_answer_attachments
+       WHERE question_id IN (
+         SELECT id FROM form_questions WHERE template_id = $1
+       )`,
+      [id],
+    );
+
+    await client.query(
+      `DELETE FROM appraisal_answers
+       WHERE question_id IN (
+         SELECT id FROM form_questions WHERE template_id = $1
+       )`,
+      [id],
+    );
+
+    const result = await client.query(
+      `DELETE FROM form_templates WHERE id = $1 RETURNING id`,
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
+      throw new FormTemplateError("Form template not found.", 404);
+    }
+
+    await client.query("COMMIT");
+    return { appraisalCount };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-
-  return { appraisalCount };
 }
 
 export async function assignFormTemplateToEmployees(
