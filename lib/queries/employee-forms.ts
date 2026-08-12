@@ -608,32 +608,87 @@ function normalizeAnswer(
 export async function listAssignedFormsForUser(
   userId: number,
 ): Promise<AssignedFormListItem[]> {
-  const explicitAssignments = await listExplicitlyAssignedTemplatesForUser(userId);
-  const eligibilityCtx = await getUserAssessmentEligibilityContext(userId);
+  // Two queries total (eligibility + assignments⋈appraisals). Avoids the old
+  // N+1 that opened one pool checkout per assigned form via Promise.all.
+  const [eligibilityCtx, result] = await Promise.all([
+    getUserAssessmentEligibilityContext(userId),
+    db.query<{
+      id: string;
+      title: string;
+      description: string | null;
+      question_count: string;
+      self_assessment_disabled: boolean;
+      fiscal_year: number;
+      appraisal_id: string | null;
+      appraisal_status: string | null;
+      submitted_at: string | null;
+      appraisal_updated_at: string | null;
+      system_raw_score: string | null;
+    }>(
+      `SELECT
+         ft.id,
+         ft.title,
+         ft.description,
+         efa.self_assessment_disabled,
+         ac.fiscal_year,
+         COUNT(fq.id)::text AS question_count,
+         a.id AS appraisal_id,
+         a.status AS appraisal_status,
+         a.submitted_at::text AS submitted_at,
+         a.updated_at::text AS appraisal_updated_at,
+         a.system_raw_score
+       FROM employee_form_assignments efa
+       INNER JOIN form_templates ft ON ft.id = efa.template_id
+       INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
+       LEFT JOIN form_questions fq ON fq.template_id = ft.id
+       LEFT JOIN appraisals a
+         ON a.template_id = ft.id
+        AND a.employee_id = efa.employee_id
+       WHERE efa.employee_id = $1
+       GROUP BY
+         ft.id,
+         efa.self_assessment_disabled,
+         ac.fiscal_year,
+         a.id,
+         a.status,
+         a.submitted_at,
+         a.updated_at,
+         a.system_raw_score
+       ORDER BY ft.id DESC`,
+      [userId],
+    ),
+  ]);
 
-  return Promise.all(
-    explicitAssignments.map(async (assigned) => {
-      const appraisal = await getAppraisalForUserTemplate(userId, assigned.templateId);
-      const eligibility = resolveEmployeeAssessmentEligibility(
-        eligibilityCtx,
-        assigned.fiscalYear,
-      );
+  return result.rows.map((row) => {
+    const selfAssessmentEnabled = !row.self_assessment_disabled;
+    const appraisal: AppraisalRow | null = row.appraisal_id
+      ? {
+          id: row.appraisal_id,
+          status: row.appraisal_status ?? "",
+          submitted_at: row.submitted_at,
+          updated_at: row.appraisal_updated_at ?? "",
+          system_raw_score: row.system_raw_score ?? "0",
+        }
+      : null;
+    const eligibility = resolveEmployeeAssessmentEligibility(
+      eligibilityCtx,
+      Number(row.fiscal_year),
+    );
 
-      return {
-        templateId: assigned.templateId,
-        title: assigned.title,
-        description: assigned.description,
-        questionCount: assigned.questionCount,
-        status: resolveAppraisalWorkflowStatus(appraisal, assigned.selfAssessmentEnabled),
-        selfAssessmentEnabled: assigned.selfAssessmentEnabled,
-        submittedAt: appraisal?.submitted_at ?? null,
-        updatedAt: appraisal?.updated_at ?? null,
-        eligibilityStatus: eligibility.eligibilityStatus,
-        canFillAssessment: eligibility.canFillAssessment,
-        ineligibilityReason: eligibility.ineligibilityReason,
-      } satisfies AssignedFormListItem;
-    }),
-  );
+    return {
+      templateId: Number(row.id),
+      title: row.title,
+      description: row.description,
+      questionCount: Number(row.question_count),
+      status: resolveAppraisalWorkflowStatus(appraisal, selfAssessmentEnabled),
+      selfAssessmentEnabled,
+      submittedAt: appraisal?.submitted_at ?? null,
+      updatedAt: appraisal?.updated_at ?? null,
+      eligibilityStatus: eligibility.eligibilityStatus,
+      canFillAssessment: eligibility.canFillAssessment,
+      ineligibilityReason: eligibility.ineligibilityReason,
+    } satisfies AssignedFormListItem;
+  });
 }
 
 export async function getEmployeeFormDetail(
