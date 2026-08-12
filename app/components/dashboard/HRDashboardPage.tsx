@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ClipboardList, LayoutDashboard } from "lucide-react";
+import { ClearAllFiltersButton } from "@/app/components/common/ClearAllFiltersButton";
 import { DashboardFilterBar } from "@/app/components/dashboard/DashboardFilterBar";
 import { DashboardPrimaryCharts } from "@/app/components/dashboard/DashboardPrimaryCharts";
 import { DashboardSectionToggles } from "@/app/components/dashboard/DashboardSectionToggles";
@@ -117,31 +118,37 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   return (
     <div className="relative min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
       {canAccessDirectAssessment ? (
-        <div className="mb-2 flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
-          <button
-            onClick={() => setActiveTab("overview")}
-            className={cn(
-              "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
-              activeTab === "overview"
-                ? "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300"
-                : "border-transparent text-foreground/60 hover:text-text-primary",
-            )}
-          >
-            <LayoutDashboard className="size-3.5" />
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab("direct-assessment")}
-            className={cn(
-              "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
-              activeTab === "direct-assessment"
-                ? "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300"
-                : "border-transparent text-foreground/60 hover:text-text-primary",
-            )}
-          >
-            <ClipboardList className="size-3.5" />
-            Direct Assessment
-          </button>
+        <div className="mb-2 flex items-center justify-between gap-1 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab("overview")}
+              className={cn(
+                "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+                activeTab === "overview"
+                  ? "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300"
+                  : "border-transparent text-foreground/60 hover:text-text-primary",
+              )}
+            >
+              <LayoutDashboard className="size-3.5" />
+              Overview
+            </button>
+            <button
+              onClick={() => setActiveTab("direct-assessment")}
+              className={cn(
+                "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+                activeTab === "direct-assessment"
+                  ? "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300"
+                  : "border-transparent text-foreground/60 hover:text-text-primary",
+              )}
+            >
+              <ClipboardList className="size-3.5" />
+              Direct Assessment
+            </button>
+          </div>
+          <ClearAllFiltersButton
+            hasActiveFilters={tableHasActiveFilters}
+            onClearAllFilters={globalClearAllFilters}
+          />
         </div>
       ) : null}
 
@@ -184,8 +191,12 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           entitiesLoading={entitiesLoading || overviewLoading}
           activeFilters={activeFilters}
           onClearAllFilters={clearAllFilters}
-          hasGlobalActiveFilters={tableHasActiveFilters}
-          onGlobalClearAllFilters={globalClearAllFilters}
+          {...(!canAccessDirectAssessment
+            ? {
+                hasGlobalActiveFilters: tableHasActiveFilters,
+                onGlobalClearAllFilters: globalClearAllFilters,
+              }
+            : {})}
         />
 
         {isHead ? (

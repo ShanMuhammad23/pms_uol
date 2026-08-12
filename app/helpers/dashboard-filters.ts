@@ -77,7 +77,11 @@ export function matchesCardFilter(
       return isBoardApprovalApproved(submission);
     default:
       if (cardFilter.startsWith("eligibility:")) {
-        const status = cardFilter.slice("eligibility:".length) as
+        const raw = cardFilter.slice("eligibility:".length);
+        // The EligibilityStatCard passes display labels (e.g. "Not Applicable")
+        // rather than internal EligibilityStatus values (e.g. "Ineligible").
+        // Normalize back to the internal status before matching.
+        const status = (raw === "Not Applicable" ? "Ineligible" : raw) as
           | "Fully Eligible"
           | "Partially Eligible"
           | "Not Eligible"

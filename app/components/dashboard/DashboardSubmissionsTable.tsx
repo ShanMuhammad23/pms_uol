@@ -1819,6 +1819,7 @@ export function DashboardSubmissionsTable({
           open={eligibilityModalState.open}
           employeeName={eligibilityModalState.submission.employeeName}
           currentEligibility={eligibilityModalState.submission.assessmentEligibility}
+          submission={eligibilityModalState.submission}
           isPending={eligibilityToggleMutation.isPending}
           error={eligibilityModalState.error}
           onClose={() =>

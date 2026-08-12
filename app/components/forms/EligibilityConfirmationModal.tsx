@@ -3,12 +3,19 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, ShieldOff, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  getEligibilityDisplayLabel,
+  getSubmissionEligibilityDisplayStatus,
+} from "@/app/helpers/dashboard-eligibility";
+import type { FormSubmissionListItem } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 
 interface EligibilityConfirmationModalProps {
   open: boolean;
   employeeName: string;
   currentEligibility: boolean;
+  /** Full submission row, used to resolve the original stored eligibility status. */
+  submission?: FormSubmissionListItem | null;
   onConfirm: (reason: string) => void;
   onClose: () => void;
   isPending?: boolean;
@@ -19,6 +26,7 @@ export default function EligibilityConfirmationModal({
   open,
   employeeName,
   currentEligibility,
+  submission,
   onConfirm,
   onClose,
   isPending = false,
@@ -35,6 +43,18 @@ export default function EligibilityConfirmationModal({
   const isDisabling = currentEligibility;
   const reasonTrimmed = reason.trim();
   const canConfirm = !isDisabling || reasonTrimmed.length > 0;
+
+  // Resolve the original eligibility status from the submission row using the
+  // same helper as the dashboard's Eligible? column. Falls back to the manual
+  // boolean when no submission context is available.
+  const originalStatusLabel = submission
+    ? getEligibilityDisplayLabel(getSubmissionEligibilityDisplayStatus(submission))
+    : currentEligibility
+      ? "Eligible"
+      : "Not Applicable";
+  const isOriginalEligible =
+    originalStatusLabel !== "Not Applicable" && originalStatusLabel !== "Not Eligible";
+  const isPartiallyEligible = originalStatusLabel === "Partially Eligible";
 
   const handleConfirm = () => {
     if (!canConfirm || isPending) return;
@@ -94,12 +114,14 @@ export default function EligibilityConfirmationModal({
                 <span
                   className={cn(
                     "rounded-md px-2 py-0.5 font-semibold",
-                    currentEligibility
-                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                      : "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+                    isPartiallyEligible
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                      : isOriginalEligible
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                        : "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
                   )}
                 >
-                  {currentEligibility ? "Eligible" : "Not Applicable"}
+                  {originalStatusLabel}
                 </span>
               </div>
 
