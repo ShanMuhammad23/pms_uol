@@ -210,6 +210,10 @@ function mapOverviewRow(
     selfAssessmentEnabled: true,
     assessmentEligibility: row.assessment_eligibility ?? true,
     ineligibilityReason: row.ineligibility_reason ?? null,
+    isReturned: false,
+    returnReason: null,
+    manager1Name: null,
+    manager2Name: null,
   };
 }
 

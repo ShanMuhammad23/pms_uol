@@ -207,6 +207,14 @@ CREATE TABLE appraisals (
     remarks_evaluation TEXT,
     hr_approval_status VARCHAR(20) DEFAULT 'pending', -- pending | approved | review_required (independent of remarks_evaluation)
 
+    -- Return Submission workflow tracking.
+    -- is_returned is TRUE when HR/Board/Super Admin returned the submission
+    -- to a lower workflow level (Manager 2, Manager 1, or Employee). The
+    -- destination is represented by the existing status/manager_level, not a
+    -- separate field. Reset to FALSE when the submission advances normally.
+    is_returned BOOLEAN NOT NULL DEFAULT FALSE,
+    return_reason TEXT,
+
     -- Compensation worksheet
     current_salary NUMERIC(14, 2),
     previous_salary NUMERIC(14, 2),

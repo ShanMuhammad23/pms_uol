@@ -1207,6 +1207,7 @@ export async function assignFormTemplateToEmployees(
       other_title: string;
     }>(
       `WITH conflict_rows AS (
+         -- Active assignments to a different form in the same cycle.
          SELECT
            u.employee_id,
            CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
@@ -1220,6 +1221,11 @@ export async function assignFormTemplateToEmployees(
 
          UNION
 
+         -- Orphaned appraisals (submitted but no longer assigned) must NOT
+         -- block new assignments. Only consider appraisals that still have
+         -- a corresponding employee_form_assignments row, so that unassigning
+         -- an employee (which deletes the assignment but may leave a submitted
+         -- appraisal behind) frees them for a new form in the same cycle.
          SELECT
            u.employee_id,
            CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
@@ -1231,6 +1237,12 @@ export async function assignFormTemplateToEmployees(
            AND ap.cycle_id = $2
            AND ap.template_id IS NOT NULL
            AND ap.template_id <> $3
+           AND EXISTS (
+             SELECT 1
+             FROM employee_form_assignments efa2
+             WHERE efa2.employee_id = ap.employee_id
+               AND efa2.template_id = ap.template_id
+           )
        )
        SELECT employee_id, employee_name, other_title
        FROM conflict_rows

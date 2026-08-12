@@ -211,6 +211,44 @@ export async function resetFormSubmission(
   }>(response);
 }
 
+export type ReturnLevel = "manager2" | "manager1" | "employee";
+
+/**
+ * Return a submission to a lower workflow level (Manager 2, Manager 1, or
+ * Employee). Removes confidential manager data as appropriate, sets
+ * is_returned = TRUE, persists the return_reason, and transitions the
+ * status to the existing workflow stage for the destination. Only HR /
+ * Board / Super Admin may perform this action (enforced server-side).
+ */
+export async function returnSubmission(
+  id: number,
+  returnLevel: ReturnLevel,
+  reason: string,
+): Promise<{
+  status: FormSubmissionDetail["status"];
+  managerLevel: number;
+  isReturned: boolean;
+  returnLevel: ReturnLevel;
+  deletedAnswers: number;
+  deletedAttachments: number;
+}> {
+  const response = await fetch(`/api/submissions/${id}/return`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ returnLevel, reason }),
+  });
+
+  return parseResponse<{
+    status: FormSubmissionDetail["status"];
+    managerLevel: number;
+    isReturned: boolean;
+    returnLevel: ReturnLevel;
+    deletedAnswers: number;
+    deletedAttachments: number;
+  }>(response);
+}
+
 export async function saveHrReview(
   id: number,
   answers: Array<{
