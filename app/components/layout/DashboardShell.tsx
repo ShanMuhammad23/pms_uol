@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { EmployeeAccessGuard } from "@/app/components/layout/EmployeeAccessGuard";
+import GlobalAskHrButton from "@/app/components/layout/GlobalAskHrButton";
 import Sidebar from "@/app/components/layout/Sidebar";
 import {
   SIDEBAR_COLLAPSED_WIDTH,
@@ -45,6 +46,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         >
           <EmployeeAccessGuard>{children}</EmployeeAccessGuard>
         </main>
+        <GlobalAskHrButton />
       </div>
     </SidebarContext.Provider>
   );
