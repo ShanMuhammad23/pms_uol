@@ -445,15 +445,26 @@ function renderCell(
       const disabledTitle =
         "HR approval is unavailable until a valid Normalized Score has been calculated";
 
-      // Return button is available for any submission that has progressed
-      // past the Self Assessment stage and is not a direct-score-entry row.
-      const canReturn =
-        !submission.directScoreEntry &&
-        submission.status !== "PENDING_SELF_ASSESSMENT" &&
-        submission.id > 0 &&
-        !ctx.isApproving &&
-        !ctx.isSaving &&
-        !ctx.isReviewing;
+      // Return button mirrors Approve / Review Required: always rendered for
+      // HR, but disabled when there is no valid submission to return, when the
+      // row is a direct-score-entry (no submission workflow), when the
+      // submission is still in Self Assessment (nothing to return), or while
+      // another HR action is in progress.
+      const returnDisabled =
+        submission.directScoreEntry ||
+        submission.status === "PENDING_SELF_ASSESSMENT" ||
+        submission.id <= 0 ||
+        ctx.isApproving ||
+        ctx.isSaving ||
+        ctx.isReviewing ||
+        ctx.isReturning;
+      const returnDisabledTitle = submission.directScoreEntry
+        ? "Return is unavailable for direct score entry rows"
+        : submission.status === "PENDING_SELF_ASSESSMENT"
+          ? "Return is unavailable before the self assessment is submitted"
+          : submission.id <= 0
+            ? "Return is unavailable — no submission exists for this employee"
+            : "Return submission";
 
       return (
         <div className="flex items-center justify-center gap-1">
@@ -495,30 +506,26 @@ function renderCell(
               <AlertTriangle className="h-4 w-4" />
             )}
           </button>
-          {canReturn ? (
-            <>
-              <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700" />
-              <button
-                type="button"
-                onClick={ctx.onReturn}
-                disabled={ctx.isReturning}
-                title="Return Submission"
-                aria-label="Return submission"
-                className={cn(
-                  "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-                  submission.isReturned
-                    ? "bg-amber-600 text-white dark:bg-amber-500"
-                    : "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20",
-                )}
-              >
-                {ctx.isReturning ? (
-                  <span className="text-[10px]">...</span>
-                ) : (
-                  <RotateCcw className="h-4 w-4" />
-                )}
-              </button>
-            </>
-          ) : null}
+          <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+          <button
+            type="button"
+            onClick={ctx.onReturn}
+            disabled={returnDisabled}
+            title={returnDisabledTitle}
+            aria-label="Return submission"
+            className={cn(
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+              submission.isReturned
+                ? "bg-amber-600 text-white dark:bg-amber-500"
+                : "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20",
+            )}
+          >
+            {ctx.isReturning ? (
+              <span className="text-[10px]">...</span>
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
+          </button>
         </div>
       );
     }
@@ -1297,6 +1304,17 @@ export function DashboardSubmissionsTable({
             onOpenChange={setMasterFilterOpen}
             activeCount={masterFilterActiveCount}
           />
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.04]"
+              title="Clear all filters and search"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Clear filters
+            </button>
+          ) : null}
           {canManageColumns ? (
             <ColumnManagementPanelTrigger
               open={columnMgmtOpen}

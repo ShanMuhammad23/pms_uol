@@ -53,6 +53,8 @@ export interface UserRecord {
   qualificationCountry: string | null;
   isActive: boolean;
   createdAt: string;
+  /** Whether the user is eligible for assessment (defaults to true when column is absent). */
+  assessmentEligibility: boolean;
 }
 
 export interface CreateUserInput {

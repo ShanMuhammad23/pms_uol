@@ -222,6 +222,7 @@ export default function UsersManager() {
         qualificationCountry: form.qualificationCountry || null,
         isActive: form.isActive,
         createdAt: "",
+        assessmentEligibility: true,
       }) satisfies UserRecord,
     [form, selectedEntity],
   );

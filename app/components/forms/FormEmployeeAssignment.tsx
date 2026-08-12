@@ -17,7 +17,12 @@ import {
   updateAssignmentSelfAssessmentDisabled,
 } from "@/lib/queries/forms-client";
 import { fetchUsers } from "@/lib/queries/users-client";
+import { fetchFormSubmissions } from "@/lib/queries/form-submissions-client";
 import type { UserRecord } from "@/types/users";
+import {
+  getEligibilityShortLabel,
+  getSubmissionEligibilityDisplayStatus,
+} from "@/app/helpers/dashboard-eligibility";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -33,7 +38,8 @@ type FilterId =
   | "roleCategory"
   | "headName"
   | "manager2Name"
-  | "assignmentStatus";
+  | "assignmentStatus"
+  | "assessmentEligibility";
 
 type FilterSelection = string[] | null;
 
@@ -41,6 +47,7 @@ type FilterState = Record<FilterId, FilterSelection>;
 
 const FILTER_CONFIG: { id: FilterId; label: string }[] = [
   { id: "assignmentStatus", label: "Assignment Status" },
+  { id: "assessmentEligibility", label: "Eligibility" },
   { id: "entityName", label: "Entity" },
   { id: "designation", label: "Designation" },
   { id: "roleCategory", label: "Role Category" },
@@ -50,6 +57,7 @@ const FILTER_CONFIG: { id: FilterId; label: string }[] = [
 
 const EMPTY_FILTERS: FilterState = {
   assignmentStatus: null,
+  assessmentEligibility: null,
   entityName: null,
   designation: null,
   roleCategory: null,
@@ -61,12 +69,45 @@ function getAssignmentStatus(user: UserRecord, assignedIds: Set<string>): string
   return assignedIds.has(user.employeeId) ? "Assigned" : "Unassigned";
 }
 
+/**
+ * Returns the eligibility short label for a user, mirroring the dashboard's
+ * Eligible? column: getEligibilityShortLabel(getSubmissionEligibilityDisplayStatus(row)).
+ *
+ * The stored eligibility status lives on the `appraisals` table, fetched via
+ * the existing /api/submissions endpoint. When a submission exists for the
+ * employee, its stored eligibilityStatus + assessmentEligibility override are
+ * used. When no submission exists yet, we fall back to the user's
+ * assessmentEligibility flag only (no duration-based computation, since the
+ * form assignment page doesn't have the appraisal cycle context).
+ */
+function getEligibilityLabel(
+  user: UserRecord,
+  eligibilityOverride: Map<string, string>,
+): string {
+  const override = eligibilityOverride.get(user.employeeId);
+  if (override) return override;
+  // No submission yet — use the manual override flag only.
+  return user.assessmentEligibility ? "Full" : "N/A";
+}
+
+function getFilterValue(
+  user: UserRecord,
+  field: FilterId,
+  assignedIds: Set<string>,
+  eligibilityOverride: Map<string, string>,
+): string {
+  if (field === "assignmentStatus") return getAssignmentStatus(user, assignedIds);
+  if (field === "assessmentEligibility") return getEligibilityLabel(user, eligibilityOverride);
+  return String(user[field] ?? "—");
+}
+
 function buildOptions(
   users: UserRecord[],
   field: FilterId,
   filters: FilterState,
   selected: FilterSelection,
   assignedEmployeeIds: Set<string>,
+  eligibilityOverride: Map<string, string>,
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 
@@ -80,9 +121,7 @@ function buildOptions(
         passesOtherFilters = false;
         break;
       }
-      const val = f.id === "assignmentStatus"
-        ? getAssignmentStatus(user, assignedEmployeeIds)
-        : String(user[f.id] ?? "—");
+      const val = getFilterValue(user, f.id, assignedEmployeeIds, eligibilityOverride);
       if (!sel.includes(val)) {
         passesOtherFilters = false;
         break;
@@ -90,9 +129,7 @@ function buildOptions(
     }
     if (!passesOtherFilters) continue;
 
-    const value = field === "assignmentStatus"
-      ? getAssignmentStatus(user, assignedEmployeeIds)
-      : String(user[field] ?? "—");
+    const value = getFilterValue(user, field, assignedEmployeeIds, eligibilityOverride);
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
@@ -117,14 +154,13 @@ function userMatchesFilters(
   user: UserRecord,
   filters: FilterState,
   assignedEmployeeIds: Set<string>,
+  eligibilityOverride: Map<string, string>,
 ): boolean {
   for (const f of FILTER_CONFIG) {
     const sel = filters[f.id];
     if (sel === null || sel === undefined) continue;
     if (sel.length === 0) return false;
-    const val = f.id === "assignmentStatus"
-      ? getAssignmentStatus(user, assignedEmployeeIds)
-      : String(user[f.id] ?? "—");
+    const val = getFilterValue(user, f.id, assignedEmployeeIds, eligibilityOverride);
     if (!sel.includes(val)) return false;
   }
   return true;
@@ -161,6 +197,15 @@ export default function FormEmployeeAssignment({
     queryFn: () => fetchFormTemplateAssignments(templateId),
   });
 
+  // Fetch submissions via the existing /api/submissions endpoint to get the
+  // stored eligibility status (is_eligible / eligibility_status on the
+  // appraisals table). This mirrors the dashboard's Eligible? column logic.
+  const { data: submissions } = useQuery({
+    queryKey: ["form-submissions-all"],
+    queryFn: fetchFormSubmissions,
+    ...DASHBOARD_QUERY_CACHE,
+  });
+
   const allUsers = users ?? [];
   const activeCount = countActiveFilters(filters);
 
@@ -168,6 +213,17 @@ export default function FormEmployeeAssignment({
     () => new Set((assignedEmployees ?? []).map((e) => e.employeeId)),
     [assignedEmployees],
   );
+
+  // Build employeeId → eligibility short label map using the same helpers as
+  // the dashboard's Eligible? column.
+  const eligibilityOverride = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const submission of submissions ?? []) {
+      const status = getSubmissionEligibilityDisplayStatus(submission);
+      map.set(submission.employeeId, getEligibilityShortLabel(status));
+    }
+    return map;
+  }, [submissions]);
 
   const assignedSelfAssessmentDisabled = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -182,16 +238,16 @@ export default function FormEmployeeAssignment({
     for (const f of FILTER_CONFIG) {
       map.set(
         f.id,
-        buildOptions(allUsers, f.id, filters, filters[f.id], assignedEmployeeIds),
+        buildOptions(allUsers, f.id, filters, filters[f.id], assignedEmployeeIds, eligibilityOverride),
       );
     }
     return map;
-  }, [allUsers, filters, assignedEmployeeIds]);
+  }, [allUsers, filters, assignedEmployeeIds, eligibilityOverride]);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allUsers.filter((user) => {
-      if (!userMatchesFilters(user, filters, assignedEmployeeIds)) return false;
+      if (!userMatchesFilters(user, filters, assignedEmployeeIds, eligibilityOverride)) return false;
       if (!query) return true;
       const name = `${user.firstName} ${user.lastName}`.toLowerCase();
       return (
@@ -199,7 +255,7 @@ export default function FormEmployeeAssignment({
         name.includes(query)
       );
     });
-  }, [search, allUsers, filters, assignedEmployeeIds]);
+  }, [search, allUsers, filters, assignedEmployeeIds, eligibilityOverride]);
 
   const filteredAssignedEmployeeIds = useMemo(
     () => filteredUsers.filter((u) => assignedEmployeeIds.has(u.employeeId)).map((u) => u.employeeId),
@@ -537,6 +593,19 @@ export default function FormEmployeeAssignment({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {(activeCount > 0 || search.trim().length > 0) ? (
+            <button
+              type="button"
+              onClick={() => {
+                handleClearAllFilters();
+                setSearch("");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Clear filters
+            </button>
+          ) : null}
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {totalCount} of {allUsers.length} employees
             {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
