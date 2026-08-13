@@ -223,6 +223,9 @@ export default function UsersManager() {
         isActive: form.isActive,
         createdAt: "",
         assessmentEligibility: true,
+        formAssigned: false,
+        directScoreEntry: false,
+        selfAssessmentEnabled: true,
       }) satisfies UserRecord,
     [form, selectedEntity],
   );
