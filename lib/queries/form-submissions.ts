@@ -805,6 +805,8 @@ export interface BulkReviewQuestionRow {
   manager1Score: number | null;
   /** Manager 1's saved remarks (used as fallback for Manager 2 drafts). */
   manager1Remarks: string | null;
+  /** Attachments uploaded by the employee for this question. */
+  attachments: EmployeeFormAnswerAttachment[];
 }
 
 export interface BulkReviewQuestionData {
@@ -914,6 +916,27 @@ export async function getBulkReviewQuestionData(
   }
 
   // Batch-fetch answers: self-assessment + reviewer answers per submission.
+  // Pre-fetch employee attachments per submission, grouped by question ID, so
+  // managers can see what the employee uploaded alongside their self-assessment.
+  const attachmentsBySubmission = new Map<
+    number,
+    Map<number, EmployeeFormAnswerAttachment[]>
+  >();
+
+  for (const meta of submissionMeta) {
+    const empAttachments = await listAttachmentsForAppraisal(
+      meta.id,
+      meta.employeeUserId,
+    );
+    const byQuestion = new Map<number, EmployeeFormAnswerAttachment[]>();
+    for (const att of empAttachments) {
+      const list = byQuestion.get(att.questionId) ?? [];
+      list.push(att);
+      byQuestion.set(att.questionId, list);
+    }
+    attachmentsBySubmission.set(meta.id, byQuestion);
+  }
+
   const questionsData: BulkReviewQuestionData[] = [];
 
   for (const q of scoredQuestions) {
@@ -988,6 +1011,8 @@ export async function getBulkReviewQuestionData(
         managerRemarks,
         manager1Score,
         manager1Remarks,
+        attachments:
+          attachmentsBySubmission.get(meta.id)?.get(q.id) ?? [],
       });
     }
 
