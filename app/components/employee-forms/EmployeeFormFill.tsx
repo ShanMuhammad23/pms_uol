@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, Paperclip, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Paperclip, Trash2, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import {
@@ -165,6 +165,7 @@ export default function EmployeeFormFill({
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [thankYouOpen, setThankYouOpen] = useState(false);
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const [submittedScore, setSubmittedScore] = useState<{
     rawScore: number;
     maxRawScore: number;
@@ -341,9 +342,17 @@ export default function EmployeeFormFill({
         setFormError(validationError);
         return;
       }
+      // Open confirmation modal before submitting.
+      setSubmitConfirmOpen(true);
+      return;
     }
 
     saveMutation.mutate(submit);
+  };
+
+  const confirmSubmit = () => {
+    setSubmitConfirmOpen(false);
+    saveMutation.mutate(true);
   };
 
   const handleUpload = async (questionId: number, file: File | null) => {
@@ -830,6 +839,101 @@ export default function EmployeeFormFill({
       )}
 
       <PrintFooter />
+
+      <AnimatePresence>
+        {submitConfirmOpen ? (
+          <motion.div
+            key="employee-form-submit-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="employee-form-submit-confirm-title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-4"
+          >
+            <motion.button
+              type="button"
+              aria-label="Close submit confirmation"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSubmitConfirmOpen(false)}
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+              className="relative w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/15 dark:bg-slate-900"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    <AlertTriangle className="size-6" />
+                  </span>
+                  <div>
+                    <h2
+                      id="employee-form-submit-confirm-title"
+                      className="text-lg font-semibold text-slate-900 dark:text-white"
+                    >
+                      Submit Assessment?
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      Once submitted, you will not be able to edit your answers.
+                      Please review your scores and remarks before confirming.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSubmitConfirmOpen(false)}
+                  aria-label="Close"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:border-white/15 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-slate-950/50">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Current score
+                </p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
+                  {displayedRawScore}
+                  <span className="text-base font-semibold text-slate-500 dark:text-slate-400">
+                    {" "}
+                    / {maxRawScore}
+                  </span>
+                </p>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="!w-auto px-5"
+                  onClick={() => setSubmitConfirmOpen(false)}
+                >
+                  Go Back
+                </Button>
+                <Button
+                  type="button"
+                  className="!w-auto px-5"
+                  isLoading={saveMutation.isPending}
+                  onClick={confirmSubmit}
+                >
+                  Confirm Submit
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <AnimatePresence>
         {thankYouOpen && submittedScore ? (
