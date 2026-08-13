@@ -441,12 +441,27 @@ function renderCell(
 
     if (ctx?.isHrRole) {
       const scoreDisabled = !ctx.hasValidScore;
+      // Calibration Factor is required before HR can approve a submission at
+      // the HR Calibration stage. Without it, the normalized score cannot be
+      // finalized. Review Required remains available regardless.
+      const missingCalibrationFactor =
+        submission.status === "PENDING_HR_CALIBRATION" &&
+        (submission.calibrationFactor == null ||
+          Number.isNaN(submission.calibrationFactor));
       const approvalDisabled =
-        scoreDisabled || ctx.isApproving || ctx.isSaving || ctx.isReviewing || ctx.isReturning;
+        scoreDisabled ||
+        missingCalibrationFactor ||
+        ctx.isApproving ||
+        ctx.isSaving ||
+        ctx.isReviewing ||
+        ctx.isReturning;
       const reviewDisabled =
         scoreDisabled || ctx.isReviewing || ctx.isSaving || ctx.isApproving || ctx.isReturning;
-      const disabledTitle =
-        "HR approval is unavailable until a valid Normalized Score has been calculated";
+      const disabledTitle = scoreDisabled
+        ? "HR approval is unavailable until a valid Normalized Score has been calculated"
+        : missingCalibrationFactor
+          ? "Approval is blocked — Calibration Factor has not been set. Please enter a Calibration Factor before approving."
+          : "Approve";
 
       // Return button mirrors Approve / Review Required: always rendered for
       // HR, but disabled when there is no valid submission to return, when the
@@ -496,13 +511,21 @@ function renderCell(
             type="button"
             onClick={ctx.onApprove}
             disabled={approvalDisabled}
-            title={scoreDisabled ? disabledTitle : "Approve"}
+            title={
+              scoreDisabled
+                ? disabledTitle
+                : missingCalibrationFactor
+                  ? disabledTitle
+                  : "Approve"
+            }
             aria-label="Approve"
             className={cn(
               "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
               hrStatus === "approved"
                 ? "bg-emerald-600 text-white dark:bg-emerald-500"
-                : "text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20",
+                : missingCalibrationFactor
+                  ? "text-amber-600 ring-1 ring-inset ring-amber-400 dark:text-amber-400 dark:ring-amber-600"
+                  : "text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20",
             )}
           >
             {ctx.isApproving ? (

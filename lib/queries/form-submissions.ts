@@ -1355,8 +1355,11 @@ export async function approveManagerReview(appraisalId: number): Promise<{
 export async function approveHrCalibration(appraisalId: number): Promise<{
   status: AppraisalStatus;
 }> {
-  const current = await db.query<{ status: AppraisalStatus }>(
-    `SELECT status FROM appraisals WHERE id = $1`,
+  const current = await db.query<{
+    status: AppraisalStatus;
+    calibration_factor: string | null;
+  }>(
+    `SELECT status, calibration_factor::text FROM appraisals WHERE id = $1`,
     [appraisalId],
   );
 
@@ -1368,6 +1371,21 @@ export async function approveHrCalibration(appraisalId: number): Promise<{
   let nextStatus: AppraisalStatus;
 
   if (row.status === "PENDING_HR_CALIBRATION") {
+    // Calibration Factor is required before HR can advance a submission from
+    // the HR Calibration stage to Board Approval. Without it the normalized
+    // score cannot be finalized.
+    const calibrationFactor = row.calibration_factor
+      ? Number(row.calibration_factor)
+      : null;
+    if (
+      calibrationFactor == null ||
+      Number.isNaN(calibrationFactor)
+    ) {
+      throw new FormSubmissionError(
+        "Approval is blocked — Calibration Factor has not been set. Please enter a Calibration Factor before approving.",
+        409,
+      );
+    }
     nextStatus = "PENDING_BOARD_APPROVAL";
   } else if (row.status === "PENDING_BOARD_APPROVAL") {
     nextStatus = "APPROVED";
