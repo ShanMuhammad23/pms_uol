@@ -245,11 +245,14 @@ interface RenderCellContext {
   onApprove: () => void;
   onReviewRequired: () => void;
   onReturn: () => void;
+  onBoardApprove: () => void;
   isSaving: boolean;
   isApproving: boolean;
   isReviewing: boolean;
   isReturning: boolean;
+  isBoardApproving: boolean;
   canApprove: boolean;
+  canBoardApprove: boolean;
   hasValidScore: boolean;
   quartileBands: PerformanceQuartileBand[] | null;
   sortedMatrix: PerformanceLevelWithQuartiles[] | null;
@@ -466,6 +469,27 @@ function renderCell(
             ? "Return is unavailable — no submission exists for this employee"
             : "Return submission";
 
+      // Board Approval button: always rendered for HR/Board, but only active
+      // when the submission has reached PENDING_BOARD_APPROVAL status. Disabled
+      // for direct-score-entry rows, rows with no submission, or while another
+      // action is in progress.
+      const boardApprovalDisabled =
+        submission.directScoreEntry ||
+        submission.id <= 0 ||
+        submission.status !== "PENDING_BOARD_APPROVAL" ||
+        ctx.isApproving ||
+        ctx.isSaving ||
+        ctx.isReviewing ||
+        ctx.isReturning ||
+        ctx.isBoardApproving;
+      const boardApprovalTitle = submission.directScoreEntry
+        ? "Board approval is unavailable for direct score entry rows"
+        : submission.id <= 0
+          ? "Board approval is unavailable — no submission exists for this employee"
+          : submission.status !== "PENDING_BOARD_APPROVAL"
+            ? "Board approval is unavailable until the submission reaches the Board Approval stage"
+            : "Approve at Board level";
+
       return (
         <div className="flex items-center justify-center gap-1">
           <button
@@ -524,6 +548,26 @@ function renderCell(
               <span className="text-[10px]">...</span>
             ) : (
               <RotateCcw className="h-4 w-4" />
+            )}
+          </button>
+          <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+          <button
+            type="button"
+            onClick={ctx.onBoardApprove}
+            disabled={boardApprovalDisabled}
+            title={boardApprovalTitle}
+            aria-label="Board approve"
+            className={cn(
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+              submission.status === "APPROVED"
+                ? "bg-violet-600 text-white dark:bg-violet-500"
+                : "text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-900/20",
+            )}
+          >
+            {ctx.isBoardApproving ? (
+              <span className="text-[10px]">...</span>
+            ) : (
+              <ShieldCheck className="h-4 w-4" />
             )}
           </button>
         </div>
@@ -987,6 +1031,21 @@ export function DashboardSubmissionsTable({
         delete next[submissionId];
         return next;
       });
+      invalidateStaffListingQueries(queryClient);
+    },
+  });
+
+  const boardApproveMutation = useMutation({
+    mutationFn: async (submissionId: number) => {
+      const existing = submissions.find((s) => s.id === submissionId);
+      if (
+        existing &&
+        existing.status === "PENDING_BOARD_APPROVAL"
+      ) {
+        return approveHrCalibration(submissionId);
+      }
+    },
+    onSuccess: () => {
       invalidateStaffListingQueries(queryClient);
     },
   });
@@ -1555,12 +1614,21 @@ export function DashboardSubmissionsTable({
                               submissionId: submission.id,
                               error: null,
                             }),
+                          onBoardApprove: () =>
+                            setHrApprovalModal({
+                              open: true,
+                              action: "board_approve",
+                              submissionId: submission.id,
+                            }),
                           isSaving: hrSaveMutation.isPending,
                           isApproving: hrApproveMutation.isPending,
                           isReviewing: hrReviewRequiredMutation.isPending,
                           isReturning: returnSubmissionMutation.isPending,
+                          isBoardApproving: boardApproveMutation.isPending,
                           canApprove:
                             submission.status === "PENDING_HR_CALIBRATION" ||
+                            submission.status === "PENDING_BOARD_APPROVAL",
+                          canBoardApprove:
                             submission.status === "PENDING_BOARD_APPROVAL",
                           hasValidScore: hasValidNormalizedScore(submission),
                           quartileBands,
@@ -1699,12 +1767,21 @@ export function DashboardSubmissionsTable({
                               submissionId: submission.id,
                               error: null,
                             }),
+                          onBoardApprove: () =>
+                            setHrApprovalModal({
+                              open: true,
+                              action: "board_approve",
+                              submissionId: submission.id,
+                            }),
                           isSaving: hrSaveMutation.isPending,
                           isApproving: hrApproveMutation.isPending,
                           isReviewing: hrReviewRequiredMutation.isPending,
                           isReturning: returnSubmissionMutation.isPending,
+                          isBoardApproving: boardApproveMutation.isPending,
                           canApprove:
                             submission.status === "PENDING_HR_CALIBRATION" ||
+                            submission.status === "PENDING_BOARD_APPROVAL",
+                          canBoardApprove:
                             submission.status === "PENDING_BOARD_APPROVAL",
                           hasValidScore: hasValidNormalizedScore(submission),
                           quartileBands,
@@ -1859,7 +1936,9 @@ export function DashboardSubmissionsTable({
         isPending={
           hrApprovalModal.action === "approve"
             ? hrApproveMutation.isPending
-            : hrReviewRequiredMutation.isPending
+            : hrApprovalModal.action === "board_approve"
+              ? boardApproveMutation.isPending
+              : hrReviewRequiredMutation.isPending
         }
         onClose={() =>
           setHrApprovalModal({ open: false, action: "approve", submissionId: 0 })
@@ -1868,6 +1947,8 @@ export function DashboardSubmissionsTable({
           const { action, submissionId } = hrApprovalModal;
           if (action === "approve") {
             hrApproveMutation.mutate(submissionId);
+          } else if (action === "board_approve") {
+            boardApproveMutation.mutate(submissionId);
           } else {
             hrReviewRequiredMutation.mutate(submissionId);
           }

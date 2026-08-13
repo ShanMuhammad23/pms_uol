@@ -1,9 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, X } from "lucide-react";
+import { AlertTriangle, Check, ShieldCheck, X } from "lucide-react";
 
-export type HrApprovalAction = "approve" | "review_required";
+export type HrApprovalAction = "approve" | "review_required" | "board_approve";
 
 interface HrApprovalConfirmModalProps {
   open: boolean;
@@ -21,14 +21,21 @@ export function HrApprovalConfirmModal({
   isPending = false,
 }: HrApprovalConfirmModalProps) {
   const isApprove = action === "approve";
+  const isBoardApprove = action === "board_approve";
 
-  const title = isApprove ? "Confirm Approval" : "Mark for Review";
-  const message = isApprove
-    ? "Are you sure you want to mark this record as Approved?"
-    : "Are you sure you want to mark this record as Review Required?";
-  const confirmLabel = isApprove ? "Approve" : "Mark for Review";
-  const Icon = isApprove ? Check : AlertTriangle;
-  const confirmColor = isApprove
+  const title = isBoardApprove
+    ? "Confirm Board Approval"
+    : isApprove ? "Confirm Approval" : "Mark for Review";
+  const message = isBoardApprove
+    ? "Are you sure you want to approve this record at the Board level? This will finalize the submission."
+    : isApprove
+      ? "Are you sure you want to mark this record as Approved?"
+      : "Are you sure you want to mark this record as Review Required?";
+  const confirmLabel = isBoardApprove
+    ? "Board Approve"
+    : isApprove ? "Approve" : "Mark for Review";
+  const Icon = isApprove ? Check : isBoardApprove ? ShieldCheck : AlertTriangle;
+  const confirmColor = isApprove || isBoardApprove
     ? "bg-emerald-600 hover:bg-emerald-700"
     : "bg-amber-600 hover:bg-amber-700";
 
@@ -53,7 +60,7 @@ export function HrApprovalConfirmModal({
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-white/10">
               <div className="flex items-center gap-2">
                 <Icon
-                  className={`h-5 w-5 ${isApprove ? "text-emerald-600" : "text-amber-500"}`}
+                  className={`h-5 w-5 ${isApprove || isBoardApprove ? "text-emerald-600" : "text-amber-500"}`}
                 />
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                   {title}
