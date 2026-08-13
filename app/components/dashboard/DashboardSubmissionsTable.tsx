@@ -1048,12 +1048,25 @@ export function DashboardSubmissionsTable({
         return approveHrCalibration(submissionId);
       }
     },
-    onSuccess: (_data, submissionId) => {
+    onSuccess: (data, submissionId) => {
       setPendingScoreChanges((current) => {
         const next = { ...current };
         delete next[submissionId];
         return next;
       });
+      // Optimistically patch the row so the UI updates immediately,
+      // without waiting for the background refetch to complete.
+      if (data?.status) {
+        patchStaffListingCaches(queryClient, (row) =>
+          row.id === submissionId
+            ? {
+                ...row,
+                status: data.status,
+                hrApprovalStatus: "approved",
+              }
+            : row,
+        );
+      }
       invalidateStaffListingQueries(queryClient);
       setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
     },
@@ -1069,7 +1082,18 @@ export function DashboardSubmissionsTable({
         return approveHrCalibration(submissionId);
       }
     },
-    onSuccess: () => {
+    onSuccess: (data, submissionId) => {
+      if (data?.status) {
+        patchStaffListingCaches(queryClient, (row) =>
+          row.id === submissionId
+            ? {
+                ...row,
+                status: data.status,
+                hrApprovalStatus: "approved",
+              }
+            : row,
+        );
+      }
       invalidateStaffListingQueries(queryClient);
       setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
     },
@@ -1079,7 +1103,12 @@ export function DashboardSubmissionsTable({
     mutationFn: async (submissionId: number) => {
       return setHrReviewRequired(submissionId);
     },
-    onSuccess: () => {
+    onSuccess: (_data, submissionId) => {
+      patchStaffListingCaches(queryClient, (row) =>
+        row.id === submissionId
+          ? { ...row, hrApprovalStatus: "review_required" }
+          : row,
+      );
       invalidateStaffListingQueries(queryClient);
       setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
     },
