@@ -1055,6 +1055,7 @@ export function DashboardSubmissionsTable({
         return next;
       });
       invalidateStaffListingQueries(queryClient);
+      setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
     },
   });
 
@@ -1070,6 +1071,7 @@ export function DashboardSubmissionsTable({
     },
     onSuccess: () => {
       invalidateStaffListingQueries(queryClient);
+      setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
     },
   });
 
@@ -1079,6 +1081,7 @@ export function DashboardSubmissionsTable({
     },
     onSuccess: () => {
       invalidateStaffListingQueries(queryClient);
+      setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
     },
   });
 
