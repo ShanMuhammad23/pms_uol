@@ -5,6 +5,16 @@ import type {
   QuestionRecord,
 } from "@/types/forms";
 
+export type ReturnLevel = "manager2" | "manager1" | "employee";
+
+export interface ReturnHistoryEntry {
+  id: number;
+  returnLevel: ReturnLevel;
+  returnReason: string;
+  returnedAt: string;
+  returnedByName: string | null;
+}
+
 export interface FormSubmissionListItem {
   id: number;
   employeeId: string;
@@ -179,4 +189,6 @@ export interface FormSubmissionDetail {
   isReturned: boolean;
   /** Reason provided when the submission was returned. Null when not returned. */
   returnReason: string | null;
+  /** Full history of returns to this submission (all levels). */
+  returnHistory?: ReturnHistoryEntry[];
 }

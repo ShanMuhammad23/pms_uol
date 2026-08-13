@@ -30,6 +30,7 @@ import OverallRemarksSection, {
   OverallRemarksPrintSection,
 } from "@/app/components/forms/OverallRemarksSection";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
+import ReturnHistoryBanner from "@/app/components/forms/ReturnHistoryBanner";
 import { useSession } from "next-auth/react";
 import { canReviewSubmissions, canViewQuartile } from "@/lib/auth/submission-review-roles";
 import { useAdditionalAccess } from "@/app/queries/use-additional-access";
@@ -792,6 +793,13 @@ export default function SubmissionDetailView({
           role={isAdminRole ? "admin" : "manager"}
           employeeName={data?.employeeName}
           reason={data?.ineligibilityReason}
+        />
+      ) : null}
+
+      {data?.returnHistory && data.returnHistory.length > 0 ? (
+        <ReturnHistoryBanner
+          returnHistory={data.returnHistory}
+          view="manager"
         />
       ) : null}
 

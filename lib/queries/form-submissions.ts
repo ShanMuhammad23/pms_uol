@@ -20,7 +20,10 @@ import type { ManagerReviewAnswerInput } from "@/types/employee-forms";
 import type {
   FormSubmissionDetail,
   FormSubmissionListItem,
+  ReturnHistoryEntry,
+  ReturnLevel,
 } from "@/types/form-submissions";
+export type { ReturnHistoryEntry, ReturnLevel };
 import type { AppraisalStatus, PerformanceRating, QuestionRecord } from "@/types/forms";
 import { flattenAllQuestions } from "@/types/forms";
 import {
@@ -1554,6 +1557,7 @@ export async function getFormSubmissionById(
     manager2OverallRemarks: summary.manager2OverallRemarks,
     isReturned: summary.isReturned ?? false,
     returnReason: summary.returnReason ?? null,
+    returnHistory: await getReturnHistory(id),
   };
 }
 
@@ -2325,8 +2329,6 @@ export async function resetFormSubmission(
 /* Return Submission                                                           */
 /* -------------------------------------------------------------------------- */
 
-export type ReturnLevel = "manager2" | "manager1" | "employee";
-
 export interface ReturnSubmissionResult {
   status: AppraisalStatus;
   managerLevel: number;
@@ -2334,6 +2336,44 @@ export interface ReturnSubmissionResult {
   returnLevel: ReturnLevel;
   deletedAnswers: number;
   deletedAttachments: number;
+}
+
+/**
+ * Fetches the return history for a submission from the `appraisal_logs` table.
+ * Each entry corresponds to a RETURN_SUBMISSION action, with the return level
+ * extracted from `old_value->>'return_level'` and the reason from
+ * `new_value->>'return_reason'`.
+ */
+export async function getReturnHistory(
+  appraisalId: number,
+): Promise<ReturnHistoryEntry[]> {
+  const result = await db.query<{
+    id: string;
+    return_level: string;
+    return_reason: string | null;
+    returned_at: string;
+    returned_by_name: string | null;
+  }>(
+    `SELECT al.id::text,
+            al.old_value->>'return_level' AS return_level,
+            al.new_value->>'return_reason' AS return_reason,
+            to_char(al.timestamp, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS returned_at,
+            CONCAT(u.first_name, ' ', u.last_name) AS returned_by_name
+     FROM appraisal_logs al
+     LEFT JOIN users u ON u.id = al.changed_by_id
+     WHERE al.appraisal_id = $1
+       AND al.action_performed = 'RETURN_SUBMISSION'
+     ORDER BY al.timestamp DESC, al.id DESC`,
+    [appraisalId],
+  );
+
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    returnLevel: row.return_level as ReturnLevel,
+    returnReason: row.return_reason ?? "",
+    returnedAt: row.returned_at,
+    returnedByName: row.returned_by_name ?? null,
+  }));
 }
 
 interface ReturnSubmissionRow {

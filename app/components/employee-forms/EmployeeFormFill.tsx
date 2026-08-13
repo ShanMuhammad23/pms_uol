@@ -31,6 +31,7 @@ import {
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
+import ReturnHistoryBanner from "@/app/components/forms/ReturnHistoryBanner";
 import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
@@ -507,6 +508,13 @@ export default function EmployeeFormFill({
               : "Ineligible"
           }
           reason={data.ineligibilityReason}
+        />
+      ) : null}
+
+      {!isPreview && data?.returnHistory && data.returnHistory.length > 0 ? (
+        <ReturnHistoryBanner
+          returnHistory={data.returnHistory}
+          view="employee"
         />
       ) : null}
 
