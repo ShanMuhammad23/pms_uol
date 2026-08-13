@@ -35,7 +35,7 @@ export default function AskHrButton({ subjectSuffix }: AskHrButtonProps) {
   }, [subjectSuffix]);
 
   return (
-    <div className="no-print pointer-events-none fixed bottom-6 right-6 z-40 flex flex-col items-end gap-1.5 sm:bottom-8 sm:right-8">
+    <div className="no-print pointer-events-none fixed bottom-6 right-16 z-40 flex cursor-pointer flex-col items-end gap-1.5 sm:bottom-28 sm:right-8">
       <motion.button
         type="button"
         onClick={openGmail}
@@ -43,12 +43,12 @@ export default function AskHrButton({ subjectSuffix }: AskHrButtonProps) {
         title="Ask HR — HR will reply to your email inbox"
         whileHover={{ scale: 1.04, y: -2 }}
         whileTap={{ scale: 0.97 }}
-        className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg ring-1 ring-white/10 transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 dark:focus-visible:ring-amber-500"
+        className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-blue-400 px-4 py-3 text-sm font-semibold text-white shadow-lg ring-1 ring-white/10 transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 dark:focus-visible:ring-amber-500"
       >
         <Mail className="size-5 shrink-0" aria-hidden="true" />
         <span className="hidden sm:inline">Ask HR</span>
       </motion.button>
-      <p className="pointer-events-none max-w-[13rem] text-right text-[11px] font-medium leading-snug text-slate-500 dark:text-slate-400 sm:max-w-[15rem] sm:text-xs">
+      <p className="pointer-events-none max-w-[13rem] text-right text-[11px] font-medium leading-snug bg-white rounded text-blue-800 dark:text-slate-400 sm:max-w-[15rem] sm:text-xs">
         HR will reply to your email inbox.
       </p>
     </div>
