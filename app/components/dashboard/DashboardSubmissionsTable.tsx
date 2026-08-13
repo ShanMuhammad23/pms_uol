@@ -441,6 +441,11 @@ function renderCell(
 
     if (ctx?.isHrRole) {
       const scoreDisabled = !ctx.hasValidScore;
+      // The Approve button advances from HR Calibration → Board Approval.
+      // It is only active at the HR Calibration stage. At Board Approval,
+      // the dedicated Board Approve button is used instead.
+      const approveStageDisabled =
+        submission.status !== "PENDING_HR_CALIBRATION";
       // Calibration Factor is required before HR can approve a submission at
       // the HR Calibration stage. Without it, the normalized score cannot be
       // finalized. Review Required remains available regardless.
@@ -449,6 +454,7 @@ function renderCell(
         (submission.calibrationFactor == null ||
           Number.isNaN(submission.calibrationFactor));
       const approvalDisabled =
+        approveStageDisabled ||
         scoreDisabled ||
         missingCalibrationFactor ||
         ctx.isApproving ||
@@ -457,11 +463,13 @@ function renderCell(
         ctx.isReturning;
       const reviewDisabled =
         scoreDisabled || ctx.isReviewing || ctx.isSaving || ctx.isApproving || ctx.isReturning;
-      const disabledTitle = scoreDisabled
-        ? "HR approval is unavailable until a valid Normalized Score has been calculated"
-        : missingCalibrationFactor
-          ? "Approval is blocked — Calibration Factor has not been set. Please enter a Calibration Factor before approving."
-          : "Approve";
+      const disabledTitle = approveStageDisabled
+        ? "Approval is unavailable — the submission is not at the HR Calibration stage"
+        : scoreDisabled
+          ? "HR approval is unavailable until a valid Normalized Score has been calculated"
+          : missingCalibrationFactor
+            ? "Approval is blocked — Calibration Factor has not been set. Please enter a Calibration Factor before approving."
+            : "Approve";
 
       // Return button mirrors Approve / Review Required: always rendered for
       // HR, but disabled when there is no valid submission to return, when the
@@ -512,11 +520,9 @@ function renderCell(
             onClick={ctx.onApprove}
             disabled={approvalDisabled}
             title={
-              scoreDisabled
+              approveStageDisabled || scoreDisabled || missingCalibrationFactor
                 ? disabledTitle
-                : missingCalibrationFactor
-                  ? disabledTitle
-                  : "Approve"
+                : "Approve"
             }
             aria-label="Approve"
             className={cn(
@@ -1106,7 +1112,11 @@ export function DashboardSubmissionsTable({
     onSuccess: (_data, submissionId) => {
       patchStaffListingCaches(queryClient, (row) =>
         row.id === submissionId
-          ? { ...row, hrApprovalStatus: "review_required" }
+          ? {
+              ...row,
+              status: "PENDING_HR_CALIBRATION",
+              hrApprovalStatus: "review_required",
+            }
           : row,
       );
       invalidateStaffListingQueries(queryClient);
@@ -1681,8 +1691,7 @@ export function DashboardSubmissionsTable({
                           isReturning: returnSubmissionMutation.isPending,
                           isBoardApproving: boardApproveMutation.isPending,
                           canApprove:
-                            submission.status === "PENDING_HR_CALIBRATION" ||
-                            submission.status === "PENDING_BOARD_APPROVAL",
+                            submission.status === "PENDING_HR_CALIBRATION",
                           canBoardApprove:
                             submission.status === "PENDING_BOARD_APPROVAL",
                           hasValidScore: hasValidNormalizedScore(submission),
@@ -1834,8 +1843,7 @@ export function DashboardSubmissionsTable({
                           isReturning: returnSubmissionMutation.isPending,
                           isBoardApproving: boardApproveMutation.isPending,
                           canApprove:
-                            submission.status === "PENDING_HR_CALIBRATION" ||
-                            submission.status === "PENDING_BOARD_APPROVAL",
+                            submission.status === "PENDING_HR_CALIBRATION",
                           canBoardApprove:
                             submission.status === "PENDING_BOARD_APPROVAL",
                           hasValidScore: hasValidNormalizedScore(submission),

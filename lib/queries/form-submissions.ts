@@ -1410,10 +1410,12 @@ export async function approveHrCalibration(appraisalId: number): Promise<{
 
 export async function setHrReviewRequired(appraisalId: number): Promise<{
   hrApprovalStatus: string;
+  status: AppraisalStatus;
 }> {
   const result = await db.query<{ id: string }>(
     `UPDATE appraisals
      SET hr_approval_status = 'review_required',
+         status = 'PENDING_HR_CALIBRATION',
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1
      RETURNING id`,
@@ -1424,7 +1426,7 @@ export async function setHrReviewRequired(appraisalId: number): Promise<{
     throw new FormSubmissionError("Submission not found.", 404);
   }
 
-  return { hrApprovalStatus: "review_required" };
+  return { hrApprovalStatus: "review_required", status: "PENDING_HR_CALIBRATION" };
 }
 
 export async function getFormSubmissionById(
