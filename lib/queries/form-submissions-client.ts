@@ -173,14 +173,14 @@ export async function approveHrCalibration(
 
 export async function setHrReviewRequired(
   id: number,
-): Promise<{ hrApprovalStatus: string }> {
+): Promise<{ hrApprovalStatus: string; status: FormSubmissionDetail["status"] }> {
   const response = await fetch(`/api/submissions/${id}/hr-approval`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "review_required" }),
   });
 
-  return parseResponse<{ hrApprovalStatus: string }>(response);
+  return parseResponse<{ hrApprovalStatus: string; status: FormSubmissionDetail["status"] }>(response);
 }
 
 /**
