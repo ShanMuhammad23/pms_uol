@@ -136,11 +136,14 @@ export function getAdjustedScore(
 
 /**
  * Compute the normalized score (adjusted score × calibration factor).
- * Returns null when the adjusted score is not available.
+ * Prefer the persisted Norm. Score when present (HR calibration / stored value);
+ * otherwise derive from Score O + adjustments × calibration factor.
+ * Returns null when neither source is available.
  */
 export function getNormalizedScore(
   row: Pick<
     FormSubmissionListItem,
+    | "normalizedScore"
     | "scoreO"
     | "rawScore"
     | "creditHrsErpScoreAdj"
@@ -149,6 +152,13 @@ export function getNormalizedScore(
     | "calibrationFactor"
   >,
 ): number | null {
+  if (
+    row.normalizedScore != null &&
+    Number.isFinite(row.normalizedScore)
+  ) {
+    return row.normalizedScore;
+  }
+
   const adjusted = getAdjustedScore(row);
   if (adjusted === null) return null;
   const calFr = row.calibrationFactor ?? 1;
@@ -160,13 +170,15 @@ export function getNormalizedScore(
  * This is the single source of truth for the percentage used to map
  * submissions to performance levels and quartiles.
  *
- * Formula: ((scoreO + chAdj + oricAdj + qecAdj) × calFr / maxRawScore) × 100
+ * Prefer persisted `normalizedScore` (Staff Listing Norm. Score). Otherwise:
+ * ((scoreO + chAdj + oricAdj + qecAdj) × calFr / maxRawScore) × 100
  *
  * Returns null when the score or maxRawScore is not valid.
  */
 export function getNormalizedScorePercent(
   row: Pick<
     FormSubmissionListItem,
+    | "normalizedScore"
     | "scoreO"
     | "rawScore"
     | "creditHrsErpScoreAdj"
@@ -193,6 +205,7 @@ export function getNormalizedScorePercent(
 export function resolveSubmissionPerformanceQuartile(
   row: Pick<
     FormSubmissionListItem,
+    | "normalizedScore"
     | "scoreO"
     | "rawScore"
     | "creditHrsErpScoreAdj"

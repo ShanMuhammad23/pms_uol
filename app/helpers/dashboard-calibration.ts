@@ -1,10 +1,9 @@
 import type { FormSubmissionListItem } from "@/types/form-submissions";
-import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
-import { getHrApprovalStatus } from "@/app/helpers/dashboard-table-columns";
 import {
-  countEligibleSubmissions,
-  isSubmissionEligible,
-} from "@/app/helpers/dashboard-workflow-stats";
+  contributesToPerformanceDistribution,
+  filterSubmissionsForCharts,
+} from "@/app/helpers/dashboard-chart-submissions";
+import { countEligibleSubmissions } from "@/app/helpers/dashboard-workflow-stats";
 
 const RATING_NORMALIZE: Record<string, string> = {
   Unsatisfactory: "Unsatisfactory",
@@ -22,7 +21,7 @@ export function normalizeRating(rating: string): string {
 
 /**
  * Performance level used for the Rating Curve Actual series — same source as
- * the Rating × Quartile Matrix (resolved HR-aligned performance level).
+ * the Rating × Quartile Matrix (resolved from normalized score after HR alignment).
  */
 export function getSubmissionDisplayRating(
   submission: FormSubmissionListItem,
@@ -38,7 +37,7 @@ export function getSubmissionDisplayRating(
  *               so quota counts stay stable when those filters change.
  *
  * Quota = institutional % × eligible employee count.
- * Actual = eligible employees with approved HR alignment, by performance level.
+ * Actual = eligible employees with completed HR alignment + valid normalized score.
  */
 export function buildCalibrationData(
   submissions: FormSubmissionListItem[],
@@ -50,9 +49,7 @@ export function buildCalibrationData(
   }
 
   const chartSubmissions = filterSubmissionsForCharts(submissions).filter(
-    (submission) =>
-      isSubmissionEligible(submission) &&
-      getHrApprovalStatus(submission) === "approved",
+    contributesToPerformanceDistribution,
   );
   const quotaBaseCount =
     quotaEligibleCount ?? countEligibleSubmissions(submissions);

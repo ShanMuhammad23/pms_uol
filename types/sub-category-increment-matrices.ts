@@ -2,6 +2,7 @@ export interface SubCategoryIncrementMatrixRecord {
   id: number;
   financialYearId: number;
   matrixLabel: string;
+  performanceMatrixLabel: string;
   performanceLevelId: number;
   performanceLevelName: string;
   performanceQuartileId: number;

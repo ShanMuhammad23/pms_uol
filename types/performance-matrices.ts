@@ -51,6 +51,15 @@ export interface UpdatePerformanceQuartileInput {
   sortOrder?: number;
 }
 
+export interface PerformanceMatrixAssignmentRecord {
+  employeeId: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  matrixLabel: string;
+  financialYearId: number;
+}
+
 export function formatPerformanceScore(value: number): string {
   if (!Number.isFinite(value)) {
     return "—";

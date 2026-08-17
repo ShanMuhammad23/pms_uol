@@ -27,6 +27,7 @@ interface OverviewRow {
   initial_rating: PerformanceRating | null;
   calibrated_rating: PerformanceRating | null;
   normalized_score: string | null;
+  calibrated_score_numeric: string | null;
   system_raw_score: string | null;
   initial_score_numeric: string | null;
   max_raw_score: string | null;
@@ -172,7 +173,8 @@ function mapOverviewRow(
     pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
     qecScoreAdj: toNumber(row.qec_score_adj),
     calibrationFactor: toNumber(row.calibration_factor),
-    normalizedScore: toNumber(row.normalized_score),
+    normalizedScore:
+      toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric),
     ratingN: row.calibrated_rating,
     performanceLevelName: null,
     quartileName: null,
@@ -236,23 +238,17 @@ export async function listDashboardOverview(
     ? `u.date_of_joining::text,`
     : `NULL::text AS date_of_joining,`;
   const scoreSelect = excelReady
-    ? `ap.normalized_score::text,
+    ? `COALESCE(ap.normalized_score, ap.calibrated_score_numeric)::text AS normalized_score,
+       ap.calibrated_score_numeric::text,
        COALESCE(ap.system_raw_score, 0)::text AS system_raw_score,
        ap.initial_score_numeric::text,
-       COALESCE(
-         (
-           SELECT SUM(fq.total_marks)::text
-           FROM form_questions fq
-           WHERE fq.template_id = ap.template_id
-             AND fq.total_marks > 0
-         ),
-         '0'
-       ) AS max_raw_score,
+       COALESCE(tm.max_raw::text, '0') AS max_raw_score,
        ap.credit_hrs_erp_score_adj::text,
        ap.pub_oric_score_adj::text,
        ap.qec_score_adj::text,
        ap.calibration_factor::text,`
     : `NULL::text AS normalized_score,
+       NULL::text AS calibrated_score_numeric,
        '0'::text AS system_raw_score,
        NULL::text AS initial_score_numeric,
        '0'::text AS max_raw_score,
@@ -281,7 +277,13 @@ export async function listDashboardOverview(
   const scoped = appendStaffVisibilityClause(options);
 
   const result = await db.query<OverviewRow>(
-    `SELECT
+    `WITH template_max_marks AS (
+       SELECT template_id, SUM(total_marks) AS max_raw
+       FROM form_questions
+       WHERE total_marks > 0
+       GROUP BY template_id
+     )
+     SELECT
        ap.id,
        u.employee_id,
        CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
@@ -311,6 +313,20 @@ export async function listDashboardOverview(
        ORDER BY ap_inner.updated_at DESC NULLS LAST, ap_inner.id DESC
        LIMIT 1
      ) ap ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT efa.template_id
+       FROM employee_form_assignments efa
+       INNER JOIN form_templates efa_ft ON efa_ft.id = efa.template_id
+       WHERE efa.employee_id = u.id
+         AND (
+           $1::int IS NULL
+           OR efa_ft.cycle_id = $1
+         )
+       ORDER BY efa.template_id DESC
+       LIMIT 1
+     ) assigned ON TRUE
+     LEFT JOIN template_max_marks tm
+       ON tm.template_id = COALESCE(ap.template_id, assigned.template_id)
      LEFT JOIN entities ent ON ent.id = u.entity_id
      LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
      WHERE u.is_active = TRUE

@@ -96,6 +96,7 @@ export async function assignIncrementMatrixToEmployees(input: {
 export async function unassignIncrementMatrixFromEmployees(input: {
   financialYearId: number;
   employeeCodes: string[];
+  matrixLabel?: string;
 }): Promise<{ unassignedCount: number; financialYearId: number }> {
   const response = await fetch(
     "/api/admin/sub-category-increment-matrices/assignments",

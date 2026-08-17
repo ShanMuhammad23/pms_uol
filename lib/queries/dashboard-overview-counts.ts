@@ -1,4 +1,6 @@
-import { hasAppraisalProgress } from "@/app/helpers/dashboard-chart-submissions";
+import {
+  contributesToPerformanceDistribution,
+} from "@/app/helpers/dashboard-chart-submissions";
 import { getSubmissionEligibilityDisplayStatus } from "@/app/helpers/dashboard-eligibility";
 import {
   formatRoleCategoryValue,
@@ -7,14 +9,12 @@ import {
   matchesSubmissionFiltersExcluding,
   type SubmissionFilterState,
 } from "@/app/helpers/dashboard-filters";
-import { getHrApprovalStatus } from "@/app/helpers/dashboard-table-columns";
 import {
   buildBoardApprovalStats,
   buildHrAlignmentStats,
   buildManagerReviewStats,
   buildSelfAssessmentStats,
   countEligibleSubmissions,
-  isSubmissionEligible,
 } from "@/app/helpers/dashboard-workflow-stats";
 import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormState } from "@/app/helpers/dashboard-types";
@@ -81,17 +81,9 @@ function buildRatingQuartileCounts(
   }
 
   for (const submission of submissions) {
-    if (!hasAppraisalProgress(submission)) continue;
-    if (!isSubmissionEligible(submission)) continue;
-    // Only count employees whose HR review is approved — normalized
-    // score alone must not populate the matrix while HR is pending.
-    if (getHrApprovalStatus(submission) !== "approved") continue;
+    // Curve/matrix: HR alignment completed + valid normalized score only.
+    if (!contributesToPerformanceDistribution(submission)) continue;
 
-    // Use the shared resolver which computes the normalized score %
-    // from Score O + adjustments + calibration factor, then maps it
-    // to the configured performance matrix bands. This ensures the
-    // server-side aggregation uses the exact same logic as the
-    // Staff Listing and the client-side matrix.
     const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
     if (!resolved) continue;
 
@@ -112,11 +104,7 @@ function buildRatingDistribution(
   const counts = new Map<string, number>();
 
   for (const submission of submissions) {
-    if (!hasAppraisalProgress(submission)) continue;
-    if (!isSubmissionEligible(submission)) continue;
-    // Match Rating × Quartile Matrix / Performance Rating Curve Actual:
-    // only HR-approved alignments contribute to the distribution.
-    if (getHrApprovalStatus(submission) !== "approved") continue;
+    if (!contributesToPerformanceDistribution(submission)) continue;
 
     const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
     if (!resolved) continue;
@@ -279,8 +267,7 @@ export function buildDashboardOverviewCounts(
     },
     ratingDistribution: buildRatingDistribution(filtered, quartileBands),
     ratingQuartileCounts: buildRatingQuartileCounts(filtered, quartileBands),
-    chartEmployeeCount: filtered.filter(
-      (submission) => hasAppraisalProgress(submission) && isSubmissionEligible(submission),
-    ).length,
+    chartEmployeeCount: filtered.filter(contributesToPerformanceDistribution)
+      .length,
   };
 }

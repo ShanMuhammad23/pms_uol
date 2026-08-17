@@ -234,12 +234,13 @@ function mapSubmissionRow(
   // NORMALIZED score percentage (Score O + adjustments + calibration
   // factor), NOT the raw self-assessment score percentage. Using the raw
   // score % here was the root cause of the matrix not matching the Staff
-  // Listing — the persisted performanceLevelName/quartileName were based
+  // Listing - the persisted performanceLevelName/quartileName were based
   // on the self-assessment score, while the dashboard matrix used the
   // normalized score.
   const resolved = hasAppraisal
     ? resolveSubmissionPerformanceQuartile(
         {
+          normalizedScore,
           scoreO,
           rawScore,
           creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
@@ -500,7 +501,13 @@ export async function listFormSubmissions(
   const scoped = appendStaffVisibilityClause(options);
 
   const result = await db.query<SubmissionListRow>(
-    `SELECT
+    `WITH template_max_marks AS (
+       SELECT template_id, SUM(total_marks) AS max_raw
+       FROM form_questions
+       WHERE total_marks > 0
+       GROUP BY template_id
+     )
+     SELECT
        ap.id,
        u.id::text AS employee_user_id,
        u.employee_id,
@@ -508,7 +515,7 @@ export async function listFormSubmissions(
        u.email AS employee_email,
        ${excelSelect}
        ${qualSelect}
-       ap.template_id,
+       COALESCE(ap.template_id, efa.template_id) AS template_id,
        ft.title AS template_title,
        (
          EXISTS (
@@ -569,15 +576,7 @@ export async function listFormSubmissions(
          WHERE aa.appraisal_id = ap.id
            AND aa.filled_by_id = u.manager_2_id
        ) AS manager_2_score,
-       COALESCE(
-         (
-           SELECT SUM(fq.total_marks)::text
-           FROM form_questions fq
-           WHERE fq.template_id = ap.template_id
-             AND fq.total_marks > 0
-         ),
-         '0'
-       ) AS max_raw_score,
+       COALESCE(tm.max_raw::text, '0') AS max_raw_score,
        ap.submitted_at::text,
        COALESCE(efa.self_assessment_disabled, false) AS self_assessment_disabled,
       COALESCE(u.assessment_eligibility, true) AS assessment_eligibility
@@ -593,8 +592,26 @@ export async function listFormSubmissions(
        ORDER BY ap_inner.updated_at DESC NULLS LAST, ap_inner.id DESC
        LIMIT 1
      ) ap ON TRUE
-     LEFT JOIN form_templates ft ON ft.id = ap.template_id
-     LEFT JOIN employee_form_assignments efa ON efa.employee_id = u.id AND efa.template_id = ap.template_id
+     LEFT JOIN LATERAL (
+       SELECT efa_inner.template_id, efa_inner.self_assessment_disabled
+       FROM employee_form_assignments efa_inner
+       INNER JOIN form_templates efa_ft ON efa_ft.id = efa_inner.template_id
+       WHERE efa_inner.employee_id = u.id
+         AND (
+           $1::int IS NULL
+           OR efa_ft.cycle_id = $1
+         )
+       ORDER BY
+         CASE
+           WHEN ap.template_id IS NOT NULL AND efa_inner.template_id = ap.template_id THEN 0
+           ELSE 1
+         END,
+         efa_inner.template_id DESC
+       LIMIT 1
+     ) efa ON TRUE
+     LEFT JOIN form_templates ft ON ft.id = COALESCE(ap.template_id, efa.template_id)
+     LEFT JOIN template_max_marks tm
+       ON tm.template_id = COALESCE(ap.template_id, efa.template_id)
      LEFT JOIN entities ent ON ent.id = u.entity_id
      LEFT JOIN entity_categories ent_cat ON ent_cat.id = ent.entity_category_id
      LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
@@ -927,7 +944,7 @@ export async function getBulkReviewQuestionData(
           : null;
       const managerRemarks = mgrResult.rows[0]?.remarks ?? null;
 
-      // Manager 1 answers — used as fallback for Manager 2 drafts, mirroring
+      // Manager 1 answers - used as fallback for Manager 2 drafts, mirroring
       // the individual assessment flow's buildManagerDraftMap logic.
       let manager1Score: number | null = null;
       let manager1Remarks: string | null = null;
@@ -2115,7 +2132,7 @@ export async function bulkUpdateEmployeeListingFields(
  * An audit log entry is written to the `appraisal_logs` table with
  * action = 'RESET_FORM' capturing who performed the reset.
  *
- * This operation is wrapped in a transaction — if any step fails the entire
+ * This operation is wrapped in a transaction - if any step fails the entire
  * reset is rolled back.
  *
  * Authorization (HR / Board / Super Admin only) is enforced by the API
@@ -2216,7 +2233,7 @@ export async function resetFormSubmission(
     const resetAppraisal = (appraisalResult.rowCount ?? 0) > 0;
 
     // 4. Write an audit log entry to appraisal_logs.
-    //    The table is created in schema.sql but currently unused — this
+    //    The table is created in schema.sql but currently unused - this
     //    is the first operational use. Store the previous status and the
     //    reset actor in the JSONB columns for traceability.
     //
@@ -2249,7 +2266,7 @@ export async function resetFormSubmission(
 
     await client.query("COMMIT");
 
-    // Debug logging — verify deletion counts for troubleshooting.
+    // Debug logging - verify deletion counts for troubleshooting.
     console.info(
       `[resetFormSubmission] appraisal=${appraisalId} ` +
         `deletedAttachments=${deletedAttachments} ` +

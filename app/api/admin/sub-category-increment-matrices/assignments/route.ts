@@ -109,6 +109,7 @@ export async function DELETE(request: Request) {
     const body = (await request.json()) as {
       financialYearId: number;
       employeeCodes: string[];
+      matrixLabel?: string;
     };
 
     if (
@@ -131,6 +132,7 @@ export async function DELETE(request: Request) {
     const result = await unassignIncrementMatrixFromEmployees(
       body.financialYearId,
       body.employeeCodes,
+      body.matrixLabel,
     );
     return NextResponse.json(result);
   } catch (error) {

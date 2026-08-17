@@ -8,8 +8,6 @@ import {
   getPerformanceLevelColor,
   getPerformanceLevelTint,
 } from "@/app/helpers/dashboard-helpers";
-import { DASHBOARD_QUERY_CACHE } from "@/app/queries/query-cache";
-import { queryKeys } from "@/app/queries/keys";
 import { fetchFinancialYears } from "@/lib/queries/financial-years-client";
 import {
   assignPerformanceMatrixToEmployees,
@@ -18,11 +16,12 @@ import {
   deletePerformanceLevel,
   deletePerformanceQuartile,
   fetchPerformanceMatrix,
+  fetchPerformanceMatrixAssignments,
   fetchPerformanceMatrixLabels,
+  unassignPerformanceMatrixFromEmployees,
   updatePerformanceLevel,
   updatePerformanceQuartile,
 } from "@/lib/queries/performance-matrices-client";
-import { fetchUsers } from "@/lib/queries/users-client";
 import { cn } from "@/lib/utils";
 import {
   formatPerformanceScore,
@@ -33,6 +32,7 @@ import {
   type PerformanceQuartileRecord,
 } from "@/types/performance-matrices";
 import PerformanceMatrixGrid from "./PerformanceMatrixGrid";
+import MatrixEmployeeAssignment from "./MatrixEmployeeAssignment";
 
 type MessageTone = "success" | "error";
 type MatricesPanel = "overview" | "assign" | "add-matrix";
@@ -79,7 +79,6 @@ export default function PerformanceMatricesManager() {
 
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
 
   const { data: financialYears } = useQuery({
     queryKey: ["financial-years"],
@@ -114,10 +113,10 @@ export default function PerformanceMatricesManager() {
     enabled: selectedFinancialYearId !== null,
   });
 
-  const { data: users } = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: fetchUsers,
-    ...DASHBOARD_QUERY_CACHE,
+  const { data: assignments } = useQuery({
+    queryKey: ["performance-matrix-assignments", selectedFinancialYearId],
+    queryFn: () => fetchPerformanceMatrixAssignments(selectedFinancialYearId!),
+    enabled: selectedFinancialYearId !== null,
   });
 
   const invalidateMatrix = () => {
@@ -126,6 +125,12 @@ export default function PerformanceMatricesManager() {
     });
     queryClient.invalidateQueries({
       queryKey: ["performance-matrix-labels", selectedFinancialYearId],
+    });
+  };
+
+  const invalidateAssignments = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["performance-matrix-assignments", selectedFinancialYearId],
     });
   };
 
@@ -217,20 +222,6 @@ export default function PerformanceMatricesManager() {
     },
     onError: (mutationError: Error) => {
       setDialogError(mutationError.message);
-    },
-  });
-
-  const assignMatrixMutation = useMutation({
-    mutationFn: assignPerformanceMatrixToEmployees,
-    onSuccess: (result) => {
-      setFormMessage({
-        tone: "success",
-        text: `Performance matrix "${result.matrixLabel}" assigned to ${result.updatedCount} employees.`,
-      });
-      setSelectedEmployeeIds([]);
-    },
-    onError: (mutationError: Error) => {
-      setFormMessage({ tone: "error", text: mutationError.message });
     },
   });
 
@@ -802,82 +793,93 @@ export default function PerformanceMatricesManager() {
 
           {activePanel === "assign" ? (
             <div className="space-y-4">
-              <div>
-                <h3 className="text-base font-semibold text-text-primary">
-                  Assign matrix to employees
-                </h3>
-                <p className="mt-1 text-sm text-foreground/70">
-                  Map employees to the currently selected performance matrix
-                  label.
-                </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
+                  <label
+                    htmlFor="assign-financial-year"
+                    className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
+                  >
+                    Financial Year
+                  </label>
+                  <select
+                    id="assign-financial-year"
+                    value={selectedFinancialYearId ?? ""}
+                    onChange={(event) => {
+                      setSelectedFinancialYearId(Number(event.target.value));
+                      setSelectedMatrixLabel("Default");
+                      setFormMessage(null);
+                    }}
+                    disabled={!financialYears?.length}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                  >
+                    {!financialYears?.length ? (
+                      <option value="">No financial years available</option>
+                    ) : (
+                      financialYears.map((year) => (
+                        <option key={year.id} value={year.id}>
+                          {year.label}
+                          {year.isActive ? " — Active" : ""}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <div className="rounded-md border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
+                  <label
+                    htmlFor="assign-performance-matrix-label"
+                    className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
+                  >
+                    Performance Matrix
+                  </label>
+                  <select
+                    id="assign-performance-matrix-label"
+                    value={selectedMatrixLabel}
+                    onChange={(event) => {
+                      setSelectedMatrixLabel(event.target.value);
+                      setFormMessage(null);
+                    }}
+                    className="w-full rounded-lg border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                  >
+                    {matrixOptions.map((label) => (
+                      <option key={label} value={label}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="rounded-md border border-sky-200 bg-sky-50/50 px-4 py-3 dark:border-sky-500/30 dark:bg-sky-950/20">
-                <p className="text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
-                  Assigning
-                </p>
-                <p className="mt-1 text-lg font-bold text-sky-900 dark:text-sky-100">
-                  {selectedMatrixLabel}
-                </p>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="assign-employees"
-                  className="mb-1.5 block text-sm font-medium text-text-primary"
-                >
-                  Employees
-                </label>
-                <select
-                  id="assign-employees"
-                  multiple
-                  value={selectedEmployeeIds}
-                  onChange={(event) => {
-                    const selected = Array.from(
-                      event.currentTarget.selectedOptions,
-                    ).map((option) => option.value);
-                    setSelectedEmployeeIds(selected);
-                  }}
-                  className="min-h-40 w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-                >
-                  {(users ?? []).map((user) => (
-                    <option key={user.id} value={user.employeeId}>
-                      {user.employeeId} -{" "}
-                      {`${user.firstName} ${user.lastName}`.trim()}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1.5 text-xs text-foreground/60">
-                  Hold Ctrl/Cmd to select multiple employees.
-                  {selectedEmployeeIds.length > 0
-                    ? ` ${selectedEmployeeIds.length} selected.`
-                    : ""}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                disabled={
-                  !selectedFinancialYearId ||
-                  selectedEmployeeIds.length === 0 ||
-                  assignMatrixMutation.isPending
-                }
-                onClick={() => {
+              <MatrixEmployeeAssignment
+                targetLabel={selectedMatrixLabel}
+                description="Select employees to assign or unassign the performance matrix"
+                assignments={(assignments ?? []).map((row) => ({
+                  employeeId: row.employeeCode,
+                  matrixLabel: row.matrixLabel,
+                }))}
+                disabled={!selectedFinancialYearId}
+                onAssign={async (employeeIds) => {
                   if (!selectedFinancialYearId) {
-                    return;
+                    throw new Error("Select a financial year first.");
                   }
-                  setFormMessage(null);
-                  assignMatrixMutation.mutate({
+                  const result = await assignPerformanceMatrixToEmployees({
                     financialYearId: selectedFinancialYearId,
                     matrixLabel: selectedMatrixLabel,
-                    employeeIds: selectedEmployeeIds,
+                    employeeIds,
+                  });
+                  return { assignedCount: result.updatedCount };
+                }}
+                onUnassign={async (employeeIds) => {
+                  if (!selectedFinancialYearId) {
+                    throw new Error("Select a financial year first.");
+                  }
+                  return unassignPerformanceMatrixFromEmployees({
+                    financialYearId: selectedFinancialYearId,
+                    employeeIds,
+                    matrixLabel: selectedMatrixLabel,
                   });
                 }}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
-              >
-                <UserCheck className="size-4" />
-                Assign selected employees
-              </button>
+                onSettled={invalidateAssignments}
+              />
             </div>
           ) : null}
 

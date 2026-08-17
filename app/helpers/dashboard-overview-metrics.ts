@@ -25,7 +25,7 @@ export function buildEligibilityDataFromCounts(
 /**
  * Performance Rating Curve series:
  * - Quota: institutional % × eligible employee count
- * - Actual: counts from ratingDistribution (HR-approved alignments only)
+ * - Actual: counts from ratingDistribution (HR alignment completed + normalized score)
  */
 export function buildCalibrationDataFromCounts(
   ratingDistribution: CountOption[],
