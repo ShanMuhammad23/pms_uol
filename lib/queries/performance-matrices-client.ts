@@ -3,6 +3,7 @@ import type {
   CreatePerformanceQuartileInput,
   PerformanceLevelRecord,
   PerformanceLevelWithQuartiles,
+  PerformanceMatrixAssignmentRecord,
   PerformanceQuartileRecord,
   UpdatePerformanceLevelInput,
   UpdatePerformanceQuartileInput,
@@ -59,6 +60,16 @@ export async function fetchPerformanceMatrixLabels(
   return parseResponse<string[]>(response);
 }
 
+export async function fetchPerformanceMatrixAssignments(
+  financialYearId: number,
+): Promise<PerformanceMatrixAssignmentRecord[]> {
+  const response = await fetch(
+    `/api/admin/performance-levels/assignments?financialYearId=${financialYearId}`,
+    { credentials: "include", cache: "no-store" },
+  );
+  return parseResponse<PerformanceMatrixAssignmentRecord[]>(response);
+}
+
 export async function assignPerformanceMatrixToEmployees(
   input: {
     financialYearId: number;
@@ -72,6 +83,21 @@ export async function assignPerformanceMatrixToEmployees(
     body: JSON.stringify(input),
   });
   return parseResponse<{ updatedCount: number; financialYearId: number; matrixLabel: string }>(
+    response,
+  );
+}
+
+export async function unassignPerformanceMatrixFromEmployees(input: {
+  financialYearId: number;
+  employeeIds: string[];
+  matrixLabel?: string;
+}): Promise<{ unassignedCount: number; financialYearId: number }> {
+  const response = await fetch("/api/admin/performance-levels/assignments", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseResponse<{ unassignedCount: number; financialYearId: number }>(
     response,
   );
 }

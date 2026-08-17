@@ -1,7 +1,8 @@
 import type { RatingQuartileMatrixData } from "@/app/helpers/dashboard-types";
-import { filterSubmissionsForCharts } from "@/app/helpers/dashboard-chart-submissions";
-import { getHrApprovalStatus } from "@/app/helpers/dashboard-table-columns";
-import { isSubmissionEligible } from "@/app/helpers/dashboard-workflow-stats";
+import {
+  contributesToPerformanceDistribution,
+  filterSubmissionsForCharts,
+} from "@/app/helpers/dashboard-chart-submissions";
 import {
   buildQuartileBandsFromMatrix,
   getMatrixQuartileColumnHeaders,
@@ -19,14 +20,9 @@ export function buildRatingQuartileMatrix(
 ): RatingQuartileMatrixData {
   const sortedMatrix = sortPerformanceMatrix(matrix);
   const columns = getMatrixQuartileColumnHeaders(sortedMatrix);
-  // Match the server-side aggregation: only count submissions that have
-  // appraisal progress, are eligible, AND have HR review approved.
-  // Normalized score alone is not enough — pending HR approval must not
-  // populate the matrix.
+  // Actual distribution: completed HR alignment + valid normalized score only.
   const chartSubmissions = filterSubmissionsForCharts(submissions).filter(
-    (submission) =>
-      isSubmissionEligible(submission) &&
-      getHrApprovalStatus(submission) === "approved",
+    contributesToPerformanceDistribution,
   );
   const bands = buildQuartileBandsFromMatrix(sortedMatrix);
   const counts = new Map<string, number>();
@@ -38,9 +34,7 @@ export function buildRatingQuartileMatrix(
   });
 
   chartSubmissions.forEach((submission) => {
-    // Use the shared resolver which computes the normalized score %
-    // from Score O + adjustments + calibration factor, then maps it
-    // to the configured performance matrix bands.
+    // Shared resolver: persisted Norm. Score when present, else derived %.
     const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
 
     if (resolved) {

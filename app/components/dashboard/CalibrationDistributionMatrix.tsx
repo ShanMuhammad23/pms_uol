@@ -32,8 +32,8 @@ export function CalibrationDistributionMatrix({
             Rating × Quartile Matrix
           </p>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            Employee headcount by performance level and quartile (HR-approved
-            reviews only)
+            Employee headcount by performance level and quartile (normalized
+            score after HR alignment only)
           </p>
         </div>
       ) : null}

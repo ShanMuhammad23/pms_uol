@@ -12,6 +12,7 @@ interface IncrementMatrixRow {
   id: string;
   financial_year_id: number;
   matrix_label: string;
+  performance_matrix_label: string;
   performance_level_id: string;
   performance_level_name: string;
   performance_level_sort_order: number;
@@ -47,6 +48,7 @@ function mapRow(row: IncrementMatrixRow): SubCategoryIncrementMatrixRecord {
     id: Number(row.id),
     financialYearId: row.financial_year_id,
     matrixLabel: row.matrix_label,
+    performanceMatrixLabel: row.performance_matrix_label,
     performanceLevelId: Number(row.performance_level_id),
     performanceLevelName: row.performance_level_name,
     performanceQuartileId: Number(row.performance_quartile_id),
@@ -62,6 +64,7 @@ const LIST_QUERY = `
     sim.id,
     sim.financial_year_id,
     sim.matrix_label,
+    pl.matrix_label AS performance_matrix_label,
     pl.id AS performance_level_id,
     pl.name AS performance_level_name,
     pl.sort_order AS performance_level_sort_order,
@@ -401,6 +404,7 @@ export async function assignIncrementMatrixToEmployees(
 export async function unassignIncrementMatrixFromEmployees(
   financialYearId: number,
   employeeCodes: string[],
+  matrixLabel?: string,
 ): Promise<{ unassignedCount: number; financialYearId: number }> {
   const normalizedCodes = [...new Set(employeeCodes.map((c) => c.trim()).filter(Boolean))];
 
@@ -408,13 +412,17 @@ export async function unassignIncrementMatrixFromEmployees(
     throw new SubCategoryIncrementMatrixError("At least one employee is required.", 400);
   }
 
+  const trimmedLabel = matrixLabel?.trim();
   const result = await db.query(
     `DELETE FROM employee_increment_matrix_assignments
      WHERE financial_year_id = $1
        AND employee_id IN (
          SELECT id FROM users WHERE employee_id = ANY($2::text[])
-       )`,
-    [financialYearId, normalizedCodes],
+       )
+       ${trimmedLabel ? "AND matrix_label = $3" : ""}`,
+    trimmedLabel
+      ? [financialYearId, normalizedCodes, trimmedLabel]
+      : [financialYearId, normalizedCodes],
   );
 
   return {

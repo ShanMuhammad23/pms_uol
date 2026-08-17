@@ -5,6 +5,7 @@ import type {
   CreatePerformanceLevelInput,
   PerformanceLevelRecord,
   PerformanceLevelWithQuartiles,
+  PerformanceMatrixAssignmentRecord,
   PerformanceQuartileRecord,
   UpdatePerformanceLevelInput,
 } from "@/types/performance-matrices";
@@ -292,6 +293,32 @@ export async function assignPerformanceMatrixToEmployees(
     throw new PerformanceLevelError("Selected performance matrix does not exist.", 404);
   }
 
+  const conflicts = await db.query<{
+    employee_code: string;
+    first_name: string;
+    last_name: string;
+    matrix_label: string;
+  }>(
+    `SELECT u.employee_id AS employee_code, u.first_name, u.last_name, epma.matrix_label
+     FROM employee_performance_matrix_assignments epma
+     INNER JOIN users u ON u.id = epma.employee_id
+     WHERE epma.financial_year_id = $1
+       AND u.employee_id = ANY($2::text[])
+       AND epma.matrix_label <> $3`,
+    [financialYearId, normalizedCodes, trimmedLabel],
+  );
+
+  if (conflicts.rows.length > 0) {
+    const names = conflicts.rows.map(
+      (row) =>
+        `${row.employee_code} (${row.first_name} ${row.last_name}) — assigned to "${row.matrix_label}"`,
+    );
+    throw new PerformanceLevelError(
+      `Cannot assign: the following employee(s) are already assigned to a different performance matrix. Unassign them first:\n${names.join("\n")}`,
+      409,
+    );
+  }
+
   const result = await db.query<{ employee_id: string }>(
     `WITH selected_users AS (
        SELECT id
@@ -318,5 +345,70 @@ export async function assignPerformanceMatrixToEmployees(
     updatedCount: result.rows.length,
     financialYearId,
     matrixLabel: trimmedLabel,
+  };
+}
+
+export async function listEmployeePerformanceMatrixAssignments(
+  financialYearId: number,
+): Promise<PerformanceMatrixAssignmentRecord[]> {
+  const result = await db.query<{
+    employee_id: string;
+    employee_code: string;
+    first_name: string;
+    last_name: string;
+    matrix_label: string;
+  }>(
+    `SELECT
+       epma.employee_id::text,
+       u.employee_id AS employee_code,
+       u.first_name,
+       u.last_name,
+       epma.matrix_label
+     FROM employee_performance_matrix_assignments epma
+     INNER JOIN users u ON u.id = epma.employee_id
+     WHERE epma.financial_year_id = $1
+     ORDER BY u.employee_id ASC`,
+    [financialYearId],
+  );
+
+  return result.rows.map((row) => ({
+    employeeId: row.employee_id,
+    employeeCode: row.employee_code,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    matrixLabel: row.matrix_label,
+    financialYearId,
+  }));
+}
+
+export async function unassignPerformanceMatrixFromEmployees(
+  financialYearId: number,
+  employeeIds: string[],
+  matrixLabel?: string,
+): Promise<{ unassignedCount: number; financialYearId: number }> {
+  const normalizedCodes = [
+    ...new Set(employeeIds.map((item) => item.trim()).filter(Boolean)),
+  ];
+
+  if (normalizedCodes.length === 0) {
+    throw new PerformanceLevelError("At least one employee is required.", 400);
+  }
+
+  const trimmedLabel = matrixLabel?.trim();
+  const result = await db.query(
+    `DELETE FROM employee_performance_matrix_assignments
+     WHERE financial_year_id = $1
+       AND employee_id IN (
+         SELECT id FROM users WHERE employee_id = ANY($2::text[])
+       )
+       ${trimmedLabel ? "AND matrix_label = $3" : ""}`,
+    trimmedLabel
+      ? [financialYearId, normalizedCodes, trimmedLabel]
+      : [financialYearId, normalizedCodes],
+  );
+
+  return {
+    unassignedCount: result.rowCount ?? 0,
+    financialYearId,
   };
 }
