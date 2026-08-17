@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
@@ -62,7 +62,7 @@ import {
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { ScoreAdjustmentField } from "@/lib/queries/form-submissions-client";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
-import { updateSubmissionScoreAdjustments, approveHrCalibration, setHrReviewRequired, updateAssessmentEligibility, fetchFormSubmissionsPage } from "@/lib/queries/form-submissions-client";
+import { updateSubmissionScoreAdjustments, approveHrCalibration, setHrReviewRequired, updateAssessmentEligibility, fetchFormSubmissionsPage, returnSubmission as returnSubmissionClient, type ReturnLevel } from "@/lib/queries/form-submissions-client";
 import { useSession } from "next-auth/react";
 import { useAdditionalAccess } from "@/app/queries/use-additional-access";
 import {
@@ -78,6 +78,10 @@ import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import { ExcelExportButton } from "@/app/components/common/ExcelExportButton";
 import { HrApprovalConfirmModal, type HrApprovalAction } from "@/app/components/dashboard/HrApprovalConfirmModal";
+import {
+  ReturnSubmissionModal,
+  type ReturnSubmissionTarget,
+} from "@/app/components/dashboard/ReturnSubmissionModal";
 import {
   getPerformanceLevelColor,
   getQuartileShade,
@@ -240,10 +244,15 @@ interface RenderCellContext {
   onCancel: () => void;
   onApprove: () => void;
   onReviewRequired: () => void;
+  onReturn: () => void;
+  onBoardApprove: () => void;
   isSaving: boolean;
   isApproving: boolean;
   isReviewing: boolean;
+  isReturning: boolean;
+  isBoardApproving: boolean;
   canApprove: boolean;
+  canBoardApprove: boolean;
   hasValidScore: boolean;
   quartileBands: PerformanceQuartileBand[] | null;
   sortedMatrix: PerformanceLevelWithQuartiles[] | null;
@@ -432,12 +441,77 @@ function renderCell(
 
     if (ctx?.isHrRole) {
       const scoreDisabled = !ctx.hasValidScore;
+      // The Approve button advances from HR Calibration → Board Approval.
+      // It is only active at the HR Calibration stage. At Board Approval,
+      // the dedicated Board Approve button is used instead.
+      const approveStageDisabled =
+        submission.status !== "PENDING_HR_CALIBRATION";
+      // Calibration Factor is required before HR can approve a submission at
+      // the HR Calibration stage. Without it, the normalized score cannot be
+      // finalized. Review Required remains available regardless.
+      const missingCalibrationFactor =
+        submission.status === "PENDING_HR_CALIBRATION" &&
+        (submission.calibrationFactor == null ||
+          Number.isNaN(submission.calibrationFactor));
       const approvalDisabled =
-        scoreDisabled || ctx.isApproving || ctx.isSaving || ctx.isReviewing;
+        approveStageDisabled ||
+        scoreDisabled ||
+        missingCalibrationFactor ||
+        ctx.isApproving ||
+        ctx.isSaving ||
+        ctx.isReviewing ||
+        ctx.isReturning;
       const reviewDisabled =
-        scoreDisabled || ctx.isReviewing || ctx.isSaving || ctx.isApproving;
-      const disabledTitle =
-        "HR approval is unavailable until a valid Normalized Score has been calculated";
+        scoreDisabled || ctx.isReviewing || ctx.isSaving || ctx.isApproving || ctx.isReturning;
+      const disabledTitle = approveStageDisabled
+        ? "Approval is unavailable — the submission is not at the HR Calibration stage"
+        : scoreDisabled
+          ? "HR approval is unavailable until a valid Normalized Score has been calculated"
+          : missingCalibrationFactor
+            ? "Approval is blocked — Calibration Factor has not been set. Please enter a Calibration Factor before approving."
+            : "Approve";
+
+      // Return button mirrors Approve / Review Required: always rendered for
+      // HR, but disabled when there is no valid submission to return, when the
+      // row is a direct-score-entry (no submission workflow), when the
+      // submission is still in Self Assessment (nothing to return), or while
+      // another HR action is in progress.
+      const returnDisabled =
+        submission.directScoreEntry ||
+        submission.status === "PENDING_SELF_ASSESSMENT" ||
+        submission.id <= 0 ||
+        ctx.isApproving ||
+        ctx.isSaving ||
+        ctx.isReviewing ||
+        ctx.isReturning;
+      const returnDisabledTitle = submission.directScoreEntry
+        ? "Return is unavailable for direct score entry rows"
+        : submission.status === "PENDING_SELF_ASSESSMENT"
+          ? "Return is unavailable before the self assessment is submitted"
+          : submission.id <= 0
+            ? "Return is unavailable — no submission exists for this employee"
+            : "Return submission";
+
+      // Board Approval button: always rendered for HR/Board, but only active
+      // when the submission has reached PENDING_BOARD_APPROVAL status. Disabled
+      // for direct-score-entry rows, rows with no submission, or while another
+      // action is in progress.
+      const boardApprovalDisabled =
+        submission.directScoreEntry ||
+        submission.id <= 0 ||
+        submission.status !== "PENDING_BOARD_APPROVAL" ||
+        ctx.isApproving ||
+        ctx.isSaving ||
+        ctx.isReviewing ||
+        ctx.isReturning ||
+        ctx.isBoardApproving;
+      const boardApprovalTitle = submission.directScoreEntry
+        ? "Board approval is unavailable for direct score entry rows"
+        : submission.id <= 0
+          ? "Board approval is unavailable — no submission exists for this employee"
+          : submission.status !== "PENDING_BOARD_APPROVAL"
+            ? "Board approval is unavailable until the submission reaches the Board Approval stage"
+            : "Approve at Board level";
 
       return (
         <div className="flex items-center justify-center gap-1">
@@ -445,13 +519,19 @@ function renderCell(
             type="button"
             onClick={ctx.onApprove}
             disabled={approvalDisabled}
-            title={scoreDisabled ? disabledTitle : "Approve"}
+            title={
+              approveStageDisabled || scoreDisabled || missingCalibrationFactor
+                ? disabledTitle
+                : "Approve"
+            }
             aria-label="Approve"
             className={cn(
               "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
               hrStatus === "approved"
                 ? "bg-emerald-600 text-white dark:bg-emerald-500"
-                : "text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20",
+                : missingCalibrationFactor
+                  ? "text-amber-600 ring-1 ring-inset ring-amber-400 dark:text-amber-400 dark:ring-amber-600"
+                  : "text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20",
             )}
           >
             {ctx.isApproving ? (
@@ -477,6 +557,46 @@ function renderCell(
               <span className="text-[10px]">...</span>
             ) : (
               <AlertTriangle className="h-4 w-4" />
+            )}
+          </button>
+          <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+          <button
+            type="button"
+            onClick={ctx.onReturn}
+            disabled={returnDisabled}
+            title={returnDisabledTitle}
+            aria-label="Return submission"
+            className={cn(
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+              submission.isReturned
+                ? "bg-amber-600 text-white dark:bg-amber-500"
+                : "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20",
+            )}
+          >
+            {ctx.isReturning ? (
+              <span className="text-[10px]">...</span>
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
+          </button>
+          <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+          <button
+            type="button"
+            onClick={ctx.onBoardApprove}
+            disabled={boardApprovalDisabled}
+            title={boardApprovalTitle}
+            aria-label="Board approve"
+            className={cn(
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+              submission.status === "APPROVED"
+                ? "bg-violet-600 text-white dark:bg-violet-500"
+                : "text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-900/20",
+            )}
+          >
+            {ctx.isBoardApproving ? (
+              <span className="text-[10px]">...</span>
+            ) : (
+              <ShieldCheck className="h-4 w-4" />
             )}
           </button>
         </div>
@@ -733,6 +853,11 @@ export function DashboardSubmissionsTable({
     action: HrApprovalAction;
     submissionId: number;
   }>({ open: false, action: "approve", submissionId: 0 });
+  const [returnModal, setReturnModal] = useState<{
+    open: boolean;
+    submissionId: number;
+    error: string | null;
+  }>({ open: false, submissionId: 0, error: null });
   const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
 
   // When Show All is active OR we have a cached full dataset, always request
@@ -929,19 +1054,132 @@ export function DashboardSubmissionsTable({
         return approveHrCalibration(submissionId);
       }
     },
-    onSuccess: (_data, submissionId) => {
+    onSuccess: (data, submissionId) => {
       setPendingScoreChanges((current) => {
         const next = { ...current };
         delete next[submissionId];
         return next;
       });
+      // Optimistically patch the row so the UI updates immediately,
+      // without waiting for the background refetch to complete.
+      if (data?.status) {
+        patchStaffListingCaches(queryClient, (row) =>
+          row.id === submissionId
+            ? {
+                ...row,
+                status: data.status,
+                hrApprovalStatus: "approved",
+              }
+            : row,
+        );
+      }
       invalidateStaffListingQueries(queryClient);
+      setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
+    },
+  });
+
+  const boardApproveMutation = useMutation({
+    mutationFn: async (submissionId: number) => {
+      const existing = submissions.find((s) => s.id === submissionId);
+      if (
+        existing &&
+        existing.status === "PENDING_BOARD_APPROVAL"
+      ) {
+        return approveHrCalibration(submissionId);
+      }
+    },
+    onSuccess: (data, submissionId) => {
+      if (data?.status) {
+        patchStaffListingCaches(queryClient, (row) =>
+          row.id === submissionId
+            ? {
+                ...row,
+                status: data.status,
+                hrApprovalStatus: "approved",
+              }
+            : row,
+        );
+      }
+      invalidateStaffListingQueries(queryClient);
+      setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
     },
   });
 
   const hrReviewRequiredMutation = useMutation({
     mutationFn: async (submissionId: number) => {
       return setHrReviewRequired(submissionId);
+    },
+    onSuccess: (_data, submissionId) => {
+      patchStaffListingCaches(queryClient, (row) =>
+        row.id === submissionId
+          ? {
+              ...row,
+              status: "PENDING_HR_CALIBRATION",
+              hrApprovalStatus: "review_required",
+            }
+          : row,
+      );
+      invalidateStaffListingQueries(queryClient);
+      setHrApprovalModal({ open: false, action: "approve", submissionId: 0 });
+    },
+  });
+
+  const returnSubmissionMutation = useMutation({
+    mutationFn: async ({
+      submissionId,
+      returnLevel,
+      reason,
+    }: {
+      submissionId: number;
+      returnLevel: ReturnLevel;
+      reason: string;
+    }) => {
+      return returnSubmissionClient(submissionId, returnLevel, reason);
+    },
+    onMutate: ({ submissionId, returnLevel }) => {
+      // Optimistically update the affected row only — no full refetch.
+      void cancelStaffListingQueries(queryClient);
+      const snapshots = getStaffListingSnapshots(queryClient);
+      patchStaffListingCaches(queryClient, (row) => {
+        if (row.id !== submissionId) return row;
+        return {
+          ...row,
+          isReturned: true,
+          status:
+            returnLevel === "employee"
+              ? "PENDING_SELF_ASSESSMENT"
+              : "PENDING_HEAD_REVIEW",
+          managerLevel: returnLevel === "manager2" ? 2 : 1,
+          // Clear HR calibration fields that depend on removed manager data.
+          creditHrsErpScoreAdj:
+            returnLevel === "manager2" ? row.creditHrsErpScoreAdj : null,
+          pubOricScoreAdj:
+            returnLevel === "manager2" ? row.pubOricScoreAdj : null,
+          qecScoreAdj: returnLevel === "manager2" ? row.qecScoreAdj : null,
+          calibrationFactor:
+            returnLevel === "manager2" ? row.calibrationFactor : null,
+          normalizedScore:
+            returnLevel === "manager2" ? row.normalizedScore : null,
+          // Clear manager scores for removed levels.
+          manager2Score:
+            returnLevel === "manager2" ? row.manager2Score : null,
+          manager1Score:
+            returnLevel === "employee" ? row.manager1Score : row.manager1Score,
+          // Clear manager overall remarks for removed levels.
+          manager2OverallRemarks:
+            returnLevel === "manager2" ? row.manager2OverallRemarks : null,
+          manager1OverallRemarks:
+            returnLevel === "employee" ? row.manager1OverallRemarks : null,
+          // Reset HR approval status.
+          hrApprovalStatus: "pending",
+        };
+      });
+      return { snapshots };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.snapshots) {
+        restoreStaffListingSnapshots(queryClient, context.snapshots);
+      }
     },
     onSuccess: () => {
       invalidateStaffListingQueries(queryClient);
@@ -1190,6 +1428,17 @@ export function DashboardSubmissionsTable({
             onOpenChange={setMasterFilterOpen}
             activeCount={masterFilterActiveCount}
           />
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.04]"
+              title="Clear all filters and search"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Clear filters
+            </button>
+          ) : null}
           {canManageColumns ? (
             <ColumnManagementPanelTrigger
               open={columnMgmtOpen}
@@ -1424,11 +1673,26 @@ export function DashboardSubmissionsTable({
                               action: "review_required",
                               submissionId: submission.id,
                             }),
+                          onReturn: () =>
+                            setReturnModal({
+                              open: true,
+                              submissionId: submission.id,
+                              error: null,
+                            }),
+                          onBoardApprove: () =>
+                            setHrApprovalModal({
+                              open: true,
+                              action: "board_approve",
+                              submissionId: submission.id,
+                            }),
                           isSaving: hrSaveMutation.isPending,
                           isApproving: hrApproveMutation.isPending,
                           isReviewing: hrReviewRequiredMutation.isPending,
+                          isReturning: returnSubmissionMutation.isPending,
+                          isBoardApproving: boardApproveMutation.isPending,
                           canApprove:
-                            submission.status === "PENDING_HR_CALIBRATION" ||
+                            submission.status === "PENDING_HR_CALIBRATION",
+                          canBoardApprove:
                             submission.status === "PENDING_BOARD_APPROVAL",
                           hasValidScore: hasValidNormalizedScore(submission),
                           quartileBands,
@@ -1561,11 +1825,26 @@ export function DashboardSubmissionsTable({
                               action: "review_required",
                               submissionId: submission.id,
                             }),
+                          onReturn: () =>
+                            setReturnModal({
+                              open: true,
+                              submissionId: submission.id,
+                              error: null,
+                            }),
+                          onBoardApprove: () =>
+                            setHrApprovalModal({
+                              open: true,
+                              action: "board_approve",
+                              submissionId: submission.id,
+                            }),
                           isSaving: hrSaveMutation.isPending,
                           isApproving: hrApproveMutation.isPending,
                           isReviewing: hrReviewRequiredMutation.isPending,
+                          isReturning: returnSubmissionMutation.isPending,
+                          isBoardApproving: boardApproveMutation.isPending,
                           canApprove:
-                            submission.status === "PENDING_HR_CALIBRATION" ||
+                            submission.status === "PENDING_HR_CALIBRATION",
+                          canBoardApprove:
                             submission.status === "PENDING_BOARD_APPROVAL",
                           hasValidScore: hasValidNormalizedScore(submission),
                           quartileBands,
@@ -1680,6 +1959,7 @@ export function DashboardSubmissionsTable({
           open={eligibilityModalState.open}
           employeeName={eligibilityModalState.submission.employeeName}
           currentEligibility={eligibilityModalState.submission.assessmentEligibility}
+          submission={eligibilityModalState.submission}
           isPending={eligibilityToggleMutation.isPending}
           error={eligibilityModalState.error}
           onClose={() =>
@@ -1719,7 +1999,9 @@ export function DashboardSubmissionsTable({
         isPending={
           hrApprovalModal.action === "approve"
             ? hrApproveMutation.isPending
-            : hrReviewRequiredMutation.isPending
+            : hrApprovalModal.action === "board_approve"
+              ? boardApproveMutation.isPending
+              : hrReviewRequiredMutation.isPending
         }
         onClose={() =>
           setHrApprovalModal({ open: false, action: "approve", submissionId: 0 })
@@ -1728,11 +2010,79 @@ export function DashboardSubmissionsTable({
           const { action, submissionId } = hrApprovalModal;
           if (action === "approve") {
             hrApproveMutation.mutate(submissionId);
+          } else if (action === "board_approve") {
+            boardApproveMutation.mutate(submissionId);
           } else {
             hrReviewRequiredMutation.mutate(submissionId);
           }
         }}
       />
+
+      {isHrRole && returnModal.submissionId > 0 ? (
+        <ReturnSubmissionModal
+          open={returnModal.open}
+          submissionKey={returnModal.submissionId}
+          employeeName={
+            submissions.find((s) => s.id === returnModal.submissionId)
+              ?.employeeName ?? ""
+          }
+          targets={(() => {
+            const sub = submissions.find(
+              (s) => s.id === returnModal.submissionId,
+            );
+            if (!sub) return [] as ReturnSubmissionTarget[];
+            const isDirect = !sub.selfAssessmentEnabled;
+            const targets: ReturnSubmissionTarget[] = [
+              {
+                level: "manager2",
+                label: "Manager 2",
+                userName: sub.manager2Name,
+                available: sub.manager2UserId != null,
+              },
+              {
+                level: "manager1",
+                label: "Manager 1",
+                userName: sub.manager1Name,
+                available: sub.manager1UserId != null,
+              },
+            ];
+            if (!isDirect) {
+              targets.push({
+                level: "employee",
+                label: "Employee",
+                userName: sub.employeeName,
+                available: true,
+              });
+            }
+            return targets;
+          })()}
+          isPending={returnSubmissionMutation.isPending}
+          error={returnModal.error}
+          onClose={() =>
+            setReturnModal({ open: false, submissionId: 0, error: null })
+          }
+          onConfirm={(returnLevel, reason) => {
+            const submissionId = returnModal.submissionId;
+            returnSubmissionMutation.mutate(
+              { submissionId, returnLevel, reason },
+              {
+                onSuccess: () => {
+                  setReturnModal({ open: false, submissionId: 0, error: null });
+                },
+                onError: (error) => {
+                  setReturnModal((prev) => ({
+                    ...prev,
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to return submission.",
+                  }));
+                },
+              },
+            );
+          }}
+        />
+      ) : null}
     </motion.div>
   );
 }

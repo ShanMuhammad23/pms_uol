@@ -9,6 +9,7 @@ import type {
   UserRecord,
 } from "@/types/users";
 import { normalizeUserInput } from "@/lib/validation/users";
+import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import {
   MANAGER_ELIGIBLE_ROLES,
   isManagerEligibleRole,
@@ -42,6 +43,10 @@ interface UserRow {
   qualification_country: string | null;
   is_active: boolean;
   created_at: string;
+  assessment_eligibility: boolean;
+  form_assigned: boolean;
+  direct_score_entry: boolean;
+  self_assessment_disabled: boolean;
 }
 
 type UserOrgMode = "entity" | "department";
@@ -49,6 +54,7 @@ type UserOrgMode = "entity" | "department";
 let cachedUserOrgMode: UserOrgMode | null = null;
 let cachedExcelColumns: boolean | null = null;
 let cachedQualificationsTable: boolean | null = null;
+let cachedAssessmentEligibilityColumn: boolean | null = null;
 
 async function hasExcelSheetColumns(): Promise<boolean> {
   if (cachedExcelColumns !== null) {
@@ -87,6 +93,25 @@ async function hasQualificationsTable(): Promise<boolean> {
   return cachedQualificationsTable;
 }
 
+async function hasAssessmentEligibilityColumn(): Promise<boolean> {
+  if (cachedAssessmentEligibilityColumn !== null) {
+    return cachedAssessmentEligibilityColumn;
+  }
+
+  const result = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'users'
+         AND column_name = 'assessment_eligibility'
+     ) AS exists`,
+  );
+
+  cachedAssessmentEligibilityColumn = Boolean(result.rows[0]?.exists);
+  return cachedAssessmentEligibilityColumn;
+}
+
 async function getUserOrgMode(): Promise<UserOrgMode> {
   if (cachedUserOrgMode) {
     return cachedUserOrgMode;
@@ -115,6 +140,8 @@ function buildUserSelect(
   mode: UserOrgMode,
   excelReady: boolean,
   qualsReady: boolean,
+  eligibilityReady: boolean,
+  cycleId: number | null = null,
 ): string {
   const orgIdColumn = mode === "entity" ? "u.entity_id" : "u.department_id";
   const orgJoinTable = mode === "entity" ? "entities" : "departments";
@@ -152,6 +179,35 @@ function buildUserSelect(
     : "";
   const parentEntitySelect =
     mode === "entity" ? "parent_ent.name AS parent_entity_name," : "NULL::text AS parent_entity_name,";
+  const eligibilitySelect = eligibilityReady
+    ? `COALESCE(u.assessment_eligibility, true) AS assessment_eligibility,`
+    : `true AS assessment_eligibility,`;
+  // Form assignment info for the active appraisal cycle. When cycleId is null,
+  // no cycle is active so all three fields default to false/true.
+  const cycleParam = cycleId != null ? String(cycleId) : "NULL";
+  const formAssignmentSelect = `
+    EXISTS (
+      SELECT 1
+      FROM employee_form_assignments efa
+      JOIN form_templates efa_ft ON efa_ft.id = efa.template_id
+      WHERE efa.employee_id = u.id
+        AND (${cycleParam}::int IS NULL OR efa_ft.cycle_id = ${cycleParam}::int)
+    ) AS form_assigned,
+    EXISTS (
+      SELECT 1
+      FROM direct_score_entry_assignments dsea
+      WHERE dsea.employee_id = u.id
+        AND (${cycleParam}::int IS NULL OR dsea.cycle_id = ${cycleParam}::int)
+    ) AS direct_score_entry,
+    COALESCE(
+      (SELECT efa.self_assessment_disabled
+       FROM employee_form_assignments efa
+       JOIN form_templates efa_ft ON efa_ft.id = efa.template_id
+       WHERE efa.employee_id = u.id
+         AND (${cycleParam}::int IS NULL OR efa_ft.cycle_id = ${cycleParam}::int)
+       LIMIT 1),
+      false
+    ) AS self_assessment_disabled,`;
 
   return `
     SELECT
@@ -172,6 +228,8 @@ function buildUserSelect(
       u.manager_2_id,
       CONCAT(m2.first_name, ' ', m2.last_name) AS manager_2_name,
       ${qualSelect}
+      ${eligibilitySelect}
+      ${formAssignmentSelect}
       u.is_active,
       u.created_at::text
     FROM users u
@@ -220,6 +278,10 @@ function mapUserRow(row: UserRow): UserRecord {
     qualificationCountry: row.qualification_country,
     isActive: row.is_active,
     createdAt: row.created_at,
+    assessmentEligibility: row.assessment_eligibility ?? true,
+    formAssigned: Boolean(row.form_assigned),
+    directScoreEntry: Boolean(row.direct_score_entry),
+    selfAssessmentEnabled: !row.self_assessment_disabled,
   };
 }
 
@@ -316,15 +378,17 @@ async function assertValidManagers(
  * Used as the single source of truth for populating Manager 1/2 dropdowns.
  */
 export async function listEligibleManagers(): Promise<UserRecord[]> {
-  const [mode, excelReady] = await Promise.all([
+  const [mode, excelReady, eligibilityReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
+    hasAssessmentEligibilityColumn(),
+    getDefaultAppraisalCycle(),
   ]);
   const rolesPlaceholder = MANAGER_ELIGIBLE_ROLES.map(
     (_, i) => `$${i + 1}`,
   ).join(", ");
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, excelReady, false)}
+    `${buildUserSelect(mode, excelReady, false, eligibilityReady, cycle?.id ?? null)}
      WHERE u.system_role IN (${rolesPlaceholder})
      ORDER BY u.last_name ASC, u.first_name ASC`,
     MANAGER_ELIGIBLE_ROLES as unknown as string[],
@@ -370,13 +434,15 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
-  const [mode, excelReady, qualsReady] = await Promise.all([
+  const [mode, excelReady, qualsReady, eligibilityReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
     hasQualificationsTable(),
+    hasAssessmentEligibilityColumn(),
+    getDefaultAppraisalCycle(),
   ]);
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, excelReady, qualsReady)}
+    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
 
@@ -387,12 +453,14 @@ export async function listUsers(): Promise<UserRecord[]> {
  * Slim user rows for filter facets / head pickers (no qualifications join).
  */
 export async function listUsersOverview(): Promise<UserRecord[]> {
-  const [mode, excelReady] = await Promise.all([
+  const [mode, excelReady, eligibilityReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
+    hasAssessmentEligibilityColumn(),
+    getDefaultAppraisalCycle(),
   ]);
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, excelReady, false)}
+    `${buildUserSelect(mode, excelReady, false, eligibilityReady, cycle?.id ?? null)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
 
@@ -412,13 +480,15 @@ export async function listUsersByEmployeeIds(
     return [];
   }
 
-  const [mode, excelReady, qualsReady] = await Promise.all([
+  const [mode, excelReady, qualsReady, eligibilityReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
     hasQualificationsTable(),
+    hasAssessmentEligibilityColumn(),
+    getDefaultAppraisalCycle(),
   ]);
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, excelReady, qualsReady)}
+    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
      WHERE u.employee_id = ANY($1::text[])`,
     [uniqueIds],
   );
@@ -434,13 +504,15 @@ export async function listUsersByEmployeeIds(
 
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
-  const [mode, excelReady, qualsReady] = await Promise.all([
+  const [mode, excelReady, qualsReady, eligibilityReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
     hasQualificationsTable(),
+    hasAssessmentEligibilityColumn(),
+    getDefaultAppraisalCycle(),
   ]);
   const result = await db.query<UserRow>(
-    `${buildUserSelect(mode, excelReady, qualsReady)}
+    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
      WHERE u.id = $1`,
     [id],
   );

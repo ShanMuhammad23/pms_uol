@@ -1,44 +1,19 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ShieldCheck, X } from "lucide-react";
+import { LogOut, X } from "lucide-react";
 
-export type HrApprovalAction = "approve" | "review_required" | "board_approve";
-
-interface HrApprovalConfirmModalProps {
+interface SignOutConfirmModalProps {
   open: boolean;
-  action: HrApprovalAction;
   onConfirm: () => void;
   onClose: () => void;
-  isPending?: boolean;
 }
 
-export function HrApprovalConfirmModal({
+export function SignOutConfirmModal({
   open,
-  action,
   onConfirm,
   onClose,
-  isPending = false,
-}: HrApprovalConfirmModalProps) {
-  const isApprove = action === "approve";
-  const isBoardApprove = action === "board_approve";
-
-  const title = isBoardApprove
-    ? "Confirm Board Approval"
-    : isApprove ? "Confirm Approval" : "Mark for Review";
-  const message = isBoardApprove
-    ? "Are you sure you want to approve this record at the Board level? This will finalize the submission."
-    : isApprove
-      ? "Are you sure you want to mark this record as Approved?"
-      : "Are you sure you want to mark this record as Review Required?";
-  const confirmLabel = isBoardApprove
-    ? "Board Approve"
-    : isApprove ? "Approve" : "Mark for Review";
-  const Icon = isApprove ? Check : isBoardApprove ? ShieldCheck : AlertTriangle;
-  const confirmColor = isApprove || isBoardApprove
-    ? "bg-emerald-600 hover:bg-emerald-700"
-    : "bg-amber-600 hover:bg-amber-700";
-
+}: SignOutConfirmModalProps) {
   return (
     <AnimatePresence>
       {open ? (
@@ -59,11 +34,9 @@ export function HrApprovalConfirmModal({
           >
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-white/10">
               <div className="flex items-center gap-2">
-                <Icon
-                  className={`h-5 w-5 ${isApprove || isBoardApprove ? "text-emerald-600" : "text-amber-500"}`}
-                />
+                <LogOut className="h-5 w-5 text-red-500" />
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  {title}
+                  Confirm Sign Out
                 </h3>
               </div>
               <button
@@ -77,7 +50,8 @@ export function HrApprovalConfirmModal({
 
             <div className="px-5 py-4">
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                {message}
+                Are you sure you want to sign out? You will need to sign in again
+                to access the dashboard.
               </p>
             </div>
 
@@ -85,18 +59,16 @@ export function HrApprovalConfirmModal({
               <button
                 type="button"
                 onClick={onClose}
-                disabled={isPending}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={onConfirm}
-                disabled={isPending}
-                className={`rounded-lg px-4 py-2 text-xs font-semibold text-white transition-colors disabled:opacity-50 ${confirmColor}`}
+                className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700"
               >
-                {isPending ? "..." : confirmLabel}
+                Sign Out
               </button>
             </div>
           </motion.div>

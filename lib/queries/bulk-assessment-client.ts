@@ -1,4 +1,5 @@
 import type { AppraisalStatus } from "@/types/forms";
+import type { EmployeeFormAnswerAttachment } from "@/types/employee-forms";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                       */
@@ -36,6 +37,8 @@ export interface BulkReviewQuestionRow {
   managerRemarks: string | null;
   manager1Score: number | null;
   manager1Remarks: string | null;
+  /** Attachments uploaded by the employee for this question. */
+  attachments: EmployeeFormAnswerAttachment[];
 }
 
 export interface BulkReviewQuestionData {

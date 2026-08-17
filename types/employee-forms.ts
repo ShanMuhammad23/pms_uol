@@ -1,4 +1,5 @@
 import type { AppraisalStatus, FormTemplateRecord } from "@/types/forms";
+import type { ReturnHistoryEntry } from "@/types/form-submissions";
 
 export type EmployeeFormStatus = "NOT_STARTED" | "DRAFT" | "SUBMITTED";
 
@@ -59,6 +60,8 @@ export interface EmployeeFormDetail {
   ineligibilityReason: string | null;
   headName: string | null;
   manager2Name: string | null;
+  /** History of returns to this submission (employee and manager 1 levels). */
+  returnHistory?: ReturnHistoryEntry[];
 }
 
 export interface EmployeeFormAnswerInput {

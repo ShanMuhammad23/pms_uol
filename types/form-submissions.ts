@@ -5,6 +5,16 @@ import type {
   QuestionRecord,
 } from "@/types/forms";
 
+export type ReturnLevel = "manager2" | "manager1" | "employee";
+
+export interface ReturnHistoryEntry {
+  id: number;
+  returnLevel: ReturnLevel;
+  returnReason: string;
+  returnedAt: string;
+  returnedByName: string | null;
+}
+
 export interface FormSubmissionListItem {
   id: number;
   employeeId: string;
@@ -104,6 +114,19 @@ export interface FormSubmissionListItem {
   assessmentEligibility: boolean;
   /** Reason provided when eligibility was disabled. Null when eligible. */
   ineligibilityReason: string | null;
+  /**
+   * True when HR/Board/Super Admin returned this submission to a lower
+   * workflow level (Manager 2, Manager 1, or Employee). The destination is
+   * represented by the existing status/manager_level. Reset to FALSE when
+   * the submission advances normally again.
+   */
+  isReturned: boolean;
+  /** Reason provided when the submission was returned. Null when not returned. */
+  returnReason: string | null;
+  /** Display name of the assigned Manager 1 (users.head_id). Null when unassigned. */
+  manager1Name: string | null;
+  /** Display name of the assigned Manager 2 (users.manager_2_id). Null when unassigned. */
+  manager2Name: string | null;
 }
 
 export interface FormSubmissionDetail {
@@ -162,4 +185,10 @@ export interface FormSubmissionDetail {
   manager1OverallRemarks: string | null;
   /** Overall remarks entered by Manager 2 (read-only for non-Manager-2 viewers). */
   manager2OverallRemarks: string | null;
+  /** True when the submission was returned to a lower workflow level. */
+  isReturned: boolean;
+  /** Reason provided when the submission was returned. Null when not returned. */
+  returnReason: string | null;
+  /** Full history of returns to this submission (all levels). */
+  returnHistory?: ReturnHistoryEntry[];
 }

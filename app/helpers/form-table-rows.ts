@@ -17,6 +17,10 @@ export interface FormTableRow {
   isFirstInSubsection: boolean;
   sectionRowCount: number;
   isHeaderOnly: boolean;
+  /** Sum of totalMarks for all questions in this section (0 for root questions). */
+  sectionTotalMarks: number;
+  /** Sum of totalMarks for all questions in this subsection (0 if no subsection). */
+  subsectionTotalMarks: number;
 }
 
 /**
@@ -27,6 +31,10 @@ export interface FormTableRow {
  * 1-based `sectionNumber` (sequential, no gaps from hidden/removed sections).
  * Subsection rows get `isFirstInSubsection: true` and a dotted number such
  * as "1.1" to support subsection-level numbering in the UI.
+ *
+ * `sectionTotalMarks` and `subsectionTotalMarks` are computed for every row
+ * in a section/subsection so that the header row (which is the first row)
+ * can display the aggregate marks alongside the title.
  */
 export function buildFormTableRows(
   sections: FormSectionRecord[],
@@ -45,6 +53,10 @@ export function buildFormTableRows(
   ) => {
     const startIdx = rows.length;
     const subsectionNumber = `${currentSectionNumber}.${subIndex + 1}`;
+    const subsectionTotalMarks = subsection.questions.reduce(
+      (sum, q) => sum + (q.totalMarks || 0),
+      0,
+    );
 
     if (subsection.questions.length === 0) {
       sr += 1;
@@ -59,6 +71,8 @@ export function buildFormTableRows(
         isFirstInSubsection: true,
         sectionRowCount: 0,
         isHeaderOnly: true,
+        sectionTotalMarks: 0,
+        subsectionTotalMarks,
       });
       return;
     }
@@ -76,6 +90,8 @@ export function buildFormTableRows(
         isFirstInSubsection: false,
         sectionRowCount: 0,
         isHeaderOnly: false,
+        sectionTotalMarks: 0,
+        subsectionTotalMarks,
       });
     });
 
@@ -101,6 +117,8 @@ export function buildFormTableRows(
       isFirstInSubsection: false,
       sectionRowCount: 0,
       isHeaderOnly: false,
+      sectionTotalMarks: 0,
+      subsectionTotalMarks: 0,
     });
   };
 
@@ -137,8 +155,14 @@ export function buildFormTableRows(
 
       if (rows.length > sectionStartIdx) {
         rows[sectionStartIdx].isFirstInSection = true;
+        // Compute the total marks for this section by summing all questions
+        // (both direct and within subsections) that belong to it.
+        const sectionTotalMarks = rows
+          .slice(sectionStartIdx, rows.length)
+          .reduce((sum, r) => sum + (r.question?.totalMarks || 0), 0);
         for (let i = sectionStartIdx; i < rows.length; i++) {
           rows[i].sectionRowCount = rows.length - sectionStartIdx;
+          rows[i].sectionTotalMarks = sectionTotalMarks;
         }
       }
     } else {
@@ -156,6 +180,8 @@ export function buildFormTableRows(
           isFirstInSubsection: false,
           sectionRowCount: 1,
           isHeaderOnly: false,
+          sectionTotalMarks: 0,
+          subsectionTotalMarks: 0,
         });
       }
     }
@@ -165,25 +191,37 @@ export function buildFormTableRows(
 }
 
 /**
- * Formats a section label as "Section {number}: {title}".
+ * Formats a section label as "Section {number}: {title}  (Total: {marks})".
  * Returns just the title if no section number is available.
+ * The total marks suffix is only shown when sectionTotalMarks > 0.
  */
 export function formatSectionLabel(row: FormTableRow): string {
-  if (row.sectionNumber != null && row.sectionTitle) {
-    return `Section ${row.sectionNumber}: ${row.sectionTitle}`;
+  const base =
+    row.sectionNumber != null && row.sectionTitle
+      ? `Section ${row.sectionNumber}: ${row.sectionTitle}`
+      : (row.sectionTitle ?? "");
+
+  if (row.sectionTotalMarks > 0) {
+    return `${base}  (Total: ${row.sectionTotalMarks})`;
   }
 
-  return row.sectionTitle ?? "";
+  return base;
 }
 
 /**
- * Formats a subsection label as "{number} {title}" (e.g. "1.1 Classroom Activities").
+ * Formats a subsection label as "{number} {title}  (Total: {marks})".
  * Returns just the title if no subsection number is available.
+ * The total marks suffix is only shown when subsectionTotalMarks > 0.
  */
 export function formatSubsectionLabel(row: FormTableRow): string {
-  if (row.subsectionNumber && row.subsectionTitle) {
-    return `${row.subsectionNumber} ${row.subsectionTitle}`;
+  const base =
+    row.subsectionNumber && row.subsectionTitle
+      ? `${row.subsectionNumber} ${row.subsectionTitle}`
+      : (row.subsectionTitle ?? "");
+
+  if (row.subsectionTotalMarks > 0) {
+    return `${base}  (Total: ${row.subsectionTotalMarks})`;
   }
 
-  return row.subsectionTitle ?? "";
+  return base;
 }

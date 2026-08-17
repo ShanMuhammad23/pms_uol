@@ -53,6 +53,14 @@ export interface UserRecord {
   qualificationCountry: string | null;
   isActive: boolean;
   createdAt: string;
+  /** Whether the user is eligible for assessment (defaults to true when column is absent). */
+  assessmentEligibility: boolean;
+  /** Whether a form template is assigned to this user in the active cycle. */
+  formAssigned: boolean;
+  /** Whether the user is marked for direct score entry in the active cycle. */
+  directScoreEntry: boolean;
+  /** Whether self-assessment is enabled for this user's form assignment. */
+  selfAssessmentEnabled: boolean;
 }
 
 export interface CreateUserInput {

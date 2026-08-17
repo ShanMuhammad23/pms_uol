@@ -8,6 +8,7 @@ import {
   toEmployeeManagers,
 } from "@/app/helpers/manager-review";
 import { getFormTemplateById } from "@/lib/queries/forms";
+import { getReturnHistory } from "@/lib/queries/form-submissions";
 import {
   deleteFormAttachmentFile,
   resolveFormAttachmentAbsolutePath,
@@ -639,6 +640,14 @@ export async function getEmployeeFormDetail(
   const headName = managerResult.rows[0]?.head_name ?? null;
   const manager2Name = managerResult.rows[0]?.manager_2_name ?? null;
 
+  // Fetch return history — for the employee view, only show returns to
+  // "employee" and "manager1" levels (not manager2).
+  const returnHistory = appraisal
+    ? (await getReturnHistory(Number(appraisal.id))).filter(
+        (entry) => entry.returnLevel === "employee" || entry.returnLevel === "manager1",
+      )
+    : [];
+
   return {
     template,
     appraisalId: appraisal ? Number(appraisal.id) : null,
@@ -656,6 +665,7 @@ export async function getEmployeeFormDetail(
     ineligibilityReason: eligibility.ineligibilityReason,
     headName,
     manager2Name,
+    returnHistory,
   };
 }
 

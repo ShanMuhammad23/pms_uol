@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     let scopedEntityIds: number[] | undefined;
     let managedByUserId: number | undefined;
     const isHead = isHeadRole(auth.user?.role);
+    // When viewing as a different role (view-as feature), skip the entity
+    // subtree scoping — only show employees directly assigned to the user as
+    // Manager 1 or Manager 2.
+    const isViewingAs = Boolean(auth.user?.viewAsRole);
 
     if (isHead) {
       const headEntityId = auth.user?.entityId;
@@ -39,7 +43,7 @@ export async function GET(request: NextRequest) {
 
       managedByUserId = viewerUserId;
       scopedEntityIds =
-        headEntityId != null && Number.isFinite(headEntityId)
+        !isViewingAs && headEntityId != null && Number.isFinite(headEntityId)
           ? await resolveEntitySubtreeIds(headEntityId)
           : [];
     }
@@ -57,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     let scopedOverview = overview;
     if (isHead) {
-      const headEntityId = auth.user?.entityId ?? null;
+      const headEntityId = isViewingAs ? null : (auth.user?.entityId ?? null);
       const viewerUserId = Number(auth.user!.id);
       scopedOverview = overview.filter((submission) =>
         submissionVisibleToHead(

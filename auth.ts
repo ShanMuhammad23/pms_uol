@@ -122,10 +122,25 @@ export const authOptions: NextAuthOptions = {
 
       return true;
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger, session: updateData }) {
       // Strip provider profile image from the token on every write.
       delete (token as { picture?: unknown }).picture;
       delete (token as { image?: unknown }).image;
+
+      // Handle session updates from the client (View As feature).
+      // The updateData contains { viewAsRole: string | null }.
+      if (trigger === "update" && updateData) {
+        const requested = (updateData as { viewAsRole?: string | null }).viewAsRole;
+        if (requested === null || requested === undefined) {
+          // Clearing the view-as role — always allowed.
+          token.viewAsRole = undefined;
+        } else if (requested === "EMPLOYEE" || requested === "MANAGER") {
+          // Only allow switching to EMPLOYEE or MANAGER (never escalate).
+          // The real DB role is refreshed below and must be >= the requested role.
+          // We'll validate after the DB refresh.
+          token.viewAsRole = requested;
+        }
+      }
 
       if (user) {
         if (account?.provider === "google") {
@@ -179,6 +194,26 @@ export const authOptions: NextAuthOptions = {
         token.entityId = dbUser.entityId ?? null;
         token.name = `${dbUser.firstName} ${dbUser.lastName}`.trim();
         token.error = undefined;
+
+        // Validate viewAsRole after DB refresh:
+        // - EMPLOYEE: allowed for any non-employee role (MANAGER, HR, BOARD, SUPER_ADMIN)
+        // - MANAGER: allowed for MANAGER, HR, BOARD, SUPER_ADMIN
+        //   (HR/Board/Super Admin can view as Manager only if they are actually
+        //   a manager1 or manager2 of some employee — checked in the API endpoint)
+        if (token.viewAsRole) {
+          const realRole = dbUser.systemRole;
+          if (token.viewAsRole === "EMPLOYEE") {
+            if (realRole === "EMPLOYEE") {
+              token.viewAsRole = undefined;
+            }
+          } else if (token.viewAsRole === "MANAGER") {
+            if (realRole === "EMPLOYEE") {
+              token.viewAsRole = undefined;
+            }
+          } else {
+            token.viewAsRole = undefined;
+          }
+        }
       }
 
       return token;
@@ -213,6 +248,14 @@ export const authOptions: NextAuthOptions = {
             : Number(token.entityId);
         // Never expose Google profile image URL via session.
         session.user.image = undefined;
+        // Apply view-as role override so the entire app (client + server
+        // components that call getServerSession) sees the switched role.
+        // The real DB role remains in token.role for authorizeFromSessionUser.
+        session.user.viewAsRole = token.viewAsRole ?? null;
+        session.user.realRole = token.role as string | undefined ?? null;
+        if (token.viewAsRole) {
+          session.user.role = token.viewAsRole;
+        }
       }
 
       return session;

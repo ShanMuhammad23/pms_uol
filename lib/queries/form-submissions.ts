@@ -10,6 +10,7 @@ import {
 } from "@/lib/queries/performance-rating";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
+import { deleteFormAttachmentFile } from "@/lib/uploads/form-attachments";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import type {
   EmployeeFormAnswerAttachment,
@@ -19,7 +20,10 @@ import type { ManagerReviewAnswerInput } from "@/types/employee-forms";
 import type {
   FormSubmissionDetail,
   FormSubmissionListItem,
+  ReturnHistoryEntry,
+  ReturnLevel,
 } from "@/types/form-submissions";
+export type { ReturnHistoryEntry, ReturnLevel };
 import type { AppraisalStatus, PerformanceRating, QuestionRecord } from "@/types/forms";
 import { flattenAllQuestions } from "@/types/forms";
 import {
@@ -107,6 +111,10 @@ interface SubmissionListRow {
   self_assessment_disabled: boolean;
   assessment_eligibility: boolean | null;
   ineligibility_reason: string | null;
+  is_returned: boolean | null;
+  return_reason: string | null;
+  manager_1_name: string | null;
+  manager_2_name: string | null;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -336,6 +344,10 @@ function mapSubmissionRow(
     selfAssessmentEnabled: !row.self_assessment_disabled,
     assessmentEligibility: row.assessment_eligibility ?? true,
     ineligibilityReason: row.ineligibility_reason ?? null,
+    isReturned: Boolean(row.is_returned),
+    returnReason: row.return_reason ?? null,
+    manager1Name: row.manager_1_name ?? null,
+    manager2Name: row.manager_2_name ?? null,
   };
 }
 
@@ -579,7 +591,11 @@ export async function listFormSubmissions(
        COALESCE(tm.max_raw::text, '0') AS max_raw_score,
        ap.submitted_at::text,
        COALESCE(efa.self_assessment_disabled, false) AS self_assessment_disabled,
-      COALESCE(u.assessment_eligibility, true) AS assessment_eligibility
+      COALESCE(u.assessment_eligibility, true) AS assessment_eligibility,
+      COALESCE(ap.is_returned, false) AS is_returned,
+      ap.return_reason,
+      m1_user.employee_name AS manager_1_name,
+      m2_user.employee_name AS manager_2_name
      FROM users u
      LEFT JOIN LATERAL (
        SELECT ap_inner.*
@@ -620,6 +636,16 @@ export async function listFormSubmissions(
      LEFT JOIN entity_categories p2_cat ON p2_cat.id = p2.entity_category_id
      LEFT JOIN entities p3 ON p3.id = p2.parent_entity_id
      LEFT JOIN entity_categories p3_cat ON p3_cat.id = p3.entity_category_id
+     LEFT JOIN LATERAL (
+       SELECT CONCAT(m.first_name, ' ', m.last_name) AS employee_name
+       FROM users m
+       WHERE m.id = u.head_id
+     ) m1_user ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT CONCAT(m.first_name, ' ', m.last_name) AS employee_name
+       FROM users m
+       WHERE m.id = u.manager_2_id
+     ) m2_user ON TRUE
      ${quartileJoin}
      ${qualJoin}
      WHERE u.is_active = TRUE
@@ -799,6 +825,8 @@ export interface BulkReviewQuestionRow {
   manager1Score: number | null;
   /** Manager 1's saved remarks (used as fallback for Manager 2 drafts). */
   manager1Remarks: string | null;
+  /** Attachments uploaded by the employee for this question. */
+  attachments: EmployeeFormAnswerAttachment[];
 }
 
 export interface BulkReviewQuestionData {
@@ -908,6 +936,27 @@ export async function getBulkReviewQuestionData(
   }
 
   // Batch-fetch answers: self-assessment + reviewer answers per submission.
+  // Pre-fetch employee attachments per submission, grouped by question ID, so
+  // managers can see what the employee uploaded alongside their self-assessment.
+  const attachmentsBySubmission = new Map<
+    number,
+    Map<number, EmployeeFormAnswerAttachment[]>
+  >();
+
+  for (const meta of submissionMeta) {
+    const empAttachments = await listAttachmentsForAppraisal(
+      meta.id,
+      meta.employeeUserId,
+    );
+    const byQuestion = new Map<number, EmployeeFormAnswerAttachment[]>();
+    for (const att of empAttachments) {
+      const list = byQuestion.get(att.questionId) ?? [];
+      list.push(att);
+      byQuestion.set(att.questionId, list);
+    }
+    attachmentsBySubmission.set(meta.id, byQuestion);
+  }
+
   const questionsData: BulkReviewQuestionData[] = [];
 
   for (const q of scoredQuestions) {
@@ -982,6 +1031,8 @@ export async function getBulkReviewQuestionData(
         managerRemarks,
         manager1Score,
         manager1Remarks,
+        attachments:
+          attachmentsBySubmission.get(meta.id)?.get(q.id) ?? [],
       });
     }
 
@@ -1321,8 +1372,11 @@ export async function approveManagerReview(appraisalId: number): Promise<{
 export async function approveHrCalibration(appraisalId: number): Promise<{
   status: AppraisalStatus;
 }> {
-  const current = await db.query<{ status: AppraisalStatus }>(
-    `SELECT status FROM appraisals WHERE id = $1`,
+  const current = await db.query<{
+    status: AppraisalStatus;
+    calibration_factor: string | null;
+  }>(
+    `SELECT status, calibration_factor::text FROM appraisals WHERE id = $1`,
     [appraisalId],
   );
 
@@ -1334,6 +1388,21 @@ export async function approveHrCalibration(appraisalId: number): Promise<{
   let nextStatus: AppraisalStatus;
 
   if (row.status === "PENDING_HR_CALIBRATION") {
+    // Calibration Factor is required before HR can advance a submission from
+    // the HR Calibration stage to Board Approval. Without it the normalized
+    // score cannot be finalized.
+    const calibrationFactor = row.calibration_factor
+      ? Number(row.calibration_factor)
+      : null;
+    if (
+      calibrationFactor == null ||
+      Number.isNaN(calibrationFactor)
+    ) {
+      throw new FormSubmissionError(
+        "Approval is blocked — Calibration Factor has not been set. Please enter a Calibration Factor before approving.",
+        409,
+      );
+    }
     nextStatus = "PENDING_BOARD_APPROVAL";
   } else if (row.status === "PENDING_BOARD_APPROVAL") {
     nextStatus = "APPROVED";
@@ -1358,10 +1427,12 @@ export async function approveHrCalibration(appraisalId: number): Promise<{
 
 export async function setHrReviewRequired(appraisalId: number): Promise<{
   hrApprovalStatus: string;
+  status: AppraisalStatus;
 }> {
   const result = await db.query<{ id: string }>(
     `UPDATE appraisals
      SET hr_approval_status = 'review_required',
+         status = 'PENDING_HR_CALIBRATION',
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1
      RETURNING id`,
@@ -1372,7 +1443,7 @@ export async function setHrReviewRequired(appraisalId: number): Promise<{
     throw new FormSubmissionError("Submission not found.", 404);
   }
 
-  return { hrApprovalStatus: "review_required" };
+  return { hrApprovalStatus: "review_required", status: "PENDING_HR_CALIBRATION" };
 }
 
 export async function getFormSubmissionById(
@@ -1521,6 +1592,9 @@ export async function getFormSubmissionById(
     additionalRemarksEnabled,
     manager1OverallRemarks: summary.manager1OverallRemarks,
     manager2OverallRemarks: summary.manager2OverallRemarks,
+    isReturned: summary.isReturned ?? false,
+    returnReason: summary.returnReason ?? null,
+    returnHistory: await getReturnHistory(id),
   };
 }
 
@@ -2279,6 +2353,371 @@ export async function resetFormSubmission(
       deletedAttachments,
       deletedAnswers,
       resetAppraisal,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Return Submission                                                           */
+/* -------------------------------------------------------------------------- */
+
+export interface ReturnSubmissionResult {
+  status: AppraisalStatus;
+  managerLevel: number;
+  isReturned: boolean;
+  returnLevel: ReturnLevel;
+  deletedAnswers: number;
+  deletedAttachments: number;
+}
+
+/**
+ * Fetches the return history for a submission from the `appraisal_logs` table.
+ * Each entry corresponds to a RETURN_SUBMISSION action, with the return level
+ * extracted from `old_value->>'return_level'` and the reason from
+ * `new_value->>'return_reason'`.
+ */
+export async function getReturnHistory(
+  appraisalId: number,
+): Promise<ReturnHistoryEntry[]> {
+  const result = await db.query<{
+    id: string;
+    return_level: string;
+    return_reason: string | null;
+    returned_at: string;
+    returned_by_name: string | null;
+  }>(
+    `SELECT al.id::text,
+            al.old_value->>'return_level' AS return_level,
+            al.new_value->>'return_reason' AS return_reason,
+            to_char(al.timestamp, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS returned_at,
+            CONCAT(u.first_name, ' ', u.last_name) AS returned_by_name
+     FROM appraisal_logs al
+     LEFT JOIN users u ON u.id = al.changed_by_id
+     WHERE al.appraisal_id = $1
+       AND al.action_performed = 'RETURN_SUBMISSION'
+     ORDER BY al.timestamp DESC, al.id DESC`,
+    [appraisalId],
+  );
+
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    returnLevel: row.return_level as ReturnLevel,
+    returnReason: row.return_reason ?? "",
+    returnedAt: row.returned_at,
+    returnedByName: row.returned_by_name ?? null,
+  }));
+}
+
+interface ReturnSubmissionRow {
+  status: AppraisalStatus;
+  manager_level: number | null;
+  employee_id: string;
+  head_id: string | null;
+  manager_2_id: string | null;
+  self_assessment_disabled: boolean | null;
+}
+
+/**
+ * Return a submission to a lower workflow level.
+ *
+ * - **manager2**: Preserve all assessment data. Set status to PENDING_HEAD_REVIEW
+ *   with manager_level = 2. Manager 2 can edit their fields.
+ * - **manager1**: Remove Manager 2 answers, attachments, and overall remarks.
+ *   Preserve Manager 1 and Employee data. Set status to PENDING_HEAD_REVIEW
+ *   with manager_level = 1. Manager 1 can edit again.
+ * - **employee**: Remove Manager 1 AND Manager 2 answers, attachments, and
+ *   overall remarks. Preserve Employee self-assessment data. Clear
+ *   submitted_at so the employee can edit. Set status to
+ *   PENDING_SELF_ASSESSMENT with manager_level = 1. Only valid for
+ *   self-assessment submissions (not direct assessment).
+ *
+ * In all cases, `is_returned` is set to TRUE and `return_reason` is persisted.
+ * HR calibration / normalization fields are cleared when manager data is
+ * removed (they depend on that data). `hr_approval_status` is reset to
+ * 'pending'.
+ *
+ * This operation is atomic — wrapped in a single transaction.
+ *
+ * Authorization (HR / Board / Super Admin only) is enforced by the API route
+ * before calling this function.
+ */
+export async function returnSubmission(
+  appraisalId: number,
+  returnByUserId: number,
+  returnLevel: ReturnLevel,
+  reason: string,
+): Promise<ReturnSubmissionResult> {
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) {
+    throw new FormSubmissionError("A return reason is required.", 400);
+  }
+
+  const client = await db.connect();
+  let attachmentPaths: string[] = [];
+
+  try {
+    await client.query("BEGIN");
+
+    // Fetch everything needed in a single query.
+    const row = await client.query<ReturnSubmissionRow>(
+      `SELECT ap.status,
+              ap.manager_level,
+              ap.employee_id::text,
+              u.head_id::text,
+              u.manager_2_id::text,
+              COALESCE(efa.self_assessment_disabled, false) AS self_assessment_disabled
+       FROM appraisals ap
+       INNER JOIN users u ON u.id = ap.employee_id
+       LEFT JOIN employee_form_assignments efa
+         ON efa.employee_id = u.id AND efa.template_id = ap.template_id
+       WHERE ap.id = $1`,
+      [appraisalId],
+    );
+
+    if (row.rows.length === 0) {
+      throw new FormSubmissionError("Submission not found.", 404);
+    }
+
+    const r = row.rows[0];
+    const manager1UserId = r.head_id ? Number(r.head_id) : null;
+    const manager2UserId = r.manager_2_id ? Number(r.manager_2_id) : null;
+    const employeeId = Number(r.employee_id);
+    const isDirectAssessment = Boolean(r.self_assessment_disabled);
+
+    // --- Validate the requested return level ---
+
+    if (returnLevel === "employee" && isDirectAssessment) {
+      throw new FormSubmissionError(
+        "Cannot return a direct manager assessment to the employee level.",
+        409,
+      );
+    }
+
+    if (returnLevel === "manager2" && manager2UserId == null) {
+      throw new FormSubmissionError(
+        "Manager 2 is not assigned to this submission.",
+        409,
+      );
+    }
+
+    if (returnLevel === "manager1" && manager1UserId == null) {
+      throw new FormSubmissionError(
+        "Manager 1 is not assigned to this submission.",
+        409,
+      );
+    }
+
+    // Prevent returning to the same level the submission is already at.
+    if (
+      returnLevel === "manager2" &&
+      r.status === "PENDING_HEAD_REVIEW" &&
+      (r.manager_level ?? 1) === 2
+    ) {
+      throw new FormSubmissionError(
+        "Submission is already at the Manager 2 review stage.",
+        409,
+      );
+    }
+    if (
+      returnLevel === "manager1" &&
+      r.status === "PENDING_HEAD_REVIEW" &&
+      (r.manager_level ?? 1) === 1
+    ) {
+      throw new FormSubmissionError(
+        "Submission is already at the Manager 1 review stage.",
+        409,
+      );
+    }
+    if (
+      returnLevel === "employee" &&
+      r.status === "PENDING_SELF_ASSESSMENT"
+    ) {
+      throw new FormSubmissionError(
+        "Submission is already at the Self Assessment stage.",
+        409,
+      );
+    }
+
+    // --- Determine which manager data to remove ---
+    // manager2  → remove nothing (preserve all)
+    // manager1  → remove manager 2 data
+    // employee  → remove manager 1 + manager 2 data
+    const removeManager2Data = returnLevel === "manager1" || returnLevel === "employee";
+    const removeManager1Data = returnLevel === "employee";
+
+    const filledByIdsToRemove: number[] = [];
+    if (removeManager2Data && manager2UserId != null) {
+      filledByIdsToRemove.push(manager2UserId);
+    }
+    if (removeManager1Data && manager1UserId != null) {
+      filledByIdsToRemove.push(manager1UserId);
+    }
+
+    let deletedAnswers = 0;
+    let deletedAttachments = 0;
+
+    // --- Remove manager answers and attachments ---
+    if (filledByIdsToRemove.length > 0) {
+      // Collect attachment file paths before deleting DB rows (for physical
+      // file cleanup after the transaction commits).
+      const pathsResult = await client.query<{ relative_path: string }>(
+        `SELECT relative_path
+         FROM appraisal_answer_attachments
+         WHERE appraisal_id = $1
+           AND filled_by_id = ANY($2::bigint[])`,
+        [appraisalId, filledByIdsToRemove],
+      );
+      attachmentPaths = pathsResult.rows.map((p) => p.relative_path);
+
+      // Delete attachment DB rows.
+      const attachmentsResult = await client.query(
+        `DELETE FROM appraisal_answer_attachments
+         WHERE appraisal_id = $1
+           AND filled_by_id = ANY($2::bigint[])`,
+        [appraisalId, filledByIdsToRemove],
+      );
+      deletedAttachments = attachmentsResult.rowCount ?? 0;
+
+      // Delete answer rows.
+      const answersResult = await client.query(
+        `DELETE FROM appraisal_answers
+         WHERE appraisal_id = $1
+           AND filled_by_id = ANY($2::bigint[])`,
+        [appraisalId, filledByIdsToRemove],
+      );
+      deletedAnswers = answersResult.rowCount ?? 0;
+    }
+
+    // --- Update the appraisal row ---
+    let newStatus: AppraisalStatus;
+    let newManagerLevel: number;
+
+    if (returnLevel === "employee") {
+      newStatus = "PENDING_SELF_ASSESSMENT";
+      newManagerLevel = 1;
+    } else {
+      newStatus = "PENDING_HEAD_REVIEW";
+      newManagerLevel = returnLevel === "manager2" ? 2 : 1;
+    }
+
+    // Build the SET clause. When manager data is removed, clear the
+    // calibration/normalization fields that depend on it. When returning
+    // to employee, also clear the system_raw_score and submitted_at so the
+    // employee can edit and resubmit.
+    const clearCalibrationFields = removeManager2Data || removeManager1Data;
+    const clearEmployeeSubmissionFields = returnLevel === "employee";
+
+    const setClauses: string[] = [
+      "status = $2",
+      "manager_level = $3",
+      "is_returned = TRUE",
+      "return_reason = $4",
+      "hr_approval_status = 'pending'",
+      "updated_at = CURRENT_TIMESTAMP",
+    ];
+
+    if (removeManager2Data) {
+      setClauses.push("manager2_overall_remarks = NULL");
+    }
+    if (removeManager1Data) {
+      setClauses.push("manager1_overall_remarks = NULL");
+    }
+    if (clearCalibrationFields) {
+      setClauses.push(
+        "credit_hrs_erp_score_adj = NULL",
+        "pub_oric_score_adj = NULL",
+        "qec_score_adj = NULL",
+        "calibration_factor = NULL",
+        "normalized_score = NULL",
+        "calibrated_score_numeric = NULL",
+        "calibrated_rating = NULL",
+        "performance_quartile_id = NULL",
+      );
+    }
+    if (clearEmployeeSubmissionFields) {
+      // Clear submitted_at so the employee can edit their self-assessment.
+      // Clear system_raw_score — it will be recalculated on resubmit.
+      // Preserve the employee's answers/attachments/remarks.
+      setClauses.push("submitted_at = NULL", "system_raw_score = 0");
+    }
+
+    await client.query(
+      `UPDATE appraisals SET ${setClauses.join(", ")} WHERE id = $1`,
+      [appraisalId, newStatus, newManagerLevel, trimmedReason],
+    );
+
+    // --- Write audit log ---
+    await client.query(
+      `INSERT INTO appraisal_logs
+         (appraisal_id, changed_by_id, action_performed, old_value, new_value, timestamp)
+       VALUES
+         ($1::bigint, $2::bigint, 'RETURN_SUBMISSION',
+          jsonb_build_object(
+            'returned_by', $2::bigint,
+            'employee_id', $3::bigint,
+            'returned_at', to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SSOF'),
+            'return_level', $4::text,
+            'old_status', $5::text,
+            'old_manager_level', $6::int,
+            'deleted_answers', $7::int,
+            'deleted_attachments', $8::int
+          ),
+          jsonb_build_object(
+            'status', $9::text,
+            'manager_level', $10::int,
+            'is_returned', true,
+            'return_reason', $11::text
+          ),
+          CURRENT_TIMESTAMP)`,
+      [
+        appraisalId,
+        returnByUserId,
+        employeeId,
+        returnLevel,
+        r.status,
+        r.manager_level ?? 1,
+        deletedAnswers,
+        deletedAttachments,
+        newStatus,
+        newManagerLevel,
+        trimmedReason,
+      ],
+    );
+
+    await client.query("COMMIT");
+
+    // --- Delete physical attachment files after commit ---
+    // Orphaned DB rows are worse than orphaned files, so we delete files
+    // only after the transaction is safely committed. If a file deletion
+    // fails (e.g. already gone), the error is swallowed.
+    for (const relativePath of attachmentPaths) {
+      try {
+        await deleteFormAttachmentFile(relativePath);
+      } catch {
+        // Physical file may already be gone — not a data integrity issue.
+      }
+    }
+
+    console.info(
+      `[returnSubmission] appraisal=${appraisalId} ` +
+        `returnLevel=${returnLevel} ` +
+        `deletedAnswers=${deletedAnswers} ` +
+        `deletedAttachments=${deletedAttachments} ` +
+        `newStatus=${newStatus} newManagerLevel=${newManagerLevel}`,
+    );
+
+    return {
+      status: newStatus,
+      managerLevel: newManagerLevel,
+      isReturned: true,
+      returnLevel,
+      deletedAnswers,
+      deletedAttachments,
     };
   } catch (error) {
     await client.query("ROLLBACK");

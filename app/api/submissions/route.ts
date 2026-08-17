@@ -20,6 +20,11 @@ export async function GET(request: NextRequest) {
     let scopedEntityIds: number[] | undefined;
     let managedByUserId: number | undefined;
     const isHead = isHeadRole(auth.user?.role);
+    // When viewing as a different role (view-as feature), skip the entity
+    // subtree scoping — only show employees directly assigned to the user as
+    // Manager 1 or Manager 2. This prevents an HR/Board/Super Admin who is
+    // also a manager from seeing the entire org subtree in manager view.
+    const isViewingAs = Boolean(auth.user?.viewAsRole);
 
     if (isHead) {
       const headEntityId = auth.user?.entityId;
@@ -40,8 +45,10 @@ export async function GET(request: NextRequest) {
       }
 
       managedByUserId = viewerUserId;
+      // Only use entity subtree scoping when NOT viewing as a different role.
+      // In view-as mode, the user should only see their direct reports.
       scopedEntityIds =
-        headEntityId != null && Number.isFinite(headEntityId)
+        !isViewingAs && headEntityId != null && Number.isFinite(headEntityId)
           ? await resolveEntitySubtreeIds(headEntityId)
           : [];
     }
@@ -62,7 +69,9 @@ export async function GET(request: NextRequest) {
             filterRow: (submission) =>
               submissionVisibleToHead(
                 Number(auth.user!.id),
-                auth.user?.entityId ?? null,
+                // When viewing as a different role, don't use entity subtree —
+                // only show direct reports (Manager 1 / Manager 2).
+                isViewingAs ? null : (auth.user?.entityId ?? null),
                 submission,
                 entities,
               ),

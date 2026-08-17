@@ -45,7 +45,7 @@ function formatMultiChipLabel(
 function formatCardFilterChipLabel(cardId: CardFilterId): string {
   if (cardId.startsWith("eligibility:")) {
     const status = cardId.slice("eligibility:".length);
-    if (status === "Ineligible") return "Eligibility: N/A";
+    if (status === "Ineligible" || status === "Not Applicable") return "Eligibility: N/A";
     if (status === "Fully Eligible") return "Eligibility: Full";
     if (status === "Partially Eligible") return "Eligibility: Partial";
     if (status === "Not Eligible") return "Eligibility: None";

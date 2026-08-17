@@ -8,6 +8,17 @@ interface CredentialsInput {
   password: string;
 }
 
+export interface ViewAsOption {
+  value: string;
+  label: string;
+}
+
+export interface ViewAsOptionsResponse {
+  options: ViewAsOption[];
+  currentViewAsRole: string | null;
+  realRole?: string;
+}
+
 const authErrorMap: Record<string, string> = {
   AccessDenied: "Your account is not allowed to sign in with Google.",
   CallbackRouteError: "We could not complete sign-in. Please try again.",
@@ -55,4 +66,15 @@ export async function signInWithGoogle() {
 
 export async function signOutAndRedirect() {
   await signOut({ callbackUrl: "/" });
+}
+
+/**
+ * Fetch the available "View As" roles for the current user.
+ */
+export async function fetchViewAsOptions(): Promise<ViewAsOptionsResponse> {
+  const response = await fetch("/api/auth/view-as");
+  if (!response.ok) {
+    throw new Error("Failed to fetch view-as options");
+  }
+  return response.json();
 }

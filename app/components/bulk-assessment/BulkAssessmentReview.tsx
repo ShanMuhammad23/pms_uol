@@ -25,6 +25,8 @@ import {
 import { APPRAISAL_STATUS_LABELS } from "@/types/forms";
 import { cn } from "@/lib/utils";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
+import AttachmentList from "@/app/components/attachments/AttachmentList";
+import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
 
 interface BulkAssessmentReviewProps {
   role: string | null;
@@ -904,8 +906,10 @@ function WorkspaceView({
                   <th className="px-3 py-3 w-10"></th>
                   <th className="px-3 py-3">Employee</th>
                   <th className="px-3 py-3 text-right">Self Score</th>
+                  <th className="px-3 py-3 min-w-[180px]">Self Remarks</th>
                   <th className="px-3 py-3 text-right">Manager Score</th>
                   <th className="px-3 py-3">Remarks</th>
+                  <th className="px-3 py-3 min-w-[160px]">Attachments</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40">
@@ -940,6 +944,15 @@ function WorkspaceView({
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums font-semibold text-teal-700 dark:text-teal-300">
                         {row.selfScore != null ? row.selfScore : "—"}
+                      </td>
+                      <td className="px-3 py-3">
+                        {row.selfRemarks ? (
+                          <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+                            {row.selfRemarks}
+                          </p>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 text-right">
                         <input
@@ -977,6 +990,18 @@ function WorkspaceView({
                           }
                           className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                           placeholder="Optional remarks"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <AttachmentList
+                          attachments={row.attachments}
+                          buildDownloadUrl={(attachmentId) =>
+                            getSubmissionAttachmentDownloadUrl(
+                              row.submissionId,
+                              attachmentId,
+                            )
+                          }
+                          compact
                         />
                       </td>
                     </tr>

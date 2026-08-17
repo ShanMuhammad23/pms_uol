@@ -443,9 +443,9 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   hrApprovalStatus: {
     id: "hrApprovalStatus",
-    label: "HR Approval",
+    label: "Action",
     align: "center",
-    width: 90,
+    width: 110,
     getValue: (row) => {
       const status = getHrApprovalStatus(row);
       if (status === "approved") return "Approved";

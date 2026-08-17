@@ -10,6 +10,10 @@ declare module "next-auth" {
       entityId?: number | null;
       /** Always undefined — Google image URLs must not be session-exposed. */
       image?: string | null;
+      /** When set, the user is viewing as this role (EMPLOYEE or MANAGER). */
+      viewAsRole?: string | null;
+      /** The user's real DB role (unchanged by view-as). */
+      realRole?: string | null;
     };
   }
 
@@ -28,6 +32,8 @@ declare module "next-auth/jwt" {
     entityId?: number | null;
     /** Set when DB says inactive/missing — session callback treats as logged out. */
     error?: "InactiveOrMissingUser" | string;
+    /** View-as role (EMPLOYEE or MANAGER). Cleared to return to original role. */
+    viewAsRole?: string | null;
   }
 }
 

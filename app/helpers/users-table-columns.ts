@@ -4,6 +4,7 @@ import type { UserRecord } from "@/types/users";
 export type UsersTableColumnId =
   | "sapCode"
   | "employeeName"
+  | "formAssignment"
   | "email"
   | "designation"
   | "roleCategory"
@@ -62,6 +63,20 @@ export const USERS_TABLE_COLUMNS: UsersTableColumnDef[] = [
     id: "employeeName",
     label: "Employee Name",
     getValue: (row) => `${row.firstName} ${row.lastName}`.trim(),
+  },
+  {
+    id: "formAssignment",
+    label: "Form",
+    align: "center",
+    width: 80,
+    getValue: (row) =>
+      row.directScoreEntry
+        ? "DS"
+        : row.formAssigned
+          ? row.selfAssessmentEnabled
+            ? "✔"
+            : "MA"
+          : "✖",
   },
   {
     id: "email",
