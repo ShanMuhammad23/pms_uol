@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Eye } from "lucide-react";
-import { useRouter } from "next/navigation";
 import {
   fetchViewAsOptions,
   type ViewAsOption,
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  */
 export function ViewAsDropdown() {
   const { data: session, update } = useSession();
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const [options, setOptions] = useState<ViewAsOption[]>([]);
   const [currentRole, setCurrentRole] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -92,17 +92,24 @@ export function ViewAsDropdown() {
       // Update the JWT token via NextAuth's session update mechanism.
       // This triggers the jwt callback with trigger="update".
       await update({ viewAsRole: targetValue });
-      // Navigate to the appropriate home page for the new role.
+
+      // Clear all React Query caches so stale data from the previous role
+      // is not displayed. This forces every query to refetch with the new
+      // role's authorization context.
+      queryClient.clear();
+
+      // Determine the destination based on the new effective role.
       const newRole = targetValue ?? realRole ?? undefined;
-      if (newRole === "EMPLOYEE") {
-        router.push("/dashboard/my-forms");
-      } else {
-        router.push("/dashboard");
-      }
-      router.refresh();
+      const destination =
+        newRole === "EMPLOYEE" ? "/dashboard/my-forms" : "/dashboard";
+
+      // Use a hard navigation (window.location) instead of router.push +
+      // router.refresh. This ensures the server re-reads the updated JWT
+      // cookie and renders with the new role. Soft navigation can race with
+      // the session update and serve stale server components.
+      window.location.href = destination;
     } catch (error) {
       console.error("Failed to switch view-as role:", error);
-    } finally {
       setLoading(false);
     }
   }
