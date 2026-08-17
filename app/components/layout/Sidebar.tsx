@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { ViewAsDropdown } from "@/app/components/layout/ViewAsDropdown";
+import { SignOutConfirmModal } from "@/app/components/layout/SignOutConfirmModal";
 import { useSidebar } from "@/app/components/layout/sidebar-context";
 import { isEmployeeRole } from "@/lib/auth/home-path";
 import {
@@ -111,6 +112,7 @@ const Sidebar = () => {
   const isAdminRouteActive = adminLinks.some((link) => link.match(pathname));
 
   const [adminOpen, setAdminOpen] = useState(isAdminRouteActive);
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   useEffect(() => {
     if (isAdminRouteActive) {
@@ -405,7 +407,7 @@ const Sidebar = () => {
             </div>
             <button
               type="button"
-              onClick={() => void signOutAndRedirect()}
+              onClick={() => setSignOutOpen(true)}
               title="Sign out"
               className="flex size-9 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
             >
@@ -434,7 +436,7 @@ const Sidebar = () => {
             <ViewAsDropdown />
             <button
               type="button"
-              onClick={() => void signOutAndRedirect()}
+              onClick={() => setSignOutOpen(true)}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300/80 py-2 text-xs font-medium text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-white/15"
             >
               <LogOut className="size-3.5" />
@@ -443,6 +445,14 @@ const Sidebar = () => {
           </div>
         )}
       </div>
+      <SignOutConfirmModal
+        open={signOutOpen}
+        onConfirm={() => {
+          setSignOutOpen(false);
+          void signOutAndRedirect();
+        }}
+        onClose={() => setSignOutOpen(false)}
+      />
     </aside>
   );
 };
