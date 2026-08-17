@@ -21,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
+import { ViewAsDropdown } from "@/app/components/layout/ViewAsDropdown";
 import { useSidebar } from "@/app/components/layout/sidebar-context";
 import { isEmployeeRole } from "@/lib/auth/home-path";
 import {
@@ -430,6 +431,7 @@ const Sidebar = () => {
                 </p>
               </div>
             </div>
+            <ViewAsDropdown />
             <button
               type="button"
               onClick={() => void signOutAndRedirect()}

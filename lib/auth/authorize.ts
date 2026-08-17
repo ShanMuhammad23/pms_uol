@@ -142,12 +142,19 @@ export interface AuthorizeOptions {
 /**
  * Resolve the caller from a session user id, re-fetching role/entity from DB.
  * Rejects inactive users and role mismatches (JWT role is ignored for authz).
+ *
+ * When `viewAsRole` is provided (set via the "View As" dropdown), the
+ * principal's role is overridden with it so that all role-based authorization
+ * checks use the view-as role instead of the real DB role. The real role is
+ * still >= the view-as role in privilege, so the user can perform all actions
+ * of the lower-privilege role.
  */
 export async function authorizeFromSessionUser(
   sessionUser: {
     id?: string | null;
     email?: string | null;
     role?: string | null;
+    viewAsRole?: string | null;
   } | null | undefined,
   options: AuthorizeOptions = {},
 ): Promise<AuthPrincipal> {
@@ -167,6 +174,13 @@ export async function authorizeFromSessionUser(
 
   if (!principal.isActive) {
     throw new AuthzError("Account disabled", 401, "INACTIVE");
+  }
+
+  // Apply view-as role override for authorization checks. The view-as role
+  // is always <= the real role in privilege, validated at the API endpoint
+  // that sets it.
+  if (sessionUser?.viewAsRole && isSystemRole(sessionUser.viewAsRole)) {
+    principal = { ...principal, role: sessionUser.viewAsRole };
   }
 
   if (options.roles && options.roles.length > 0) {
