@@ -1530,7 +1530,6 @@ export async function getFormSubmissionById(
       qecScoreAdj: summary.qecScoreAdj,
       calibrationFactor: summary.calibrationFactor,
       maxRawScore: summary.maxRawScore,
-      normalizedScore: summary.normalizedScore,
     },
     quartileBands,
   );
