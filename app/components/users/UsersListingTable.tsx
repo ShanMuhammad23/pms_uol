@@ -271,18 +271,21 @@ export function UsersListingTable({
   const displayPageSize = showAll ? totalCount : PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(totalCount / displayPageSize));
 
-  useEffect(() => {
-    setPage(1);
-  }, [users, masterFilters, showAll]);
-
-  useEffect(() => {
-    setPage((current) => Math.min(current, totalPages));
-  }, [totalPages]);
-
-  // Invalidate the full-dataset cache when filters change.
-  useEffect(() => {
-    setHasFullDataset(false);
-  }, [users, masterFilters]);
+  const usersResetKey = `${showAll}:${JSON.stringify(masterFilters)}:${users?.length ?? 0}`;
+  const [prevUsersResetKey, setPrevUsersResetKey] = useState(usersResetKey);
+  if (usersResetKey !== prevUsersResetKey) {
+    setPrevUsersResetKey(usersResetKey);
+    if (page !== 1) {
+      setPage(1);
+    }
+    if (hasFullDataset) {
+      setHasFullDataset(false);
+    }
+  }
+  const clampedPage = Math.min(page, totalPages);
+  if (clampedPage !== page) {
+    setPage(clampedPage);
+  }
 
   const pageEmployeeIds = useMemo(() => {
     const start = (queryPage - 1) * queryPageSize;
@@ -303,12 +306,9 @@ export function UsersListingTable({
     isFetching: pageUsersFetching,
   } = useUsersByEmployeeIdsQuery(pageEmployeeIds);
 
-  // Cache the full dataset once Show All data arrives.
-  useEffect(() => {
-    if (showAll && pageUsersFromApi) {
-      setHasFullDataset(true);
-    }
-  }, [showAll, pageUsersFromApi]);
+  if (showAll && pageUsersFromApi && !hasFullDataset) {
+    setHasFullDataset(true);
+  }
 
   const paginatedUsers = useMemo(() => {
     if (!pageUsersFromApi || pageUsersFromApi.length === 0) {
@@ -344,21 +344,24 @@ export function UsersListingTable({
     enabled: showAll,
   });
 
-  useEffect(() => {
-    const available = new Set(masterFilteredUsers.map((row) => row.employeeId));
-    setSelectedEmployeeIds((current) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const id of current) {
-        if (available.has(id)) {
-          next.add(id);
-        } else {
-          changed = true;
-        }
+  const availableEmployeeIds = useMemo(
+    () => new Set(masterFilteredUsers.map((row) => row.employeeId)),
+    [masterFilteredUsers],
+  );
+  if (selectedEmployeeIds.size > 0) {
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of selectedEmployeeIds) {
+      if (availableEmployeeIds.has(id)) {
+        next.add(id);
+      } else {
+        changed = true;
       }
-      return changed ? next : current;
-    });
-  }, [masterFilteredUsers]);
+    }
+    if (changed) {
+      setSelectedEmployeeIds(next);
+    }
+  }
 
   const filteredEmployeeIds = useMemo(() => {
     const ids: string[] = [];

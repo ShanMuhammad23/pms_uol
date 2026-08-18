@@ -139,7 +139,7 @@ export function LoginForm() {
           Welcome back
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Sign in to the University of Lahore faculty portal
+          Sign in to the University of Lahore Performance Management System
         </p>
       </header>
 
@@ -157,11 +157,8 @@ export function LoginForm() {
         aria-label="Continue with Google — recommended sign-in method"
         className="!h-12 shadow-md border-slate-300 dark:border-white/20 " 
         icon={
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-            <path d="M21.8 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.5c-.2 1.3-.9 2.5-2 3.3v2.8h3.2c1.9-1.8 3.1-4.4 3.1-8.1Z" />
-            <path d="M12 22c2.7 0 5-1 6.7-2.6l-3.2-2.8c-.9.6-2 .9-3.5.9-2.6 0-4.8-1.8-5.6-4.2H3.1v2.9A10 10 0 0 0 12 22Z" />
-            <path d="M6.4 13.3A6 6 0 0 1 6.1 12c0-.5.1-.9.2-1.3V7.8H3.1A10 10 0 0 0 2 12c0 1.7.4 3.3 1.1 4.7l3.3-2.9Z" />
-            <path d="M12 6.5c1.5 0 2.8.5 3.9 1.5l2.9-2.9C17 3.4 14.7 2.5 12 2.5A10 10 0 0 0 3.1 7.8l3.3 2.9c.8-2.4 3-4.2 5.6-4.2Z" />
+          <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="40" height="40" viewBox="0 0 48 48">
+          <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path>
           </svg>
         }
       >
@@ -239,26 +236,12 @@ export function LoginForm() {
           }
         />
 
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/20 dark:border-white/10 dark:bg-slate-950"
-            />
-            <span className="text-xs text-slate-500 dark:text-slate-400">Keep me signed in</span>
-          </label>
-          <a
-            href="/forgot-password"
-            className="text-xs font-medium text-slate-500 transition-colors hover:text-amber-700 dark:text-slate-400 dark:hover:text-amber-400"
-          >
-            Forgot password?
-          </a>
-        </div>
+     
 
         <div className="pt-2">
           <Button
             type="submit"
-            variant="outline"
+            variant="primary"
             isLoading={isCredentialsLoading}
             disabled={isAnyLoading}
             icon={<GraduationCap className="h-4 w-4" />}
@@ -269,17 +252,7 @@ export function LoginForm() {
         </div>
       </form>
 
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1 }}
-        className="mt-8 text-center text-xs text-slate-400 dark:text-slate-600"
-      >
-        Protected by university authentication protocols. Need help?{" "}
-        <a href="/support" className="text-amber-600 hover:underline dark:text-amber-400">
-          Contact IT Support
-        </a>
-      </motion.p>
+  
     </motion.section>
   );
 }

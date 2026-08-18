@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
@@ -161,6 +161,8 @@ function stickyHeaderClassName() {
 function canOpenSubmission(submission: FormSubmissionListItem) {
   return submission.id > 0 && submission.status !== "PENDING_SELF_ASSESSMENT";
 }
+
+const EMPTY_SUBMISSIONS: FormSubmissionListItem[] = [];
 
 function EligibilityToggleAction({
   submission,
@@ -881,22 +883,19 @@ export function DashboardSubmissionsTable({
 
   const allSubmissions = Array.isArray(submissionsPage?.items)
     ? submissionsPage.items
-    : [];
+    : EMPTY_SUBMISSIONS;
   const totalCount = submissionsPage?.total ?? 0;
 
-  // Cache the full dataset once Show All data arrives so subsequent toggles
-  // to Show Paginated can reuse the cached response (no refetch).
-  useEffect(() => {
-    if (showAll && submissionsPage) {
-      setHasFullDataset(true);
+  const filterCacheKey = JSON.stringify({ filterParams, masterFilters });
+  const [prevFilterCacheKey, setPrevFilterCacheKey] = useState(filterCacheKey);
+  if (filterCacheKey !== prevFilterCacheKey) {
+    setPrevFilterCacheKey(filterCacheKey);
+    if (hasFullDataset) {
+      setHasFullDataset(false);
     }
-  }, [showAll, submissionsPage]);
-
-  // Invalidate the full-dataset cache when filters change so the next
-  // Show All fetches fresh data for the new filter state.
-  useEffect(() => {
-    setHasFullDataset(false);
-  }, [filterParams, masterFilters]);
+  } else if (showAll && submissionsPage && !hasFullDataset) {
+    setHasFullDataset(true);
+  }
 
   // When using the cached full dataset in paginated mode, slice the
   // all-records response to show only the current page.
@@ -914,6 +913,7 @@ export function DashboardSubmissionsTable({
     count: submissions.length,
     estimateSize: 33,
     enabled: showAll,
+    scrollRef: tableScrollRef,
   });
 
   const matchingEmployeeIds = submissionsPage?.matchingEmployeeIds;
@@ -1230,39 +1230,36 @@ export function DashboardSubmissionsTable({
   const displayPageSize = showAll ? totalCount : PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(totalCount / displayPageSize));
 
-  useEffect(() => {
-    setPage(1);
-  }, [filterParams, showAll]);
-
-  // Don't sync page from server response when using the full dataset —
-  // the query always requests page 1, but the user's page is managed
-  // client-side and used to slice the cached data.
-  useEffect(() => {
-    if (useFullDataset) return;
-    if (submissionsPage?.page != null && submissionsPage.page !== page) {
-      setPage(submissionsPage.page);
+  const pageResetKey = `${JSON.stringify(filterParams)}:${showAll}`;
+  const [prevPageResetKey, setPrevPageResetKey] = useState(pageResetKey);
+  if (pageResetKey !== prevPageResetKey) {
+    setPrevPageResetKey(pageResetKey);
+    if (page !== 1) {
+      setPage(1);
     }
-  }, [submissionsPage?.page, page, useFullDataset]);
+  } else if (
+    !useFullDataset &&
+    submissionsPage?.page != null &&
+    submissionsPage.page !== page
+  ) {
+    setPage(submissionsPage.page);
+  }
 
-  useEffect(() => {
-    if (!matchingEmployeeIds) {
-      return;
-    }
-
+  if (matchingEmployeeIds) {
     const available = new Set(matchingEmployeeIds);
-    setSelectedEmployeeIds((current) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const id of current) {
-        if (available.has(id)) {
-          next.add(id);
-        } else {
-          changed = true;
-        }
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of selectedEmployeeIds) {
+      if (available.has(id)) {
+        next.add(id);
+      } else {
+        changed = true;
       }
-      return changed ? next : current;
-    });
-  }, [matchingEmployeeIds]);
+    }
+    if (changed) {
+      setSelectedEmployeeIds(next);
+    }
+  }
 
   const filteredEmployeeIds = matchingEmployeeIds ?? [];
 
@@ -1511,12 +1508,7 @@ export function DashboardSubmissionsTable({
       />
 
       <div
-        ref={(el) => {
-          tableScrollRef.current = el;
-          if (virtualRows.enabled) {
-            virtualRows.scrollRef.current = el;
-          }
-        }}
+        ref={tableScrollRef}
         className="w-full max-w-full max-h-[calc(100vh-5.5rem)] overflow-auto overscroll-contain"
       >
         <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">

@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, ShieldOff, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   getEligibilityDisplayLabel,
   getSubmissionEligibilityDisplayStatus,
@@ -33,12 +33,13 @@ export default function EligibilityConfirmationModal({
   error = null,
 }: EligibilityConfirmationModalProps) {
   const [reason, setReason] = useState("");
-
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setReason("");
     }
-  }, [open]);
+  }
 
   const isDisabling = currentEligibility;
   const reasonTrimmed = reason.trim();

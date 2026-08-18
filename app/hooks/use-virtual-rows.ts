@@ -12,6 +12,8 @@ interface UseVirtualRowsOptions {
   overscan?: number;
   /** Whether virtualization is active. When false, all rows are rendered. */
   enabled: boolean;
+  /** Optional scroll container ref. When omitted, the hook owns the ref. */
+  scrollRef?: RefObject<HTMLDivElement | null>;
 }
 
 interface UseVirtualRowsResult {
@@ -43,9 +45,13 @@ export function useVirtualRows({
   estimateSize,
   overscan = 8,
   enabled,
+  scrollRef: scrollRefProp,
 }: UseVirtualRowsOptions): UseVirtualRowsResult {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const internalScrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = scrollRefProp ?? internalScrollRef;
 
+  // TanStack Virtual intentionally returns unstable function identities.
+  // eslint-disable-next-line react-hooks/incompatible-library -- third-party virtualizer API
   const rowVirtualizer = useVirtualizer({
     count: enabled ? count : 0,
     getScrollElement: () => scrollRef.current,

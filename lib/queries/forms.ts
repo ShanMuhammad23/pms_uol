@@ -1183,8 +1183,6 @@ export async function assignFormTemplateToEmployees(
     ? Number(templateResult.rows[0].cycle_id)
     : null;
 
-  const formSelfAssessmentEnabled = templateResult.rows[0].self_assessment_enabled;
-
   const usersResult = await db.query<{ id: string; employee_id: string }>(
     `SELECT id, employee_id
      FROM users

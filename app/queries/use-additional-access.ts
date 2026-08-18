@@ -2,7 +2,6 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { fetchMyAdditionalAccess } from "@/lib/queries/additional-access-client";
-import type { AdditionalAccessPermission } from "@/types/additional-access";
 import {
   canEditModuleClient,
   canViewModuleClient,

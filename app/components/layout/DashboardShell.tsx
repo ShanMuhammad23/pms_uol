@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { EmployeeAccessGuard } from "@/app/components/layout/EmployeeAccessGuard";
 import GlobalAskHrButton from "@/app/components/layout/GlobalAskHrButton";
 import Sidebar from "@/app/components/layout/Sidebar";
+import { useIsClient } from "@/app/hooks/use-is-client";
 import {
   SIDEBAR_COLLAPSED_WIDTH,
   SIDEBAR_EXPANDED_WIDTH,
@@ -12,14 +13,14 @@ import {
 } from "@/app/components/layout/sidebar-context";
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
+  const isClient = useIsClient();
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
-    if (stored === "true") setCollapsed(true);
+  if (isClient && !hydrated) {
+    setCollapsed(localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true");
     setHydrated(true);
-  }, []);
+  }
 
   const toggle = useCallback(() => {
     setCollapsed((prev) => {

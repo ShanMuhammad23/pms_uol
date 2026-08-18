@@ -95,7 +95,6 @@ function TextFilterControl({
 }
 
 function ColumnFilterRow({
-  columnId,
   children,
 }: {
   columnId: DashboardTableColumnId;

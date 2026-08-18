@@ -49,9 +49,9 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     if (!isHead) return undefined;
     const base = HEAD_DASHBOARD_TABLE_COLUMN_IDS as readonly DashboardTableColumnId[];
     const extra: DashboardTableColumnId[] = [];
-    for (const module of Object.keys(ADDITIONAL_ACCESS_MODULE_COLUMNS) as AdditionalAccessModule[]) {
-      if (canView(module)) {
-        extra.push(...ADDITIONAL_ACCESS_MODULE_COLUMNS[module]);
+    for (const accessModule of Object.keys(ADDITIONAL_ACCESS_MODULE_COLUMNS) as AdditionalAccessModule[]) {
+      if (canView(accessModule)) {
+        extra.push(...ADDITIONAL_ACCESS_MODULE_COLUMNS[accessModule]);
       }
     }
     if (extra.length === 0) return base;

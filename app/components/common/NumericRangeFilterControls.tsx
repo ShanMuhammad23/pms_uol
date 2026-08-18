@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { NumericRangeFilter } from "@/app/helpers/numeric-range-filter";
 import { cn } from "@/lib/utils";
 
@@ -17,11 +17,13 @@ export function NumericRangeFilterControls({
 }: NumericRangeFilterControlsProps) {
   const [gtText, setGtText] = useState("");
   const [ltText, setLtText] = useState("");
-
-  useEffect(() => {
+  const filterKey = `${filter?.gt ?? ""}:${filter?.lt ?? ""}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
     setGtText(filter?.gt != null ? String(filter.gt) : "");
     setLtText(filter?.lt != null ? String(filter.lt) : "");
-  }, [filter]);
+  }
 
   const commit = (nextGt: string, nextLt: string) => {
     const gtNum = nextGt.trim() === "" ? undefined : Number(nextGt);

@@ -16,7 +16,6 @@ interface CalibrationDistributionMatrixProps {
 export function CalibrationDistributionMatrix({
   rows,
   columns,
-  employeeCount: _employeeCount,
   isLoading,
   hideHeader = false,
 }: CalibrationDistributionMatrixProps) {

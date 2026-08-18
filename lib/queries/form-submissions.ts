@@ -158,20 +158,6 @@ async function hasQualificationsTable(): Promise<boolean> {
   return Boolean(result.rows[0]?.exists);
 }
 
-async function hasAssessmentEligibilityColumn(): Promise<boolean> {
-  const result = await db.query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'users'
-         AND column_name = 'assessment_eligibility'
-     ) AS exists`,
-  );
-
-  return Boolean(result.rows[0]?.exists);
-}
-
 function toNumber(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
@@ -1543,6 +1529,7 @@ export async function getFormSubmissionById(
       qecScoreAdj: summary.qecScoreAdj,
       calibrationFactor: summary.calibrationFactor,
       maxRawScore: summary.maxRawScore,
+      normalizedScore: summary.normalizedScore,
     },
     quartileBands,
   );

@@ -38,12 +38,10 @@ export function InlineRemarksCell({
   const [draft, setDraft] = useState(value ?? "");
   const [error, setError] = useState<string | null>(null);
   const fieldLabel = FIELD_LABELS[field];
-
-  useEffect(() => {
-    if (!editing) {
-      setDraft(value ?? "");
-    }
-  }, [editing, value]);
+  const nextDraft = value ?? "";
+  if (!editing && draft !== nextDraft) {
+    setDraft(nextDraft);
+  }
 
   useEffect(() => {
     if (editing) {

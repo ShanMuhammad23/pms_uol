@@ -60,12 +60,15 @@ export function InlineScoreAdjustmentCell({
   );
   const [error, setError] = useState<string | null>(null);
   const fieldLabel = FIELD_LABELS[field];
-
-  useEffect(() => {
-    if (!editing) {
-      setDraft(displayValue != null ? String(isDecimal ? displayValue : Math.round(displayValue)) : isDecimal ? "1" : "");
-    }
-  }, [editing, displayValue, isDecimal]);
+  const nextDraft =
+    displayValue != null
+      ? String(isDecimal ? displayValue : Math.round(displayValue))
+      : isDecimal
+        ? "1"
+        : "";
+  if (!editing && draft !== nextDraft) {
+    setDraft(nextDraft);
+  }
 
   useEffect(() => {
     if (editing) {

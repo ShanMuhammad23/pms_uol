@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Percent, Save } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { fetchFinancialYears } from "@/lib/queries/financial-years-client";
 import {
   fetchInstitutionalQuotas,
   upsertInstitutionalQuotas,
 } from "@/lib/queries/institutional-quotas-client";
+import type { InstitutionalQuotaRecord } from "@/types/institutional-quotas";
 import {
   PERFORMANCE_RATINGS,
   RATING_LABELS,
@@ -40,24 +41,25 @@ function emptyDraft(): QuotaDraft {
 
 export default function InstitutionalQuotaManager() {
   const queryClient = useQueryClient();
-  const [selectedFinancialYearId, setSelectedFinancialYearId] = useState<
+  const [selectedYearOverride, setSelectedFinancialYearId] = useState<
     number | null
   >(null);
   const [draft, setDraft] = useState<QuotaDraft>(emptyDraft);
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+  const [syncedQuotas, setSyncedQuotas] = useState<
+    InstitutionalQuotaRecord[] | undefined
+  >(undefined);
 
   const { data: financialYears, isLoading: yearsLoading } = useQuery({
     queryKey: ["financial-years"],
     queryFn: fetchFinancialYears,
   });
 
-  useEffect(() => {
-    if (!selectedFinancialYearId && financialYears && financialYears.length > 0) {
-      const activeYear =
-        financialYears.find((year) => year.isActive) ?? financialYears[0];
-      setSelectedFinancialYearId(activeYear.id);
-    }
-  }, [financialYears, selectedFinancialYearId]);
+  const selectedFinancialYearId =
+    selectedYearOverride ??
+    financialYears?.find((year) => year.isActive)?.id ??
+    financialYears?.[0]?.id ??
+    null;
 
   const {
     data: quotas,
@@ -69,20 +71,20 @@ export default function InstitutionalQuotaManager() {
     enabled: selectedFinancialYearId !== null,
   });
 
-  useEffect(() => {
-    if (!quotas) return;
-
-    if (quotas.length === 0) {
-      setDraft(emptyDraft());
-      return;
+  if (quotas !== syncedQuotas) {
+    setSyncedQuotas(quotas);
+    if (quotas) {
+      if (quotas.length === 0) {
+        setDraft(emptyDraft());
+      } else {
+        const next = emptyDraft();
+        quotas.forEach((row) => {
+          next[row.rating] = String(row.quotaPercent);
+        });
+        setDraft(next);
+      }
     }
-
-    const next = emptyDraft();
-    quotas.forEach((row) => {
-      next[row.rating] = String(row.quotaPercent);
-    });
-    setDraft(next);
-  }, [quotas]);
+  }
 
   const totalPercent = useMemo(
     () =>

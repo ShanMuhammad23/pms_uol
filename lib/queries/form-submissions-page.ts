@@ -46,7 +46,6 @@ export type ListFormSubmissionsPageOptions = StaffListScope & {
 
 function buildColumnCounts(
   filteredByDashboard: FormSubmissionListItem[],
-  allScoped: FormSubmissionListItem[],
   masterFilters: MasterFilterState,
 ): Partial<Record<DashboardTableColumnId, CountOption[]>> {
   const columnCounts: Partial<Record<DashboardTableColumnId, CountOption[]>> =
@@ -62,7 +61,6 @@ function buildColumnCounts(
       column,
       masterFilters,
       masterFilters.multi[column.id] ?? null,
-      allScoped,
     );
     columnCounts[column.id] = options.slice(0, MAX_OPTIONS_PER_COLUMN).map(
       (option) => ({
@@ -119,7 +117,6 @@ export async function listFormSubmissionsPage(
     matchingEmployeeIds: masterFiltered.map((row) => row.employeeId),
     columnCounts: buildColumnCounts(
       dashboardFiltered,
-      scoped,
       masterFilters,
     ),
   };

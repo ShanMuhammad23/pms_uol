@@ -6,8 +6,10 @@ import {
 import {
   assignPerformanceMatrixToEmployees,
   createPerformanceLevel,
+  deletePerformanceMatrix,
   getPerformanceMatrixByFinancialYearId,
   listPerformanceMatrixLabelsByFinancialYearId,
+  listPerformanceMatrixSummaries,
   PerformanceLevelError,
 } from "@/lib/queries/performance-levels";
 import { validateCreatePerformanceLevelInput } from "@/lib/validation/performance-matrices";
@@ -20,18 +22,24 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
+  const summaries = searchParams.get("summaries") === "1";
   const financialYearId = Number(searchParams.get("financialYearId"));
   const matrixLabel = searchParams.get("matrixLabel")?.trim();
   const labelsOnly = searchParams.get("labelsOnly") === "1";
 
-  if (Number.isNaN(financialYearId) || financialYearId <= 0) {
-    return NextResponse.json(
-      { error: "financialYearId is required." },
-      { status: 400 },
-    );
-  }
-
   try {
+    if (summaries) {
+      const items = await listPerformanceMatrixSummaries();
+      return NextResponse.json(items);
+    }
+
+    if (Number.isNaN(financialYearId) || financialYearId <= 0) {
+      return NextResponse.json(
+        { error: "financialYearId is required." },
+        { status: 400 },
+      );
+    }
+
     if (labelsOnly) {
       const labels = await listPerformanceMatrixLabelsByFinancialYearId(financialYearId);
       return NextResponse.json(labels);
@@ -122,6 +130,49 @@ export async function POST(request: Request) {
     console.error("Failed to create performance level:", error);
     return NextResponse.json(
       { error: "Failed to create performance level." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  try {
+    const body = (await request.json()) as {
+      financialYearId?: unknown;
+      matrixLabel?: unknown;
+    };
+    const financialYearId = Number(body.financialYearId);
+    if (Number.isNaN(financialYearId) || financialYearId <= 0) {
+      return NextResponse.json(
+        { error: "financialYearId is required." },
+        { status: 400 },
+      );
+    }
+    if (typeof body.matrixLabel !== "string" || !body.matrixLabel.trim()) {
+      return NextResponse.json(
+        { error: "matrixLabel is required." },
+        { status: 400 },
+      );
+    }
+
+    await deletePerformanceMatrix(financialYearId, body.matrixLabel);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (error instanceof PerformanceLevelError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.statusCode },
+      );
+    }
+
+    console.error("Failed to delete performance matrix:", error);
+    return NextResponse.json(
+      { error: "Failed to delete performance matrix." },
       { status: 500 },
     );
   }

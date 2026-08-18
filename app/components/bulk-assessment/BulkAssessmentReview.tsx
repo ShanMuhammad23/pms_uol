@@ -11,7 +11,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchBulkReviewQueue,
@@ -154,10 +154,12 @@ export default function BulkAssessmentReview({
     [filteredQueue, currentPage],
   );
 
-  // Reset page when filters change
-  useEffect(() => {
+  const filterResetKey = `${search}\0${departmentFilter}\0${dateFilter}`;
+  const [prevFilterResetKey, setPrevFilterResetKey] = useState(filterResetKey);
+  if (filterResetKey !== prevFilterResetKey) {
+    setPrevFilterResetKey(filterResetKey);
     setPage(1);
-  }, [search, departmentFilter, dateFilter]);
+  }
 
   // --- Selection ---
   const allOnPageSelected = useMemo(
@@ -230,41 +232,35 @@ export default function BulkAssessmentReview({
     return map;
   }, [questionData?.submissions]);
 
-  useEffect(() => {
+  const [prevQuestion, setPrevQuestion] = useState(currentQuestion);
+  if (currentQuestion !== prevQuestion) {
+    setPrevQuestion(currentQuestion);
     if (!currentQuestion) {
       setDrafts(new Map());
       setModifiedRows(new Set());
-      return;
+    } else {
+      const next = new Map<number, { pointsEarned: string; remarks: string }>();
+      for (const row of currentQuestion.rows) {
+        const managerLevel = managerLevelBySubmissionId.get(row.submissionId) ?? 1;
+        const fallbackScore =
+          managerLevel === 2
+            ? (row.manager1Score ?? row.selfScore)
+            : row.selfScore;
+        const fallbackRemarks =
+          managerLevel === 2
+            ? (row.manager1Remarks ?? row.selfRemarks)
+            : row.selfRemarks;
+        const points = row.managerScore ?? fallbackScore;
+        const remarks = row.managerRemarks ?? fallbackRemarks;
+        next.set(row.submissionId, {
+          pointsEarned: points == null ? "" : String(points),
+          remarks: remarks ?? "",
+        });
+      }
+      setDrafts(next);
+      setModifiedRows(new Set());
     }
-
-    const next = new Map<number, { pointsEarned: string; remarks: string }>();
-    for (const row of currentQuestion.rows) {
-      const managerLevel = managerLevelBySubmissionId.get(row.submissionId) ?? 1;
-
-      // Fallback chain mirrors buildManagerDraftMap in SubmissionDetailView:
-      //   Manager 1: managerScore → selfScore → ""
-      //   Manager 2: managerScore → manager1Score → selfScore → ""
-      //   Remarks follow the same chain: managerRemarks → (mgr1Remarks) → selfRemarks → ""
-      const fallbackScore =
-        managerLevel === 2
-          ? (row.manager1Score ?? row.selfScore)
-          : row.selfScore;
-      const fallbackRemarks =
-        managerLevel === 2
-          ? (row.manager1Remarks ?? row.selfRemarks)
-          : row.selfRemarks;
-
-      const points = row.managerScore ?? fallbackScore;
-      const remarks = row.managerRemarks ?? fallbackRemarks;
-
-      next.set(row.submissionId, {
-        pointsEarned: points != null ? String(points) : "",
-        remarks: remarks ?? "",
-      });
-    }
-    setDrafts(next);
-    setModifiedRows(new Set());
-  }, [currentQuestion?.questionId, managerLevelBySubmissionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const updateDraft = useCallback(
     (submissionId: number, field: "pointsEarned" | "remarks", value: string) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { User } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -55,31 +55,26 @@ export function HeadDashboardOverview({
   chartsVisible = true,
 }: HeadDashboardOverviewProps) {
   const [chartsKey, setChartsKey] = useState(0);
-  const [chartReady, setChartReady] = useState(false);
-  const wasChartsVisibleRef = useRef(chartsVisible);
+  const [chartReady, setChartReady] = useState(chartsVisible);
+  const [wasChartsVisible, setWasChartsVisible] = useState(chartsVisible);
+
+  if (chartsVisible !== wasChartsVisible) {
+    setWasChartsVisible(chartsVisible);
+    setChartReady(false);
+  }
 
   useEffect(() => {
     if (!chartsVisible) {
-      setChartReady(false);
-      wasChartsVisibleRef.current = false;
       return;
     }
 
-    const becameVisible = !wasChartsVisibleRef.current;
-    wasChartsVisibleRef.current = true;
-
-    // First paint with charts already open — no delay.
-    if (!becameVisible) {
-      setChartReady(true);
-      // Layout can change when stats toggle; nudge Recharts to remeasure.
+    if (chartReady) {
       const frame = window.requestAnimationFrame(() => {
         window.dispatchEvent(new Event("resize"));
       });
       return () => window.cancelAnimationFrame(frame);
     }
 
-    // Remount after the height animation so ResponsiveContainer can measure.
-    setChartReady(false);
     const showTimer = window.setTimeout(() => {
       setChartsKey((key) => key + 1);
       setChartReady(true);
@@ -87,7 +82,7 @@ export function HeadDashboardOverview({
     }, 380);
 
     return () => window.clearTimeout(showTimer);
-  }, [chartsVisible, statsVisible]);
+  }, [chartsVisible, statsVisible, chartReady]);
 
   if (!statsVisible && !chartsVisible) {
     return null;

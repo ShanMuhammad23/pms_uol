@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Columns3 } from "lucide-react";
+import { useIsClient } from "@/app/hooks/use-is-client";
 import {
   DASHBOARD_TABLE_COLUMN_STORAGE_KEY,
   HEAD_DASHBOARD_TABLE_COLUMN_STORAGE_KEY,
@@ -135,6 +136,7 @@ function moveIdToPosition(
 export function useDashboardColumnVisibility(options?: {
   allowedColumnIds?: readonly DashboardTableColumnId[];
 }) {
+  const isClient = useIsClient();
   const allowedColumnIds = options?.allowedColumnIds;
   const storageKey = allowedColumnIds
     ? HEAD_DASHBOARD_TABLE_COLUMN_STORAGE_KEY
@@ -147,23 +149,28 @@ export function useDashboardColumnVisibility(options?: {
     getDefaultColumnOrder(allowedColumnIds),
   );
   const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setHydrated(false);
-    const stored = readStoredPrefs(storageKey, allowedColumnIds);
-    if (stored) {
-      setVisibleIds(
-        stored.visible.length > 0
-          ? stored.visible
-          : getDefaultVisibleColumnIds(allowedColumnIds),
-      );
-      setColumnOrder(stored.order);
-    } else {
-      setVisibleIds(getDefaultVisibleColumnIds(allowedColumnIds));
-      setColumnOrder(getDefaultColumnOrder(allowedColumnIds));
+  const prefsKey = `${isClient}:${storageKey}:${allowedColumnIds?.join(",") ?? ""}`;
+  const [prevPrefsKey, setPrevPrefsKey] = useState(prefsKey);
+  if (prefsKey !== prevPrefsKey) {
+    setPrevPrefsKey(prefsKey);
+    if (isClient) {
+      const stored = readStoredPrefs(storageKey, allowedColumnIds);
+      if (stored) {
+        setVisibleIds(
+          stored.visible.length > 0
+            ? stored.visible
+            : getDefaultVisibleColumnIds(allowedColumnIds),
+        );
+        setColumnOrder(stored.order);
+      } else {
+        setVisibleIds(getDefaultVisibleColumnIds(allowedColumnIds));
+        setColumnOrder(getDefaultColumnOrder(allowedColumnIds));
+      }
+      if (!hydrated) {
+        setHydrated(true);
+      }
     }
-    setHydrated(true);
-  }, [storageKey, allowedColumnIds]);
+  }
 
   useEffect(() => {
     if (!hydrated) return;
@@ -272,13 +279,16 @@ export function ColumnVisibilityDropdown({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
-  useEffect(() => {
+  const orderKey = orderedToggleable.map((column) => column.id).join(",");
+  const [prevOrderKey, setPrevOrderKey] = useState("");
+  if (orderKey !== prevOrderKey) {
+    setPrevOrderKey(orderKey);
     const next: Record<string, string> = {};
     orderedToggleable.forEach((column, index) => {
       next[column.id] = String(index + 1);
     });
     setDraftOrders(next);
-  }, [orderedToggleable]);
+  }
 
   const selectedCount = useMemo(
     () =>

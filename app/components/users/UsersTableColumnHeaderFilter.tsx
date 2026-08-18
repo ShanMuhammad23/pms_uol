@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import { Check, Filter, Search, X } from "lucide-react";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { NumericRangeFilterControls } from "@/app/components/common/NumericRangeFilterControls";
+import { useIsClient } from "@/app/hooks/use-is-client";
 import {
   buildUsersMasterFilterOptions,
   isUsersColumnFilterActive,
@@ -83,7 +84,6 @@ function getMenuPosition(trigger: HTMLElement): MenuPosition {
 export function UsersTableColumnHeaderFilter({
   column,
   users,
-  allUsers,
   filters,
   onTextChange,
   onMultiChange,
@@ -93,7 +93,7 @@ export function UsersTableColumnHeaderFilter({
   const [query, setQuery] = useState("");
   const [draftText, setDraftText] = useState("");
   const [position, setPosition] = useState<MenuPosition | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsClient();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -112,22 +112,23 @@ export function UsersTableColumnHeaderFilter({
             column,
             filters,
             selectedValues,
-            allUsers,
           ),
-    [allUsers, column, filters, isText, selectedValues, users],
+    [column, filters, isText, selectedValues, users],
   );
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
+  const draftSyncKey =
+    open && isText
+      ? `${column.id}:${filters.text[column.id as UsersMasterFilterTextColumnId] ?? ""}`
+      : "";
+  const [prevDraftSyncKey, setPrevDraftSyncKey] = useState(draftSyncKey);
+  if (draftSyncKey !== prevDraftSyncKey) {
+    setPrevDraftSyncKey(draftSyncKey);
     if (open && isText) {
       setDraftText(
         filters.text[column.id as UsersMasterFilterTextColumnId] ?? "",
       );
     }
-  }, [column.id, filters.text, isText, open]);
+  }
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) {

@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Columns3, GripVertical, Pin, PinOff, RotateCcw, X } from "lucide-react";
-import {
-  MIN_COLUMN_WIDTH,
-  MAX_COLUMN_WIDTH,
-  type ColumnDef,
-} from "@/app/hooks/use-column-config";
+import { type ColumnDef } from "@/app/hooks/use-column-config";
 import type { ColumnConfig } from "@/lib/queries/column-widths-client";
 import { cn } from "@/lib/utils";
 
@@ -94,17 +90,20 @@ export function ColumnManagementPanel({
   config,
   defaults,
   onApply,
-  onReset,
 }: ColumnManagementPanelProps) {
   const [draft, setDraft] = useState<DraftColumn[]>([]);
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  useEffect(() => {
+  const draftSyncKey = open
+    ? `${columns.map((column) => column.id).join(",")}:${JSON.stringify(config)}`
+    : "closed";
+  const [prevDraftSyncKey, setPrevDraftSyncKey] = useState(draftSyncKey);
+  if (draftSyncKey !== prevDraftSyncKey) {
+    setPrevDraftSyncKey(draftSyncKey);
     if (open) {
       setDraft(buildDraft(columns, config));
     }
-  }, [open, columns, config]);
+  }
 
   const toggleVisible = (id: string) => {
     setDraft((current) =>

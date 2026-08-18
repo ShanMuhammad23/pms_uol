@@ -171,7 +171,6 @@ export function buildUsersMasterFilterOptions(
   column: UsersTableColumnDef,
   filters: UsersMasterFilterState = EMPTY_USERS_MASTER_FILTER_STATE,
   selectedValues: UsersMasterFilterMultiSelection = null,
-  allUsers?: UserRecord[],
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 

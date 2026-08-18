@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchColumnConfig,
   saveColumnConfig,
-  EMPTY_COLUMN_CONFIG,
   type ColumnConfig,
 } from "@/lib/queries/column-widths-client";
 
@@ -160,48 +159,52 @@ export function useColumnConfig(
     fixedConfig ?? defaults,
   );
   const [hydrated, setHydrated] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initializedRef = useRef(false);
 
-  // Sync from server only once (on initial load). After that, local config
-  // is the single source of truth — updated only by updateConfig/setColumnWidth.
-  // Skipped entirely when fixedConfig is set.
-  useEffect(() => {
-    if (isFixed) {
-      // Always apply the current fixedConfig — it may change when
-      // additional-access permissions load asynchronously (e.g. a
-      // Manager's column set expands after permissions are fetched).
-      setConfig(fixedConfig);
-      if (!initializedRef.current) {
-        setHydrated(true);
-        initializedRef.current = true;
+  const [prevFixedConfig, setPrevFixedConfig] = useState(fixedConfig);
+  if (isFixed) {
+    if (fixedConfig !== prevFixedConfig) {
+      setPrevFixedConfig(fixedConfig);
+      if (fixedConfig) {
+        setConfig(fixedConfig);
       }
+    }
+    if (!hydrated) {
+      setHydrated(true);
+    }
+    if (!initialized) {
+      setInitialized(true);
+    }
+  } else if (!initialized && savedConfig) {
+    setInitialized(true);
+    const merged = mergeWithDefaults(savedConfig, allColumns, allowedColumnIds);
+    setConfig(merged);
+    setHydrated(true);
+  }
+
+  useEffect(() => {
+    if (isFixed || !savedConfig) {
       return;
     }
-    if (initializedRef.current) return;
-    if (savedConfig) {
-      const isFirstTime =
-        savedConfig.order.length === 0 && savedConfig.visible.length === 0;
-      const merged = mergeWithDefaults(savedConfig, allColumns, allowedColumnIds);
-      setConfig(merged);
-      setHydrated(true);
-      initializedRef.current = true;
-
-      // Persist defaults for first-time users so the server has a baseline.
-      if (isFirstTime) {
-        void saveColumnConfig(tableKey, merged);
-        void queryClient.setQueryData(queryKey, merged);
-      }
+    const isFirstTime =
+      savedConfig.order.length === 0 && savedConfig.visible.length === 0;
+    if (!isFirstTime) {
+      return;
     }
-  }, [savedConfig, allColumns, allowedColumnIds, tableKey, queryKey, queryClient, isFixed, fixedConfig]);
+    const merged = mergeWithDefaults(savedConfig, allColumns, allowedColumnIds);
+    void saveColumnConfig(tableKey, merged);
+    void queryClient.setQueryData(queryKey, merged);
+  }, [savedConfig, allColumns, allowedColumnIds, tableKey, queryKey, queryClient, isFixed]);
 
-  // If allColumns or allowedColumnIds change after initialization, re-merge
-  // the CURRENT config (not from server) to filter out disallowed columns.
-  // Skipped when fixedConfig is set — the fixed layout is authoritative.
-  useEffect(() => {
-    if (isFixed || !initializedRef.current) return;
-    setConfig((current) => mergeWithDefaults(current, allColumns, allowedColumnIds));
-  }, [allColumns, allowedColumnIds, isFixed]);
+  const columnsKey = `${allColumns.map((column) => column.id).join(",")}:${allowedColumnIds?.join(",") ?? ""}`;
+  const [prevColumnsKey, setPrevColumnsKey] = useState(columnsKey);
+  if (!isFixed && initialized && columnsKey !== prevColumnsKey) {
+    setPrevColumnsKey(columnsKey);
+    setConfig((current) =>
+      mergeWithDefaults(current, allColumns, allowedColumnIds),
+    );
+  }
 
   const persist = useCallback(
     (next: ColumnConfig) => {

@@ -102,15 +102,6 @@ function buildManagerDraftMap(
   return drafts;
 }
 
-function getRatingFromPercent(pct: number | null): string {
-  if (pct === null) return "—";
-  if (pct >= 85) return "OS";
-  if (pct >= 70) return "EX";
-  if (pct >= 55) return "ST";
-  if (pct >= 40) return "IN";
-  return "UN";
-}
-
 interface ScoreAdjustmentsPanelProps {
   submissionId: number;
   scoreO: number;
@@ -157,7 +148,6 @@ function ScoreAdjustmentsPanel({
     maxRawScore > 0
       ? Number(((adjustedScore / maxRawScore) * 100).toFixed(2))
       : null;
-  const ratingO = getRatingFromPercent(adjustedScorePct);
 
   const normalizedScore = adjustedScore * calFr;
   const normalizedScorePct =
@@ -321,31 +311,33 @@ export default function SubmissionDetailView({
     queryFn: () => fetchFormSubmission(submissionId),
   });
 
-  useEffect(() => {
-    if (!data) return;
-
-    const drafts = buildManagerDraftMap(
-      data.questions,
-      data.managerAnswers,
-      data.answers,
-      data.manager1Answers,
-      data.managerLevel ?? undefined,
-    );
-    setManagerDrafts(drafts);
-    setInitialDraftsSnapshot(
-      new Map(
-        [...drafts.entries()].map(([k, v]) => [
-          k,
-          { pointsEarned: v.pointsEarned, remarks: v.remarks },
-        ]),
-      ),
-    );
-    const m1Remarks = data.manager1OverallRemarks ?? "";
-    const m2Remarks = data.manager2OverallRemarks ?? "";
-    setManager1OverallRemarks(m1Remarks);
-    setManager2OverallRemarks(m2Remarks);
-    setInitialOverallRemarks({ manager1: m1Remarks, manager2: m2Remarks });
-  }, [data]);
+  const [prevSubmissionData, setPrevSubmissionData] = useState(data);
+  if (data !== prevSubmissionData) {
+    setPrevSubmissionData(data);
+    if (data) {
+      const drafts = buildManagerDraftMap(
+        data.questions,
+        data.managerAnswers,
+        data.answers,
+        data.manager1Answers,
+        data.managerLevel ?? undefined,
+      );
+      setManagerDrafts(drafts);
+      setInitialDraftsSnapshot(
+        new Map(
+          [...drafts.entries()].map(([k, v]) => [
+            k,
+            { pointsEarned: v.pointsEarned, remarks: v.remarks },
+          ]),
+        ),
+      );
+      const m1Remarks = data.manager1OverallRemarks ?? "";
+      const m2Remarks = data.manager2OverallRemarks ?? "";
+      setManager1OverallRemarks(m1Remarks);
+      setManager2OverallRemarks(m2Remarks);
+      setInitialOverallRemarks({ manager1: m1Remarks, manager2: m2Remarks });
+    }
+  }
 
   const saveMutation = useMutation({
     mutationFn: () => {

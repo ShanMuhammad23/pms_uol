@@ -1,11 +1,15 @@
 import type {
+  CopyPerformanceMatrixInput,
   CreatePerformanceLevelInput,
+  CreatePerformanceMatrixInput,
   CreatePerformanceQuartileInput,
   PerformanceLevelRecord,
   PerformanceLevelWithQuartiles,
   PerformanceMatrixAssignmentRecord,
+  PerformanceMatrixSummary,
   PerformanceQuartileRecord,
   UpdatePerformanceLevelInput,
+  UpdatePerformanceMatrixIdentityInput,
   UpdatePerformanceQuartileInput,
 } from "@/types/performance-matrices";
 
@@ -58,6 +62,61 @@ export async function fetchPerformanceMatrixLabels(
     `/api/admin/performance-levels?financialYearId=${financialYearId}&labelsOnly=1`,
   );
   return parseResponse<string[]>(response);
+}
+
+export async function fetchPerformanceMatrixSummaries(): Promise<
+  PerformanceMatrixSummary[]
+> {
+  const response = await fetch("/api/admin/performance-levels?summaries=1", {
+    credentials: "include",
+    cache: "no-store",
+  });
+  return parseResponse<PerformanceMatrixSummary[]>(response);
+}
+
+export async function createPerformanceMatrix(
+  input: CreatePerformanceMatrixInput,
+): Promise<PerformanceMatrixSummary> {
+  const response = await fetch("/api/admin/performance-levels/matrix", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseResponse<PerformanceMatrixSummary>(response);
+}
+
+export async function updatePerformanceMatrixIdentity(
+  input: UpdatePerformanceMatrixIdentityInput,
+): Promise<PerformanceMatrixSummary> {
+  const response = await fetch("/api/admin/performance-levels/matrix", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseResponse<PerformanceMatrixSummary>(response);
+}
+
+export async function copyPerformanceMatrix(
+  input: CopyPerformanceMatrixInput,
+): Promise<PerformanceMatrixSummary> {
+  const response = await fetch("/api/admin/performance-levels/matrix/copy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseResponse<PerformanceMatrixSummary>(response);
+}
+
+export async function deletePerformanceMatrix(input: {
+  financialYearId: number;
+  matrixLabel: string;
+}): Promise<void> {
+  const response = await fetch("/api/admin/performance-levels", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await parseResponse<{ success: true }>(response);
 }
 
 export async function fetchPerformanceMatrixAssignments(
