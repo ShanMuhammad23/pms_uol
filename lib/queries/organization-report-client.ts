@@ -7,6 +7,7 @@ export interface OrgReportNode {
   parentEntityId: number | null;
   directStaffCount: number;
   subtreeStaffCount: number;
+  eligible: number;
   formsAssigned: number;
   selfAssessed: number;
   assessedByManagers: number;

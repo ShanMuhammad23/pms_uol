@@ -68,7 +68,7 @@ const ADMIN_LINKS = [
   },
   {
     href: "/dashboard/reports",
-    label: "Reports",
+    label: "Process Status Summary",
     icon: FileBarChart,
     match: (pathname: string) => pathname.startsWith("/dashboard/reports"),
     module: undefined as AdditionalAccessModule | undefined,

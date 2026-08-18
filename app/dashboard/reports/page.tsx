@@ -7,7 +7,7 @@ export default async function ReportsRoute() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Reports</h1>
+        <h1 className="text-2xl font-bold">Process Status Summary</h1>
         <p className="mt-1 text-sm text-foreground/70">
           Hierarchical organization report with appraisal workflow progress
           counts.

@@ -15,6 +15,8 @@ export interface OrgReportNode {
   directStaffCount: number;
   /** Subtree staff count (this entity + all descendants). */
   subtreeStaffCount: number;
+  /** Eligible employees in this entity's subtree. */
+  eligible: number;
   /** Forms assigned to employees in this entity's subtree. */
   formsAssigned: number;
   /** Employees who have submitted self-assessment (status >= PENDING_HEAD_REVIEW). */
@@ -31,6 +33,8 @@ export interface OrgReportNode {
 
 interface EntityCountRow {
   entity_id: string;
+  total_employees: string;
+  eligible: string;
   forms_assigned: string;
   self_assessed: string;
   assessed_by_managers: string;
@@ -48,9 +52,19 @@ interface EntityCountRow {
 export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   const entities = await listEntities();
 
-  // Get the default appraisal cycle id.
+  // Get the default appraisal cycle id and active financial year.
   const defaultCycle = await getDefaultAppraisalCycle();
   const cycleId = defaultCycle?.id ?? null;
+
+  const fyResult = await db.query<{ year: number }>(
+    `SELECT year FROM financial_years WHERE is_active = TRUE ORDER BY year DESC LIMIT 1`,
+  );
+  const financialYear = fyResult.rows[0]?.year ?? defaultCycle?.fiscalYear ?? null;
+
+  // FY end is June 30 of the financial year (UoL fiscal year runs 1 Jul – 30 Jun).
+  // An employee is eligible if they have >= 3 months tenure by FY end.
+  // We compute this in SQL using date_of_joining.
+  const fyEndDate = financialYear ? `${financialYear}-06-30` : null;
 
   // Aggregate counts per entity using the entity's subtree.
   // We join users → appraisals → employee_form_assignments, grouping by
@@ -59,6 +73,21 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
     `SELECT
        u.entity_id::text AS entity_id,
        COUNT(DISTINCT u.id) AS total_employees,
+       COUNT(DISTINCT u.id) FILTER (
+         WHERE COALESCE(ap.is_eligible, FALSE) = TRUE
+            OR (
+              u.date_of_joining IS NOT NULL
+              AND $2::text IS NOT NULL
+              AND u.date_of_joining::date <= $2::date
+              AND (
+                -- months between date_of_joining and FY end >= 3
+                (EXTRACT(YEAR FROM $2::date) - EXTRACT(YEAR FROM u.date_of_joining::date)) * 12
+                + (EXTRACT(MONTH FROM $2::date) - EXTRACT(MONTH FROM u.date_of_joining::date))
+                + CASE WHEN EXTRACT(DAY FROM $2::date) >= EXTRACT(DAY FROM u.date_of_joining::date) THEN 1 ELSE 0 END
+                >= 3
+              )
+            )
+       ) AS eligible,
        COUNT(DISTINCT u.id) FILTER (
          WHERE efa.template_id IS NOT NULL
        ) AS forms_assigned,
@@ -99,13 +128,14 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
        AND u.employee_id <> 'EMP-0001'
        AND u.entity_id IS NOT NULL
      GROUP BY u.entity_id`,
-    [cycleId],
+    [cycleId, fyEndDate],
   );
 
   // Build a map of entity_id → counts (direct, not subtree).
   const directCounts = new Map<
     number,
     {
+      eligible: number;
       formsAssigned: number;
       selfAssessed: number;
       assessedByManagers: number;
@@ -118,12 +148,13 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   for (const row of countRows.rows) {
     const entityId = Number(row.entity_id);
     directCounts.set(entityId, {
+      eligible: Number(row.eligible ?? 0),
       formsAssigned: Number(row.forms_assigned ?? 0),
       selfAssessed: Number(row.self_assessed ?? 0),
       assessedByManagers: Number(row.assessed_by_managers ?? 0),
       hrAlignment: Number(row.hr_alignment ?? 0),
       boardApproval: Number(row.board_approval ?? 0),
-      directStaffCount: 0, // filled from entities
+      directStaffCount: Number(row.total_employees ?? 0),
     });
   }
 
@@ -136,8 +167,9 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       name: entity.name,
       categoryCode: entity.categoryCode,
       parentEntityId: entity.parentEntityId,
-      directStaffCount: entity.staffCount,
+      directStaffCount: counts?.directStaffCount ?? 0,
       subtreeStaffCount: 0,
+      eligible: 0,
       formsAssigned: 0,
       selfAssessed: 0,
       assessedByManagers: 0,
@@ -169,19 +201,18 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
     let hrAlignment = 0;
     let boardApproval = 0;
     let subtreeStaffCount = 0;
+    let eligible = 0;
 
     for (const subId of subtreeIds) {
       const subCounts = directCounts.get(subId);
-      const subEntity = byId.get(subId);
       if (subCounts) {
         formsAssigned += subCounts.formsAssigned;
         selfAssessed += subCounts.selfAssessed;
         assessedByManagers += subCounts.assessedByManagers;
         hrAlignment += subCounts.hrAlignment;
         boardApproval += subCounts.boardApproval;
-      }
-      if (subEntity) {
-        subtreeStaffCount += subEntity.directStaffCount;
+        subtreeStaffCount += subCounts.directStaffCount;
+        eligible += subCounts.eligible;
       }
     }
 
@@ -192,6 +223,7 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       node.assessedByManagers = assessedByManagers;
       node.hrAlignment = hrAlignment;
       node.boardApproval = boardApproval;
+      node.eligible = eligible;
       node.subtreeStaffCount = subtreeStaffCount;
     }
   }
