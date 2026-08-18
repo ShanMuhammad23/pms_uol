@@ -60,6 +60,10 @@ export interface EmployeeFormDetail {
   ineligibilityReason: string | null;
   headName: string | null;
   manager2Name: string | null;
+  /** Employee's full name — shown in print header. */
+  employeeName: string | null;
+  /** Employee's SAP/employee ID — shown in print header. */
+  employeeId: string | null;
   /** History of returns to this submission (employee and manager 1 levels). */
   returnHistory?: ReturnHistoryEntry[];
 }

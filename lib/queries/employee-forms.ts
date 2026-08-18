@@ -454,6 +454,24 @@ function validateAnswers(
       );
     }
 
+    // When submitting, remarks are required if the employee filled in a score
+    // for this question — regardless of whether the question is mandatory or
+    // optional. If an optional question is skipped (no score), remarks are
+    // also optional.
+    if (submit && answer && !answer.remarks?.trim()) {
+      const hasScore =
+        isScored &&
+        answer.pointsEarned !== undefined &&
+        answer.pointsEarned !== null;
+      const hasText = Boolean(answer.textResponse?.trim());
+
+      if (hasScore || hasText || question.isRequired) {
+        throw new EmployeeFormError(
+          `Remarks are required for "${question.questionText.slice(0, 80)}".`,
+        );
+      }
+    }
+
     if (!answer) {
       continue;
     }
@@ -628,8 +646,15 @@ export async function getEmployeeFormDetail(
     template.fiscalYear,
   );
 
-  const managerResult = await db.query<{ head_name: string | null; manager_2_name: string | null }>(
-    `SELECT CONCAT(h.first_name, ' ', h.last_name) AS head_name,
+  const managerResult = await db.query<{
+    head_name: string | null;
+    manager_2_name: string | null;
+    employee_name: string | null;
+    employee_id: string | null;
+  }>(
+    `SELECT CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+            u.employee_id,
+            CONCAT(h.first_name, ' ', h.last_name) AS head_name,
             CONCAT(m2.first_name, ' ', m2.last_name) AS manager_2_name
      FROM users u
      LEFT JOIN users h ON h.id = u.head_id
@@ -639,6 +664,8 @@ export async function getEmployeeFormDetail(
   );
   const headName = managerResult.rows[0]?.head_name ?? null;
   const manager2Name = managerResult.rows[0]?.manager_2_name ?? null;
+  const employeeName = managerResult.rows[0]?.employee_name ?? null;
+  const employeeId = managerResult.rows[0]?.employee_id ?? null;
 
   // Fetch return history — for the employee view, only show returns to
   // "employee" and "manager1" levels (not manager2).
@@ -665,6 +692,8 @@ export async function getEmployeeFormDetail(
     ineligibilityReason: eligibility.ineligibilityReason,
     headName,
     manager2Name,
+    employeeName,
+    employeeId,
     returnHistory,
   };
 }

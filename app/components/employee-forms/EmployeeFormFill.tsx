@@ -65,6 +65,8 @@ function buildPreviewDetail(template: FormTemplateRecord): EmployeeFormDetail {
     ineligibilityReason: null,
     headName: null,
     manager2Name: null,
+    employeeName: null,
+    employeeId: null,
   };
 }
 
@@ -324,6 +326,13 @@ export default function EmployeeFormFill({
       if (Number.isNaN(score) || score < 0 || score > question.totalMarks) {
         return `Score must be between 0 and ${question.totalMarks} for "${question.questionText.slice(0, 60)}..."`;
       }
+
+      // Remarks are required when the employee filled in a score — whether
+      // the question is mandatory or optional. If an optional question is
+      // skipped (no score), remarks are also optional.
+      if (hasScore && !answer!.remarks.trim()) {
+        return `Remarks are required for "${question.questionText.slice(0, 60)}..."`;
+      }
     }
 
     return null;
@@ -467,6 +476,8 @@ export default function EmployeeFormFill({
       <PrintDocumentHeader
         title={template.title}
         metaItems={[
+          { label: "Employee", value: data.employeeName ?? "N/A" },
+          { label: "SAP ID", value: data.employeeId ?? "N/A" },
           { label: "Status", value: statusLabel },
           { label: "Score", value: `${displayedRawScore} / ${maxRawScore}` },
           { label: "Manager 1", value: data.headName ?? "N/A" },
@@ -687,16 +698,33 @@ export default function EmployeeFormFill({
                                 )}
                               </td>
                               <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
-                                <textarea
-                                  value={answer.remarks}
-                                  disabled={isReadOnly || isHodOnly}
-                                  rows={2}
-                                  onChange={(e) =>
-                                    updateAnswer(question!.id, "remarks", e.target.value)
-                                  }
-                                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                                  placeholder={isHodOnly ? "HOD only" : "Optional remarks"}
-                                />
+                                {(() => {
+                                  const hasScore = answer.pointsEarned !== "";
+                                  const remarksRequired = !isHodOnly && (question!.isRequired || hasScore);
+                                  return (
+                                    <textarea
+                                      value={answer.remarks}
+                                      disabled={isReadOnly || isHodOnly}
+                                      rows={2}
+                                      onChange={(e) =>
+                                        updateAnswer(question!.id, "remarks", e.target.value)
+                                      }
+                                      className={cn(
+                                        "w-full rounded border bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:bg-slate-800 dark:text-slate-300",
+                                        remarksRequired
+                                          ? "border-amber-400 dark:border-amber-600/50"
+                                          : "border-slate-300 dark:border-white/15",
+                                      )}
+                                      placeholder={
+                                        isHodOnly
+                                          ? "HOD only"
+                                          : remarksRequired
+                                            ? "Required remarks *"
+                                            : "Optional remarks"
+                                      }
+                                    />
+                                  );
+                                })()}
                               </td>
                               <td className="px-2 py-2.5">
                                 <div className="space-y-2">

@@ -764,7 +764,91 @@ export default function SubmissionDetailView({
           <span className="text-xs text-slate-500 dark:text-slate-400">
             {data.templateTitle}
           </span>
-          <div className="ml-auto no-print">
+          <div className="ml-auto no-print flex flex-wrap items-center gap-2">
+            {/* Reset Form — admin only */}
+            {isAdminRole && rows.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(true)}
+                disabled={resetFormMutation.isPending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-950/40"
+              >
+                <RotateCcw className="size-3.5" />
+                {resetFormMutation.isPending ? "Resetting..." : "Reset Form"}
+              </button>
+            ) : null}
+
+            {/* Manager review actions */}
+            {data.canEditManagerReview ? (
+              <>
+                {hasUnsavedChanges ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={cancelEditing}
+                      disabled={saveMutation.isPending || approveMutation.isPending}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveMutation.mutate()}
+                      disabled={saveMutation.isPending || approveMutation.isPending}
+                      className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
+                    >
+                      {saveMutation.isPending ? "Saving..." : "Save"}
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => approveMutation.mutate()}
+                  disabled={saveMutation.isPending || approveMutation.isPending}
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {approveMutation.isPending ? "Approving..." : "Approve Review"}
+                </button>
+              </>
+            ) : null}
+
+            {/* HR review actions */}
+            {editingHr && hasUnsavedChanges ? (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSaveConfirm(true)}
+                  disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
+                  className="rounded-lg border border-orange-300 bg-white px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-50 disabled:opacity-60 dark:border-orange-700 dark:bg-slate-900 dark:text-orange-200 dark:hover:bg-orange-950/40"
+                >
+                  {hrSaveMutation.isPending ? "Saving..." : "Save"}
+                </button>
+                {(data.status === "PENDING_HR_CALIBRATION" ||
+                data.status === "PENDING_BOARD_APPROVAL") ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowApproveConfirm(true)}
+                    disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                  >
+                    {hrApproveMutation.isPending
+                      ? "Approving..."
+                      : data.status === "PENDING_HR_CALIBRATION"
+                        ? "Approve & Send to Board"
+                        : "Approve"}
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+
             <PrintButton
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
             />
@@ -774,12 +858,7 @@ export default function SubmissionDetailView({
           <span className="font-semibold text-indigo-700 dark:text-indigo-300">
             Score {data.rawScore}/{data.maxRawScore} ({data.scorePercent}%)
           </span>
-          {showQuartile && data.performanceLevelName ? (
-            <span className="font-medium text-teal-700 dark:text-teal-300">
-              {data.performanceLevelName}
-              {showQuartile && data.quartileName ? ` · ${data.quartileName}` : ""}
-            </span>
-          ) : null}
+
           {data.submittedAt ? (
             <span className="text-slate-500 dark:text-slate-400">
               {new Date(data.submittedAt).toLocaleString()}
@@ -803,120 +882,18 @@ export default function SubmissionDetailView({
         />
       ) : null}
 
-      {/* Danger Zone — admin only (HR / Board / Super Admin).
-          Backend RBAC is enforced in the API route; this banner is hidden
-          for Manager and Employee roles. Placed at the top so admins see
-          the destructive-action warning before reviewing assessment data. */}
-      {isAdminRole && rows.length > 0 ? (
-        <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-red-200 bg-red-50/70 px-4 py-2.5 dark:border-red-900/60 dark:bg-red-950/20">
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300">
-              <AlertTriangle className="size-4" />
-            </span>
-            <div className="leading-tight">
-              <p className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-300">
-                Danger Zone
-              </p>
-              <p className="text-xs text-red-600/90 dark:text-red-400/80">
-                Reset removes all assessment data permanently. This action
-                cannot be undone.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowResetConfirm(true)}
-            disabled={resetFormMutation.isPending}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-950/40"
-          >
-            <RotateCcw className="size-3.5" />
-            {resetFormMutation.isPending ? "Resetting..." : "Reset Form"}
-          </button>
-        </div>
-      ) : null}
+      
 
-      {data.canEditManagerReview ? (
-        <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-violet-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-violet-950/20">
-          <p className="text-violet-800 dark:text-violet-200">
-            {selfAssessmentEnabled
-              ? "Manager scores are pre-filled from self assessment. Edit any value and save your review."
-              : "Enter scores directly for this employee. Edit any value and save your review."}
-          </p>
-          <div className="flex items-center gap-2">
-            {hasUnsavedChanges ? (
-              <>
-                <button
-                  type="button"
-                  onClick={cancelEditing}
-                  disabled={saveMutation.isPending || approveMutation.isPending}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => saveMutation.mutate()}
-                  disabled={saveMutation.isPending || approveMutation.isPending}
-                  className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
-                >
-                  {saveMutation.isPending ? "Saving..." : "Save"}
-                </button>
-              </>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => approveMutation.mutate()}
-              disabled={saveMutation.isPending || approveMutation.isPending}
-              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
-            >
-              {approveMutation.isPending ? "Approving..." : "Approve Review"}
-            </button>
-          </div>
-        </div>
-      ) : null}
+     
 
+      {/* HR review hint — buttons are in the header. */}
       {editingHr && hasUnsavedChanges ? (
-        <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-orange-50/60 px-4 py-2 text-xs dark:border-slate-700 dark:bg-orange-950/20">
-          <p className="text-orange-800 dark:text-orange-200">
-            {data.status === "PENDING_HR_CALIBRATION"
-              ? "HR Alignment phase. Save or approve to send to Board."
-              : data.status === "PENDING_BOARD_APPROVAL"
-                ? "Board Approval phase. Save or approve to finalize."
-                : "You have unsaved score changes. Save to persist your edits."}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={cancelEditing}
-              disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowSaveConfirm(true)}
-              disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
-              className="rounded-lg border border-orange-300 bg-white px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-50 disabled:opacity-60 dark:border-orange-700 dark:bg-slate-900 dark:text-orange-200 dark:hover:bg-orange-950/40"
-            >
-              {hrSaveMutation.isPending ? "Saving..." : "Save"}
-            </button>
-            {(data.status === "PENDING_HR_CALIBRATION" ||
-            data.status === "PENDING_BOARD_APPROVAL") ? (
-              <button
-                type="button"
-                onClick={() => setShowApproveConfirm(true)}
-                disabled={hrSaveMutation.isPending || hrApproveMutation.isPending}
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
-              >
-                {hrApproveMutation.isPending
-                  ? "Approving..."
-                  : data.status === "PENDING_HR_CALIBRATION"
-                    ? "Approve & Send to Board"
-                    : "Approve"}
-              </button>
-            ) : null}
-          </div>
+        <div className="no-print border-b border-slate-200 bg-orange-50/60 px-4 py-1.5 text-xs text-orange-800 dark:border-slate-700 dark:bg-orange-950/20 dark:text-orange-200">
+          {data.status === "PENDING_HR_CALIBRATION"
+            ? "HR Alignment phase. Save or approve to send to Board."
+            : data.status === "PENDING_BOARD_APPROVAL"
+              ? "Board Approval phase. Save or approve to finalize."
+              : "You have unsaved score changes. Save to persist your edits."}
         </div>
       ) : null}
 
