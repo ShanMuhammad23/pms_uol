@@ -2,7 +2,6 @@ import {
   ENTITY_CATEGORY_CODES,
   type CreateEntityCategoryInput,
   type EntityCategoryCode,
-  type UpdateEntityCategoryInput,
 } from "@/types/entity-categories";
 
 function isValidCode(code: unknown): code is EntityCategoryCode {

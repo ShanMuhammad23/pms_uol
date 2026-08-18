@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useIsClient } from "@/app/hooks/use-is-client";
 import { motion } from "framer-motion";
 import {
   Area,
@@ -35,17 +36,24 @@ export function DashboardPrimaryCharts({
   role,
 }: DashboardPrimaryChartsProps) {
   const isHead = role === "MANAGER";
+  const isClient = useIsClient();
   const [chartsKey, setChartsKey] = useState(0);
   const [chartReady, setChartReady] = useState(false);
 
-  useEffect(() => {
-    setChartsKey((key) => key + 1);
+  if (isClient && !chartReady) {
     setChartReady(true);
+    setChartsKey(1);
+  }
+
+  useEffect(() => {
+    if (!chartReady) {
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
       window.dispatchEvent(new Event("resize"));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [chartReady]);
 
   return (
     <motion.section

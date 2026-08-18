@@ -4,16 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Briefcase,
   Building2,
-  CheckCircle2,
   ClipboardList,
   Eye,
   Hash,
   Inbox,
   Layers,
   Network,
-  Send,
   UserRound,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -129,10 +126,17 @@ export default function MyFormsList({
 
   const waitingOnForms = isLoading || isFetching;
 
+  if (!waitingOnForms) {
+    if (slowLoad) {
+      setSlowLoad(false);
+    }
+    if (slowBannerDismissed) {
+      setSlowBannerDismissed(false);
+    }
+  }
+
   useEffect(() => {
     if (!waitingOnForms) {
-      setSlowLoad(false);
-      setSlowBannerDismissed(false);
       return;
     }
 
@@ -199,22 +203,6 @@ export default function MyFormsList({
         },
       ]
     : [];
-
-  const stats = {
-    total: data?.length ?? 0,
-    submitted:
-      data?.filter(
-        (f) =>
-          (f.status !== "PENDING_SELF_ASSESSMENT" || Boolean(f.submittedAt)) ||
-          !f.selfAssessmentEnabled,
-      ).length ?? 0,
-    managerReview:
-      data?.filter((f) => f.status === "PENDING_HEAD_REVIEW").length ?? 0,
-    approved:
-      data?.filter(
-        (f) => f.status === "APPROVED" || f.status === "COMPLETED",
-      ).length ?? 0,
-  };
 
   const blockedEligibility =
     data?.find((form) => form.eligibilityStatus === "Ineligible") ??

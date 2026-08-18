@@ -1,8 +1,12 @@
 import type {
+  CopyIncrementMatrixInput,
+  CreateIncrementMatrixInput,
   CreateSubCategoryIncrementMatrixInput,
-  SubCategoryIncrementMatrixRecord,
-  UpdateSubCategoryIncrementMatrixInput,
   IncrementMatrixAssignmentRecord,
+  IncrementMatrixSummary,
+  SubCategoryIncrementMatrixRecord,
+  UpdateIncrementMatrixIdentityInput,
+  UpdateSubCategoryIncrementMatrixInput,
 } from "@/types/sub-category-increment-matrices";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -24,6 +28,74 @@ export async function fetchSubCategoryIncrementMatrices(
   );
 
   return parseResponse<SubCategoryIncrementMatrixRecord[]>(response);
+}
+
+export async function fetchIncrementMatrixSummaries(): Promise<
+  IncrementMatrixSummary[]
+> {
+  const response = await fetch(
+    "/api/admin/sub-category-increment-matrices?summaries=1",
+    { credentials: "include", cache: "no-store" },
+  );
+  return parseResponse<IncrementMatrixSummary[]>(response);
+}
+
+export async function deleteIncrementMatrix(input: {
+  financialYearId: number;
+  matrixLabel: string;
+}): Promise<void> {
+  const response = await fetch("/api/admin/sub-category-increment-matrices", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  await parseResponse<{ success: boolean }>(response);
+}
+
+export async function createIncrementMatrixDef(
+  input: CreateIncrementMatrixInput,
+): Promise<IncrementMatrixSummary> {
+  const response = await fetch(
+    "/api/admin/sub-category-increment-matrices/matrix",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(input),
+    },
+  );
+  return parseResponse<IncrementMatrixSummary>(response);
+}
+
+export async function updateIncrementMatrixIdentity(
+  input: UpdateIncrementMatrixIdentityInput,
+): Promise<IncrementMatrixSummary> {
+  const response = await fetch(
+    "/api/admin/sub-category-increment-matrices/matrix",
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(input),
+    },
+  );
+  return parseResponse<IncrementMatrixSummary>(response);
+}
+
+export async function copyIncrementMatrixDef(
+  input: CopyIncrementMatrixInput,
+): Promise<IncrementMatrixSummary> {
+  const response = await fetch(
+    "/api/admin/sub-category-increment-matrices/matrix/copy",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(input),
+    },
+  );
+  return parseResponse<IncrementMatrixSummary>(response);
 }
 
 export async function createSubCategoryIncrementMatrix(

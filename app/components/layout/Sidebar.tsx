@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { signOutAndRedirect } from "@/lib/queries/auth-client";
 import {
   Building2,
@@ -30,7 +30,6 @@ import {
   canAccessDashboardSubmissions,
   isAdminRole,
 } from "@/lib/auth/submission-review-roles";
-import { USER_ROLE_LABELS } from "@/types/users";
 import { cn } from "@/lib/utils";
 import { useAdditionalAccess } from "@/app/queries/use-additional-access";
 import { type AdditionalAccessModule } from "@/types/additional-access";
@@ -121,16 +120,15 @@ const Sidebar = () => {
 
   const [adminOpen, setAdminOpen] = useState(isAdminRouteActive);
   const [signOutOpen, setSignOutOpen] = useState(false);
-
-  useEffect(() => {
+  const [wasAdminRouteActive, setWasAdminRouteActive] =
+    useState(isAdminRouteActive);
+  if (isAdminRouteActive !== wasAdminRouteActive) {
+    setWasAdminRouteActive(isAdminRouteActive);
     if (isAdminRouteActive) {
       setAdminOpen(true);
     }
-  }, [isAdminRouteActive]);
+  }
 
-  const roleLabel = user?.role
-    ? (USER_ROLE_LABELS as Record<string, string>)[user.role] ?? user.role
-    : null;
   const initials = user?.name
     ? user.name
         .trim()

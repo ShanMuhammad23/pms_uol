@@ -368,11 +368,11 @@ export default function UsersManager() {
 
     const yearValue = form.qualificationYear.trim();
     const permissions: AdditionalAccessPermission[] = [];
-    for (const module of ADDITIONAL_ACCESS_MODULES) {
-      if (additionalAccess[module]) {
+    for (const accessModule of ADDITIONAL_ACCESS_MODULES) {
+      if (additionalAccess[accessModule]) {
         permissions.push({
-          module,
-          accessLevel: additionalAccess[module]!,
+          module: accessModule,
+          accessLevel: additionalAccess[accessModule]!,
         });
       }
     }

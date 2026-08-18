@@ -2,10 +2,14 @@ import "server-only";
 
 import { db } from "../db";
 import type {
+  CopyIncrementMatrixInput,
+  CreateIncrementMatrixInput,
   CreateSubCategoryIncrementMatrixInput,
-  SubCategoryIncrementMatrixRecord,
-  UpdateSubCategoryIncrementMatrixInput,
   IncrementMatrixAssignmentRecord,
+  IncrementMatrixSummary,
+  SubCategoryIncrementMatrixRecord,
+  UpdateIncrementMatrixIdentityInput,
+  UpdateSubCategoryIncrementMatrixInput,
 } from "@/types/sub-category-increment-matrices";
 
 interface IncrementMatrixRow {
@@ -40,6 +44,15 @@ function isUniqueViolation(error: unknown): boolean {
     error !== null &&
     "code" in error &&
     (error as { code: string }).code === "23505"
+  );
+}
+
+function isForeignKeyViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: string }).code === "23503"
   );
 }
 
@@ -274,13 +287,392 @@ export async function listIncrementMatrixLabels(
   financialYearId: number,
 ): Promise<string[]> {
   const result = await db.query<{ matrix_label: string }>(
-    `SELECT DISTINCT matrix_label
-     FROM sub_category_increment_matrices
+    `SELECT matrix_label
+     FROM increment_matrix_defs
      WHERE financial_year_id = $1
-     ORDER BY matrix_label ASC`,
+     ORDER BY title ASC, matrix_label ASC`,
     [financialYearId],
   );
   return result.rows.map((row) => row.matrix_label);
+}
+
+export async function listIncrementMatrixSummaries(): Promise<
+  IncrementMatrixSummary[]
+> {
+  const result = await db.query<{
+    financial_year_id: number;
+    financial_year_label: string;
+    is_active: boolean;
+    matrix_label: string;
+    title: string;
+    cell_count: string;
+    assigned_employee_count: string;
+    updated_at: string;
+  }>(
+    `SELECT
+       d.financial_year_id,
+       fy.label AS financial_year_label,
+       fy.is_active,
+       d.matrix_label,
+       d.title,
+       COUNT(sim.id)::text AS cell_count,
+       (
+         SELECT COUNT(*)::text
+         FROM employee_increment_matrix_assignments eima
+         WHERE eima.financial_year_id = d.financial_year_id
+           AND eima.matrix_label = d.matrix_label
+       ) AS assigned_employee_count,
+       d.updated_at::text AS updated_at
+     FROM increment_matrix_defs d
+     INNER JOIN financial_years fy ON fy.id = d.financial_year_id
+     LEFT JOIN sub_category_increment_matrices sim
+       ON sim.financial_year_id = d.financial_year_id
+      AND sim.matrix_label = d.matrix_label
+     GROUP BY d.financial_year_id, fy.label, fy.is_active, d.matrix_label, d.title, d.updated_at
+     ORDER BY fy.is_active DESC, fy.label DESC, d.title ASC, d.matrix_label ASC`,
+  );
+
+  return result.rows.map((row) => ({
+    financialYearId: Number(row.financial_year_id),
+    financialYearLabel: row.financial_year_label,
+    isActiveYear: row.is_active,
+    matrixLabel: row.matrix_label,
+    title: row.title,
+    cellCount: Number(row.cell_count),
+    assignedEmployeeCount: Number(row.assigned_employee_count),
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function createIncrementMatrix(
+  input: CreateIncrementMatrixInput,
+): Promise<IncrementMatrixSummary> {
+  const trimmedLabel = input.matrixLabel.trim();
+  const trimmedTitle = input.title.trim() || trimmedLabel;
+
+  if (!trimmedLabel) {
+    throw new SubCategoryIncrementMatrixError("Matrix label is required.", 400);
+  }
+
+  try {
+    await db.query(
+      `INSERT INTO increment_matrix_defs (financial_year_id, matrix_label, title)
+       VALUES ($1, $2, $3)`,
+      [input.financialYearId, trimmedLabel, trimmedTitle],
+    );
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new SubCategoryIncrementMatrixError(
+        `Increment matrix "${trimmedLabel}" already exists for this financial year.`,
+        409,
+      );
+    }
+    throw error;
+  }
+
+  const summaries = await listIncrementMatrixSummaries();
+  const created = summaries.find(
+    (item) =>
+      item.financialYearId === input.financialYearId &&
+      item.matrixLabel === trimmedLabel,
+  );
+  if (!created) {
+    throw new SubCategoryIncrementMatrixError(
+      "Failed to load created increment matrix.",
+      500,
+    );
+  }
+  return created;
+}
+
+export async function updateIncrementMatrixIdentity(
+  input: UpdateIncrementMatrixIdentityInput,
+): Promise<IncrementMatrixSummary> {
+  const currentLabel = input.matrixLabel.trim();
+  const nextLabel = input.newMatrixLabel.trim();
+  const nextTitle = input.title.trim() || nextLabel;
+
+  if (!currentLabel || !nextLabel) {
+    throw new SubCategoryIncrementMatrixError("Matrix label is required.", 400);
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query<{ id: string }>(
+      `SELECT id
+       FROM increment_matrix_defs
+       WHERE financial_year_id = $1 AND matrix_label = $2
+       LIMIT 1`,
+      [input.financialYearId, currentLabel],
+    );
+    if (!existing.rows[0]) {
+      throw new SubCategoryIncrementMatrixError("Increment matrix not found.", 404);
+    }
+
+    if (nextLabel !== currentLabel) {
+      const conflict = await client.query<{ id: string }>(
+        `SELECT id
+         FROM increment_matrix_defs
+         WHERE financial_year_id = $1 AND matrix_label = $2
+         LIMIT 1`,
+        [input.financialYearId, nextLabel],
+      );
+      if (conflict.rows[0]) {
+        throw new SubCategoryIncrementMatrixError(
+          `Increment matrix "${nextLabel}" already exists for this financial year.`,
+          409,
+        );
+      }
+
+      await client.query(
+        `UPDATE sub_category_increment_matrices
+         SET matrix_label = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE financial_year_id = $2 AND matrix_label = $3`,
+        [nextLabel, input.financialYearId, currentLabel],
+      );
+      await client.query(
+        `UPDATE employee_increment_matrix_assignments
+         SET matrix_label = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE financial_year_id = $2 AND matrix_label = $3`,
+        [nextLabel, input.financialYearId, currentLabel],
+      );
+    }
+
+    await client.query(
+      `UPDATE increment_matrix_defs
+       SET matrix_label = $1,
+           title = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE financial_year_id = $3 AND matrix_label = $4`,
+      [nextLabel, nextTitle, input.financialYearId, currentLabel],
+    );
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const summaries = await listIncrementMatrixSummaries();
+  const updated = summaries.find(
+    (item) =>
+      item.financialYearId === input.financialYearId &&
+      item.matrixLabel === nextLabel,
+  );
+  if (!updated) {
+    throw new SubCategoryIncrementMatrixError(
+      "Failed to load updated increment matrix.",
+      500,
+    );
+  }
+  return updated;
+}
+
+export async function copyIncrementMatrix(
+  input: CopyIncrementMatrixInput,
+): Promise<IncrementMatrixSummary> {
+  const sourceLabel = input.sourceMatrixLabel.trim();
+  const nextLabel = input.newMatrixLabel.trim();
+  const nextTitle = input.title.trim() || nextLabel;
+  const sourceYearId = input.sourceFinancialYearId;
+  const targetYearId = input.targetFinancialYearId;
+
+  if (!sourceLabel || !nextLabel) {
+    throw new SubCategoryIncrementMatrixError("Matrix label is required.", 400);
+  }
+  if (
+    sourceYearId === targetYearId &&
+    sourceLabel.toLowerCase() === nextLabel.toLowerCase()
+  ) {
+    throw new SubCategoryIncrementMatrixError(
+      "Choose a new label when copying within the same financial year.",
+      400,
+    );
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    const source = await client.query<{ id: string }>(
+      `SELECT id
+       FROM increment_matrix_defs
+       WHERE financial_year_id = $1 AND matrix_label = $2
+       LIMIT 1`,
+      [sourceYearId, sourceLabel],
+    );
+    if (!source.rows[0]) {
+      throw new SubCategoryIncrementMatrixError("Increment matrix not found.", 404);
+    }
+
+    await client.query(
+      `INSERT INTO increment_matrix_defs (financial_year_id, matrix_label, title)
+       VALUES ($1, $2, $3)`,
+      [targetYearId, nextLabel, nextTitle],
+    );
+
+    if (sourceYearId === targetYearId) {
+      await client.query(
+        `INSERT INTO sub_category_increment_matrices (
+           financial_year_id,
+           matrix_label,
+           performance_quartile_id,
+           increment_percentage
+         )
+         SELECT $1, $2, performance_quartile_id, increment_percentage
+         FROM sub_category_increment_matrices
+         WHERE financial_year_id = $3 AND matrix_label = $4`,
+        [targetYearId, nextLabel, sourceYearId, sourceLabel],
+      );
+    } else {
+      const unmapped = await client.query<{
+        performance_matrix_label: string;
+        level_name: string;
+        quartile_name: string;
+      }>(
+        `SELECT
+           spl.matrix_label AS performance_matrix_label,
+           spl.name AS level_name,
+           spq.name AS quartile_name
+         FROM sub_category_increment_matrices sim
+         INNER JOIN performance_quartiles spq ON spq.id = sim.performance_quartile_id
+         INNER JOIN performance_levels spl ON spl.id = spq.performance_level_id
+         LEFT JOIN performance_levels tpl
+           ON tpl.financial_year_id = $1
+          AND tpl.matrix_label = spl.matrix_label
+          AND tpl.name = spl.name
+         LEFT JOIN performance_quartiles tpq
+           ON tpq.performance_level_id = tpl.id
+          AND tpq.name = spq.name
+         WHERE sim.financial_year_id = $2
+           AND sim.matrix_label = $3
+           AND tpq.id IS NULL
+         ORDER BY spl.matrix_label, spl.name, spq.name`,
+        [targetYearId, sourceYearId, sourceLabel],
+      );
+
+      if (unmapped.rows.length > 0) {
+        const first = unmapped.rows[0];
+        throw new SubCategoryIncrementMatrixError(
+          `Cannot copy increment percentages: "${first.performance_matrix_label}" / ${first.level_name} / ${first.quartile_name} does not exist in the target cycle. Copy the matching performance matrix first.`,
+          400,
+        );
+      }
+
+      await client.query(
+        `INSERT INTO sub_category_increment_matrices (
+           financial_year_id,
+           matrix_label,
+           performance_quartile_id,
+           increment_percentage
+         )
+         SELECT $1, $2, tpq.id, sim.increment_percentage
+         FROM sub_category_increment_matrices sim
+         INNER JOIN performance_quartiles spq ON spq.id = sim.performance_quartile_id
+         INNER JOIN performance_levels spl ON spl.id = spq.performance_level_id
+         INNER JOIN performance_levels tpl
+           ON tpl.financial_year_id = $1
+          AND tpl.matrix_label = spl.matrix_label
+          AND tpl.name = spl.name
+         INNER JOIN performance_quartiles tpq
+           ON tpq.performance_level_id = tpl.id
+          AND tpq.name = spq.name
+         WHERE sim.financial_year_id = $3 AND sim.matrix_label = $4`,
+        [targetYearId, nextLabel, sourceYearId, sourceLabel],
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error instanceof SubCategoryIncrementMatrixError) {
+      throw error;
+    }
+    if (isForeignKeyViolation(error)) {
+      throw new SubCategoryIncrementMatrixError("Financial year not found.", 404);
+    }
+    if (isUniqueViolation(error)) {
+      throw new SubCategoryIncrementMatrixError(
+        `Increment matrix "${nextLabel}" already exists for this financial year.`,
+        409,
+      );
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const summaries = await listIncrementMatrixSummaries();
+  const copied = summaries.find(
+    (item) =>
+      item.financialYearId === targetYearId && item.matrixLabel === nextLabel,
+  );
+  if (!copied) {
+    throw new SubCategoryIncrementMatrixError(
+      "Failed to load copied increment matrix.",
+      500,
+    );
+  }
+  return copied;
+}
+
+export async function deleteIncrementMatrix(
+  financialYearId: number,
+  matrixLabel: string,
+): Promise<void> {
+  const trimmedLabel = matrixLabel.trim();
+  if (!trimmedLabel) {
+    throw new SubCategoryIncrementMatrixError("Matrix label is required.", 400);
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query<{ id: string }>(
+      `SELECT id
+       FROM increment_matrix_defs
+       WHERE financial_year_id = $1 AND matrix_label = $2
+       LIMIT 1`,
+      [financialYearId, trimmedLabel],
+    );
+
+    if (!existing.rows[0]) {
+      throw new SubCategoryIncrementMatrixError(
+        "Increment matrix not found.",
+        404,
+      );
+    }
+
+    await client.query(
+      `DELETE FROM employee_increment_matrix_assignments
+       WHERE financial_year_id = $1 AND matrix_label = $2`,
+      [financialYearId, trimmedLabel],
+    );
+
+    await client.query(
+      `DELETE FROM sub_category_increment_matrices
+       WHERE financial_year_id = $1 AND matrix_label = $2`,
+      [financialYearId, trimmedLabel],
+    );
+
+    await client.query(
+      `DELETE FROM increment_matrix_defs
+       WHERE financial_year_id = $1 AND matrix_label = $2`,
+      [financialYearId, trimmedLabel],
+    );
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listEmployeeIncrementMatrixAssignments(
@@ -333,7 +725,7 @@ export async function assignIncrementMatrixToEmployees(
 
   const matrixExists = await db.query<{ id: string }>(
     `SELECT id
-     FROM sub_category_increment_matrices
+     FROM increment_matrix_defs
      WHERE financial_year_id = $1 AND matrix_label = $2
      LIMIT 1`,
     [financialYearId, trimmedLabel],

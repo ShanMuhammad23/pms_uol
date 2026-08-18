@@ -106,7 +106,6 @@ function draftToTemplateRecord(
     const mappedQuestions = s.questions.map(mapQuestion);
 
     // Build id-based layout from clientId-based layout.
-    const subIdByClientId = new Map(mappedSubsections.map((sub) => [sub.id, sub.id]));
     const subIdLookup = new Map(s.subsections.map((sub, i) => [sub.clientId, mappedSubsections[i].id]));
     const qIdLookup = new Map(s.questions.map((q, i) => [q.clientId, mappedQuestions[i].id]));
     const sectionLayout = (s.layout ?? []).map((item) => {
@@ -292,7 +291,6 @@ function ModernFormDesignStep({
   errors,
   onTitleChange,
   onDescriptionChange,
-  onSelfAssessmentEnabledChange,
   onAdditionalRemarksEnabledChange,
   onStructureChange,
 }: ModernFormDesignStepProps) {
@@ -304,16 +302,30 @@ function ModernFormDesignStep({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-expand sections that have errors
-  useEffect(() => {
-    const sectionsWithErrors = new Set<string>();
+  const sectionsWithErrors = useMemo(() => {
+    const ids = new Set<string>();
     sections.forEach((section, sIdx) => {
-      const hasError = Object.keys(errors).some(k => k.startsWith(`section-${sIdx}`));
-      if (hasError) sectionsWithErrors.add(section.clientId);
+      const hasError = Object.keys(errors).some((k) =>
+        k.startsWith(`section-${sIdx}`),
+      );
+      if (hasError) ids.add(section.clientId);
     });
-    if (sectionsWithErrors.size > 0) {
-      setExpandedSections(prev => new Set([...prev, ...sectionsWithErrors]));
-    }
+    return ids;
   }, [errors, sections]);
+  if (sectionsWithErrors.size > 0) {
+    let missing = false;
+    for (const id of sectionsWithErrors) {
+      if (!expandedSections.has(id)) {
+        missing = true;
+        break;
+      }
+    }
+    if (missing) {
+      setExpandedSections(
+        (prev) => new Set([...prev, ...sectionsWithErrors]),
+      );
+    }
+  }
 
   useEffect(() => {
     const handleDragStart = () => setDraggingId("active");
@@ -1676,7 +1688,6 @@ function QuestionCard({
   onDropQuestion,
   onDropSubsection,
   onDropSection,
-  compact = false,
   formSelfAssessmentEnabled = true,
 }: {
   question: QuestionInput;
@@ -2026,7 +2037,7 @@ export default function FormBuilderWizard({
       })),
     })) ?? [],
   );
-  const [cycleId, setCycleId] = useState<number | "">(
+  const [cycleId] = useState<number | "">(
     copyMode
       ? pickDefaultAppraisalCycleId(appraisalCycles)
       : initialState?.cycleId ?? pickDefaultAppraisalCycleId(appraisalCycles),
@@ -2167,7 +2178,6 @@ export default function FormBuilderWizard({
   };
 
   const currentStepData = STEPS[step];
-  const StepIcon = currentStepData.icon;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-slate-50 dark:bg-slate-950">

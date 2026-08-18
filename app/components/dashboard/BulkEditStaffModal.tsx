@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Pencil, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelStaffListingQueries,
@@ -116,7 +116,9 @@ export function BulkEditStaffModal({
     enabled: open,
   });
 
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setTextValues({});
       setNumberValues({});
@@ -126,7 +128,7 @@ export function BulkEditStaffModal({
       setAssessmentEligibility("");
       setError(null);
     }
-  }, [open]);
+  }
 
   const managerOptions = useMemo(() => {
     if (!users) return [];

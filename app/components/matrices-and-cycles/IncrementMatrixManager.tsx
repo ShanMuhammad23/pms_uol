@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Grid3X3, Percent, Plus, Trash2, UserCheck, X } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Grid3X3, Percent, Plus, Trash2, UserCheck, X } from "lucide-react";
+import { type FormEvent, useMemo, useState } from "react";
 import {
   getPerformanceLevelColor,
   getPerformanceLevelTint,
@@ -15,11 +15,16 @@ import {
 } from "@/lib/queries/performance-matrices-client";
 import {
   assignIncrementMatrixToEmployees,
+  copyIncrementMatrixDef,
+  createIncrementMatrixDef,
   createSubCategoryIncrementMatrix,
+  deleteIncrementMatrix,
   deleteSubCategoryIncrementMatrix,
   fetchIncrementMatrixAssignments,
+  fetchIncrementMatrixSummaries,
   fetchSubCategoryIncrementMatrices,
   unassignIncrementMatrixFromEmployees,
+  updateIncrementMatrixIdentity,
   updateSubCategoryIncrementMatrix,
 } from "@/lib/queries/sub-category-increment-matrices-client";
 import { cn } from "@/lib/utils";
@@ -30,9 +35,12 @@ import type {
 } from "@/types/performance-matrices";
 import PerformanceMatrixGrid from "./PerformanceMatrixGrid";
 import MatrixEmployeeAssignment from "./MatrixEmployeeAssignment";
+import MatrixCopyDialog from "./MatrixCopyDialog";
+import MatrixIdentityEditor from "./MatrixIdentityEditor";
+import MatrixListTable, { type MatrixListRow } from "./MatrixListTable";
 
 type MessageTone = "success" | "error";
-type MatricesPanel = "overview" | "assign" | "add-matrix";
+type MatricesPanel = "list" | "overview" | "assign" | "add-matrix";
 
 interface FormMessage {
   tone: MessageTone;
@@ -40,7 +48,7 @@ interface FormMessage {
 }
 
 const panels: Array<{
-  id: MatricesPanel;
+  id: Exclude<MatricesPanel, "list">;
   label: string;
   icon: typeof Grid3X3;
 }> = [
@@ -58,14 +66,17 @@ function formatIncrementPercent(value: number): string {
 
 export default function IncrementMatrixManager() {
   const queryClient = useQueryClient();
-  const [selectedFinancialYearId, setSelectedFinancialYearId] = useState<
+  const [selectedYearOverride, setSelectedFinancialYearId] = useState<
     number | null
   >(null);
-  const [activePanel, setActivePanel] = useState<MatricesPanel>("overview");
+  const [activePanel, setActivePanel] = useState<MatricesPanel>("list");
   const [selectedMatrixLabel, setSelectedMatrixLabel] = useState("Default");
-  const [selectedPerformanceMatrixLabel, setSelectedPerformanceMatrixLabel] =
+  const [performanceMatrixOverride, setSelectedPerformanceMatrixLabel] =
     useState("Default");
   const [newMatrixLabel, setNewMatrixLabel] = useState("");
+  const [newMatrixTitle, setNewMatrixTitle] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editLabel, setEditLabel] = useState("");
   const [selectedLevelId, setSelectedLevelId] = useState<number | null>(null);
   const [selectedQuartileId, setSelectedQuartileId] = useState<number | null>(
     null,
@@ -78,19 +89,31 @@ export default function IncrementMatrixManager() {
   const [incrementPercentage, setIncrementPercentage] = useState(10);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+  const [copyRow, setCopyRow] = useState<MatrixListRow | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   const { data: financialYears } = useQuery({
     queryKey: ["financial-years"],
     queryFn: fetchFinancialYears,
   });
 
-  useEffect(() => {
-    if (!selectedFinancialYearId && financialYears && financialYears.length > 0) {
-      const activeYear =
-        financialYears.find((year) => year.isActive) ?? financialYears[0];
-      setSelectedFinancialYearId(activeYear.id);
-    }
-  }, [financialYears, selectedFinancialYearId]);
+  const selectedFinancialYearId =
+    selectedYearOverride ??
+    financialYears?.find((year) => year.isActive)?.id ??
+    financialYears?.[0]?.id ??
+    null;
+
+  const { data: performanceMatrixLabels } = useQuery({
+    queryKey: ["performance-matrix-labels", selectedFinancialYearId],
+    queryFn: () => fetchPerformanceMatrixLabels(selectedFinancialYearId!),
+    enabled: selectedFinancialYearId !== null,
+  });
+
+  const selectedPerformanceMatrixLabel =
+    performanceMatrixLabels?.length &&
+    !performanceMatrixLabels.includes(performanceMatrixOverride)
+      ? performanceMatrixLabels[0]
+      : performanceMatrixOverride;
 
   const {
     data: performanceMatrix,
@@ -110,12 +133,6 @@ export default function IncrementMatrixManager() {
     enabled: selectedFinancialYearId !== null,
   });
 
-  const { data: performanceMatrixLabels } = useQuery({
-    queryKey: ["performance-matrix-labels", selectedFinancialYearId],
-    queryFn: () => fetchPerformanceMatrixLabels(selectedFinancialYearId!),
-    enabled: selectedFinancialYearId !== null,
-  });
-
   const {
     data: entries,
     isLoading: entriesLoading,
@@ -128,41 +145,38 @@ export default function IncrementMatrixManager() {
   const { data: assignments } = useQuery({
     queryKey: ["increment-matrix-assignments", selectedFinancialYearId],
     queryFn: () => fetchIncrementMatrixAssignments(selectedFinancialYearId!),
-    enabled: selectedFinancialYearId !== null,
+    enabled: selectedFinancialYearId !== null && activePanel === "assign",
   });
 
-  const incrementLabels = useMemo(() => {
-    if (!entries) return [];
-    return [...new Set(entries.map((entry) => entry.matrixLabel))].sort(
-      (a, b) => a.localeCompare(b),
-    );
-  }, [entries]);
+  const {
+    data: matrixSummaries,
+    isLoading: summariesLoading,
+    error: summariesError,
+  } = useQuery({
+    queryKey: ["increment-matrix-summaries"],
+    queryFn: fetchIncrementMatrixSummaries,
+  });
 
   const incrementMatrixOptions = useMemo(
     () =>
       Array.from(
-        new Set([...incrementLabels, selectedMatrixLabel, "Default"]),
+        new Set(
+          (matrixSummaries ?? [])
+            .filter((item) => item.financialYearId === selectedFinancialYearId)
+            .map((item) => item.matrixLabel)
+            .concat(selectedMatrixLabel ? [selectedMatrixLabel] : []),
+        ),
       ).sort((a, b) => a.localeCompare(b)),
-    [incrementLabels, selectedMatrixLabel],
+    [matrixSummaries, selectedFinancialYearId, selectedMatrixLabel],
   );
 
   const performanceMatrixOptions = useMemo(
     () =>
-      Array.from(new Set([...(performanceMatrixLabels ?? []), "Default"])).sort(
-        (a, b) => a.localeCompare(b),
+      Array.from(new Set(performanceMatrixLabels ?? [])).sort((a, b) =>
+        a.localeCompare(b),
       ),
     [performanceMatrixLabels],
   );
-
-  useEffect(() => {
-    if (!performanceMatrixLabels?.length) {
-      return;
-    }
-
-    if (!performanceMatrixLabels.includes(selectedPerformanceMatrixLabel)) {
-      setSelectedPerformanceMatrixLabel(performanceMatrixLabels[0]);
-    }
-  }, [performanceMatrixLabels, selectedPerformanceMatrixLabel]);
 
   const entriesForLabel = useMemo(() => {
     if (!entries) return [];
@@ -177,41 +191,6 @@ export default function IncrementMatrixManager() {
     return map;
   }, [entriesForLabel]);
 
-  const totalQuartiles = useMemo(
-    () =>
-      performanceMatrix?.reduce(
-        (sum, level) => sum + level.quartiles.length,
-        0,
-      ) ?? 0,
-    [performanceMatrix],
-  );
-
-  const quartileIdsOnGrid = useMemo(() => {
-    const ids = new Set<number>();
-    for (const level of performanceMatrix ?? []) {
-      for (const quartile of level.quartiles) {
-        ids.add(quartile.id);
-      }
-    }
-    return ids;
-  }, [performanceMatrix]);
-
-  const filledCells = useMemo(
-    () =>
-      entriesForLabel.filter((entry) =>
-        quartileIdsOnGrid.has(entry.performanceQuartileId),
-      ).length,
-    [entriesForLabel, quartileIdsOnGrid],
-  );
-
-  const sourcePerformanceMatrices = useMemo(
-    () =>
-      [...new Set(entriesForLabel.map((entry) => entry.performanceMatrixLabel))]
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b)),
-    [entriesForLabel],
-  );
-
   const selectedLevel = performanceMatrix?.find(
     (level) => level.id === selectedLevelId,
   );
@@ -222,12 +201,86 @@ export default function IncrementMatrixManager() {
     void queryClient.invalidateQueries({
       queryKey: ["sub-category-increment-matrices", selectedFinancialYearId],
     });
+    void queryClient.invalidateQueries({
+      queryKey: ["increment-matrix-summaries"],
+    });
   };
 
   const invalidateAssignments = () => {
     void queryClient.invalidateQueries({
       queryKey: ["increment-matrix-assignments", selectedFinancialYearId],
     });
+    void queryClient.invalidateQueries({
+      queryKey: ["increment-matrix-summaries"],
+    });
+  };
+
+  const deleteMatrixMutation = useMutation({
+    mutationFn: deleteIncrementMatrix,
+    onSuccess: () => {
+      setFormMessage({
+        tone: "success",
+        text: "Increment matrix deleted.",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["increment-matrix-summaries"],
+      });
+      invalidateEntries();
+    },
+    onError: (error: Error) => {
+      setFormMessage({ tone: "error", text: error.message });
+    },
+  });
+
+  const copyMatrixMutation = useMutation({
+    mutationFn: copyIncrementMatrixDef,
+    onSuccess: (copied) => {
+      setCopyRow(null);
+      setCopyError(null);
+      invalidateEntries();
+      openMatrix(
+        {
+          financialYearId: copied.financialYearId,
+          financialYearLabel: copied.financialYearLabel,
+          isActiveYear: copied.isActiveYear,
+          matrixLabel: copied.matrixLabel,
+          title: copied.title,
+          assignedEmployeeCount: copied.assignedEmployeeCount,
+          updatedAt: copied.updatedAt,
+          metricLabel: "% Set",
+          metricValue: copied.cellCount,
+        },
+        "overview",
+      );
+      setFormMessage({
+        tone: "success",
+        text: `Copied to "${copied.title}". You can edit any field on this copy.`,
+      });
+    },
+    onError: (error: Error) => {
+      setCopyError(error.message);
+    },
+  });
+
+  const openMatrix = (row: MatrixListRow, panel: "overview" | "assign") => {
+    setSelectedFinancialYearId(row.financialYearId);
+    setSelectedMatrixLabel(row.matrixLabel);
+    setEditTitle(row.title);
+    setEditLabel(row.matrixLabel);
+    setSelectedLevelId(null);
+    setSelectedQuartileId(null);
+    setFormMessage(null);
+    setActivePanel(panel);
+  };
+
+  const closeCopyDialog = () => {
+    setCopyRow(null);
+    setCopyError(null);
+  };
+
+  const goToList = () => {
+    setActivePanel("list");
+    setFormMessage(null);
   };
 
   const closePercentDialog = () => {
@@ -358,34 +411,101 @@ export default function IncrementMatrixManager() {
     deleteMutation.mutate(existing.id);
   };
 
+  const createMatrixMutation = useMutation({
+    mutationFn: createIncrementMatrixDef,
+    onSuccess: (created) => {
+      setSelectedFinancialYearId(created.financialYearId);
+      setSelectedMatrixLabel(created.matrixLabel);
+      setEditTitle(created.title);
+      setEditLabel(created.matrixLabel);
+      setNewMatrixLabel("");
+      setNewMatrixTitle("");
+      setSelectedLevelId(null);
+      setSelectedQuartileId(null);
+      invalidateEntries();
+      setActivePanel("overview");
+      setFormMessage({
+        tone: "success",
+        text: `Increment matrix "${created.title}" created. Choose a performance matrix and click quartile cells to set percentages.`,
+      });
+    },
+    onError: (error: Error) => {
+      setFormMessage({ tone: "error", text: error.message });
+    },
+  });
+
+  const updateIdentityMutation = useMutation({
+    mutationFn: updateIncrementMatrixIdentity,
+    onSuccess: (updated) => {
+      setSelectedMatrixLabel(updated.matrixLabel);
+      setEditTitle(updated.title);
+      setEditLabel(updated.matrixLabel);
+      invalidateEntries();
+      setFormMessage({
+        tone: "success",
+        text: "Matrix title and label updated.",
+      });
+    },
+    onError: (error: Error) => {
+      setFormMessage({ tone: "error", text: error.message });
+    },
+  });
+
   const handleCreateMatrixLabel = (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
+    if (!selectedFinancialYearId) {
+      setFormMessage({ tone: "error", text: "Financial year is required." });
+      return;
+    }
     const label = newMatrixLabel.trim();
+    const title = newMatrixTitle.trim() || label;
     if (!label) {
       setFormMessage({ tone: "error", text: "Matrix label is required." });
       return;
     }
 
-    if (
-      incrementMatrixOptions.some(
-        (option) => option.toLowerCase() === label.toLowerCase(),
-      )
-    ) {
-      setFormMessage({
-        tone: "error",
-        text: `Matrix "${label}" already exists for this financial year.`,
-      });
+    createMatrixMutation.mutate({
+      financialYearId: selectedFinancialYearId,
+      matrixLabel: label,
+      title,
+    });
+  };
+
+  const currentSummary = matrixSummaries?.find(
+    (item) =>
+      item.financialYearId === selectedFinancialYearId &&
+      item.matrixLabel === selectedMatrixLabel,
+  );
+  const identityDirty =
+    editTitle.trim() !== (currentSummary?.title ?? selectedMatrixLabel) ||
+    editLabel.trim() !== selectedMatrixLabel;
+
+  const listRows: MatrixListRow[] = (matrixSummaries ?? []).map((item) => ({
+    financialYearId: item.financialYearId,
+    financialYearLabel: item.financialYearLabel,
+    isActiveYear: item.isActiveYear,
+    matrixLabel: item.matrixLabel,
+    title: item.title,
+    assignedEmployeeCount: item.assignedEmployeeCount,
+    updatedAt: item.updatedAt,
+    metricLabel: "% Set",
+    metricValue: item.cellCount,
+  }));
+
+  const handleDeleteMatrix = (row: MatrixListRow) => {
+    const assignedNote =
+      row.assignedEmployeeCount > 0
+        ? `This matrix is assigned to ${row.assignedEmployeeCount} employee(s). Assignments will be removed.`
+        : "This action cannot be undone.";
+    const confirmed = window.confirm(
+      `Delete increment matrix "${row.matrixLabel}" for ${row.financialYearLabel}?\n\n${assignedNote}`,
+    );
+    if (!confirmed) {
       return;
     }
-
-    setSelectedMatrixLabel(label);
-    setNewMatrixLabel("");
-    setSelectedLevelId(null);
-    setSelectedQuartileId(null);
-    setActivePanel("overview");
-    setFormMessage({
-      tone: "success",
-      text: `Increment matrix "${label}" ready. Choose a performance matrix and click quartile cells to set percentages.`,
+    deleteMatrixMutation.mutate({
+      financialYearId: row.financialYearId,
+      matrixLabel: row.matrixLabel,
     });
   };
 
@@ -412,7 +532,61 @@ export default function IncrementMatrixManager() {
       </AnimatePresence>
 
       <div className="rounded-md border border-slate-300/80 dark:border-white/15">
-        <div className="flex flex-wrap gap-1 border-b border-slate-300/80 p-2 dark:border-white/15">
+        {activePanel === "list" ? (
+          <div className="space-y-4 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-foreground/70">
+                Design and manage increment matrices and assign them to employees.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewMatrixLabel("");
+                  setNewMatrixTitle("");
+                  setFormMessage(null);
+                  setActivePanel("add-matrix");
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
+              >
+                <Plus className="size-4" />
+                Create Matrix
+              </button>
+            </div>
+            <MatrixListTable
+              rows={listRows}
+              isLoading={summariesLoading}
+              error={Boolean(summariesError)}
+              emptyTitle="No increment matrices yet"
+              emptyDescription="Create your first increment matrix to get started."
+              createLabel="Create Matrix"
+              onCreate={() => {
+                setNewMatrixLabel("");
+                setNewMatrixTitle("");
+                setFormMessage(null);
+                setActivePanel("add-matrix");
+              }}
+              onEdit={(row) => openMatrix(row, "overview")}
+              onCopy={(row) => {
+                setCopyError(null);
+                setCopyRow(row);
+              }}
+              onAssign={(row) => openMatrix(row, "assign")}
+              onDelete={handleDeleteMatrix}
+              deletePending={deleteMatrixMutation.isPending}
+              copyPending={copyMatrixMutation.isPending}
+            />
+          </div>
+        ) : (
+          <>
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-300/80 p-2 dark:border-white/15">
+          <button
+            type="button"
+            onClick={goToList}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-primary/10 hover:text-text-primary"
+          >
+            <ArrowLeft className="size-4" />
+            Back to list
+          </button>
           {panels.map((panel) => {
             const Icon = panel.icon;
             const isActive = activePanel === panel.id;
@@ -425,6 +599,7 @@ export default function IncrementMatrixManager() {
                   setActivePanel(panel.id);
                   if (panel.id === "add-matrix") {
                     setNewMatrixLabel("");
+                    setNewMatrixTitle("");
                     setFormMessage(null);
                   }
                 }}
@@ -445,154 +620,52 @@ export default function IncrementMatrixManager() {
         <div className="p-5">
           {activePanel === "overview" ? (
             <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-md border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
-                  <label
-                    htmlFor="increment-financial-year"
-                    className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
-                  >
-                    Financial Year
-                  </label>
-                  <select
-                    id="increment-financial-year"
-                    value={selectedFinancialYearId ?? ""}
-                    onChange={(event) => {
-                      setSelectedFinancialYearId(Number(event.target.value));
-                      setSelectedMatrixLabel("Default");
-                      setSelectedPerformanceMatrixLabel("Default");
-                      setSelectedLevelId(null);
-                      setSelectedQuartileId(null);
-                      setFormMessage(null);
-                    }}
-                    disabled={!financialYears?.length}
-                    className="w-full rounded-lg border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-                  >
-                    {!financialYears?.length ? (
-                      <option value="">No financial years available</option>
-                    ) : (
-                      financialYears.map((year) => (
-                        <option key={year.id} value={year.id}>
-                          {year.label}
-                          {year.isActive ? " — Active" : ""}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-
-                <div className="rounded-md border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
-                  <label
-                    htmlFor="increment-matrix-label"
-                    className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
-                  >
-                    Increment Matrix
-                  </label>
-                  <select
-                    id="increment-matrix-label"
-                    value={selectedMatrixLabel}
-                    onChange={(event) => {
-                      setSelectedMatrixLabel(event.target.value);
-                      setSelectedLevelId(null);
-                      setSelectedQuartileId(null);
-                      setFormMessage(null);
-                    }}
-                    className="w-full rounded-lg border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-                  >
-                    {incrementMatrixOptions.map((label) => (
-                      <option key={label} value={label}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="rounded-md border border-slate-300/80 bg-background px-3 py-2.5 dark:border-white/15">
-                  <label
-                    htmlFor="increment-source-performance-matrix"
-                    className="mb-1 block text-xs font-medium uppercase tracking-wide text-foreground/60"
-                  >
-                    Performance Matrix
-                  </label>
-                  <select
-                    id="increment-source-performance-matrix"
-                    value={selectedPerformanceMatrixLabel}
-                    onChange={(event) => {
-                      setSelectedPerformanceMatrixLabel(event.target.value);
-                      setSelectedLevelId(null);
-                      setSelectedQuartileId(null);
-                      setFormMessage(null);
-                    }}
-                    className="w-full rounded-lg border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
-                  >
-                    {(performanceMatrixLabels?.length
-                      ? performanceMatrixLabels
-                      : performanceMatrixOptions
-                    ).map((label) => (
-                      <option key={label} value={label}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="rounded-md border border-emerald-200 bg-emerald-50/70 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/20">
-                  <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                    % Set on this grid
-                  </p>
-                  <p className="mt-1 text-2xl font-bold text-emerald-900 dark:text-emerald-100">
-                    {filledCells}
-                    <span className="ml-1 text-sm font-medium text-emerald-700/70 dark:text-emerald-300/70">
-                      / {totalQuartiles}
-                    </span>
-                  </p>
-                  {entriesForLabel.length > filledCells ? (
-                    <p className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">
-                      {entriesForLabel.length} total across performance matrices
-                    </p>
-                  ) : null}
-                </div>
-              </div>
+              <MatrixIdentityEditor
+                idPrefix="increment-matrix"
+                financialYearLabel={
+                  financialYears?.find((year) => year.id === selectedFinancialYearId)
+                    ?.label ?? "—"
+                }
+                title={editTitle}
+                label={editLabel}
+                onTitleChange={setEditTitle}
+                onLabelChange={setEditLabel}
+                dirty={identityDirty}
+                isSaving={updateIdentityMutation.isPending}
+                performanceMatrixLabel={selectedPerformanceMatrixLabel}
+                performanceMatrixOptions={performanceMatrixOptions}
+                onPerformanceMatrixChange={(nextLabel) => {
+                  setSelectedPerformanceMatrixLabel(nextLabel);
+                  setSelectedLevelId(null);
+                  setSelectedQuartileId(null);
+                  setFormMessage(null);
+                }}
+                onSave={(event) => {
+                  event.preventDefault();
+                  if (!selectedFinancialYearId) {
+                    return;
+                  }
+                  updateIdentityMutation.mutate({
+                    financialYearId: selectedFinancialYearId,
+                    matrixLabel: selectedMatrixLabel,
+                    newMatrixLabel: editLabel.trim(),
+                    title: editTitle.trim(),
+                  });
+                }}
+              />
 
               <div>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-semibold text-text-primary">
-                      Quartile percentages
+                      {editTitle.trim() || selectedMatrixLabel}
                     </h3>
                     <p className="text-sm text-foreground/70">
                       Choose any performance matrix, then click a quartile cell
-                      to set its increment percentage for{" "}
-                      <span className="font-medium">{selectedMatrixLabel}</span>.
+                      to set its increment percentage.
                     </p>
                   </div>
                 </div>
-
-                {sourcePerformanceMatrices.length > 0 ? (
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-foreground/60">
-                      Percentages set on
-                    </p>
-                    {sourcePerformanceMatrices.map((label) => (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPerformanceMatrixLabel(label);
-                          setSelectedLevelId(null);
-                          setSelectedQuartileId(null);
-                        }}
-                        className={cn(
-                          "rounded-full border px-2.5 py-1 text-xs font-medium transition",
-                          label === selectedPerformanceMatrixLabel
-                            ? "border-primary bg-primary text-white"
-                            : "border-slate-300 bg-background text-text-primary hover:bg-primary/10 dark:border-white/15",
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
 
                 {matrixLoading || entriesLoading ? (
                   <p className="text-sm text-foreground/70">
@@ -751,7 +824,15 @@ export default function IncrementMatrixManager() {
                     id="assign-increment-matrix-label"
                     value={selectedMatrixLabel}
                     onChange={(event) => {
-                      setSelectedMatrixLabel(event.target.value);
+                      const nextLabel = event.target.value;
+                      setSelectedMatrixLabel(nextLabel);
+                      const summary = matrixSummaries?.find(
+                        (item) =>
+                          item.financialYearId === selectedFinancialYearId &&
+                          item.matrixLabel === nextLabel,
+                      );
+                      setEditTitle(summary?.title ?? nextLabel);
+                      setEditLabel(nextLabel);
                       setFormMessage(null);
                     }}
                     className="w-full rounded-lg border border-slate-300 bg-background px-2.5 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
@@ -805,9 +886,9 @@ export default function IncrementMatrixManager() {
                   Add increment matrix
                 </h3>
                 <p className="mt-1 text-sm text-foreground/70">
-                  Create a new increment matrix label for the selected financial
-                  year. After creating it, choose quartiles from any performance
-                  matrix to set percentages.
+                  Create a new increment matrix for the selected financial year.
+                  You can edit the title and label later, then choose quartiles
+                  from any performance matrix to set percentages.
                 </p>
               </div>
 
@@ -826,33 +907,87 @@ export default function IncrementMatrixManager() {
                 <form onSubmit={handleCreateMatrixLabel} className="space-y-4">
                   <div>
                     <label
+                      htmlFor="new-increment-matrix-title"
+                      className="mb-1.5 block text-sm font-medium text-text-primary"
+                    >
+                      Title
+                    </label>
+                    <input
+                      id="new-increment-matrix-title"
+                      type="text"
+                      value={newMatrixTitle}
+                      onChange={(event) => setNewMatrixTitle(event.target.value)}
+                      disabled={!selectedFinancialYearId}
+                      placeholder="e.g. Academic Increment Matrix"
+                      className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
+                    />
+                  </div>
+                  <div>
+                    <label
                       htmlFor="new-increment-matrix-label"
                       className="mb-1.5 block text-sm font-medium text-text-primary"
                     >
-                      Matrix Label
+                      Label
                     </label>
                     <input
                       id="new-increment-matrix-label"
                       value={newMatrixLabel}
                       onChange={(event) => setNewMatrixLabel(event.target.value)}
+                      required
+                      disabled={!selectedFinancialYearId}
                       placeholder="e.g. Academic"
-                      className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+                      className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 dark:border-white/15"
                     />
                   </div>
 
+                  {incrementMatrixOptions.length > 0 ? (
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/60">
+                        Existing matrices
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {incrementMatrixOptions.map((label, index) => (
+                          <span
+                            key={label}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+                              getPerformanceLevelTint(label, index),
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "size-1.5 rounded-full",
+                                getPerformanceLevelColor(label, index),
+                              )}
+                            />
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <button
                     type="submit"
-                    disabled={!selectedFinancialYearId || !newMatrixLabel.trim()}
+                    disabled={
+                      !selectedFinancialYearId ||
+                      !newMatrixLabel.trim() ||
+                      createMatrixMutation.isPending
+                    }
                     className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
                   >
                     <Plus className="size-4" />
-                    Create matrix label
+                    {createMatrixMutation.isPending
+                      ? "Creating..."
+                      : "Create matrix"}
                   </button>
                 </form>
               </div>
             </div>
           ) : null}
         </div>
+          </>
+        )}
       </div>
 
       <AnimatePresence>
@@ -993,6 +1128,36 @@ export default function IncrementMatrixManager() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      <MatrixCopyDialog
+        key={
+          copyRow
+            ? `${copyRow.financialYearId}:${copyRow.matrixLabel}`
+            : "closed"
+        }
+        open={Boolean(copyRow)}
+        kind="increment"
+        idPrefix="copy-increment-matrix"
+        sourceTitle={copyRow?.title ?? ""}
+        sourceLabel={copyRow?.matrixLabel ?? ""}
+        sourceFinancialYearId={copyRow?.financialYearId ?? 0}
+        financialYears={financialYears ?? []}
+        isSaving={copyMatrixMutation.isPending}
+        error={copyError}
+        onClose={closeCopyDialog}
+        onCopy={({ targetFinancialYearId, title, newMatrixLabel }) => {
+          if (!copyRow) {
+            return;
+          }
+          copyMatrixMutation.mutate({
+            sourceFinancialYearId: copyRow.financialYearId,
+            sourceMatrixLabel: copyRow.matrixLabel,
+            targetFinancialYearId,
+            newMatrixLabel,
+            title,
+          });
+        }}
+      />
     </div>
   );
 }

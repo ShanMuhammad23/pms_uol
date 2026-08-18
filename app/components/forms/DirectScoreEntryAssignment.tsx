@@ -1,7 +1,7 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Filter, RotateCcw, Search } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -18,6 +18,7 @@ import {
 import { fetchUsers } from "@/lib/queries/users-client";
 import type { UserRecord } from "@/types/users";
 import { cn } from "@/lib/utils";
+import { useResettingPage } from "@/app/hooks/use-resetting-page";
 import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
@@ -135,14 +136,12 @@ function countActiveFilters(filters: FilterState): number {
 }
 
 export default function DirectScoreEntryAssignment() {
-  const queryClient = useQueryClient();
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
-  const [page, setPage] = useState(1);
 
   const { data: users } = useQuery({
     queryKey: queryKeys.users,
@@ -155,7 +154,7 @@ export default function DirectScoreEntryAssignment() {
     queryFn: () => fetchDirectScoreEntryAssignments(),
   });
 
-  const allUsers = users ?? [];
+  const allUsers = useMemo(() => users ?? [], [users]);
   const activeCount = countActiveFilters(filters);
 
   const assignedEmployeeIds = useMemo(
@@ -189,30 +188,29 @@ export default function DirectScoreEntryAssignment() {
 
   const totalCount = filteredUsers.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const [page, setPage] = useResettingPage(
+    `${search}\0${JSON.stringify(filters)}`,
+    totalPages,
+  );
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, filters]);
-
-  useEffect(() => {
-    setPage((current) => Math.min(current, totalPages));
-  }, [totalPages]);
-
-  useEffect(() => {
-    const available = new Set(filteredUsers.map((u) => u.employeeId));
-    setSelectedEmployeeIds((current) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const id of current) {
-        if (available.has(id)) {
-          next.add(id);
-        } else {
-          changed = true;
-        }
+  const availableEmployeeIds = useMemo(
+    () => new Set(filteredUsers.map((user) => user.employeeId)),
+    [filteredUsers],
+  );
+  if (selectedEmployeeIds.size > 0) {
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of selectedEmployeeIds) {
+      if (availableEmployeeIds.has(id)) {
+        next.add(id);
+      } else {
+        changed = true;
       }
-      return changed ? next : current;
-    });
-  }, [filteredUsers]);
+    }
+    if (changed) {
+      setSelectedEmployeeIds(next);
+    }
+  }
 
   const paginatedUsers = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;

@@ -2,8 +2,9 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Download, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ExportColumnDef } from "@/app/helpers/excel-export-service";
+import { useIsClient } from "@/app/hooks/use-is-client";
 import { cn } from "@/lib/utils";
 
 interface ExportColumnSelectorModalProps<T> {
@@ -34,32 +35,42 @@ export function ExportColumnSelectorModal<T>({
   storageKey,
   isExporting = false,
 }: ExportColumnSelectorModalProps<T>) {
+  const isClient = useIsClient();
   const allIds = useMemo(() => columns.map((c) => c.id), [columns]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() =>
     new Set(allIds),
   );
 
-  useEffect(() => {
-    if (!open) return;
-
-    if (storageKey) {
-      try {
-        const stored = localStorage.getItem(storageKey);
-        if (stored) {
-          const parsed = JSON.parse(stored) as string[];
-          const valid = parsed.filter((id) => allIds.includes(id));
-          if (valid.length > 0) {
-            setSelectedIds(new Set(valid));
-            return;
+  const seedKey = open
+    ? `${isClient}:${storageKey ?? ""}:${allIds.join(",")}`
+    : "closed";
+  const [prevSeedKey, setPrevSeedKey] = useState(seedKey);
+  if (seedKey !== prevSeedKey) {
+    setPrevSeedKey(seedKey);
+    if (open) {
+      if (isClient && storageKey) {
+        try {
+          const stored = localStorage.getItem(storageKey);
+          if (stored) {
+            const parsed = JSON.parse(stored) as string[];
+            const valid = parsed.filter((id) => allIds.includes(id));
+            if (valid.length > 0) {
+              setSelectedIds(new Set(valid));
+            } else {
+              setSelectedIds(new Set(allIds));
+            }
+          } else {
+            setSelectedIds(new Set(allIds));
           }
+        } catch {
+          setSelectedIds(new Set(allIds));
         }
-      } catch {
-        // ignore parse errors
+      } else {
+        setSelectedIds(new Set(allIds));
       }
     }
-    setSelectedIds(new Set(allIds));
-  }, [open, storageKey, allIds]);
+  }
 
   const toggleColumn = (id: string) => {
     setSelectedIds((current) => {

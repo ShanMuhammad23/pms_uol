@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormTemplateRecord, QuestionRecord, FieldType } from "@/types/forms";
+import type { FormTemplateRecord } from "@/types/forms";
 import {
   CATEGORY_LABELS,
   FIELD_TYPE_LABELS,

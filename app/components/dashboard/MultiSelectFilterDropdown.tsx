@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsClient } from "@/app/hooks/use-is-client";
 
 export type MultiSelectOption = {
   value: string;
@@ -99,7 +100,7 @@ export function MultiSelectFilterDropdown({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<MenuPosition | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsClient();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -112,10 +113,6 @@ export function MultiSelectFilterDropdown({
     selectedValues !== null &&
     selectedValues.length === options.length;
   const noneSelected = selectedValues === null || selectedValues.length === 0;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) {

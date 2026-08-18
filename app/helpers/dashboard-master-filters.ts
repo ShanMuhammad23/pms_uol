@@ -184,7 +184,6 @@ export function buildMasterFilterOptions(
   column: DashboardTableColumnDef,
   filters: MasterFilterState = EMPTY_MASTER_FILTER_STATE,
   selectedValues: MasterFilterMultiSelection = null,
-  allSubmissions?: FormSubmissionListItem[],
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 

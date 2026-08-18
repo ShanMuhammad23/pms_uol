@@ -30,22 +30,27 @@ export default function OfflineDialog() {
   const [showReconnected, setShowReconnected] = useState(false);
   const [wasOffline, setWasOffline] = useState(false);
 
-  useEffect(() => {
-    if (!isOnline) {
+  if (!isOnline) {
+    if (!wasOffline) {
       setWasOffline(true);
+    }
+    if (showReconnected) {
       setShowReconnected(false);
+    }
+  } else if (wasOffline && !showReconnected) {
+    setShowReconnected(true);
+  }
+
+  useEffect(() => {
+    if (!showReconnected) {
       return;
     }
-
-    if (wasOffline) {
-      setShowReconnected(true);
-      const timer = window.setTimeout(() => {
-        setShowReconnected(false);
-        setWasOffline(false);
-      }, 2400);
-      return () => window.clearTimeout(timer);
-    }
-  }, [isOnline, wasOffline]);
+    const timer = window.setTimeout(() => {
+      setShowReconnected(false);
+      setWasOffline(false);
+    }, 2400);
+    return () => window.clearTimeout(timer);
+  }, [showReconnected]);
 
   const isOpen = !isOnline || showReconnected;
 

@@ -116,7 +116,10 @@ export function EditUserModal({
     enabled: open && !!user?.employeeId,
   });
 
-  useEffect(() => {
+  const seedKey = open && user ? `${user.id}:${assignedFormsData?.forms.map((form) => form.templateId).join(",") ?? ""}` : "closed";
+  const [prevSeedKey, setPrevSeedKey] = useState(seedKey);
+  if (seedKey !== prevSeedKey) {
+    setPrevSeedKey(seedKey);
     if (open && user) {
       setForm(toFormState(user));
       const assignedIds = new Set(
@@ -124,18 +127,7 @@ export function EditUserModal({
       );
       setSelectedTemplateIds(assignedIds);
       setInitialTemplateIds(assignedIds);
-
-      fetchUserAdditionalAccess(user.id).then((perms) => {
-        const map = Object.fromEntries(
-          ADDITIONAL_ACCESS_MODULES.map((m) => [m, null]),
-        ) as Record<AdditionalAccessModule, AdditionalAccessLevel | null>;
-        for (const p of perms) {
-          map[p.module] = p.accessLevel;
-        }
-        setAdditionalAccess(map);
-      });
-    }
-    if (!open) {
+    } else if (!open) {
       setForm(null);
       setSelectedTemplateIds(new Set());
       setInitialTemplateIds(new Set());
@@ -145,7 +137,27 @@ export function EditUserModal({
         ) as Record<AdditionalAccessModule, AdditionalAccessLevel | null>,
       );
     }
-  }, [open, user, assignedFormsData]);
+  }
+
+  useEffect(() => {
+    if (!open || !user) {
+      return;
+    }
+    let cancelled = false;
+    fetchUserAdditionalAccess(user.id).then((perms) => {
+      if (cancelled) return;
+      const map = Object.fromEntries(
+        ADDITIONAL_ACCESS_MODULES.map((m) => [m, null]),
+      ) as Record<AdditionalAccessModule, AdditionalAccessLevel | null>;
+      for (const p of perms) {
+        map[p.module] = p.accessLevel;
+      }
+      setAdditionalAccess(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, user]);
 
   const headOptions = useMemo(() => {
     if (!user) return filterManagerEligibleUsers(users);

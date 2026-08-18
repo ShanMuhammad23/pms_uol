@@ -69,7 +69,6 @@ function TextFilterField({
 
 export function UsersMasterFilter({
   users,
-  allUsers,
   filters,
   onTextChange,
   onMultiChange,
@@ -90,13 +89,12 @@ export function UsersMasterFilter({
           column,
           filters,
           filters.multi[column.id] ?? null,
-          allUsers,
         ),
       );
     }
 
     return map;
-  }, [allUsers, filters, users]);
+  }, [filters, users]);
 
   return (
     <div className="border-b border-slate-200/80 bg-slate-50/90 dark:border-white/5 dark:bg-slate-950/40">

@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import { Check, Filter, Search, X } from "lucide-react";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { NumericRangeFilterControls } from "@/app/components/common/NumericRangeFilterControls";
+import { useIsClient } from "@/app/hooks/use-is-client";
 import {
   buildEntitiesMasterFilterOptions,
   isEntitiesColumnFilterActive,
@@ -94,7 +95,7 @@ export function EntitiesTableColumnHeaderFilter({
   const [query, setQuery] = useState("");
   const [draftText, setDraftText] = useState("");
   const [position, setPosition] = useState<MenuPosition | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsClient();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -115,15 +116,19 @@ export function EntitiesTableColumnHeaderFilter({
     );
   }, [column, entities, filters, isText, selectedValues]);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
+  const draftSyncKey =
+    open && isText
+      ? `${column.id}:${filters.text[column.id as EntitiesMasterFilterTextColumnId] ?? ""}`
+      : "";
+  const [prevDraftSyncKey, setPrevDraftSyncKey] = useState(draftSyncKey);
+  if (draftSyncKey !== prevDraftSyncKey) {
+    setPrevDraftSyncKey(draftSyncKey);
     if (open && isText) {
-      setDraftText(filters.text[column.id as EntitiesMasterFilterTextColumnId] ?? "");
+      setDraftText(
+        filters.text[column.id as EntitiesMasterFilterTextColumnId] ?? "",
+      );
     }
-  }, [column.id, filters.text, isText, open]);
+  }
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) {

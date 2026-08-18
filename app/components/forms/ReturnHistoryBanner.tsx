@@ -1,7 +1,7 @@
 "use client";
 
 import { RotateCcw, ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ReturnHistoryEntry, ReturnLevel } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
@@ -21,8 +21,6 @@ const LEVEL_LABELS: Record<ReturnLevel, string> = {
   manager1: "Manager 1",
   manager2: "Manager 2",
 };
-
-const LEVEL_ORDER: ReturnLevel[] = ["employee", "manager1", "manager2"];
 
 function formatDate(iso: string): string {
   try {

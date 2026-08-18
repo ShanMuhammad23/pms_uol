@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Paperclip, Trash2, X } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import {
   deleteEmployeeFormAttachment,
@@ -190,15 +190,15 @@ export default function EmployeeFormFill({
     },
   });
 
-  useEffect(() => {
-    if (!data) {
-      return;
+  const [prevFormData, setPrevFormData] = useState(data);
+  if (data !== prevFormData) {
+    setPrevFormData(data);
+    if (data) {
+      setAnswers(
+        buildInitialAnswers(flattenAllQuestions(data.template), data.answers),
+      );
     }
-
-    setAnswers(
-      buildInitialAnswers(flattenAllQuestions(data.template), data.answers),
-    );
-  }, [data]);
+  }
 
   const isReadOnly =
     isPreview ||

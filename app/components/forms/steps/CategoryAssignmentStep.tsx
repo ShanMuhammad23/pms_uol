@@ -28,8 +28,6 @@ export default function CategoryAssignmentStep({
   targetSubCategory,
   errors,
   onCycleChange,
-  onCategoryChange,
-  onSubCategoryChange,
   templateId,
   templateTitle,
 }: CategoryAssignmentStepProps) {

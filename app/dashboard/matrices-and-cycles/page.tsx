@@ -1,6 +1,5 @@
 import MatricesAndCyclesTabs from "@/app/components/matrices-and-cycles/MatricesAndCyclesTabs";
 import { requireModuleViewPage } from "@/lib/auth/require-module-page";
-import { LibraryBig } from "lucide-react";
 
 export default async function MatricesAndCyclesPage() {
   await requireModuleViewPage("MATRICES_AND_CYCLES");

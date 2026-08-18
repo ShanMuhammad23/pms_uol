@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageSquareText, Save, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import OverallRemarksSection from "@/app/components/forms/OverallRemarksSection";
 
@@ -54,16 +54,14 @@ export default function DirectAssessmentRemarksModal({
   const [manager1, setManager1] = useState(initialRemarks.manager1);
   const [manager2, setManager2] = useState(initialRemarks.manager2);
 
-  // Reset the local draft whenever the modal is (re)opened so it always
-  // reflects the latest persisted state.
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setManager1(initialRemarks.manager1);
       setManager2(initialRemarks.manager2);
     }
-    // We intentionally only re-seed on open transitions.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }
 
   const handleSave = () => {
     if (isPending) return;

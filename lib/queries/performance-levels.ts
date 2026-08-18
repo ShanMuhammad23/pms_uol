@@ -2,12 +2,16 @@ import "server-only";
 
 import { db } from "../db";
 import type {
+  CopyPerformanceMatrixInput,
   CreatePerformanceLevelInput,
+  CreatePerformanceMatrixInput,
   PerformanceLevelRecord,
   PerformanceLevelWithQuartiles,
   PerformanceMatrixAssignmentRecord,
+  PerformanceMatrixSummary,
   PerformanceQuartileRecord,
   UpdatePerformanceLevelInput,
+  UpdatePerformanceMatrixIdentityInput,
 } from "@/types/performance-matrices";
 
 interface PerformanceLevelRow {
@@ -254,14 +258,380 @@ export async function deletePerformanceLevel(id: number): Promise<void> {
   }
 }
 
+export async function listPerformanceMatrixSummaries(): Promise<
+  PerformanceMatrixSummary[]
+> {
+  const result = await db.query<{
+    financial_year_id: number;
+    financial_year_label: string;
+    is_active: boolean;
+    matrix_label: string;
+    title: string;
+    level_count: string;
+    quartile_count: string;
+    assigned_employee_count: string;
+    updated_at: string;
+  }>(
+    `SELECT
+       d.financial_year_id,
+       fy.label AS financial_year_label,
+       fy.is_active,
+       d.matrix_label,
+       d.title,
+       COUNT(DISTINCT pl.id)::text AS level_count,
+       COUNT(pq.id)::text AS quartile_count,
+       (
+         SELECT COUNT(*)::text
+         FROM employee_performance_matrix_assignments epma
+         WHERE epma.financial_year_id = d.financial_year_id
+           AND epma.matrix_label = d.matrix_label
+       ) AS assigned_employee_count,
+       d.updated_at::text AS updated_at
+     FROM performance_matrix_defs d
+     INNER JOIN financial_years fy ON fy.id = d.financial_year_id
+     LEFT JOIN performance_levels pl
+       ON pl.financial_year_id = d.financial_year_id
+      AND pl.matrix_label = d.matrix_label
+     LEFT JOIN performance_quartiles pq ON pq.performance_level_id = pl.id
+     GROUP BY d.financial_year_id, fy.label, fy.is_active, d.matrix_label, d.title, d.updated_at
+     ORDER BY fy.is_active DESC, fy.label DESC, d.title ASC, d.matrix_label ASC`,
+  );
+
+  return result.rows.map((row) => ({
+    financialYearId: Number(row.financial_year_id),
+    financialYearLabel: row.financial_year_label,
+    isActiveYear: row.is_active,
+    matrixLabel: row.matrix_label,
+    title: row.title,
+    levelCount: Number(row.level_count),
+    quartileCount: Number(row.quartile_count),
+    assignedEmployeeCount: Number(row.assigned_employee_count),
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function deletePerformanceMatrix(
+  financialYearId: number,
+  matrixLabel: string,
+): Promise<void> {
+  const trimmedLabel = matrixLabel.trim();
+  if (!trimmedLabel) {
+    throw new PerformanceLevelError("Matrix label is required.", 400);
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query<{ id: string }>(
+      `SELECT id
+       FROM performance_matrix_defs
+       WHERE financial_year_id = $1 AND matrix_label = $2
+       LIMIT 1`,
+      [financialYearId, trimmedLabel],
+    );
+
+    if (!existing.rows[0]) {
+      throw new PerformanceLevelError("Performance matrix not found.", 404);
+    }
+
+    await client.query(
+      `DELETE FROM employee_performance_matrix_assignments
+       WHERE financial_year_id = $1 AND matrix_label = $2`,
+      [financialYearId, trimmedLabel],
+    );
+
+    await client.query(
+      `DELETE FROM performance_quartiles
+       WHERE performance_level_id IN (
+         SELECT id
+         FROM performance_levels
+         WHERE financial_year_id = $1 AND matrix_label = $2
+       )`,
+      [financialYearId, trimmedLabel],
+    );
+
+    await client.query(
+      `DELETE FROM performance_levels
+       WHERE financial_year_id = $1 AND matrix_label = $2`,
+      [financialYearId, trimmedLabel],
+    );
+
+    await client.query(
+      `DELETE FROM performance_matrix_defs
+       WHERE financial_year_id = $1 AND matrix_label = $2`,
+      [financialYearId, trimmedLabel],
+    );
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error instanceof PerformanceLevelError) {
+      throw error;
+    }
+    if (isForeignKeyViolation(error)) {
+      throw new PerformanceLevelError(
+        "Cannot delete this performance matrix because it is still in use.",
+        409,
+      );
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function createPerformanceMatrix(
+  input: CreatePerformanceMatrixInput,
+): Promise<PerformanceMatrixSummary> {
+  const trimmedLabel = input.matrixLabel.trim();
+  const trimmedTitle = input.title.trim() || trimmedLabel;
+
+  if (!trimmedLabel) {
+    throw new PerformanceLevelError("Matrix label is required.", 400);
+  }
+
+  try {
+    await db.query(
+      `INSERT INTO performance_matrix_defs (financial_year_id, matrix_label, title)
+       VALUES ($1, $2, $3)`,
+      [input.financialYearId, trimmedLabel, trimmedTitle],
+    );
+  } catch (error) {
+    if (isForeignKeyViolation(error)) {
+      throw new PerformanceLevelError("Financial year not found.", 404);
+    }
+    if (isUniqueViolation(error)) {
+      throw new PerformanceLevelError(
+        `Performance matrix "${trimmedLabel}" already exists for this financial year.`,
+        409,
+      );
+    }
+    throw error;
+  }
+
+  const summaries = await listPerformanceMatrixSummaries();
+  const created = summaries.find(
+    (item) =>
+      item.financialYearId === input.financialYearId &&
+      item.matrixLabel === trimmedLabel,
+  );
+  if (!created) {
+    throw new PerformanceLevelError("Failed to load created performance matrix.", 500);
+  }
+  return created;
+}
+
+export async function updatePerformanceMatrixIdentity(
+  input: UpdatePerformanceMatrixIdentityInput,
+): Promise<PerformanceMatrixSummary> {
+  const currentLabel = input.matrixLabel.trim();
+  const nextLabel = input.newMatrixLabel.trim();
+  const nextTitle = input.title.trim() || nextLabel;
+
+  if (!currentLabel || !nextLabel) {
+    throw new PerformanceLevelError("Matrix label is required.", 400);
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query<{ id: string }>(
+      `SELECT id
+       FROM performance_matrix_defs
+       WHERE financial_year_id = $1 AND matrix_label = $2
+       LIMIT 1`,
+      [input.financialYearId, currentLabel],
+    );
+    if (!existing.rows[0]) {
+      throw new PerformanceLevelError("Performance matrix not found.", 404);
+    }
+
+    if (nextLabel !== currentLabel) {
+      const conflict = await client.query<{ id: string }>(
+        `SELECT id
+         FROM performance_matrix_defs
+         WHERE financial_year_id = $1 AND matrix_label = $2
+         LIMIT 1`,
+        [input.financialYearId, nextLabel],
+      );
+      if (conflict.rows[0]) {
+        throw new PerformanceLevelError(
+          `Performance matrix "${nextLabel}" already exists for this financial year.`,
+          409,
+        );
+      }
+
+      await client.query(
+        `UPDATE performance_levels
+         SET matrix_label = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE financial_year_id = $2 AND matrix_label = $3`,
+        [nextLabel, input.financialYearId, currentLabel],
+      );
+      await client.query(
+        `UPDATE employee_performance_matrix_assignments
+         SET matrix_label = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE financial_year_id = $2 AND matrix_label = $3`,
+        [nextLabel, input.financialYearId, currentLabel],
+      );
+    }
+
+    await client.query(
+      `UPDATE performance_matrix_defs
+       SET matrix_label = $1,
+           title = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE financial_year_id = $3 AND matrix_label = $4`,
+      [nextLabel, nextTitle, input.financialYearId, currentLabel],
+    );
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error instanceof PerformanceLevelError) {
+      throw error;
+    }
+    if (isUniqueViolation(error)) {
+      throw new PerformanceLevelError(
+        `Performance matrix "${nextLabel}" already exists for this financial year.`,
+        409,
+      );
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const summaries = await listPerformanceMatrixSummaries();
+  const updated = summaries.find(
+    (item) =>
+      item.financialYearId === input.financialYearId &&
+      item.matrixLabel === nextLabel,
+  );
+  if (!updated) {
+    throw new PerformanceLevelError("Failed to load updated performance matrix.", 500);
+  }
+  return updated;
+}
+
+export async function copyPerformanceMatrix(
+  input: CopyPerformanceMatrixInput,
+): Promise<PerformanceMatrixSummary> {
+  const sourceLabel = input.sourceMatrixLabel.trim();
+  const nextLabel = input.newMatrixLabel.trim();
+  const nextTitle = input.title.trim() || nextLabel;
+  const sourceYearId = input.sourceFinancialYearId;
+  const targetYearId = input.targetFinancialYearId;
+
+  if (!sourceLabel || !nextLabel) {
+    throw new PerformanceLevelError("Matrix label is required.", 400);
+  }
+  if (
+    sourceYearId === targetYearId &&
+    sourceLabel.toLowerCase() === nextLabel.toLowerCase()
+  ) {
+    throw new PerformanceLevelError(
+      "Choose a new label when copying within the same financial year.",
+      400,
+    );
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    const source = await client.query<{ id: string }>(
+      `SELECT id
+       FROM performance_matrix_defs
+       WHERE financial_year_id = $1 AND matrix_label = $2
+       LIMIT 1`,
+      [sourceYearId, sourceLabel],
+    );
+    if (!source.rows[0]) {
+      throw new PerformanceLevelError("Performance matrix not found.", 404);
+    }
+
+    await client.query(
+      `INSERT INTO performance_matrix_defs (financial_year_id, matrix_label, title)
+       VALUES ($1, $2, $3)`,
+      [targetYearId, nextLabel, nextTitle],
+    );
+
+    const levels = await client.query<{
+      id: string;
+      name: string;
+      sort_order: number;
+    }>(
+      `SELECT id, name, sort_order
+       FROM performance_levels
+       WHERE financial_year_id = $1 AND matrix_label = $2
+       ORDER BY sort_order ASC, name ASC`,
+      [sourceYearId, sourceLabel],
+    );
+
+    for (const level of levels.rows) {
+      const insertedLevel = await client.query<{ id: string }>(
+        `INSERT INTO performance_levels (financial_year_id, matrix_label, name, sort_order)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [targetYearId, nextLabel, level.name, level.sort_order],
+      );
+      const newLevelId = insertedLevel.rows[0]?.id;
+      if (!newLevelId) {
+        throw new PerformanceLevelError("Failed to copy a performance level.", 500);
+      }
+
+      await client.query(
+        `INSERT INTO performance_quartiles (
+           performance_level_id, name, score_min, score_max, sort_order
+         )
+         SELECT $1, name, score_min, score_max, sort_order
+         FROM performance_quartiles
+         WHERE performance_level_id = $2`,
+        [newLevelId, level.id],
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error instanceof PerformanceLevelError) {
+      throw error;
+    }
+    if (isForeignKeyViolation(error)) {
+      throw new PerformanceLevelError("Financial year not found.", 404);
+    }
+    if (isUniqueViolation(error)) {
+      throw new PerformanceLevelError(
+        `Performance matrix "${nextLabel}" already exists for this financial year.`,
+        409,
+      );
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const summaries = await listPerformanceMatrixSummaries();
+  const copied = summaries.find(
+    (item) =>
+      item.financialYearId === targetYearId && item.matrixLabel === nextLabel,
+  );
+  if (!copied) {
+    throw new PerformanceLevelError("Failed to load copied performance matrix.", 500);
+  }
+  return copied;
+}
+
 export async function listPerformanceMatrixLabelsByFinancialYearId(
   financialYearId: number,
 ): Promise<string[]> {
   const result = await db.query<{ matrix_label: string }>(
-    `SELECT DISTINCT matrix_label
-     FROM performance_levels
+    `SELECT matrix_label
+     FROM performance_matrix_defs
      WHERE financial_year_id = $1
-     ORDER BY matrix_label ASC`,
+     ORDER BY title ASC, matrix_label ASC`,
     [financialYearId],
   );
   return result.rows.map((row) => row.matrix_label);
@@ -284,7 +654,7 @@ export async function assignPerformanceMatrixToEmployees(
 
   const matrixExists = await db.query<{ id: string }>(
     `SELECT id
-     FROM performance_levels
+     FROM performance_matrix_defs
      WHERE financial_year_id = $1 AND matrix_label = $2
      LIMIT 1`,
     [financialYearId, trimmedLabel],

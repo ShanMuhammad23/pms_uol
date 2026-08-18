@@ -60,6 +60,39 @@ export interface PerformanceMatrixAssignmentRecord {
   financialYearId: number;
 }
 
+export interface PerformanceMatrixSummary {
+  financialYearId: number;
+  financialYearLabel: string;
+  isActiveYear: boolean;
+  matrixLabel: string;
+  title: string;
+  levelCount: number;
+  quartileCount: number;
+  assignedEmployeeCount: number;
+  updatedAt: string;
+}
+
+export interface CreatePerformanceMatrixInput {
+  financialYearId: number;
+  matrixLabel: string;
+  title: string;
+}
+
+export interface UpdatePerformanceMatrixIdentityInput {
+  financialYearId: number;
+  matrixLabel: string;
+  newMatrixLabel: string;
+  title: string;
+}
+
+export interface CopyPerformanceMatrixInput {
+  sourceFinancialYearId: number;
+  sourceMatrixLabel: string;
+  targetFinancialYearId: number;
+  newMatrixLabel: string;
+  title: string;
+}
+
 export function formatPerformanceScore(value: number): string {
   if (!Number.isFinite(value)) {
     return "—";

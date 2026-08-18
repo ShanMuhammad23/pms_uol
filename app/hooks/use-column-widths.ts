@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchColumnWidths,
@@ -11,21 +11,25 @@ import {
 export const MIN_COLUMN_WIDTH = 80;
 export const MAX_COLUMN_WIDTH = 600;
 
+const EMPTY_COLUMN_WIDTHS: ColumnWidths = {};
+
 export function useColumnWidths(tableKey: string) {
-  const { data: savedWidths = {} } = useQuery<ColumnWidths>({
+  const { data: savedWidthsData } = useQuery<ColumnWidths>({
     queryKey: ["column-widths", tableKey],
     queryFn: () => fetchColumnWidths(tableKey),
     staleTime: Infinity,
   });
 
+  const savedWidths = savedWidthsData ?? EMPTY_COLUMN_WIDTHS;
   const [widths, setWidths] = useState<ColumnWidths>({});
   const [hydrated, setHydrated] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
+  const [prevSavedWidths, setPrevSavedWidths] = useState(savedWidths);
+  if (savedWidths !== prevSavedWidths) {
+    setPrevSavedWidths(savedWidths);
     setWidths(savedWidths);
     setHydrated(true);
-  }, [savedWidths]);
+  }
 
   const persist = useCallback(
     (next: ColumnWidths) => {

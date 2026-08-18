@@ -33,7 +33,6 @@ export function ViewAsDropdown() {
   // Fetch available options on mount and when the real role changes.
   useEffect(() => {
     if (!realRole || realRole === "EMPLOYEE") {
-      setOptions([]);
       return;
     }
 
@@ -107,7 +106,7 @@ export function ViewAsDropdown() {
       // router.refresh. This ensures the server re-reads the updated JWT
       // cookie and renders with the new role. Soft navigation can race with
       // the session update and serve stale server components.
-      window.location.href = destination;
+      window.location.assign(destination);
     } catch (error) {
       console.error("Failed to switch view-as role:", error);
       setLoading(false);

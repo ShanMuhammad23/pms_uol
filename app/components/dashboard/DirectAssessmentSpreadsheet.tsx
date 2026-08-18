@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useMemo, useEffect, useCallback } from "react";
+import { Fragment, useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchDirectAssessmentData,
@@ -11,10 +11,6 @@ import {
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
-import {
-  type QuestionRecord,
-} from "@/types/forms";
-import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 import { cn } from "@/lib/utils";
 import {
   buildFormTableRows,
@@ -190,9 +186,13 @@ export default function DirectAssessmentSpreadsheet({
     setRemarksDrafts(buildInitialRemarksDrafts(d));
   }, []);
 
-  useEffect(() => {
-    if (data) initializeDrafts(data);
-  }, [data, initializeDrafts]);
+  const [prevAssessmentData, setPrevAssessmentData] = useState(data);
+  if (data !== prevAssessmentData) {
+    setPrevAssessmentData(data);
+    if (data) {
+      initializeDrafts(data);
+    }
+  }
 
   const editableEmployees = useMemo(
     () => filteredEmployees.filter((e) => e.canEdit),

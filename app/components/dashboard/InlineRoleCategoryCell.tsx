@@ -28,12 +28,10 @@ export function InlineRoleCategoryCell({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!editing) {
-      setDraft(value ?? "");
-    }
-  }, [editing, value]);
+  const nextDraft = value ?? "";
+  if (!editing && draft !== nextDraft) {
+    setDraft(nextDraft);
+  }
 
   useEffect(() => {
     if (editing) {
