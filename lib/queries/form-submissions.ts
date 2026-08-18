@@ -1522,6 +1522,7 @@ export async function getFormSubmissionById(
   // Performance Matrix. Previously this used the raw self-assessment score %.
   const resolved = resolveSubmissionPerformanceQuartile(
     {
+      normalizedScore: summary.normalizedScore,
       scoreO: summary.scoreO,
       rawScore: summary.rawScore,
       creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,

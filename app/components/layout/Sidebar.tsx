@@ -9,6 +9,7 @@ import {
   Building2,
   ChevronDown,
   ClipboardList,
+  FileBarChart,
   FileText,
   Grid3X3,
   LayoutDashboard,
@@ -63,6 +64,13 @@ const ADMIN_LINKS = [
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/entity-categories"),
     module: "ORGANIZATION_LEVELS" as AdditionalAccessModule | undefined,
+  },
+  {
+    href: "/dashboard/reports",
+    label: "Process Status Summary",
+    icon: FileBarChart,
+    match: (pathname: string) => pathname.startsWith("/dashboard/reports"),
+    module: undefined as AdditionalAccessModule | undefined,
   },
 ] as const;
 
