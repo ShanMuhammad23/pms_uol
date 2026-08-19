@@ -5,6 +5,7 @@ import {
   getEmployeeFormDetail,
   saveEmployeeForm,
 } from "@/lib/queries/employee-forms";
+import { notifySelfAssessmentSubmitted } from "@/lib/mail/notifications";
 import type { SaveEmployeeFormInput } from "@/types/employee-forms";
 
 interface RouteContext {
@@ -69,6 +70,18 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     const body = (await request.json()) as SaveEmployeeFormInput;
     const detail = await saveEmployeeForm(userId, templateId, body);
+
+    // Fire-and-forget notification: only when the employee actually submitted
+    // (not a draft save) and self-assessment is enabled for this form.
+    if (
+      body.submit &&
+      detail.appraisalId != null &&
+      detail.status === "SUBMITTED" &&
+      detail.selfAssessmentEnabled
+    ) {
+      void notifySelfAssessmentSubmitted(detail.appraisalId);
+    }
+
     return NextResponse.json(detail);
   } catch (error) {
     if (error instanceof EmployeeFormError) {

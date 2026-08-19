@@ -14,6 +14,7 @@ import {
   getFormSubmissionSummaryById,
   saveManagerReviewAnswers,
 } from "@/lib/queries/form-submissions";
+import { notifyHrOrBoardApproved } from "@/lib/mail/notifications";
 import type { SaveManagerReviewInput } from "@/types/employee-forms";
 
 interface RouteContext {
@@ -164,6 +165,12 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const result = await approveHrCalibration(submissionId);
+
+    // Fire-and-forget notification: the previous status (summary.status)
+    // determines whether this was HR approval (PENDING_HR_CALIBRATION) or
+    // Board approval (PENDING_BOARD_APPROVAL). result.status is the next
+    // status.
+    void notifyHrOrBoardApproved(submissionId, summary.status, result.status);
 
     return NextResponse.json(result);
   } catch (error) {
