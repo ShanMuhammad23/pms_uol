@@ -12,6 +12,7 @@ import {
   returnSubmission,
   type ReturnLevel,
 } from "@/lib/queries/form-submissions";
+import { notifySubmissionReturned } from "@/lib/mail/notifications";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -105,6 +106,10 @@ export async function POST(request: Request, context: RouteContext) {
       returnLevel,
       reason,
     );
+
+    // Fire-and-forget notification: return to employee sends 1 email;
+    // return to manager1/manager2 sends 2 emails (manager + employee).
+    void notifySubmissionReturned(submissionId, returnLevel, reason);
 
     return NextResponse.json(result);
   } catch (error) {
