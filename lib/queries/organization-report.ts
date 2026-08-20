@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import { listEntities } from "@/lib/queries/entities";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import type { EntityRecord } from "@/types/entities";
@@ -56,7 +57,7 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   const defaultCycle = await getDefaultAppraisalCycle();
   const cycleId = defaultCycle?.id ?? null;
 
-  const fyResult = await db.query<{ year: number }>(
+  const fyResult = await getDbClient().query<{ year: number }>(
     `SELECT year FROM financial_years WHERE is_active = TRUE ORDER BY year DESC LIMIT 1`,
   );
   const financialYear = fyResult.rows[0]?.year ?? defaultCycle?.fiscalYear ?? null;
@@ -71,7 +72,7 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   // recursive CTE (`subtree`) to walk the entity tree downward from each
   // entity. Joining the recursive CTE with `direct_counts` and summing gives
   // rolled-up subtree counts per root entity directly in SQL.
-  const countRows = await db.query<EntityCountRow>(
+  const countRows = await getDbClient().query<EntityCountRow>(
     `WITH RECURSIVE direct_counts AS (
        SELECT
          u.entity_id,

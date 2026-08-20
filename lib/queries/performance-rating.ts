@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 
 export type {
@@ -21,7 +22,7 @@ export {
 export async function getActiveFinancialYearQuartileBands(): Promise<
   PerformanceQuartileBand[]
 > {
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     performance_level_id: string;
     performance_level_name: string;
     level_sort_order: number;

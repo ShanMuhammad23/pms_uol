@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { getDirectAssessmentData } from "@/lib/queries/direct-assessment";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -10,7 +11,7 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export const GET = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireDashboardSubmissionsApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -60,4 +61,4 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

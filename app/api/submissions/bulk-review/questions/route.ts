@@ -4,11 +4,12 @@ import { authOptions } from "@/auth";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
 import { getBulkReviewQuestionData } from "@/lib/queries/form-submissions";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-export async function GET(request: Request) {
+export const GET = apiHandler(async (request: Request) => {
   const session = await getServerSession(authOptions);
 
   if (!session) {
@@ -56,4 +57,4 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
-}
+});

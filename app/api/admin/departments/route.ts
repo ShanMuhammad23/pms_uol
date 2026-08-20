@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireModuleViewApi } from "@/lib/auth/require-module-api";
 import { listEntitiesForUsers } from "@/lib/queries/users";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireModuleViewApi("ORGANIZATION_LEVELS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -18,4 +19,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});

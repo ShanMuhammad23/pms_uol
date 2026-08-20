@@ -13,6 +13,7 @@ import {
   type ReturnLevel,
 } from "@/lib/queries/form-submissions";
 import { notifySubmissionReturned } from "@/lib/mail/notifications";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -31,7 +32,7 @@ const VALID_RETURN_LEVELS: ReturnLevel[] = ["manager2", "manager1", "employee"];
  *
  * Authorization: HR, Board, and Super Admin only (canReviewSubmissions).
  */
-export async function POST(request: Request, context: RouteContext) {
+export const POST = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -130,4 +131,4 @@ export async function POST(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

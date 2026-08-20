@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient, withTransaction } from "@/lib/db-context";
 import {
   PERFORMANCE_RATINGS,
   RATING_LABELS,
@@ -45,7 +46,7 @@ function mapRow(row: InstitutionalQuotaRow): InstitutionalQuotaRecord {
 }
 
 async function assertFinancialYearExists(financialYearId: number): Promise<void> {
-  const result = await db.query(`SELECT id FROM financial_years WHERE id = $1`, [
+  const result = await getDbClient().query(`SELECT id FROM financial_years WHERE id = $1`, [
     financialYearId,
   ]);
 
@@ -59,7 +60,7 @@ export async function listInstitutionalQuotas(
 ): Promise<InstitutionalQuotaRecord[]> {
   await assertFinancialYearExists(financialYearId);
 
-  const result = await db.query<InstitutionalQuotaRow>(
+  const result = await getDbClient().query<InstitutionalQuotaRow>(
     `SELECT id, financial_year_id, rating, quota_percent::text, sort_order,
             created_at::text, updated_at::text
      FROM institutional_quotas
@@ -95,7 +96,7 @@ export async function listInstitutionalQuotaChartRowsForActiveYear(): Promise<{
   financialYearId: number | null;
   rows: InstitutionalQuotaChartRow[];
 }> {
-  const yearResult = await db.query<{ id: number }>(
+  const yearResult = await getDbClient().query<{ id: number }>(
     `SELECT id
      FROM financial_years
      WHERE is_active = TRUE
@@ -117,10 +118,8 @@ export async function upsertInstitutionalQuotas(
 ): Promise<InstitutionalQuotaRecord[]> {
   await assertFinancialYearExists(input.financialYearId);
 
-  const client = await db.connect();
-
-  try {
-    await client.query("BEGIN");
+  await withTransaction(async () => {
+    const client = getDbClient();
 
     for (const [index, row] of input.quotas.entries()) {
       await client.query(
@@ -141,14 +140,7 @@ export async function upsertInstitutionalQuotas(
         ],
       );
     }
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 
   return listInstitutionalQuotas(input.financialYearId);
 }

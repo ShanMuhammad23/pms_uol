@@ -1,7 +1,9 @@
 import "server-only";
 
+import type { PoolClient } from "pg";
 import { computeAppraisalEligibility, resolveReferenceEndDate } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
+import { getDbClient, withTransaction } from "@/lib/db-context";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import {
   calculateScorePercent,
@@ -1161,7 +1163,7 @@ export async function saveBulkReviewQuestionScores(
     const pointsArray = validEntries.map((e) => e.pointsEarned);
     const remarksArray = validEntries.map((e) => e.remarks);
 
-    await db.query(
+    await getDbClient().query(
       `INSERT INTO appraisal_answers (
          appraisal_id,
          question_id,
@@ -1269,7 +1271,7 @@ async function seedManagerAnswersFromSource(
   const pointsArray = sourceAnswers.map((a) => a.pointsEarned);
   const remarksArray = sourceAnswers.map((a) => a.remarks);
 
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO appraisal_answers (
        appraisal_id,
        question_id,
@@ -1335,7 +1337,7 @@ export async function saveManagerReviewAnswers(
     const pointsArray = validAnswers.map((a) => a.pointsEarned);
     const remarksArray = validAnswers.map((a) => a.remarks);
 
-    await db.query(
+    await getDbClient().query(
       `INSERT INTO appraisal_answers (
          appraisal_id,
          question_id,
@@ -1368,7 +1370,7 @@ export async function saveManagerReviewAnswers(
         ? "manager2_overall_remarks"
         : "manager1_overall_remarks";
 
-    await db.query(
+    await getDbClient().query(
       `UPDATE appraisals
        SET ${column} = $2,
            updated_at = CURRENT_TIMESTAMP
@@ -1424,7 +1426,7 @@ export async function approveManagerReview(appraisalId: number): Promise<{
     }),
   );
 
-  await db.query(
+  await getDbClient().query(
     `UPDATE appraisals
      SET status = $2,
          manager_level = $3,
@@ -1480,7 +1482,7 @@ export async function approveHrCalibration(appraisalId: number): Promise<{
     );
   }
 
-  await db.query(
+  await getDbClient().query(
     `UPDATE appraisals
      SET status = $2,
          hr_approval_status = 'approved',
@@ -2075,7 +2077,7 @@ export async function bulkUpdateEmployeeListingFields(
     if (templateId != null) {
       // Upsert form assignment for each user
       for (const userId of userIds) {
-        await db.query(
+        await getDbClient().query(
           `INSERT INTO employee_form_assignments (employee_id, template_id)
            VALUES ($1, $2)
            ON CONFLICT (employee_id, template_id) DO NOTHING`,
@@ -2138,7 +2140,7 @@ export async function bulkUpdateEmployeeListingFields(
       if (existing.rows.length > 0) {
         // Update existing primary qualification
         qualValues.push(Number(existing.rows[0].id));
-        await db.query(
+        await getDbClient().query(
           `UPDATE employee_qualifications
            SET ${qualSetClauses.join(", ")}
            WHERE id = $${++qualParamIdx}`,
@@ -2177,7 +2179,7 @@ export async function bulkUpdateEmployeeListingFields(
           insertPlaceholders.push(`$${++insertIdx}`);
         }
 
-        await db.query(
+        await getDbClient().query(
           `INSERT INTO employee_qualifications (${insertCols.join(", ")})
            VALUES (${insertPlaceholders.join(", ")})`,
           insertVals,
@@ -2229,7 +2231,7 @@ export async function bulkUpdateEmployeeListingFields(
       appraisalValues.push(userIds);
       appraisalValues.push(cycleId);
 
-      await db.query(
+      await getDbClient().query(
         `UPDATE appraisals
          SET ${appraisalSetClauses.join(", ")}
          WHERE employee_id = ANY($${++appraisalParamIdx}::bigint[])
@@ -2290,10 +2292,8 @@ export async function resetFormSubmission(
   deletedAnswers: number;
   resetAppraisal: boolean;
 }> {
-  const client = await db.connect();
-
-  try {
-    await client.query("BEGIN");
+  return withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     // Capture the employee_id for the audit log before wiping data.
     const appraisalRow = await client.query<{ employee_id: string }>(
@@ -2407,8 +2407,6 @@ export async function resetFormSubmission(
       ],
     );
 
-    await client.query("COMMIT");
-
     // Debug logging - verify deletion counts for troubleshooting.
     console.info(
       `[resetFormSubmission] appraisal=${appraisalId} ` +
@@ -2423,12 +2421,7 @@ export async function resetFormSubmission(
       deletedAnswers,
       resetAppraisal,
     };
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2526,11 +2519,10 @@ export async function returnSubmission(
     throw new FormSubmissionError("A return reason is required.", 400);
   }
 
-  const client = await db.connect();
   let attachmentPaths: string[] = [];
 
-  try {
-    await client.query("BEGIN");
+  const result = await withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     // Fetch everything needed in a single query.
     const row = await client.query<ReturnSubmissionRow>(
@@ -2758,28 +2750,6 @@ export async function returnSubmission(
       ],
     );
 
-    await client.query("COMMIT");
-
-    // --- Delete physical attachment files after commit ---
-    // Orphaned DB rows are worse than orphaned files, so we delete files
-    // only after the transaction is safely committed. If a file deletion
-    // fails (e.g. already gone), the error is swallowed.
-    for (const relativePath of attachmentPaths) {
-      try {
-        await deleteFormAttachmentFile(relativePath);
-      } catch {
-        // Physical file may already be gone — not a data integrity issue.
-      }
-    }
-
-    console.info(
-      `[returnSubmission] appraisal=${appraisalId} ` +
-        `returnLevel=${returnLevel} ` +
-        `deletedAnswers=${deletedAnswers} ` +
-        `deletedAttachments=${deletedAttachments} ` +
-        `newStatus=${newStatus} newManagerLevel=${newManagerLevel}`,
-    );
-
     return {
       status: newStatus,
       managerLevel: newManagerLevel,
@@ -2788,10 +2758,27 @@ export async function returnSubmission(
       deletedAnswers,
       deletedAttachments,
     };
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
+  });
+
+  // --- Delete physical attachment files after commit ---
+  // Orphaned DB rows are worse than orphaned files, so we delete files
+  // only after the transaction is safely committed. If a file deletion
+  // fails (e.g. already gone), the error is swallowed.
+  for (const relativePath of attachmentPaths) {
+    try {
+      await deleteFormAttachmentFile(relativePath);
+    } catch {
+      // Physical file may already be gone — not a data integrity issue.
+    }
   }
+
+  console.info(
+    `[returnSubmission] appraisal=${appraisalId} ` +
+      `returnLevel=${returnLevel} ` +
+      `deletedAnswers=${result.deletedAnswers} ` +
+      `deletedAttachments=${result.deletedAttachments} ` +
+      `newStatus=${result.status} newManagerLevel=${result.managerLevel}`,
+  );
+
+  return result;
 }

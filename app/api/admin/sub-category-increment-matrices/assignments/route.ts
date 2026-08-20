@@ -9,8 +9,9 @@ import {
   SubCategoryIncrementMatrixError,
   unassignIncrementMatrixFromEmployees,
 } from "@/lib/queries/sub-category-increment-matrices";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function GET(request: Request) {
+export const GET = apiHandler(async (request: Request) => {
   const auth = await requireModuleViewApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -38,9 +39,9 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -97,9 +98,9 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -149,4 +150,4 @@ export async function DELETE(request: Request) {
       { status: 500 },
     );
   }
-}
+});

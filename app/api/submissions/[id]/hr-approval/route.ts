@@ -16,6 +16,7 @@ import {
 } from "@/lib/queries/form-submissions";
 import { notifyHrOrBoardApproved } from "@/lib/mail/notifications";
 import type { SaveManagerReviewInput } from "@/types/employee-forms";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -23,7 +24,7 @@ interface RouteContext {
 
 const HR_REVIEW_STATUSES = ["PENDING_HR_CALIBRATION", "PENDING_BOARD_APPROVAL"] as const;
 
-export async function PUT(request: Request, context: RouteContext) {
+export const PUT = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -108,9 +109,9 @@ export async function PUT(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request, context: RouteContext) {
+export const POST = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -191,4 +192,4 @@ export async function POST(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

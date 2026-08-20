@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { getUserAdditionalAccess } from "@/lib/auth/additional-access";
+import { apiHandler } from "@/lib/api-handler";
 
 // This route reads the session (cookies) to identify the current user.
 // Without force-dynamic, Next.js may statically cache the response at
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
  * permissions. No Super Admin required — a user can always read their own
  * permissions.
  */
-export async function GET() {
+export const GET = apiHandler(async () => {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,4 +35,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { db } from "@/lib/db";
 import { isSystemRole } from "@/lib/auth/roles";
+import { apiHandler } from "@/lib/api-handler";
 
 /**
  * GET /api/auth/view-as
@@ -10,7 +11,7 @@ import { isSystemRole } from "@/lib/auth/roles";
  * real system role and whether they are a manager (head_id or manager_2_id)
  * of any employee.
  */
-export async function GET() {
+export const GET = apiHandler(async () => {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -69,4 +70,4 @@ export async function GET() {
     currentViewAsRole: session.user.viewAsRole ?? null,
     realRole,
   });
-}
+});

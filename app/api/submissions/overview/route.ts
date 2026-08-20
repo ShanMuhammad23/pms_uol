@@ -8,11 +8,12 @@ import { listEntities } from "@/lib/queries/entities";
 import { listDashboardOverview } from "@/lib/queries/dashboard-overview";
 import { buildDashboardOverviewCounts } from "@/lib/queries/dashboard-overview-counts";
 import { getActiveFinancialYearQuartileBands } from "@/lib/queries/performance-rating";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-export async function GET(request: NextRequest) {
+export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await requireDashboardSubmissionsApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -89,4 +90,4 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});

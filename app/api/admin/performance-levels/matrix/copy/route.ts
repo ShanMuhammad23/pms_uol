@@ -4,8 +4,9 @@ import {
   copyPerformanceMatrix,
   PerformanceLevelError,
 } from "@/lib/queries/performance-levels";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -72,4 +73,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});

@@ -3,6 +3,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { computeAppraisalEligibility } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
+import { getDbClient, withTransaction } from "@/lib/db-context";
 import {
   resolveSelfAssessmentAdvance,
   toEmployeeManagers,
@@ -72,7 +73,7 @@ async function getUserAssessmentEligibilityContext(
   userId: number,
   client?: PoolClient,
 ): Promise<UserAssessmentEligibilityContext> {
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
   const result = await executor.query<{
     assessment_eligibility: boolean;
     ineligibility_reason: string | null;
@@ -150,7 +151,7 @@ async function listExplicitlyAssignedTemplatesForUser(
     fiscalYear: number;
   }>
 > {
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
   const result = await executor.query<{
     id: string;
     title: string;
@@ -242,7 +243,7 @@ async function getAppraisalForUserTemplate(
   templateId: number,
   client?: PoolClient,
 ): Promise<AppraisalRow | null> {
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
   const result = await executor.query<AppraisalRow>(
     `SELECT
        id,
@@ -265,7 +266,7 @@ async function getAnswersForAppraisal(
   userId: number,
   client?: PoolClient,
 ): Promise<EmployeeFormAnswerRecord[]> {
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
 
   const result = await executor.query<{
     question_id: string;
@@ -313,7 +314,7 @@ export async function listAttachmentsForAppraisal(
   userId: number,
   client?: PoolClient,
 ): Promise<EmployeeFormAnswerAttachment[]> {
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
 
   const result = await executor.query<{
     id: string;
@@ -364,7 +365,7 @@ async function getOrCreateAppraisal(
     ? "PENDING_SELF_ASSESSMENT"
     : "PENDING_HEAD_REVIEW";
 
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
   const result = await executor.query<AppraisalRow>(
     `INSERT INTO appraisals (employee_id, template_id, status)
      VALUES ($1, $2, $3)
@@ -647,7 +648,7 @@ export async function getEmployeeFormDetail(
     template.fiscalYear,
   );
 
-  const managerResult = await db.query<{
+  const managerResult = await getDbClient().query<{
     head_name: string | null;
     manager_2_name: string | null;
     employee_name: string | null;
@@ -718,10 +719,9 @@ export async function saveEmployeeForm(
   const matchedAssignment = assignments.find((a) => a.templateId === templateId);
   const selfAssessmentEnabled = matchedAssignment?.selfAssessmentEnabled ?? template.selfAssessmentEnabled;
   const validatedAnswers = validateAnswers(template, input.answers, submit, selfAssessmentEnabled);
-  const client = await db.connect();
 
-  try {
-    await client.query("BEGIN");
+  await withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     const existing = await getAppraisalForUserTemplate(
       userId,
@@ -857,14 +857,7 @@ export async function saveEmployeeForm(
         [appraisal.id],
       );
     }
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 
   return getEmployeeFormDetail(userId, templateId);
 }
@@ -917,9 +910,8 @@ export async function addEmployeeFormAttachment(
   // This prevents slow disk I/O from holding a transaction open and
   // exhausting the connection pool under concurrent uploads.
   // If the DB insert fails, we clean up the orphaned file.
-  const client = await db.connect();
-
   let stored: { storedFilename: string; relativePath: string } | null = null;
+
   try {
     // Pre-resolve the appraisal so we know the appraisal ID for the file path.
     const existing = await getAppraisalForUserTemplate(userId, templateId);
@@ -943,66 +935,71 @@ export async function addEmployeeFormAttachment(
     });
 
     // Now open a short transaction for only the DB writes.
-    await client.query("BEGIN");
+    const result = await withTransaction(async () => {
+      const client = getDbClient() as PoolClient;
+      // stored is guaranteed non-null here — it was assigned before
+      // the transaction started. The guard satisfies TypeScript.
+      if (!stored) {
+        throw new Error("File was not stored before transaction.");
+      }
 
-    await client.query(
-      `INSERT INTO appraisal_answers (
-         appraisal_id,
-         question_id,
-         filled_by_id,
-         text_response,
-         selected_option_id,
-         points_earned,
-         remarks
-       ) VALUES ($1, $2, $3, NULL, NULL, 0, NULL)
-       ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
-      [appraisal.id, questionId, userId],
-    );
+      await client.query(
+        `INSERT INTO appraisal_answers (
+           appraisal_id,
+           question_id,
+           filled_by_id,
+           text_response,
+           selected_option_id,
+           points_earned,
+           remarks
+         ) VALUES ($1, $2, $3, NULL, NULL, 0, NULL)
+         ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
+        [appraisal.id, questionId, userId],
+      );
 
-    const result = await client.query<{
-      id: string;
-      question_id: string;
-      original_filename: string;
-      mime_type: string | null;
-      size_bytes: string;
-      created_at: string;
-    }>(
-      `INSERT INTO appraisal_answer_attachments (
-         appraisal_id,
-         question_id,
-         filled_by_id,
-         original_filename,
-         stored_filename,
-         relative_path,
-         mime_type,
-         size_bytes
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, question_id, original_filename, mime_type, size_bytes::text, created_at::text`,
-      [
-        appraisal.id,
-        questionId,
-        userId,
-        file.originalFilename,
-        stored.storedFilename,
-        stored.relativePath,
-        file.mimeType,
-        file.bytes.byteLength,
-      ],
-    );
+      const insertResult = await client.query<{
+        id: string;
+        question_id: string;
+        original_filename: string;
+        mime_type: string | null;
+        size_bytes: string;
+        created_at: string;
+      }>(
+        `INSERT INTO appraisal_answer_attachments (
+           appraisal_id,
+           question_id,
+           filled_by_id,
+           original_filename,
+           stored_filename,
+           relative_path,
+           mime_type,
+           size_bytes
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, question_id, original_filename, mime_type, size_bytes::text, created_at::text`,
+        [
+          appraisal.id,
+          questionId,
+          userId,
+          file.originalFilename,
+          stored.storedFilename,
+          stored.relativePath,
+          file.mimeType,
+          file.bytes.byteLength,
+        ],
+      );
 
-    await client.query("COMMIT");
+      return insertResult.rows[0];
+    });
 
-    const row = result.rows[0];
     return {
-      id: Number(row.id),
-      questionId: Number(row.question_id),
-      originalFilename: row.original_filename,
-      mimeType: row.mime_type,
-      sizeBytes: Number(row.size_bytes),
-      createdAt: row.created_at,
+      id: Number(result.id),
+      questionId: Number(result.question_id),
+      originalFilename: result.original_filename,
+      mimeType: result.mime_type,
+      sizeBytes: Number(result.size_bytes),
+      createdAt: result.created_at,
     };
   } catch (error) {
-    await client.query("ROLLBACK");
     // Clean up the orphaned file if it was written but the DB insert failed.
     if (stored) {
       void deleteFormAttachmentFile(stored.relativePath).catch(() => {
@@ -1010,8 +1007,6 @@ export async function addEmployeeFormAttachment(
       });
     }
     throw error;
-  } finally {
-    client.release();
   }
 }
 
@@ -1026,7 +1021,7 @@ export async function getEmployeeFormAttachmentForDownload(
 }> {
   await assertTemplateAssignedToUser(userId, templateId);
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     relative_path: string;
     original_filename: string;
     mime_type: string | null;
@@ -1084,7 +1079,7 @@ export async function deleteEmployeeFormAttachment(
   }
   await assertUserCanFillAssessment(userId, template.fiscalYear);
 
-  const result = await db.query<{ relative_path: string }>(
+  const result = await getDbClient().query<{ relative_path: string }>(
     `DELETE FROM appraisal_answer_attachments
      WHERE id = $1
        AND appraisal_id = $2
@@ -1119,7 +1114,7 @@ export async function getSubmissionAttachmentForDownload(
   mimeType: string | null;
 }> {
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     relative_path: string;
     original_filename: string;
     mime_type: string | null;

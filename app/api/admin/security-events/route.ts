@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { ROLE_PERMISSION_SETS } from "@/lib/auth/roles";
 import { listSecurityEvents } from "@/lib/auth/security-events";
 import { withAuth } from "@/lib/auth/with-auth";
+import { apiHandler } from "@/lib/api-handler";
 
 /**
  * SUPER_ADMIN only — security activity feed for administrators.
  */
 export const GET = withAuth(
-  async (request) => {
+  apiHandler(async (request: Request) => {
     try {
       const { searchParams } = new URL(request.url);
       const page = Math.max(Number(searchParams.get("page") ?? 1), 1);
@@ -39,6 +40,6 @@ export const GET = withAuth(
         { status: 500 },
       );
     }
-  },
+  }),
   { roles: ROLE_PERMISSION_SETS.superAdminOnly },
 );

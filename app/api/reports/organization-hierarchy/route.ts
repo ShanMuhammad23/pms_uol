@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/with-auth";
 import { ROLE_PERMISSION_SETS } from "@/lib/auth/roles";
 import { getOrganizationReport } from "@/lib/queries/organization-report";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -14,7 +15,7 @@ export const maxDuration = 30;
  * HR alignment, board approval). Accessible by admin roles (SUPER_ADMIN, HR,
  * BOARD) and MANAGER.
  */
-export const GET = withAuth(
+export const GET = apiHandler(withAuth(
   async () => {
     try {
       const tree = await getOrganizationReport();
@@ -28,4 +29,4 @@ export const GET = withAuth(
     }
   },
   { roles: ROLE_PERMISSION_SETS.dashboard },
-);
+));

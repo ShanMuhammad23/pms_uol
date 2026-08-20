@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import { flattenAllQuestions } from "@/types/forms";
 import type { QuestionRecord, FormSectionRecord } from "@/types/forms";
@@ -121,7 +122,7 @@ export async function getDirectAssessmentData(
     ? (visibilityParams.length === 2 ? 4 : 3)
     : 2;
 
-  const result = await db.query<AssignmentRow>(
+  const result = await getDbClient().query<AssignmentRow>(
     `SELECT
        ap.id::text AS appraisal_id,
        u.employee_id AS employee_code,
@@ -227,7 +228,7 @@ export async function getDirectAssessmentData(
   >();
 
   if (submissionIdsForAnswers.length > 0 && filledByIds.size > 0) {
-    const ansResult = await db.query<{
+    const ansResult = await getDbClient().query<{
       appraisal_id: string;
       question_id: string;
       filled_by_id: string;
@@ -266,7 +267,7 @@ export async function getDirectAssessmentData(
   >();
 
   if (submissionIdsForAnswers.length > 0 && filledByIds.size > 0) {
-    const attResult = await db.query<{
+    const attResult = await getDbClient().query<{
       appraisal_id: string;
       question_id: string;
       filled_by_id: string;
@@ -353,7 +354,7 @@ export async function getDirectAssessmentData(
     .filter((id) => id !== 0);
 
   if (submissionIds.length > 0) {
-    const remarksRows = await db.query<{
+    const remarksRows = await getDbClient().query<{
       id: string;
       manager1_overall_remarks: string | null;
       manager2_overall_remarks: string | null;

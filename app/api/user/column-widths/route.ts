@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { db } from "@/lib/db";
 import { isHeadRole } from "@/lib/auth/home-path";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,7 @@ function sanitizeConfig(raw: unknown): ColumnConfig {
   return config;
 }
 
-export async function GET(request: Request) {
+export const GET = apiHandler(async (request: Request) => {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -99,9 +100,9 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ columnConfig: sanitizeConfig(result.rows[0].column_config) });
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = apiHandler(async (request: Request) => {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -146,4 +147,4 @@ export async function PUT(request: Request) {
   );
 
   return NextResponse.json({ success: true });
-}
+});

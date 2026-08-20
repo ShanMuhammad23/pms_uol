@@ -4,8 +4,9 @@ import {
   copyIncrementMatrix,
   SubCategoryIncrementMatrixError,
 } from "@/lib/queries/sub-category-increment-matrices";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -72,4 +73,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});

@@ -8,8 +8,9 @@ import {
   listAppraisalCycles,
 } from "@/lib/queries/appraisal-cycles";
 import type { CreateAppraisalCycleInput } from "@/types/forms";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireModuleViewApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -25,9 +26,9 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -55,4 +56,4 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

@@ -16,12 +16,13 @@ import {
 } from "@/lib/queries/form-submissions";
 import { notifyManagerApproved } from "@/lib/mail/notifications";
 import type { SaveManagerReviewInput } from "@/types/employee-forms";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function PUT(request: Request, context: RouteContext) {
+export const PUT = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -114,9 +115,9 @@ export async function PUT(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(_request: Request, context: RouteContext) {
+export const POST = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -192,4 +193,4 @@ export async function POST(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

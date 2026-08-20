@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 
 export type SecurityEventType =
   | "AUTH_REQUIRED"
@@ -46,7 +47,7 @@ export async function logSecurityEvent(
   event: SecurityEventInput,
 ): Promise<void> {
   try {
-    await db.query(
+    await getDbClient().query(
       `INSERT INTO security_events (
          event_type,
          actor_user_id,
@@ -204,14 +205,14 @@ export async function listSecurityEvents(options?: {
   const offset = Math.max(options?.offset ?? 0, 0);
   const eventType = options?.eventType?.trim() || null;
 
-  const countResult = await db.query<{ count: string }>(
+  const countResult = await getDbClient().query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
      FROM security_events
      WHERE ($1::text IS NULL OR event_type = $1)`,
     [eventType],
   );
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     id: string;
     event_type: string;
     actor_user_id: string | null;

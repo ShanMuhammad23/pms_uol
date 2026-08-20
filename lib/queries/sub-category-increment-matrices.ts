@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "../db";
+import { getDbClient, withTransaction } from "@/lib/db-context";
 import type {
   CopyIncrementMatrixInput,
   CreateIncrementMatrixInput,
@@ -97,7 +98,7 @@ async function assertQuartileBelongsToLevel(
   performanceQuartileId: number,
   financialYearId: number,
 ): Promise<void> {
-  const result = await db.query<{ id: string }>(
+  const result = await getDbClient().query<{ id: string }>(
     `SELECT pq.id
      FROM performance_quartiles pq
      INNER JOIN performance_levels pl ON pl.id = pq.performance_level_id
@@ -118,7 +119,7 @@ async function assertQuartileBelongsToLevel(
 async function getIncrementMatrixById(
   id: number,
 ): Promise<SubCategoryIncrementMatrixRecord | null> {
-  const result = await db.query<IncrementMatrixRow>(
+  const result = await getDbClient().query<IncrementMatrixRow>(
     `${LIST_QUERY}
      WHERE sim.id = $1`,
     [id],
@@ -134,7 +135,7 @@ async function getIncrementMatrixById(
 export async function listSubCategoryIncrementMatrices(
   financialYearId: number,
 ): Promise<SubCategoryIncrementMatrixRecord[]> {
-  const result = await db.query<IncrementMatrixRow>(
+  const result = await getDbClient().query<IncrementMatrixRow>(
     `${LIST_QUERY}
      WHERE sim.financial_year_id = $1
      ORDER BY
@@ -157,7 +158,7 @@ export async function createSubCategoryIncrementMatrix(
   );
 
   try {
-    const result = await db.query<{ id: string }>(
+    const result = await getDbClient().query<{ id: string }>(
       `INSERT INTO sub_category_increment_matrices (
          financial_year_id,
          matrix_label,
@@ -222,7 +223,7 @@ export async function updateSubCategoryIncrementMatrix(
   );
 
   try {
-    const result = await db.query(
+    const result = await getDbClient().query(
       `UPDATE sub_category_increment_matrices
        SET matrix_label = $1,
            performance_quartile_id = $2,
@@ -270,7 +271,7 @@ export async function updateSubCategoryIncrementMatrix(
 }
 
 export async function deleteSubCategoryIncrementMatrix(id: number): Promise<void> {
-  const result = await db.query(
+  const result = await getDbClient().query(
     `DELETE FROM sub_category_increment_matrices WHERE id = $1`,
     [id],
   );
@@ -286,7 +287,7 @@ export async function deleteSubCategoryIncrementMatrix(id: number): Promise<void
 export async function listIncrementMatrixLabels(
   financialYearId: number,
 ): Promise<string[]> {
-  const result = await db.query<{ matrix_label: string }>(
+  const result = await getDbClient().query<{ matrix_label: string }>(
     `SELECT matrix_label
      FROM increment_matrix_defs
      WHERE financial_year_id = $1
@@ -299,7 +300,7 @@ export async function listIncrementMatrixLabels(
 export async function listIncrementMatrixSummaries(): Promise<
   IncrementMatrixSummary[]
 > {
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     financial_year_id: number;
     financial_year_label: string;
     is_active: boolean;
@@ -355,7 +356,7 @@ export async function createIncrementMatrix(
   }
 
   try {
-    await db.query(
+    await getDbClient().query(
       `INSERT INTO increment_matrix_defs (financial_year_id, matrix_label, title)
        VALUES ($1, $2, $3)`,
       [input.financialYearId, trimmedLabel, trimmedTitle],
@@ -396,9 +397,8 @@ export async function updateIncrementMatrixIdentity(
     throw new SubCategoryIncrementMatrixError("Matrix label is required.", 400);
   }
 
-  const client = await db.connect();
-  try {
-    await client.query("BEGIN");
+  await withTransaction(async () => {
+    const client = getDbClient();
 
     const existing = await client.query<{ id: string }>(
       `SELECT id
@@ -448,14 +448,7 @@ export async function updateIncrementMatrixIdentity(
        WHERE financial_year_id = $3 AND matrix_label = $4`,
       [nextLabel, nextTitle, input.financialYearId, currentLabel],
     );
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 
   const summaries = await listIncrementMatrixSummaries();
   const updated = summaries.find(
@@ -494,9 +487,8 @@ export async function copyIncrementMatrix(
     );
   }
 
-  const client = await db.connect();
-  try {
-    await client.query("BEGIN");
+  await withTransaction(async () => {
+    const client = getDbClient();
 
     const source = await client.query<{ id: string }>(
       `SELECT id
@@ -585,10 +577,7 @@ export async function copyIncrementMatrix(
         [targetYearId, nextLabel, sourceYearId, sourceLabel],
       );
     }
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
+  }).catch((error) => {
     if (error instanceof SubCategoryIncrementMatrixError) {
       throw error;
     }
@@ -602,9 +591,7 @@ export async function copyIncrementMatrix(
       );
     }
     throw error;
-  } finally {
-    client.release();
-  }
+  });
 
   const summaries = await listIncrementMatrixSummaries();
   const copied = summaries.find(
@@ -629,9 +616,8 @@ export async function deleteIncrementMatrix(
     throw new SubCategoryIncrementMatrixError("Matrix label is required.", 400);
   }
 
-  const client = await db.connect();
-  try {
-    await client.query("BEGIN");
+  await withTransaction(async () => {
+    const client = getDbClient();
 
     const existing = await client.query<{ id: string }>(
       `SELECT id
@@ -665,20 +651,13 @@ export async function deleteIncrementMatrix(
        WHERE financial_year_id = $1 AND matrix_label = $2`,
       [financialYearId, trimmedLabel],
     );
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function listEmployeeIncrementMatrixAssignments(
   financialYearId: number,
 ): Promise<IncrementMatrixAssignmentRecord[]> {
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     employee_id: string;
     employee_code: string;
     first_name: string;
@@ -723,7 +702,7 @@ export async function assignIncrementMatrixToEmployees(
     throw new SubCategoryIncrementMatrixError("At least one employee is required.", 400);
   }
 
-  const matrixExists = await db.query<{ id: string }>(
+  const matrixExists = await getDbClient().query<{ id: string }>(
     `SELECT id
      FROM increment_matrix_defs
      WHERE financial_year_id = $1 AND matrix_label = $2
@@ -738,7 +717,7 @@ export async function assignIncrementMatrixToEmployees(
   }
 
   // Check if any selected employees are already assigned to a DIFFERENT matrix
-  const conflicts = await db.query<{
+  const conflicts = await getDbClient().query<{
     employee_code: string;
     first_name: string;
     last_name: string;
@@ -764,7 +743,7 @@ export async function assignIncrementMatrixToEmployees(
   }
 
   // Insert new assignments (or update if same matrix — idempotent re-assignment)
-  const result = await db.query<{ employee_id: string }>(
+  const result = await getDbClient().query<{ employee_id: string }>(
     `WITH selected_users AS (
        SELECT id
        FROM users
@@ -805,7 +784,7 @@ export async function unassignIncrementMatrixFromEmployees(
   }
 
   const trimmedLabel = matrixLabel?.trim();
-  const result = await db.query(
+  const result = await getDbClient().query(
     `DELETE FROM employee_increment_matrix_assignments
      WHERE financial_year_id = $1
        AND employee_id IN (

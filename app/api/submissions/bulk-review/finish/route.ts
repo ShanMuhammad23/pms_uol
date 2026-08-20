@@ -7,6 +7,7 @@ import {
   FormSubmissionError,
   finishBulkReview,
 } from "@/lib/queries/form-submissions";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -15,7 +16,7 @@ interface FinishRequestBody {
   submissionIds?: number[];
 }
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const session = await getServerSession(authOptions);
 
   if (!session) {
@@ -79,4 +80,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import {
   isSystemRole,
   roleSatisfies,
@@ -40,7 +41,7 @@ export async function loadPrincipalById(
     return null;
   }
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     id: string;
     email: string;
     system_role: string;
@@ -90,7 +91,7 @@ export async function loadPrincipalByEmail(
     return null;
   }
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     id: string;
     email: string;
     system_role: string;

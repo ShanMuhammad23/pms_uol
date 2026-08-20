@@ -9,12 +9,13 @@ import {
   isAdditionalAccessModule,
 } from "@/types/additional-access";
 import type { AdditionalAccessPermission } from "@/types/additional-access";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export const GET = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireTrueSuperAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -37,9 +38,9 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function PUT(request: Request, context: RouteContext) {
+export const PUT = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireTrueSuperAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -90,4 +91,4 @@ export async function PUT(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

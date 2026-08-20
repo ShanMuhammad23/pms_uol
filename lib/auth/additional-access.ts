@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient, withTransaction } from "@/lib/db-context";
 import { isAdminRole } from "@/lib/auth/submission-review-roles";
 import type {
   AdditionalAccessLevel,
@@ -29,7 +30,7 @@ export async function getUserAdditionalAccess(
   }
 
   try {
-    const result = await db.query<UserAdditionalAccessRow>(
+    const result = await getDbClient().query<UserAdditionalAccessRow>(
       `SELECT module, access_level
        FROM user_additional_access
        WHERE user_id = $1`,
@@ -64,9 +65,8 @@ export async function setUserAdditionalAccess(
     throw new Error("Invalid user id.");
   }
 
-  const client = await db.connect();
-  try {
-    await client.query("BEGIN");
+  await withTransaction(async () => {
+    const client = getDbClient();
 
     await client.query(
       `DELETE FROM user_additional_access WHERE user_id = $1`,
@@ -91,14 +91,7 @@ export async function setUserAdditionalAccess(
         [userId, perm.module, perm.accessLevel, grantedByUserId],
       );
     }
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 /**

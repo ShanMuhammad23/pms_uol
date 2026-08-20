@@ -4,8 +4,9 @@ import {
   FormSubmissionError,
   updateEmployeeRoleCategory,
 } from "@/lib/queries/form-submissions";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function PATCH(request: Request) {
+export const PATCH = apiHandler(async (request: Request) => {
   const auth = await requireSubmissionReviewerApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -63,4 +64,4 @@ export async function PATCH(request: Request) {
       { status: 500 },
     );
   }
-}
+});
