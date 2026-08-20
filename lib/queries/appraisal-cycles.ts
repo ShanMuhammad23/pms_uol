@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "../db";
+import { getDbClient } from "@/lib/db-context";
 import type {
   AppraisalCycleRecord,
   CreateAppraisalCycleInput,
@@ -27,7 +28,7 @@ function mapCycleRow(row: AppraisalCycleRow): AppraisalCycleRecord {
 }
 
 export async function listAppraisalCycles(): Promise<AppraisalCycleRecord[]> {
-  const result = await db.query<AppraisalCycleRow>(
+  const result = await getDbClient().query<AppraisalCycleRow>(
     `SELECT id, fiscal_year, start_date::text, end_date::text, is_active, created_at::text
      FROM appraisal_cycles
      ORDER BY fiscal_year DESC`,
@@ -39,7 +40,7 @@ export async function listAppraisalCycles(): Promise<AppraisalCycleRecord[]> {
 export async function createAppraisalCycle(
   input: CreateAppraisalCycleInput,
 ): Promise<AppraisalCycleRecord> {
-  const result = await db.query<AppraisalCycleRow>(
+  const result = await getDbClient().query<AppraisalCycleRow>(
     `INSERT INTO appraisal_cycles (fiscal_year, start_date, end_date, is_active)
      VALUES ($1, $2, $3, $4)
      RETURNING id, fiscal_year, start_date::text, end_date::text, is_active, created_at::text`,
@@ -55,7 +56,7 @@ export async function createAppraisalCycle(
 }
 
 export async function getDefaultAppraisalCycle(): Promise<AppraisalCycleRecord | null> {
-  const result = await db.query<AppraisalCycleRow>(
+  const result = await getDbClient().query<AppraisalCycleRow>(
     `SELECT id, fiscal_year, start_date::text, end_date::text, is_active, created_at::text
      FROM appraisal_cycles
      ORDER BY is_active DESC, fiscal_year DESC
@@ -77,7 +78,7 @@ export async function ensureDefaultAppraisalCycle(): Promise<AppraisalCycleRecor
 
   const currentYear = new Date().getFullYear();
 
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO appraisal_cycles (fiscal_year, start_date, end_date, is_active)
      VALUES ($1, $2, $3, TRUE)
      ON CONFLICT (fiscal_year) DO NOTHING`,
@@ -99,7 +100,7 @@ export async function ensureDefaultAppraisalCycle(): Promise<AppraisalCycleRecor
 export async function getAppraisalCycleById(
   id: number,
 ): Promise<AppraisalCycleRecord | null> {
-  const result = await db.query<AppraisalCycleRow>(
+  const result = await getDbClient().query<AppraisalCycleRow>(
     `SELECT id, fiscal_year, start_date::text, end_date::text, is_active, created_at::text
      FROM appraisal_cycles
      WHERE id = $1`,

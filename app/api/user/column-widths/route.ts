@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { apiHandler } from "@/lib/api-handler";
 
@@ -87,7 +88,7 @@ export const GET = apiHandler(async (request: Request) => {
     );
   }
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     column_config: ColumnConfig;
   }>(
     `SELECT column_config FROM user_column_preferences
@@ -138,7 +139,7 @@ export const PUT = apiHandler(async (request: Request) => {
 
   const sanitized = sanitizeConfig(columnConfig);
 
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO user_column_preferences (user_id, table_key, column_config, updated_at)
      VALUES ($1, $2, $3::jsonb, CURRENT_TIMESTAMP)
      ON CONFLICT (user_id, table_key)

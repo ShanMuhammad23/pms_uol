@@ -2,6 +2,7 @@ import "server-only";
 
 import bcrypt from "bcryptjs";
 import { db } from "../db";
+import { getDbClient } from "@/lib/db-context";
 import type {
   CreateUserInput,
   EntityOptionRecord,
@@ -61,7 +62,7 @@ async function hasExcelSheetColumns(): Promise<boolean> {
     return cachedExcelColumns;
   }
 
-  const result = await db.query<{ exists: boolean }>(
+  const result = await getDbClient().query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM information_schema.columns
@@ -80,7 +81,7 @@ async function hasQualificationsTable(): Promise<boolean> {
     return cachedQualificationsTable;
   }
 
-  const result = await db.query<{ exists: boolean }>(
+  const result = await getDbClient().query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM information_schema.tables
@@ -98,7 +99,7 @@ async function hasAssessmentEligibilityColumn(): Promise<boolean> {
     return cachedAssessmentEligibilityColumn;
   }
 
-  const result = await db.query<{ exists: boolean }>(
+  const result = await getDbClient().query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM information_schema.columns
@@ -117,7 +118,7 @@ async function getUserOrgMode(): Promise<UserOrgMode> {
     return cachedUserOrgMode;
   }
 
-  const entityColumnResult = await db.query<{ exists: boolean }>(
+  const entityColumnResult = await getDbClient().query<{ exists: boolean }>(
     `
       SELECT EXISTS (
         SELECT 1
@@ -310,7 +311,7 @@ async function assertEntityExists(entityId: number | null): Promise<void> {
 
   const mode = await getUserOrgMode();
   const sourceTable = mode === "entity" ? "entities" : "departments";
-  const result = await db.query(`SELECT id FROM ${sourceTable} WHERE id = $1`, [
+  const result = await getDbClient().query(`SELECT id FROM ${sourceTable} WHERE id = $1`, [
     entityId,
   ]);
 
@@ -341,7 +342,7 @@ async function assertValidManager(
   const isUnchanged =
     previousManagerId !== undefined && managerId === previousManagerId;
 
-  const result = await db.query<{ system_role: string }>(
+  const result = await getDbClient().query<{ system_role: string }>(
     `SELECT system_role FROM users WHERE id = $1`,
     [managerId],
   );
@@ -387,7 +388,7 @@ export async function listEligibleManagers(): Promise<UserRecord[]> {
   const rolesPlaceholder = MANAGER_ELIGIBLE_ROLES.map(
     (_, i) => `$${i + 1}`,
   ).join(", ");
-  const result = await db.query<UserRow>(
+  const result = await getDbClient().query<UserRow>(
     `${buildUserSelect(mode, excelReady, false, eligibilityReady, cycle?.id ?? null)}
      WHERE u.system_role IN (${rolesPlaceholder})
      ORDER BY u.last_name ASC, u.first_name ASC`,
@@ -406,7 +407,7 @@ export async function assertManagerEligible(
   managerId: number,
   label: string,
 ): Promise<void> {
-  const result = await db.query<{ system_role: string }>(
+  const result = await getDbClient().query<{ system_role: string }>(
     `SELECT system_role FROM users WHERE id = $1`,
     [managerId],
   );
@@ -426,7 +427,7 @@ export async function assertManagerEligible(
 export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
   const mode = await getUserOrgMode();
   const sourceTable = mode === "entity" ? "entities" : "departments";
-  const result = await db.query<{ id: number; name: string }>(
+  const result = await getDbClient().query<{ id: number; name: string }>(
     `SELECT id, name FROM ${sourceTable} ORDER BY name ASC`,
   );
 
@@ -441,7 +442,7 @@ export async function listUsers(): Promise<UserRecord[]> {
     hasAssessmentEligibilityColumn(),
     getDefaultAppraisalCycle(),
   ]);
-  const result = await db.query<UserRow>(
+  const result = await getDbClient().query<UserRow>(
     `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
@@ -459,7 +460,7 @@ export async function listUsersOverview(): Promise<UserRecord[]> {
     hasAssessmentEligibilityColumn(),
     getDefaultAppraisalCycle(),
   ]);
-  const result = await db.query<UserRow>(
+  const result = await getDbClient().query<UserRow>(
     `${buildUserSelect(mode, excelReady, false, eligibilityReady, cycle?.id ?? null)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
@@ -487,7 +488,7 @@ export async function listUsersByEmployeeIds(
     hasAssessmentEligibilityColumn(),
     getDefaultAppraisalCycle(),
   ]);
-  const result = await db.query<UserRow>(
+  const result = await getDbClient().query<UserRow>(
     `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
      WHERE u.employee_id = ANY($1::text[])`,
     [uniqueIds],
@@ -511,7 +512,7 @@ export async function getUserById(id: number): Promise<UserRecord | null> {
     hasAssessmentEligibilityColumn(),
     getDefaultAppraisalCycle(),
   ]);
-  const result = await db.query<UserRow>(
+  const result = await getDbClient().query<UserRow>(
     `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
      WHERE u.id = $1`,
     [id],
@@ -578,7 +579,7 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
   const placeholders = values.map((_, index) => `$${index + 1}`).join(", ");
 
   try {
-    const result = await db.query<{ id: string }>(
+    const result = await getDbClient().query<{ id: string }>(
       `INSERT INTO users (
          ${columns.join(",\n         ")}
        )
@@ -721,7 +722,7 @@ export async function updateUser(
   values.push(id);
 
   try {
-    const result = await db.query(
+    const result = await getDbClient().query(
       `UPDATE users
        SET ${setClauses.join(",\n           ")}
        WHERE id = $${values.length}`,
@@ -797,7 +798,7 @@ async function upsertPrimaryQualification(
     !data.institute &&
     !data.country;
 
-  const existing = await db.query<{ id: string }>(
+  const existing = await getDbClient().query<{ id: string }>(
     `SELECT id
      FROM employee_qualifications
      WHERE user_id = $1
@@ -808,7 +809,7 @@ async function upsertPrimaryQualification(
 
   if (allEmpty) {
     if (existing.rows[0]) {
-      await db.query(`DELETE FROM employee_qualifications WHERE id = $1`, [
+      await getDbClient().query(`DELETE FROM employee_qualifications WHERE id = $1`, [
         existing.rows[0].id,
       ]);
     }
@@ -820,7 +821,7 @@ async function upsertPrimaryQualification(
   }
 
   if (existing.rows[0]) {
-    await db.query(
+    await getDbClient().query(
       `UPDATE employee_qualifications
        SET qualification = $2,
            year = $3,
@@ -842,7 +843,7 @@ async function upsertPrimaryQualification(
     return;
   }
 
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO employee_qualifications (
        user_id,
        qualification,
@@ -865,7 +866,7 @@ async function upsertPrimaryQualification(
 
 export async function deleteUser(id: number): Promise<void> {
   try {
-    const result = await db.query(`DELETE FROM users WHERE id = $1`, [id]);
+    const result = await getDbClient().query(`DELETE FROM users WHERE id = $1`, [id]);
 
     if (result.rowCount === 0) {
       throw new UserError("User not found.", 404);

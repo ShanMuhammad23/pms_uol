@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 import { db } from "../db";
+import { getDbClient } from "@/lib/db-context";
 import type { IncrementMatrixInput, PerformanceRating } from "@/types/forms";
 
 interface IncrementMatrixRow {
@@ -21,7 +22,7 @@ function mapMatrixRow(row: IncrementMatrixRow): IncrementMatrixInput {
 export async function getIncrementMatricesByCycleId(
   cycleId: number,
 ): Promise<IncrementMatrixInput[]> {
-  const result = await db.query<IncrementMatrixRow>(
+  const result = await getDbClient().query<IncrementMatrixRow>(
     `SELECT rating, quartile, recommended_increment_percentage
      FROM increment_matrices
      WHERE cycle_id = $1
@@ -37,7 +38,7 @@ export async function upsertIncrementMatrices(
   matrices: IncrementMatrixInput[],
   client?: PoolClient,
 ): Promise<void> {
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
 
   await executor.query(`DELETE FROM increment_matrices WHERE cycle_id = $1`, [
     cycleId,
