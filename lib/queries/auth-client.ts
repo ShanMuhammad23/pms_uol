@@ -35,16 +35,10 @@ const authErrorMap: Record<string, string> = {
   OAuthSignin:
     "Could not start Google sign-in. Please check your connection and try again.",
   Configuration:
-    "The sign-in system is not configured correctly. If this is the test SSO, make sure ALLOW_TEST_SSO=true is set.",
+    "The sign-in system is not configured correctly. Please contact HR if the problem persists.",
   Verification:
     "Sign-in verification failed. Please try again.",
-
-  // --- Test SSO errors (returned by the pre-check endpoint) ---
-  CredentialsSignin: "Sign-in failed. Please check the email and try again.",
-  MissingEmail: "Please enter an email address.",
-  InvalidEmail: "Please enter a valid email address.",
-  InvalidRole:
-    'Your account has an unrecognized role. Please contact HR to fix your account configuration.',
+  CredentialsSignin: "Sign-in failed. Please try again.",
 };
 
 export const getAuthErrorMessage = (code: string | null): string => {
@@ -63,50 +57,6 @@ export async function resolvePostLoginPath(): Promise<string> {
 export async function signInWithGoogle() {
   const destination = DEFAULT_HOME_PATH;
   await signIn("google", { callbackUrl: destination });
-}
-
-/**
- * Test-only SSO simulation (dev/staging only — the provider is not registered
- * in production). Signs in as the given employee email without a password,
- * producing a session identical to a real Google SSO login.
- *
- * A pre-check request is sent to /api/auth/test-sso-check first so that we
- * can show a specific, user-readable error (e.g. "account inactive" vs
- * "user not found") instead of NextAuth's generic "CredentialsSignin".
- */
-export async function signInWithTestSso(email: string) {
-  // --- Pre-check: validate the email and get a specific error if any ---
-  const checkResponse = await fetch("/api/auth/test-sso-check", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-
-  if (!checkResponse.ok) {
-    const data = await checkResponse.json().catch(() => null);
-    const errorCode = data?.error ?? "CredentialsSignin";
-    const customMessage = data?.message as string | undefined;
-    throw new Error(
-      customMessage ?? getAuthErrorMessage(errorCode ?? null),
-    );
-  }
-
-  // --- Pre-check passed — proceed with NextAuth signIn ---
-  const response = await signIn("test-sso", {
-    email,
-    redirect: false,
-    callbackUrl: DEFAULT_HOME_PATH,
-  });
-
-  if (!response || response.error) {
-    throw new Error(getAuthErrorMessage(response?.error ?? null));
-  }
-
-  const destination = await resolvePostLoginPath();
-  return {
-    ...response,
-    url: destination,
-  };
 }
 
 export async function signOutAndRedirect() {

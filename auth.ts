@@ -1,5 +1,4 @@
 import type { NextAuthOptions } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { getUserByEmail } from "./lib/queries/auth";
 import { getAuthCookieSecure } from "./lib/env";
@@ -51,63 +50,6 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
-    // --- Test-only SSO simulation provider ---
-    // Only available outside production OR when ALLOW_TEST_SSO=true is set.
-    // Allows testing the SSO login flow for any employee by email, without
-    // going through Google OAuth. The resulting session is identical to a real
-    // Google SSO session because it flows through the same jwt/session callbacks.
-    ...((process.env.ALLOW_TEST_SSO === "true" ||
-      process.env.NODE_ENV !== "production")
-      ? [
-          Credentials({
-            id: "test-sso",
-            name: "Test SSO",
-            credentials: {
-              email: { label: "Email", type: "email" },
-            },
-            async authorize(credentials) {
-              const email = credentials?.email?.toString().trim() ?? "";
-              if (!email) {
-                return null;
-              }
-
-              const user = await getUserByEmail(email);
-              if (!user) {
-                await logSecurityEvent({
-                  eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_sso_user_not_found" },
-                });
-                return null;
-              }
-
-              if (!user.isActive) {
-                await logSecurityEvent({
-                  eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_sso_account_inactive" },
-                });
-                return null;
-              }
-
-              if (!isSystemRole(user.systemRole)) {
-                await logSecurityEvent({
-                  eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_sso_invalid_role" },
-                });
-                return null;
-              }
-
-              return {
-                id: user.id,
-                email: user.email,
-                name: `${user.firstName} ${user.lastName}`.trim(),
-                role: user.systemRole,
-                designation: user.designation,
-                entityId: user.entityId,
-              };
-            },
-          }),
-        ]
-      : []),
   ],
   callbacks: {
     async signIn({ account, profile }) {
