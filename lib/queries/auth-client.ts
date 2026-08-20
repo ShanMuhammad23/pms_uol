@@ -19,6 +19,7 @@ const authErrorMap: Record<string, string> = {
   CallbackRouteError: "We could not complete sign-in. Please try again.",
   CredentialsSignin: "No active user found with that email.",
   OAuthAccountNotLinked: "Please use the original provider for this account.",
+  Configuration: "Test SSO is disabled on this build. Set ALLOW_TEST_SSO=true and rebuild.",
 };
 
 export const getAuthErrorMessage = (code: string | null): string => {

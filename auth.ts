@@ -52,11 +52,12 @@ export const authOptions: NextAuthOptions = {
       },
     }),
     // --- Test-only SSO simulation provider ---
-    // Only available outside production. Allows testing the SSO login flow
-    // for any employee by email, without going through Google OAuth. The
-    // resulting session is identical to a real Google SSO session because it
-    // flows through the same jwt/session callbacks.
-    ...(process.env.NODE_ENV !== "production"
+    // Only available outside production OR when ALLOW_TEST_SSO=true is set.
+    // Allows testing the SSO login flow for any employee by email, without
+    // going through Google OAuth. The resulting session is identical to a real
+    // Google SSO session because it flows through the same jwt/session callbacks.
+    ...((process.env.ALLOW_TEST_SSO === "true" ||
+      process.env.NODE_ENV !== "production")
       ? [
           Credentials({
             id: "test-sso",
