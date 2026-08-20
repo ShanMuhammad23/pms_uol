@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import {
   ENTITY_FILTER_LEVELS,
@@ -11,6 +11,7 @@ import {
 } from "@/app/helpers/dashboard-entity-filters";
 import type { EntityRecord } from "@/types/entities";
 import type { DirectAssessmentEmployee } from "@/lib/queries/direct-assessment-client";
+import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
 
 /** Assessment status filter values. */
 export type AssessmentStatusFilter = "pending" | "locked" | "approved" | "final";
@@ -329,17 +330,35 @@ export function useDirectAssessmentFilters(
   entities: EntityRecord[],
 ): UseDirectAssessmentFiltersResult {
   const [selectedDesignations, setSelectedDesignations] =
-    useState<MultiFilterSelection<string>>(null);
+    useSessionStorageState<MultiFilterSelection<string>>(
+      "pms:da-filters:designations",
+      null,
+    );
   const [selectedRoleCategories, setSelectedRoleCategories] =
-    useState<MultiFilterSelection<string>>(null);
+    useSessionStorageState<MultiFilterSelection<string>>(
+      "pms:da-filters:roleCategories",
+      null,
+    );
   const [selectedAssessmentStatuses, setSelectedAssessmentStatuses] =
-    useState<MultiFilterSelection<AssessmentStatusFilter>>(null);
+    useSessionStorageState<MultiFilterSelection<AssessmentStatusFilter>>(
+      "pms:da-filters:assessmentStatuses",
+      null,
+    );
   const [selectedCategory0EntityIds, setSelectedCategory0EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:da-filters:category0",
+      null,
+    );
   const [selectedCategory1EntityIds, setSelectedCategory1EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:da-filters:category1",
+      null,
+    );
   const [selectedCategory2EntityIds, setSelectedCategory2EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:da-filters:category2",
+      null,
+    );
 
   // Entity lists (cascading parent → child). Computed early because the
   // filterState pruning and the option counts both depend on them.

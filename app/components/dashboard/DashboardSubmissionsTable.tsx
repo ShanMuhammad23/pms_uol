@@ -90,6 +90,7 @@ import { useFormSubmissionsQuery } from "@/app/queries/forms";
 import { DEFAULT_PAGE_SIZE } from "@/lib/dashboard/filter-params";
 import type { DashboardFilterParams } from "@/types/dashboard-api";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
@@ -836,7 +837,8 @@ export function DashboardSubmissionsTable({
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [hasFullDataset, setHasFullDataset] = useState(false);
-  const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
+  const [masterFilters, setMasterFilters] = useSessionStorageState<MasterFilterState>(
+    "pms:dashboard-master-filters",
     EMPTY_MASTER_FILTER_STATE,
   );
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(

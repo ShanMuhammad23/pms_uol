@@ -253,7 +253,7 @@ ${returnReasonText(returnReason)}`;
 }
 
 /* -------------------------------------------------------------------------- */
-/* 7. Returned to Manager 1 (Email A: Manager, Email B: Employee)             */
+/* 7. Returned to Manager 1 (Manager only)                                    */
 /* -------------------------------------------------------------------------- */
 
 export function returnedToManager1ManagerTemplate(params: {
@@ -288,43 +288,8 @@ ${returnReasonText(returnReason)}`;
   };
 }
 
-export function returnedToManager1EmployeeTemplate(params: {
-  employeeName: string;
-  managerName: string;
-  returnReason: string | null;
-}): EmailContent {
-  const { employeeName, managerName, returnReason } = params;
-
-  const bodyHtml = `
-    <p>Dear ${escapeHtml(employeeName)},</p>
-    <p>Your performance assessment submission has been returned to Manager 1 for further review and action.</p>
-    ${infoRowHtml("Current Status", "Returned to Manager 1")}
-    ${infoRowHtml("Assigned To", managerName)}
-    <p>Manager 1 will review the submission and continue the assessment process.</p>
-    <p>No action is required from you at this stage unless you are contacted through the PMS.</p>
-    ${returnReasonHtml(returnReason)}`;
-
-  const bodyText = `Dear ${employeeName},
-
-Your performance assessment submission has been returned to Manager 1 for further review and action.
-
-${infoRowText("Current Status", "Returned to Manager 1")}
-${infoRowText("Assigned To", managerName)}
-
-Manager 1 will review the submission and continue the assessment process.
-
-No action is required from you at this stage unless you are contacted through the PMS.
-${returnReasonText(returnReason)}`;
-
-  return {
-    subject: "PMS Submission Update \u2013 Returned to Manager 1",
-    html: renderHtmlEmail(bodyHtml),
-    text: bodyText + renderTextFooter(),
-  };
-}
-
 /* -------------------------------------------------------------------------- */
-/* 8. Returned to Manager 2 (Email A: Manager, Email B: Employee)             */
+/* 8. Returned to Manager 2 (Manager only)                                    */
 /* -------------------------------------------------------------------------- */
 
 export function returnedToManager2ManagerTemplate(params: {
@@ -354,41 +319,6 @@ ${returnReasonText(returnReason)}`;
 
   return {
     subject: "Action Required \u2013 PMS Submission Returned to Manager 2",
-    html: renderHtmlEmail(bodyHtml),
-    text: bodyText + renderTextFooter(),
-  };
-}
-
-export function returnedToManager2EmployeeTemplate(params: {
-  employeeName: string;
-  managerName: string;
-  returnReason: string | null;
-}): EmailContent {
-  const { employeeName, managerName, returnReason } = params;
-
-  const bodyHtml = `
-    <p>Dear ${escapeHtml(employeeName)},</p>
-    <p>Your performance assessment submission has been returned to Manager 2 for further review and action.</p>
-    ${infoRowHtml("Current Status", "Returned to Manager 2")}
-    ${infoRowHtml("Assigned To", managerName)}
-    <p>Manager 2 will review the submission and continue the assessment process.</p>
-    <p>No action is required from you at this stage unless you are contacted through the PMS.</p>
-    ${returnReasonHtml(returnReason)}`;
-
-  const bodyText = `Dear ${employeeName},
-
-Your performance assessment submission has been returned to Manager 2 for further review and action.
-
-${infoRowText("Current Status", "Returned to Manager 2")}
-${infoRowText("Assigned To", managerName)}
-
-Manager 2 will review the submission and continue the assessment process.
-
-No action is required from you at this stage unless you are contacted through the PMS.
-${returnReasonText(returnReason)}`;
-
-  return {
-    subject: "PMS Submission Update \u2013 Returned to Manager 2",
     html: renderHtmlEmail(bodyHtml),
     text: bodyText + renderTextFooter(),
   };

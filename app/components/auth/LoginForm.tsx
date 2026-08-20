@@ -79,7 +79,7 @@ export function LoginForm() {
               Secure SSO
             </div>
             <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Welcome back
+              Welcome !
             </h2>
             <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
               Sign in to the University of Lahore{" "}

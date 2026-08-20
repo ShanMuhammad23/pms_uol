@@ -10,9 +10,7 @@ import {
   manager1ApprovedTemplate,
   manager2ApprovedTemplate,
   returnedToEmployeeTemplate,
-  returnedToManager1EmployeeTemplate,
   returnedToManager1ManagerTemplate,
-  returnedToManager2EmployeeTemplate,
   returnedToManager2ManagerTemplate,
   selfAssessmentSubmittedTemplate,
 } from "./templates";
@@ -143,14 +141,6 @@ export async function notifySubmissionReturned(
       });
       void dispatchNotification(appraisalId, "returned_to_manager1_manager", manager, mgrContent);
     }
-    if (employee) {
-      const empContent = returnedToManager1EmployeeTemplate({
-        employeeName: recipients.employee!.name,
-        managerName: recipients.manager1?.name ?? "Manager 1",
-        returnReason,
-      });
-      void dispatchNotification(appraisalId, "returned_to_manager1_employee", employee, empContent);
-    }
     return;
   }
 
@@ -163,14 +153,6 @@ export async function notifySubmissionReturned(
       returnReason,
     });
     void dispatchNotification(appraisalId, "returned_to_manager2_manager", manager, mgrContent);
-  }
-  if (employee) {
-    const empContent = returnedToManager2EmployeeTemplate({
-      employeeName: recipients.employee!.name,
-      managerName: recipients.manager2?.name ?? "Manager 2",
-      returnReason,
-    });
-    void dispatchNotification(appraisalId, "returned_to_manager2_employee", employee, empContent);
   }
 }
 

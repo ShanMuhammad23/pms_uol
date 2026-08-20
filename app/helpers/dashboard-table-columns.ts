@@ -443,7 +443,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   hrApprovalStatus: {
     id: "hrApprovalStatus",
-    label: "Action",
+    label: "HR Actions",
     align: "center",
     width: 110,
     getValue: (row) => {
