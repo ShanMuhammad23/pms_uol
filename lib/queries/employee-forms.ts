@@ -893,7 +893,7 @@ export async function addEmployeeFormAttachment(
   }
 
   if (file.bytes.byteLength > MAX_FORM_ATTACHMENT_BYTES) {
-    throw new EmployeeFormError("Attachment must be 10 MB or smaller.", 400);
+    throw new EmployeeFormError("Attachment must be 2 MB or smaller.", 400);
   }
 
   if (

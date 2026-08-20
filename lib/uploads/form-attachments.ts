@@ -10,7 +10,7 @@ export const FORM_ATTACHMENTS_ROOT = path.join(
   "form-attachments",
 );
 
-export const MAX_FORM_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+export const MAX_FORM_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 
 export const ALLOWED_FORM_ATTACHMENT_MIME_TYPES = new Set([
   "application/pdf",
