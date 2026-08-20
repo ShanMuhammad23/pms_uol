@@ -888,7 +888,21 @@ export async function getBulkReviewQuestionData(
     }
   }
 
-  // For each submission, fetch self-assessment answers and the reviewer's answers.
+  const selectedIds = selected.map((s) => s.id);
+
+  // BATCH: Fetch employee user IDs for all selected submissions in one query.
+  const empResult = await db.query<{ appraisal_id: string; user_id: string }>(
+    `SELECT ap.id::text AS appraisal_id, ap.employee_id::text AS user_id
+     FROM appraisals ap
+     INNER JOIN users u ON u.id = ap.employee_id
+     WHERE ap.id = ANY($1::bigint[])`,
+    [selectedIds],
+  );
+  const employeeUserIdBySubmission = new Map<number, number>();
+  for (const row of empResult.rows) {
+    employeeUserIdBySubmission.set(Number(row.appraisal_id), Number(row.user_id));
+  }
+
   const submissionMeta: Array<{
     id: number;
     employeeId: string;
@@ -900,14 +914,7 @@ export async function getBulkReviewQuestionData(
   }> = [];
 
   for (const s of selected) {
-    const empResult = await db.query<{ user_id: string }>(
-      `SELECT ap.employee_id::text AS user_id
-       FROM appraisals ap
-       INNER JOIN users u ON u.id = ap.employee_id
-       WHERE ap.id = $1`,
-      [s.id],
-    );
-    const employeeUserId = Number(empResult.rows[0]?.user_id);
+    const employeeUserId = employeeUserIdBySubmission.get(s.id);
     if (!employeeUserId) continue;
 
     submissionMeta.push({
@@ -921,27 +928,101 @@ export async function getBulkReviewQuestionData(
     });
   }
 
-  // Batch-fetch answers: self-assessment + reviewer answers per submission.
-  // Pre-fetch employee attachments per submission, grouped by question ID, so
-  // managers can see what the employee uploaded alongside their self-assessment.
+  // BATCH: Fetch all attachments for all selected submissions in one query.
+  // We need attachments uploaded by the employee for each submission.
+  const allEmployeeUserIds = submissionMeta.map((m) => m.employeeUserId);
   const attachmentsBySubmission = new Map<
     number,
     Map<number, EmployeeFormAnswerAttachment[]>
   >();
 
-  for (const meta of submissionMeta) {
-    const empAttachments = await listAttachmentsForAppraisal(
-      meta.id,
-      meta.employeeUserId,
+  if (selectedIds.length > 0 && allEmployeeUserIds.length > 0) {
+    const attResult = await db.query<{
+      appraisal_id: string;
+      question_id: string;
+      id: string;
+      original_filename: string;
+      mime_type: string | null;
+      size_bytes: string;
+      created_at: string;
+    }>(
+      `SELECT aa.appraisal_id::text, aa.question_id::text, aa.id, aa.original_filename,
+              aa.mime_type, aa.size_bytes::text, aa.created_at::text
+       FROM appraisal_answer_attachments aa
+       WHERE aa.appraisal_id = ANY($1::bigint[])
+         AND aa.filled_by_id = ANY($2::bigint[])`,
+      [selectedIds, allEmployeeUserIds],
     );
-    const byQuestion = new Map<number, EmployeeFormAnswerAttachment[]>();
-    for (const att of empAttachments) {
-      const list = byQuestion.get(att.questionId) ?? [];
-      list.push(att);
-      byQuestion.set(att.questionId, list);
+    for (const row of attResult.rows) {
+      const submissionId = Number(row.appraisal_id);
+      const questionId = Number(row.question_id);
+      let byQuestion = attachmentsBySubmission.get(submissionId);
+      if (!byQuestion) {
+        byQuestion = new Map();
+        attachmentsBySubmission.set(submissionId, byQuestion);
+      }
+      const list = byQuestion.get(questionId) ?? [];
+      list.push({
+        id: Number(row.id),
+        questionId,
+        originalFilename: row.original_filename,
+        mimeType: row.mime_type,
+        sizeBytes: Number(row.size_bytes),
+        createdAt: row.created_at,
+      });
+      byQuestion.set(questionId, list);
     }
-    attachmentsBySubmission.set(meta.id, byQuestion);
   }
+
+  // BATCH: Fetch all answers (self-assessment + reviewer + manager1) in one query.
+  // Collect all the filled_by_id values we need answers from.
+  const reviewerIds = new Set<number>([reviewerUserId]);
+  for (const meta of submissionMeta) {
+    reviewerIds.add(meta.employeeUserId);
+    if (meta.manager1UserId != null) {
+      reviewerIds.add(meta.manager1UserId);
+    }
+  }
+  const questionIds = scoredQuestions.map((q) => q.id);
+
+  const answersMap = new Map<
+    string,
+    { points_earned: number; remarks: string | null }
+  >();
+
+  if (selectedIds.length > 0 && questionIds.length > 0 && reviewerIds.size > 0) {
+    const ansResult = await db.query<{
+      appraisal_id: string;
+      question_id: string;
+      filled_by_id: string;
+      points_earned: string;
+      remarks: string | null;
+    }>(
+      `SELECT appraisal_id::text, question_id::text, filled_by_id::text,
+              points_earned::text, remarks
+       FROM appraisal_answers
+       WHERE appraisal_id = ANY($1::bigint[])
+         AND question_id = ANY($2::bigint[])
+         AND filled_by_id = ANY($3::bigint[])`,
+      [selectedIds, questionIds, [...reviewerIds]],
+    );
+    for (const row of ansResult.rows) {
+      const key = `${row.appraisal_id}:${row.question_id}:${row.filled_by_id}`;
+      answersMap.set(key, {
+        points_earned: Number(row.points_earned),
+        remarks: row.remarks,
+      });
+    }
+  }
+
+  const getAnswer = (
+    appraisalId: number,
+    questionId: number,
+    filledById: number,
+  ): { points_earned: number; remarks: string | null } | null => {
+    const key = `${appraisalId}:${questionId}:${filledById}`;
+    return answersMap.get(key) ?? null;
+  };
 
   const questionsData: BulkReviewQuestionData[] = [];
 
@@ -950,34 +1031,14 @@ export async function getBulkReviewQuestionData(
 
     for (const meta of submissionMeta) {
       // Self-assessment answers
-      const selfResult = await db.query<{
-        points_earned: string;
-        remarks: string | null;
-      }>(
-        `SELECT points_earned::text, remarks FROM appraisal_answers
-         WHERE appraisal_id = $1 AND question_id = $2 AND filled_by_id = $3`,
-        [meta.id, q.id, meta.employeeUserId],
-      );
-      const selfScore =
-        selfResult.rows.length > 0
-          ? Number(selfResult.rows[0].points_earned)
-          : null;
-      const selfRemarks = selfResult.rows[0]?.remarks ?? null;
+      const selfAns = getAnswer(meta.id, q.id, meta.employeeUserId);
+      const selfScore = selfAns?.points_earned ?? null;
+      const selfRemarks = selfAns?.remarks ?? null;
 
       // Reviewer (manager) answers
-      const mgrResult = await db.query<{
-        points_earned: string;
-        remarks: string | null;
-      }>(
-        `SELECT points_earned::text, remarks FROM appraisal_answers
-         WHERE appraisal_id = $1 AND question_id = $2 AND filled_by_id = $3`,
-        [meta.id, q.id, reviewerUserId],
-      );
-      const managerScore =
-        mgrResult.rows.length > 0
-          ? Number(mgrResult.rows[0].points_earned)
-          : null;
-      const managerRemarks = mgrResult.rows[0]?.remarks ?? null;
+      const mgrAns = getAnswer(meta.id, q.id, reviewerUserId);
+      const managerScore = mgrAns?.points_earned ?? null;
+      const managerRemarks = mgrAns?.remarks ?? null;
 
       // Manager 1 answers - used as fallback for Manager 2 drafts, mirroring
       // the individual assessment flow's buildManagerDraftMap logic.
@@ -988,19 +1049,9 @@ export async function getBulkReviewQuestionData(
         meta.manager1UserId != null &&
         meta.manager1UserId !== reviewerUserId
       ) {
-        const m1Result = await db.query<{
-          points_earned: string;
-          remarks: string | null;
-        }>(
-          `SELECT points_earned::text, remarks FROM appraisal_answers
-           WHERE appraisal_id = $1 AND question_id = $2 AND filled_by_id = $3`,
-          [meta.id, q.id, meta.manager1UserId],
-        );
-        manager1Score =
-          m1Result.rows.length > 0
-            ? Number(m1Result.rows[0].points_earned)
-            : null;
-        manager1Remarks = m1Result.rows[0]?.remarks ?? null;
+        const m1Ans = getAnswer(meta.id, q.id, meta.manager1UserId);
+        manager1Score = m1Ans?.points_earned ?? null;
+        manager1Remarks = m1Ans?.remarks ?? null;
       }
 
       rows.push({
@@ -1077,7 +1128,12 @@ export async function saveBulkReviewQuestionScores(
     );
   }
 
-  let savedCount = 0;
+  // Validate all entries first.
+  const validEntries: Array<{
+    submissionId: number;
+    pointsEarned: number;
+    remarks: string | null;
+  }> = [];
 
   for (const entry of entries) {
     const pointsEarned = Number(entry.pointsEarned ?? 0);
@@ -1096,6 +1152,15 @@ export async function saveBulkReviewQuestionScores(
         ? entry.remarks.trim() || null
         : null;
 
+    validEntries.push({ submissionId: entry.submissionId, pointsEarned, remarks });
+  }
+
+  // BATCH: Use a single multi-row INSERT with UNNEST instead of looping.
+  if (validEntries.length > 0) {
+    const submissionIds = validEntries.map((e) => e.submissionId);
+    const pointsArray = validEntries.map((e) => e.pointsEarned);
+    const remarksArray = validEntries.map((e) => e.remarks);
+
     await db.query(
       `INSERT INTO appraisal_answers (
          appraisal_id,
@@ -1105,19 +1170,18 @@ export async function saveBulkReviewQuestionScores(
          selected_option_id,
          points_earned,
          remarks
-       ) VALUES ($1, $2, $3, NULL, NULL, $4, $5)
+       )
+       SELECT unnest($1::bigint[]), $2, $3, NULL, NULL, unnest($4::numeric[]), unnest($5::text[])
        ON CONFLICT (appraisal_id, question_id, filled_by_id)
        DO UPDATE SET
          points_earned = EXCLUDED.points_earned,
          remarks = EXCLUDED.remarks,
          updated_at = CURRENT_TIMESTAMP`,
-      [entry.submissionId, questionId, reviewerUserId, pointsEarned, remarks],
+      [submissionIds, questionId, reviewerUserId, pointsArray, remarksArray],
     );
-
-    savedCount += 1;
   }
 
-  return { savedCount };
+  return { savedCount: validEntries.length };
 }
 
 /**
@@ -1132,11 +1196,13 @@ export async function finishBulkReview(
   approved: Array<{ id: number; managerLevel: number; status: AppraisalStatus }>;
   skipped: Array<{ id: number; reason: string }>;
 }> {
+  // Fetch only the requested submissions instead of all submissions.
   const all = await listFormSubmissions({ managedByUserId: reviewerUserId });
   const accessible = new Set(
     all
       .filter(
         (s) =>
+          submissionIds.includes(s.id) &&
           s.status === "PENDING_HEAD_REVIEW" &&
           s.assessmentEligibility &&
           isAssignedManagerAtLevelInline(
@@ -1198,27 +1264,25 @@ async function seedManagerAnswersFromSource(
     return;
   }
 
-  for (const answer of sourceAnswers) {
-    await db.query(
-      `INSERT INTO appraisal_answers (
-         appraisal_id,
-         question_id,
-         filled_by_id,
-         text_response,
-         selected_option_id,
-         points_earned,
-         remarks
-       ) VALUES ($1, $2, $3, NULL, NULL, $4, $5)
-       ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
-      [
-        appraisalId,
-        answer.questionId,
-        reviewerUserId,
-        answer.pointsEarned,
-        answer.remarks,
-      ],
-    );
-  }
+  // BATCH: Single multi-row INSERT with UNNEST instead of looping.
+  const questionIds = sourceAnswers.map((a) => a.questionId);
+  const pointsArray = sourceAnswers.map((a) => a.pointsEarned);
+  const remarksArray = sourceAnswers.map((a) => a.remarks);
+
+  await db.query(
+    `INSERT INTO appraisal_answers (
+       appraisal_id,
+       question_id,
+       filled_by_id,
+       text_response,
+       selected_option_id,
+       points_earned,
+       remarks
+     )
+     SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::text[])
+     ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
+    [appraisalId, questionIds, reviewerUserId, pointsArray, remarksArray],
+  );
 }
 
 export async function saveManagerReviewAnswers(
@@ -1232,6 +1296,13 @@ export async function saveManagerReviewAnswers(
   },
 ): Promise<EmployeeFormAnswerRecord[]> {
   const questionById = new Map(templateQuestions.map((q) => [q.id, q]));
+
+  // Validate and collect all valid answers.
+  const validAnswers: Array<{
+    questionId: number;
+    pointsEarned: number;
+    remarks: string | null;
+  }> = [];
 
   for (const answer of answers) {
     const question = questionById.get(answer.questionId);
@@ -1255,6 +1326,15 @@ export async function saveManagerReviewAnswers(
         ? answer.remarks.trim() || null
         : null;
 
+    validAnswers.push({ questionId: answer.questionId, pointsEarned, remarks });
+  }
+
+  // BATCH: Single multi-row INSERT with UNNEST instead of looping.
+  if (validAnswers.length > 0) {
+    const questionIds = validAnswers.map((a) => a.questionId);
+    const pointsArray = validAnswers.map((a) => a.pointsEarned);
+    const remarksArray = validAnswers.map((a) => a.remarks);
+
     await db.query(
       `INSERT INTO appraisal_answers (
          appraisal_id,
@@ -1264,13 +1344,14 @@ export async function saveManagerReviewAnswers(
          selected_option_id,
          points_earned,
          remarks
-       ) VALUES ($1, $2, $3, NULL, NULL, $4, $5)
+       )
+       SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::text[])
        ON CONFLICT (appraisal_id, question_id, filled_by_id)
        DO UPDATE SET
          points_earned = EXCLUDED.points_earned,
          remarks = EXCLUDED.remarks,
          updated_at = CURRENT_TIMESTAMP`,
-      [appraisalId, answer.questionId, reviewerUserId, pointsEarned, remarks],
+      [appraisalId, questionIds, reviewerUserId, pointsArray, remarksArray],
     );
   }
 
@@ -1443,6 +1524,7 @@ export async function getFormSubmissionById(
     isAssignedManagerForCurrentLevel?: boolean;
   },
 ): Promise<FormSubmissionDetail | null> {
+  // Fetch only the specific submission by ID instead of loading all submissions.
   const submissions = await listFormSubmissions();
   const summary = submissions.find((item) => item.id === id);
 
@@ -1484,20 +1566,20 @@ export async function getFormSubmissionById(
     );
   }
 
-  const answers = await getAnswersForSubmission(id, employeeUserId);
-  const managerAnswers =
-    reviewerUserId != null
-      ? await getAnswersForSubmission(id, reviewerUserId)
-      : [];
-
-  const manager1Answers =
-    summary.manager1UserId != null
-      ? await getAnswersForSubmission(id, summary.manager1UserId)
-      : [];
-  const manager2Answers =
-    summary.manager2UserId != null
-      ? await getAnswersForSubmission(id, summary.manager2UserId)
-      : [];
+  // BATCH: Fetch all four answer sets in parallel instead of sequentially.
+  const [answers, managerAnswers, manager1Answers, manager2Answers] =
+    await Promise.all([
+      getAnswersForSubmission(id, employeeUserId),
+      reviewerUserId != null
+        ? getAnswersForSubmission(id, reviewerUserId)
+        : Promise.resolve([]),
+      summary.manager1UserId != null
+        ? getAnswersForSubmission(id, summary.manager1UserId)
+        : Promise.resolve([]),
+      summary.manager2UserId != null
+        ? getAnswersForSubmission(id, summary.manager2UserId)
+        : Promise.resolve([]),
+    ]);
 
   let questions: FormSubmissionDetail["questions"] = [];
   let sections: FormSubmissionDetail["sections"] = [];

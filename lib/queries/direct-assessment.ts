@@ -2,7 +2,6 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { getFormTemplateById } from "@/lib/queries/forms";
-import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { flattenAllQuestions } from "@/types/forms";
 import type { QuestionRecord, FormSectionRecord } from "@/types/forms";
 import type {
@@ -200,38 +199,145 @@ export async function getDirectAssessmentData(
     EmployeeFormAnswerRecord[]
   > = {};
 
+  // BATCH: Fetch all answers for all submissions in one query instead of
+  // looping per employee. Collect all (submissionId, filledById) pairs we need.
+  const submissionIdsForAnswers = employees
+    .filter((e) => e.submissionId !== 0)
+    .map((e) => e.submissionId);
+
+  const filledByIds = new Set<number>();
+  for (const emp of employees) {
+    if (emp.submissionId === 0) continue;
+    filledByIds.add(reviewerUserId);
+    if (emp.manager1UserId != null) filledByIds.add(emp.manager1UserId);
+    if (emp.manager2UserId != null) filledByIds.add(emp.manager2UserId);
+  }
+
+  // Batch query: all answers for all relevant submissions + filled_by combos.
+  // Keyed by `${appraisal_id}:${filled_by_id}` → list of answer records.
+  const answersByTriple = new Map<
+    string,
+    Array<{
+      questionId: number;
+      textResponse: string | null;
+      selectedOptionId: number | null;
+      pointsEarned: number;
+      remarks: string | null;
+    }>
+  >();
+
+  if (submissionIdsForAnswers.length > 0 && filledByIds.size > 0) {
+    const ansResult = await db.query<{
+      appraisal_id: string;
+      question_id: string;
+      filled_by_id: string;
+      text_response: string | null;
+      selected_option_id: string | null;
+      points_earned: string;
+      remarks: string | null;
+    }>(
+      `SELECT appraisal_id::text, question_id::text, filled_by_id::text,
+              text_response, selected_option_id::text, points_earned::text, remarks
+       FROM appraisal_answers
+       WHERE appraisal_id = ANY($1::bigint[])
+         AND filled_by_id = ANY($2::bigint[])`,
+      [submissionIdsForAnswers, [...filledByIds]],
+    );
+    for (const row of ansResult.rows) {
+      const key = `${row.appraisal_id}:${row.filled_by_id}`;
+      const list = answersByTriple.get(key) ?? [];
+      list.push({
+        questionId: Number(row.question_id),
+        textResponse: row.text_response,
+        selectedOptionId: row.selected_option_id
+          ? Number(row.selected_option_id)
+          : null,
+        pointsEarned: Number(row.points_earned),
+        remarks: row.remarks ?? null,
+      });
+      answersByTriple.set(key, list);
+    }
+  }
+
+  // Batch query: all attachments for all relevant submissions.
+  const attachmentsByQuestionKey = new Map<
+    string,
+    EmployeeFormAnswerAttachment[]
+  >();
+
+  if (submissionIdsForAnswers.length > 0 && filledByIds.size > 0) {
+    const attResult = await db.query<{
+      appraisal_id: string;
+      question_id: string;
+      filled_by_id: string;
+      id: string;
+      original_filename: string;
+      mime_type: string | null;
+      size_bytes: string;
+      created_at: string;
+    }>(
+      `SELECT aa.appraisal_id::text, aa.question_id::text, aa.filled_by_id::text,
+              aa.id, aa.original_filename, aa.mime_type,
+              aa.size_bytes::text, aa.created_at::text
+       FROM appraisal_answer_attachments aa
+       WHERE aa.appraisal_id = ANY($1::bigint[])
+         AND aa.filled_by_id = ANY($2::bigint[])`,
+      [submissionIdsForAnswers, [...filledByIds]],
+    );
+    for (const row of attResult.rows) {
+      const key = `${row.appraisal_id}:${row.question_id}`;
+      const list = attachmentsByQuestionKey.get(key) ?? [];
+      list.push({
+        id: Number(row.id),
+        questionId: Number(row.question_id),
+        originalFilename: row.original_filename,
+        mimeType: row.mime_type,
+        sizeBytes: Number(row.size_bytes),
+        createdAt: row.created_at,
+      });
+      attachmentsByQuestionKey.set(key, list);
+    }
+  }
+
+  // Helper: assemble EmployeeFormAnswerRecord[] for a given submission + user.
+  const getAnswersForUser = (
+    submissionId: number,
+    filledById: number,
+  ): EmployeeFormAnswerRecord[] => {
+    const key = `${submissionId}:${filledById}`;
+    const list = answersByTriple.get(key) ?? [];
+    return list.map((a) => ({
+      ...a,
+      attachments: attachmentsByQuestionKey.get(`${submissionId}:${a.questionId}`) ?? [],
+    }));
+  };
+
   for (const emp of employees) {
     if (emp.submissionId === 0) continue;
 
     if (emp.canEdit) {
-      // Fetch the current reviewer's existing draft answers
-      const existing = await getAnswersForSubmission(
+      managerAnswersBySubmission[emp.submissionId] = getAnswersForUser(
         emp.submissionId,
         reviewerUserId,
       );
-      managerAnswersBySubmission[emp.submissionId] = existing;
     } else {
-      // For locked employees, fetch answers from whoever last reviewed
       const lastReviewerId =
         (emp.managerLevel ?? 1) === 2
           ? emp.manager2UserId ?? emp.manager1UserId
           : emp.manager1UserId;
       if (lastReviewerId != null) {
-        const lockedAnswers = await getAnswersForSubmission(
+        managerAnswersBySubmission[emp.submissionId] = getAnswersForUser(
           emp.submissionId,
           lastReviewerId,
         );
-        managerAnswersBySubmission[emp.submissionId] = lockedAnswers;
       }
     }
 
-    // Always fetch Manager 1 answers for Manager 2 fallback display
     if (emp.manager1UserId != null) {
-      const mgr1Answers = await getAnswersForSubmission(
+      manager1AnswersBySubmission[emp.submissionId] = getAnswersForUser(
         emp.submissionId,
         emp.manager1UserId,
       );
-      manager1AnswersBySubmission[emp.submissionId] = mgr1Answers;
     }
   }
 
@@ -281,45 +387,4 @@ export async function getDirectAssessmentData(
     manager1AnswersBySubmission,
     overallRemarksBySubmission,
   };
-}
-
-async function getAnswersForSubmission(
-  appraisalId: number,
-  filledById: number,
-): Promise<EmployeeFormAnswerRecord[]> {
-  const result = await db.query<{
-    question_id: string;
-    text_response: string | null;
-    selected_option_id: string | null;
-    points_earned: string;
-    remarks: string | null;
-  }>(
-    `SELECT question_id, text_response, selected_option_id, points_earned, remarks
-     FROM appraisal_answers
-     WHERE appraisal_id = $1
-       AND filled_by_id = $2`,
-    [appraisalId, filledById],
-  );
-
-  const attachments = await listAttachmentsForAppraisal(appraisalId, filledById);
-  const attachmentsByQuestion = new Map<number, EmployeeFormAnswerAttachment[]>();
-  for (const attachment of attachments) {
-    const current = attachmentsByQuestion.get(attachment.questionId) ?? [];
-    current.push(attachment);
-    attachmentsByQuestion.set(attachment.questionId, current);
-  }
-
-  return result.rows.map((row) => {
-    const questionId = Number(row.question_id);
-    return {
-      questionId,
-      textResponse: row.text_response,
-      selectedOptionId: row.selected_option_id
-        ? Number(row.selected_option_id)
-        : null,
-      pointsEarned: Number(row.points_earned),
-      remarks: row.remarks ?? null,
-      attachments: attachmentsByQuestion.get(questionId) ?? [],
-    };
-  });
 }

@@ -4,6 +4,7 @@ import { ROLE_PERMISSION_SETS } from "@/lib/auth/roles";
 import { getOrganizationReport } from "@/lib/queries/organization-report";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 /**
  * GET /api/reports/organization-hierarchy

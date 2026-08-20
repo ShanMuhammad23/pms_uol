@@ -4,6 +4,7 @@ import { isHeadRole } from "@/lib/auth/home-path";
 import { getDirectAssessmentData } from "@/lib/queries/direct-assessment";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 interface RouteContext {
   params: Promise<{ id: string }>;

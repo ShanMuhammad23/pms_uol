@@ -14,6 +14,9 @@ import type { FormTemplateInput } from "@/types/forms";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+
 function formTemplateErrorResponse(error: FormTemplateError) {
   return NextResponse.json(
     {

@@ -12,6 +12,7 @@ import { getFormTemplateById } from "@/lib/queries/forms";
 import { flattenAllQuestions } from "@/types/forms";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 interface SaveRequestBody {
   questionId?: number;
@@ -50,6 +51,13 @@ export async function PUT(request: Request) {
     ) {
       return NextResponse.json(
         { error: "questionId and a non-empty entries array are required." },
+        { status: 400 },
+      );
+    }
+
+    if (body.entries.length > 200) {
+      return NextResponse.json(
+        { error: "Too many entries (max 200)." },
         { status: 400 },
       );
     }

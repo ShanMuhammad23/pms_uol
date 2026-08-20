@@ -10,6 +10,7 @@ import { buildDashboardOverviewCounts } from "@/lib/queries/dashboard-overview-c
 import { getActiveFinancialYearQuartileBands } from "@/lib/queries/performance-rating";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
   const auth = await requireDashboardSubmissionsApi();

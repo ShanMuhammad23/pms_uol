@@ -1,7 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
-import bcrypt from "bcryptjs";
 import { getUserByEmail } from "./lib/queries/auth";
 import { getAuthCookieSecure } from "./lib/env";
 import { isSystemRole } from "./lib/auth/roles";
@@ -52,53 +51,50 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
-    Credentials({
-      name: "Credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        const email = credentials?.email?.toString().trim() ?? "";
-        const password = credentials?.password?.toString() ?? "";
+    // --- Test-only SSO simulation provider ---
+    // Only available outside production. Allows testing the SSO login flow
+    // for any employee by email, without going through Google OAuth. The
+    // resulting session is identical to a real Google SSO session because it
+    // flows through the same jwt/session callbacks.
+    ...(process.env.NODE_ENV !== "production"
+      ? [
+          Credentials({
+            id: "test-sso",
+            name: "Test SSO",
+            credentials: {
+              email: { label: "Email", type: "email" },
+            },
+            async authorize(credentials) {
+              const email = credentials?.email?.toString().trim() ?? "";
+              if (!email) {
+                return null;
+              }
 
-        if (!email || !password) {
-          return null;
-        }
+              const user = await getUserByEmail(email);
+              if (!user || !user.isActive) {
+                await logSecurityEvent({
+                  eventType: "LOGIN_FAILURE",
+                  meta: { email, reason: "test_sso_missing_or_inactive" },
+                });
+                return null;
+              }
 
-        const user = await getUserByEmail(email);
-        if (!user || !user.isActive) {
-          await logSecurityEvent({
-            eventType: "LOGIN_FAILURE",
-            meta: { email, reason: "missing_or_inactive" },
-          });
-          return null;
-        }
+              if (!isSystemRole(user.systemRole)) {
+                return null;
+              }
 
-        const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-        if (!isPasswordValid) {
-          await logSecurityEvent({
-            eventType: "LOGIN_FAILURE",
-            actorUserId: Number(user.id),
-            meta: { email, reason: "bad_password" },
-          });
-          return null;
-        }
-
-        if (!isSystemRole(user.systemRole)) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: `${user.firstName} ${user.lastName}`.trim(),
-          role: user.systemRole,
-          designation: user.designation,
-          entityId: user.entityId,
-        };
-      },
-    }),
+              return {
+                id: user.id,
+                email: user.email,
+                name: `${user.firstName} ${user.lastName}`.trim(),
+                role: user.systemRole,
+                designation: user.designation,
+                entityId: user.entityId,
+              };
+            },
+          }),
+        ]
+      : []),
   ],
   callbacks: {
     async signIn({ account, profile }) {

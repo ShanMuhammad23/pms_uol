@@ -39,6 +39,12 @@ export function getTransporter(): Transporter {
       user: config.user,
       pass: config.password,
     },
+    // Timeout to prevent hanging background tasks when SMTP server is slow
+    // or unreachable. These are fire-and-forget notifications, so a timeout
+    // just means the email is skipped — the workflow still succeeds.
+    connectionTimeout: 10_000, // 10s to establish connection
+    greetingTimeout: 10_000, // 10s for SMTP greeting
+    socketTimeout: 30_000, // 30s for any socket operation
   });
 
   cachedTransporter = transporter;

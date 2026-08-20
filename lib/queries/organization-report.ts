@@ -3,7 +3,6 @@ import "server-only";
 import { db } from "@/lib/db";
 import { listEntities } from "@/lib/queries/entities";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
-import { getEntitySubtreeIds } from "@/app/helpers/entity-scope";
 import type { EntityRecord } from "@/types/entities";
 
 export interface OrgReportNode {
@@ -33,7 +32,8 @@ export interface OrgReportNode {
 
 interface EntityCountRow {
   entity_id: string;
-  total_employees: string;
+  direct_staff_count: string;
+  subtree_staff_count: string;
   eligible: string;
   forms_assigned: string;
   self_assessed: string;
@@ -67,114 +67,145 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   const fyEndDate = financialYear ? `${financialYear}-06-30` : null;
 
   // Aggregate counts per entity using the entity's subtree.
-  // We join users → appraisals → employee_form_assignments, grouping by
-  // the user's entity_id. The caller will roll these up by subtree.
+  // We compute direct counts per entity in a `direct_counts` CTE, then use a
+  // recursive CTE (`subtree`) to walk the entity tree downward from each
+  // entity. Joining the recursive CTE with `direct_counts` and summing gives
+  // rolled-up subtree counts per root entity directly in SQL.
   const countRows = await db.query<EntityCountRow>(
-    `SELECT
-       u.entity_id::text AS entity_id,
-       COUNT(DISTINCT u.id) AS total_employees,
-       COUNT(DISTINCT u.id) FILTER (
-         WHERE COALESCE(ap.is_eligible, FALSE) = TRUE
-            OR (
-              u.date_of_joining IS NOT NULL
-              AND $2::text IS NOT NULL
-              AND u.date_of_joining::date <= $2::date
-              AND (
-                -- months between date_of_joining and FY end >= 3
-                (EXTRACT(YEAR FROM $2::date) - EXTRACT(YEAR FROM u.date_of_joining::date)) * 12
-                + (EXTRACT(MONTH FROM $2::date) - EXTRACT(MONTH FROM u.date_of_joining::date))
-                + CASE WHEN EXTRACT(DAY FROM $2::date) >= EXTRACT(DAY FROM u.date_of_joining::date) THEN 1 ELSE 0 END
-                >= 3
+    `WITH RECURSIVE direct_counts AS (
+       SELECT
+         u.entity_id,
+         COUNT(DISTINCT u.id) AS total_employees,
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE COALESCE(ap.is_eligible, FALSE) = TRUE
+              OR (
+                u.date_of_joining IS NOT NULL
+                AND $2::text IS NOT NULL
+                AND u.date_of_joining::date <= $2::date
+                AND (
+                  -- months between date_of_joining and FY end >= 3
+                  (EXTRACT(YEAR FROM $2::date) - EXTRACT(YEAR FROM u.date_of_joining::date)) * 12
+                  + (EXTRACT(MONTH FROM $2::date) - EXTRACT(MONTH FROM u.date_of_joining::date))
+                  + CASE WHEN EXTRACT(DAY FROM $2::date) >= EXTRACT(DAY FROM u.date_of_joining::date) THEN 1 ELSE 0 END
+                  >= 3
+                )
               )
-            )
-       ) AS eligible,
-       COUNT(DISTINCT u.id) FILTER (
-         WHERE efa.template_id IS NOT NULL
-       ) AS forms_assigned,
-       COUNT(DISTINCT ap.id) FILTER (
-         WHERE ap.status IN (
-           'PENDING_HEAD_REVIEW',
-           'PENDING_HR_CALIBRATION',
-           'PENDING_BOARD_APPROVAL',
-           'APPROVED',
-           'COMPLETED'
-         )
-       ) AS self_assessed,
-       COUNT(DISTINCT ap.id) FILTER (
-         WHERE ap.status IN (
-           'PENDING_HR_CALIBRATION',
-           'PENDING_BOARD_APPROVAL',
-           'APPROVED',
-           'COMPLETED'
-         )
-       ) AS assessed_by_managers,
-       COUNT(DISTINCT ap.id) FILTER (
-         WHERE ap.status IN (
-           'PENDING_BOARD_APPROVAL',
-           'APPROVED',
-           'COMPLETED'
-         )
-       ) AS hr_alignment,
-       COUNT(DISTINCT ap.id) FILTER (
-         WHERE ap.status IN ('APPROVED', 'COMPLETED')
-       ) AS board_approval
-     FROM users u
-     LEFT JOIN appraisals ap ON ap.employee_id = u.id
-       AND ($1::int IS NULL
-         OR ap.cycle_id = $1
-         OR ($1::int IS NULL AND ap.cycle_id IS NULL))
-     LEFT JOIN employee_form_assignments efa ON efa.employee_id = u.id
-     WHERE u.is_active = TRUE
-       AND u.employee_id <> 'EMP-0001'
-       AND u.entity_id IS NOT NULL
-     GROUP BY u.entity_id`,
+         ) AS eligible,
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE efa.template_id IS NOT NULL
+         ) AS forms_assigned,
+         COUNT(DISTINCT ap.id) FILTER (
+           WHERE ap.status IN (
+             'PENDING_HEAD_REVIEW',
+             'PENDING_HR_CALIBRATION',
+             'PENDING_BOARD_APPROVAL',
+             'APPROVED',
+             'COMPLETED'
+           )
+         ) AS self_assessed,
+         COUNT(DISTINCT ap.id) FILTER (
+           WHERE ap.status IN (
+             'PENDING_HR_CALIBRATION',
+             'PENDING_BOARD_APPROVAL',
+             'APPROVED',
+             'COMPLETED'
+           )
+         ) AS assessed_by_managers,
+         COUNT(DISTINCT ap.id) FILTER (
+           WHERE ap.status IN (
+             'PENDING_BOARD_APPROVAL',
+             'APPROVED',
+             'COMPLETED'
+           )
+         ) AS hr_alignment,
+         COUNT(DISTINCT ap.id) FILTER (
+           WHERE ap.status IN ('APPROVED', 'COMPLETED')
+         ) AS board_approval
+       FROM users u
+       LEFT JOIN appraisals ap ON ap.employee_id = u.id
+         AND ($1::int IS NULL
+           OR ap.cycle_id = $1
+           OR ($1::int IS NULL AND ap.cycle_id IS NULL))
+       LEFT JOIN employee_form_assignments efa ON efa.employee_id = u.id
+       WHERE u.is_active = TRUE
+         AND u.employee_id <> 'EMP-0001'
+         AND u.entity_id IS NOT NULL
+       GROUP BY u.entity_id
+     ),
+     subtree AS (
+       -- Base case: each entity is a member of its own subtree.
+       SELECT id AS root_id, id AS descendant_id
+       FROM entities
+       UNION ALL
+       -- Recursive step: children of nodes already in the subtree.
+       SELECT s.root_id, e.id
+       FROM subtree s
+       JOIN entities e ON e.parent_entity_id = s.descendant_id
+     )
+     SELECT
+       s.root_id::text AS entity_id,
+       COALESCE(dc_direct.total_employees, 0)::text AS direct_staff_count,
+       COALESCE(SUM(dc.total_employees), 0)::text AS subtree_staff_count,
+       COALESCE(SUM(dc.eligible), 0)::text AS eligible,
+       COALESCE(SUM(dc.forms_assigned), 0)::text AS forms_assigned,
+       COALESCE(SUM(dc.self_assessed), 0)::text AS self_assessed,
+       COALESCE(SUM(dc.assessed_by_managers), 0)::text AS assessed_by_managers,
+       COALESCE(SUM(dc.hr_alignment), 0)::text AS hr_alignment,
+       COALESCE(SUM(dc.board_approval), 0)::text AS board_approval
+     FROM subtree s
+     LEFT JOIN direct_counts dc ON dc.entity_id = s.descendant_id
+     LEFT JOIN direct_counts dc_direct ON dc_direct.entity_id = s.root_id
+     GROUP BY s.root_id, dc_direct.total_employees`,
     [cycleId, fyEndDate],
   );
 
-  // Build a map of entity_id → counts (direct, not subtree).
-  const directCounts = new Map<
+  // Build a map of entity_id → rolled-up subtree counts (and direct staff
+  // count) returned directly by the recursive CTE.
+  const countsByEntity = new Map<
     number,
     {
+      directStaffCount: number;
+      subtreeStaffCount: number;
       eligible: number;
       formsAssigned: number;
       selfAssessed: number;
       assessedByManagers: number;
       hrAlignment: number;
       boardApproval: number;
-      directStaffCount: number;
     }
   >();
 
   for (const row of countRows.rows) {
     const entityId = Number(row.entity_id);
-    directCounts.set(entityId, {
+    countsByEntity.set(entityId, {
+      directStaffCount: Number(row.direct_staff_count ?? 0),
+      subtreeStaffCount: Number(row.subtree_staff_count ?? 0),
       eligible: Number(row.eligible ?? 0),
       formsAssigned: Number(row.forms_assigned ?? 0),
       selfAssessed: Number(row.self_assessed ?? 0),
       assessedByManagers: Number(row.assessed_by_managers ?? 0),
       hrAlignment: Number(row.hr_alignment ?? 0),
       boardApproval: Number(row.board_approval ?? 0),
-      directStaffCount: Number(row.total_employees ?? 0),
     });
   }
 
   // Build the tree structure.
   const byId = new Map<number, OrgReportNode>();
   for (const entity of entities) {
-    const counts = directCounts.get(entity.id);
+    const counts = countsByEntity.get(entity.id);
     byId.set(entity.id, {
       id: entity.id,
       name: entity.name,
       categoryCode: entity.categoryCode,
       parentEntityId: entity.parentEntityId,
       directStaffCount: counts?.directStaffCount ?? 0,
-      subtreeStaffCount: 0,
-      eligible: 0,
-      formsAssigned: 0,
-      selfAssessed: 0,
-      assessedByManagers: 0,
-      hrAlignment: 0,
-      boardApproval: 0,
+      subtreeStaffCount: counts?.subtreeStaffCount ?? 0,
+      eligible: counts?.eligible ?? 0,
+      formsAssigned: counts?.formsAssigned ?? 0,
+      selfAssessed: counts?.selfAssessed ?? 0,
+      assessedByManagers: counts?.assessedByManagers ?? 0,
+      hrAlignment: counts?.hrAlignment ?? 0,
+      boardApproval: counts?.boardApproval ?? 0,
       children: [],
     });
   }
@@ -188,43 +219,6 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       node.parentEntityId !== node.id
     ) {
       byId.get(node.parentEntityId)!.children.push(node);
-    }
-  }
-
-  // Roll up subtree counts: for each entity, sum direct counts of all
-  // entities in its subtree (including itself).
-  for (const entity of entities) {
-    const subtreeIds = getEntitySubtreeIds(entity.id, entities);
-    let formsAssigned = 0;
-    let selfAssessed = 0;
-    let assessedByManagers = 0;
-    let hrAlignment = 0;
-    let boardApproval = 0;
-    let subtreeStaffCount = 0;
-    let eligible = 0;
-
-    for (const subId of subtreeIds) {
-      const subCounts = directCounts.get(subId);
-      if (subCounts) {
-        formsAssigned += subCounts.formsAssigned;
-        selfAssessed += subCounts.selfAssessed;
-        assessedByManagers += subCounts.assessedByManagers;
-        hrAlignment += subCounts.hrAlignment;
-        boardApproval += subCounts.boardApproval;
-        subtreeStaffCount += subCounts.directStaffCount;
-        eligible += subCounts.eligible;
-      }
-    }
-
-    const node = byId.get(entity.id);
-    if (node) {
-      node.formsAssigned = formsAssigned;
-      node.selfAssessed = selfAssessed;
-      node.assessedByManagers = assessedByManagers;
-      node.hrAlignment = hrAlignment;
-      node.boardApproval = boardApproval;
-      node.eligible = eligible;
-      node.subtreeStaffCount = subtreeStaffCount;
     }
   }
 

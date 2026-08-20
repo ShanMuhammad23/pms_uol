@@ -3,11 +3,6 @@
 import { getSession, signIn, signOut } from "next-auth/react";
 import { DEFAULT_HOME_PATH, getPostLoginPath } from "@/lib/auth/home-path";
 
-interface CredentialsInput {
-  email: string;
-  password: string;
-}
-
 export interface ViewAsOption {
   value: string;
   label: string;
@@ -22,7 +17,7 @@ export interface ViewAsOptionsResponse {
 const authErrorMap: Record<string, string> = {
   AccessDenied: "Your account is not allowed to sign in with Google.",
   CallbackRouteError: "We could not complete sign-in. Please try again.",
-  CredentialsSignin: "Invalid email or password.",
+  CredentialsSignin: "No active user found with that email.",
   OAuthAccountNotLinked: "Please use the original provider for this account.",
 };
 
@@ -39,29 +34,36 @@ export async function resolvePostLoginPath(): Promise<string> {
   return getPostLoginPath(session?.user?.role);
 }
 
-export async function signInWithCredentials(input: CredentialsInput) {
-  const response = await signIn("credentials", {
-    email: input.email,
-    password: input.password,
+export async function signInWithGoogle() {
+  const destination = DEFAULT_HOME_PATH;
+  await signIn("google", { callbackUrl: destination });
+}
+
+/**
+ * Test-only SSO simulation (dev/staging only — the provider is not registered
+ * in production). Signs in as the given employee email without a password,
+ * producing a session identical to a real Google SSO login.
+ */
+export async function signInWithTestSso(email: string) {
+  const response = await signIn("test-sso", {
+    email,
     redirect: false,
     callbackUrl: DEFAULT_HOME_PATH,
   });
 
   if (!response || response.error) {
-    throw new Error(getAuthErrorMessage(response?.error ?? null));
+    throw new Error(
+      response?.error === "CredentialsSignin"
+        ? "No active user found with that email."
+        : getAuthErrorMessage(response?.error ?? null),
+    );
   }
 
   const destination = await resolvePostLoginPath();
-
   return {
     ...response,
     url: destination,
   };
-}
-
-export async function signInWithGoogle() {
-  const destination = DEFAULT_HOME_PATH;
-  await signIn("google", { callbackUrl: destination });
 }
 
 export async function signOutAndRedirect() {

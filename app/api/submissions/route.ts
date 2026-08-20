@@ -9,6 +9,7 @@ import { listEntities } from "@/lib/queries/entities";
 import { listFormSubmissionsPage } from "@/lib/queries/form-submissions-page";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
   const auth = await requireDashboardSubmissionsApi();

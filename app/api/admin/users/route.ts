@@ -8,6 +8,7 @@ import { validateCreateUserInput } from "@/lib/validation/users";
 import type { CreateUserInput } from "@/types/users";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 const MAX_EMPLOYEE_IDS = 200;
 

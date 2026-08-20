@@ -9,6 +9,7 @@ import {
 } from "@/lib/queries/form-submissions";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 interface FinishRequestBody {
   submissionIds?: number[];
@@ -40,6 +41,13 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json(
         { error: "submissionIds must be a non-empty array." },
+        { status: 400 },
+      );
+    }
+
+    if (body.submissionIds.length > 200) {
+      return NextResponse.json(
+        { error: "Too many submissions selected (max 200)." },
         { status: 400 },
       );
     }

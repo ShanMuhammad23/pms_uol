@@ -11,6 +11,9 @@ import {
 import { validateCreateEntityInput } from "@/lib/validation/entities";
 import type { CreateEntityInput } from "@/types/entities";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+
 export async function GET() {
   const auth = await requireModuleViewApi("ORGANIZATION_LEVELS");
   if (auth instanceof NextResponse) {

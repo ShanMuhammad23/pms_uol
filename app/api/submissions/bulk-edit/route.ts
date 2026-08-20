@@ -8,6 +8,9 @@ import { canEditModule } from "@/lib/auth/additional-access";
 import type { AdditionalAccessModule } from "@/types/additional-access";
 import { USER_ROLES } from "@/types/users";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+
 function parseOptionalTextField(
   body: Record<string, unknown>,
   key: string,
@@ -59,6 +62,13 @@ export async function PATCH(request: Request) {
     if (!Array.isArray(body.employeeIds) || body.employeeIds.length === 0) {
       return NextResponse.json(
         { error: "employeeIds must be a non-empty array." },
+        { status: 400 },
+      );
+    }
+
+    if (body.employeeIds.length > 500) {
+      return NextResponse.json(
+        { error: "Too many employees selected (max 500)." },
         { status: 400 },
       );
     }

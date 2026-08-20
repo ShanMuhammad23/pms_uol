@@ -344,7 +344,7 @@ export async function listAttachmentsForAppraisal(
 async function getOrCreateAppraisal(
   userId: number,
   templateId: number,
-  client: PoolClient,
+  client?: PoolClient,
 ): Promise<AppraisalRow> {
   const existing = await getAppraisalForUserTemplate(userId, templateId, client);
   if (existing) {
@@ -364,7 +364,8 @@ async function getOrCreateAppraisal(
     ? "PENDING_SELF_ASSESSMENT"
     : "PENDING_HEAD_REVIEW";
 
-  const result = await client.query<AppraisalRow>(
+  const executor = client ?? db;
+  const result = await executor.query<AppraisalRow>(
     `INSERT INTO appraisals (employee_id, template_id, status)
      VALUES ($1, $2, $3)
      RETURNING id, status, submitted_at::text, updated_at::text, system_raw_score`,
@@ -912,16 +913,16 @@ export async function addEmployeeFormAttachment(
     );
   }
 
+  // Write the file to disk BEFORE opening the DB transaction.
+  // This prevents slow disk I/O from holding a transaction open and
+  // exhausting the connection pool under concurrent uploads.
+  // If the DB insert fails, we clean up the orphaned file.
   const client = await db.connect();
 
+  let stored: { storedFilename: string; relativePath: string } | null = null;
   try {
-    await client.query("BEGIN");
-
-    const existing = await getAppraisalForUserTemplate(
-      userId,
-      templateId,
-      client,
-    );
+    // Pre-resolve the appraisal so we know the appraisal ID for the file path.
+    const existing = await getAppraisalForUserTemplate(userId, templateId);
     if (existing?.submitted_at) {
       throw new EmployeeFormError(
         "This form has already been submitted and cannot be edited.",
@@ -929,7 +930,20 @@ export async function addEmployeeFormAttachment(
       );
     }
 
-    const appraisal = await getOrCreateAppraisal(userId, templateId, client);
+    // We need the appraisal ID for the file path. Get or create it outside
+    // the transaction (getOrCreateAppraisal uses its own short transaction).
+    const appraisal = await getOrCreateAppraisal(userId, templateId);
+
+    // Write file to disk — no transaction held.
+    stored = await storeFormAttachmentFile({
+      appraisalId: Number(appraisal.id),
+      questionId,
+      originalFilename: file.originalFilename,
+      bytes: file.bytes,
+    });
+
+    // Now open a short transaction for only the DB writes.
+    await client.query("BEGIN");
 
     await client.query(
       `INSERT INTO appraisal_answers (
@@ -944,13 +958,6 @@ export async function addEmployeeFormAttachment(
        ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
       [appraisal.id, questionId, userId],
     );
-
-    const stored = await storeFormAttachmentFile({
-      appraisalId: Number(appraisal.id),
-      questionId,
-      originalFilename: file.originalFilename,
-      bytes: file.bytes,
-    });
 
     const result = await client.query<{
       id: string;
@@ -996,6 +1003,12 @@ export async function addEmployeeFormAttachment(
     };
   } catch (error) {
     await client.query("ROLLBACK");
+    // Clean up the orphaned file if it was written but the DB insert failed.
+    if (stored) {
+      void deleteFormAttachmentFile(stored.relativePath).catch(() => {
+        /* best-effort cleanup */
+      });
+    }
     throw error;
   } finally {
     client.release();
