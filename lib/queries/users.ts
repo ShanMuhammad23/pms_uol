@@ -46,6 +46,7 @@ interface UserRow {
   created_at: string;
   assessment_eligibility: boolean;
   form_assigned: boolean;
+  form_code: string | null;
   direct_score_entry: boolean;
   self_assessment_disabled: boolean;
 }
@@ -194,6 +195,14 @@ function buildUserSelect(
       WHERE efa.employee_id = u.id
         AND (${cycleParam}::int IS NULL OR efa_ft.cycle_id = ${cycleParam}::int)
     ) AS form_assigned,
+    (
+      SELECT efa_ft.code
+      FROM employee_form_assignments efa
+      JOIN form_templates efa_ft ON efa_ft.id = efa.template_id
+      WHERE efa.employee_id = u.id
+        AND (${cycleParam}::int IS NULL OR efa_ft.cycle_id = ${cycleParam}::int)
+      LIMIT 1
+    ) AS form_code,
     EXISTS (
       SELECT 1
       FROM direct_score_entry_assignments dsea
@@ -281,6 +290,7 @@ function mapUserRow(row: UserRow): UserRecord {
     createdAt: row.created_at,
     assessmentEligibility: row.assessment_eligibility ?? true,
     formAssigned: Boolean(row.form_assigned),
+    formCode: row.form_code ?? null,
     directScoreEntry: Boolean(row.direct_score_entry),
     selfAssessmentEnabled: !row.self_assessment_disabled,
   };

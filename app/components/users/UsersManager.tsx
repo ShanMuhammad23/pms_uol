@@ -224,6 +224,7 @@ export default function UsersManager() {
         createdAt: "",
         assessmentEligibility: true,
         formAssigned: false,
+        formCode: null,
         directScoreEntry: false,
         selfAssessmentEnabled: true,
       }) satisfies UserRecord,
