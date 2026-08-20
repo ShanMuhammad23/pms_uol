@@ -69,6 +69,14 @@ export function validateFormTemplateInput(
     return "Form title is required.";
   }
 
+  if (!input.code?.trim()) {
+    return "Form code is required.";
+  }
+
+  if (input.code.length > 50) {
+    return "Form code must be 50 characters or fewer.";
+  }
+
   if (
     input.targetCategory &&
     !EMPLOYEE_CATEGORIES.includes(input.targetCategory)

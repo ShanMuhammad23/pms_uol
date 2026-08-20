@@ -22,6 +22,7 @@ import { buildSectionLayoutOrder } from "@/types/forms";
 interface FormTemplateListRow {
   id: string;
   title: string;
+  code: string;
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
@@ -43,6 +44,7 @@ interface FormTemplateListRow {
 interface FormTemplateRow {
   id: string;
   title: string;
+  code: string;
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
@@ -104,6 +106,7 @@ function mapFormTemplateListItem(row: FormTemplateListRow): FormTemplateListItem
   return {
     id: Number(row.id),
     title: row.title,
+    code: row.code,
     description: row.description,
     cycleId: row.cycle_id,
     fiscalYear: row.fiscal_year,
@@ -792,6 +795,7 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
     `SELECT
        ft.id,
        ft.title,
+       ft.code,
        ft.description,
        ft.cycle_id,
        ac.fiscal_year,
@@ -865,6 +869,7 @@ export async function listDirectAssessmentTemplates(scope: {
     `SELECT
        ft.id,
        ft.title,
+       ft.code,
        ft.description,
        ft.cycle_id,
        ac.fiscal_year,
@@ -923,6 +928,7 @@ export async function getFormTemplateById(
     `SELECT
        ft.id,
        ft.title,
+       ft.code,
        ft.description,
        ft.cycle_id,
        ac.fiscal_year,
@@ -949,6 +955,7 @@ export async function getFormTemplateById(
   return {
     id: Number(row.id),
     title: row.title,
+    code: row.code,
     description: row.description,
     cycleId: row.cycle_id,
     fiscalYear: row.fiscal_year,
@@ -976,6 +983,7 @@ export async function createFormTemplate(
     const templateResult = await client.query<{ id: string }>(
       `INSERT INTO form_templates (
          title,
+         code,
          description,
          cycle_id,
          target_category,
@@ -984,10 +992,11 @@ export async function createFormTemplate(
          additional_remarks_enabled,
          created_by,
          updated_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
        RETURNING id`,
       [
         input.title,
+        input.code.trim(),
         input.description || null,
         cycleId,
         input.targetCategory ?? null,
@@ -1047,17 +1056,19 @@ export async function updateFormTemplate(
     await client.query(
       `UPDATE form_templates
        SET title = $1,
-           description = $2,
-           cycle_id = $3,
-           target_category = $4,
-           target_sub_category = $5,
-           self_assessment_enabled = $6,
-           additional_remarks_enabled = $7,
-           updated_by = COALESCE($8, updated_by),
+           code = $2,
+           description = $3,
+           cycle_id = $4,
+           target_category = $5,
+           target_sub_category = $6,
+           self_assessment_enabled = $7,
+           additional_remarks_enabled = $8,
+           updated_by = COALESCE($9, updated_by),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9`,
+       WHERE id = $10`,
       [
         input.title,
+        input.code.trim(),
         input.description || null,
         cycleId,
         input.targetCategory ?? null,

@@ -69,6 +69,7 @@ interface QuestionLocation {
 
 function draftToTemplateRecord(
   title: string,
+  code: string,
   description: string,
   selfAssessmentEnabled: boolean,
   additionalRemarksEnabled: boolean,
@@ -132,6 +133,7 @@ function draftToTemplateRecord(
   return {
     id: 0,
     title,
+    code,
     description: description || null,
     cycleId: 0,
     fiscalYear: 0,
@@ -208,6 +210,7 @@ function mapRecordToState(record: FormTemplateRecord) {
 
   return {
     title: record.title,
+    code: record.code ?? "",
     description: record.description ?? "",
     cycleId: record.cycleId,
     selfAssessmentEnabled: record.selfAssessmentEnabled,
@@ -268,6 +271,7 @@ function validateQuestionFields(
 
 interface ModernFormDesignStepProps {
   title: string;
+  code: string;
   description: string;
   selfAssessmentEnabled: boolean;
   additionalRemarksEnabled: boolean;
@@ -275,6 +279,7 @@ interface ModernFormDesignStepProps {
   questions: QuestionInput[];
   errors: Record<string, string>;
   onTitleChange: (title: string) => void;
+  onCodeChange: (code: string) => void;
   onDescriptionChange: (description: string) => void;
   onSelfAssessmentEnabledChange: (enabled: boolean) => void;
   onAdditionalRemarksEnabledChange: (enabled: boolean) => void;
@@ -283,6 +288,7 @@ interface ModernFormDesignStepProps {
 
 function ModernFormDesignStep({
   title,
+  code,
   description,
   selfAssessmentEnabled,
   additionalRemarksEnabled,
@@ -290,6 +296,7 @@ function ModernFormDesignStep({
   questions,
   errors,
   onTitleChange,
+  onCodeChange,
   onDescriptionChange,
   onAdditionalRemarksEnabledChange,
   onStructureChange,
@@ -800,8 +807,8 @@ function ModernFormDesignStep({
     [sections, questions],
   );
   const previewTemplate = useMemo(
-    () => draftToTemplateRecord(title, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions),
-    [title, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions],
+    () => draftToTemplateRecord(title, code, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions),
+    [title, code, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions],
   );
 
   return (
@@ -855,6 +862,31 @@ function ModernFormDesignStep({
             {errors.title && (
               <p className="flex items-center gap-1 text-xs text-red-500">
                 <AlertCircle className="h-3 w-3" /> {errors.title}
+              </p>
+            )}
+          </div>
+
+          {/* Code Field */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Form Code
+            </label>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => onCodeChange(e.target.value)}
+              placeholder="e.g. FAC-2026"
+              maxLength={50}
+              className={cn(
+                "w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900",
+                errors.code
+                  ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 dark:border-red-800"
+                  : "border-slate-200 focus:border-primary focus:ring-primary/20 dark:border-slate-700"
+              )}
+            />
+            {errors.code && (
+              <p className="flex items-center gap-1 text-xs text-red-500">
+                <AlertCircle className="h-3 w-3" /> {errors.code}
               </p>
             )}
           </div>
@@ -1998,6 +2030,7 @@ export default function FormBuilderWizard({
       ? `${initialState.title} (Copy)`
       : initialState?.title ?? "",
   );
+  const [code, setCode] = useState(initialState?.code ?? "");
   const [description, setDescription] = useState(initialState?.description ?? "");
   const [selfAssessmentEnabled, setSelfAssessmentEnabled] = useState(initialState?.selfAssessmentEnabled ?? true);
   const [additionalRemarksEnabled, setAdditionalRemarksEnabled] = useState(initialState?.additionalRemarksEnabled ?? false);
@@ -2052,6 +2085,7 @@ export default function FormBuilderWizard({
 
     return {
       title: title.trim(),
+      code: code.trim(),
       description: description.trim(),
       selfAssessmentEnabled,
       additionalRemarksEnabled,
@@ -2061,6 +2095,7 @@ export default function FormBuilderWizard({
     };
   }, [
     title,
+    code,
     description,
     selfAssessmentEnabled,
     additionalRemarksEnabled,
@@ -2099,6 +2134,10 @@ export default function FormBuilderWizard({
 
     if (!title.trim()) {
       nextErrors.title = "Form title is required.";
+    }
+
+    if (!code.trim()) {
+      nextErrors.code = "Form code is required.";
     }
 
     if (countAllQuestions(sections, questions) === 0) {
@@ -2282,6 +2321,7 @@ export default function FormBuilderWizard({
         {step === 0 ? (
           <ModernFormDesignStep
             title={title}
+            code={code}
             description={description}
             selfAssessmentEnabled={selfAssessmentEnabled}
             additionalRemarksEnabled={additionalRemarksEnabled}
@@ -2289,6 +2329,7 @@ export default function FormBuilderWizard({
             questions={questions}
             errors={errors}
             onTitleChange={setTitle}
+            onCodeChange={setCode}
             onDescriptionChange={setDescription}
             onSelfAssessmentEnabledChange={setSelfAssessmentEnabled}
             onAdditionalRemarksEnabledChange={setAdditionalRemarksEnabled}
