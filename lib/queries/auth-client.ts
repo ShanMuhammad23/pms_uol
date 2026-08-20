@@ -15,11 +15,36 @@ export interface ViewAsOptionsResponse {
 }
 
 const authErrorMap: Record<string, string> = {
-  AccessDenied: "Your account is not allowed to sign in with Google.",
-  CallbackRouteError: "We could not complete sign-in. Please try again.",
-  CredentialsSignin: "No active user found with that email.",
-  OAuthAccountNotLinked: "Please use the original provider for this account.",
-  Configuration: "Test SSO is disabled on this build. Set ALLOW_TEST_SSO=true and rebuild.",
+  // --- Google SSO errors (returned via ?error= in the redirect URL) ---
+  AccessDenied:
+    "Sign-in was denied. If this is unexpected, please contact HR at pms@hrd.uol.edu.pk.",
+  NoEmail:
+    "Google did not return an email address. Please make sure your Google account has a verified email and try again.",
+  UserNotFound:
+    "No PMS account is linked to your Google email. Please contact HR at pms@hrd.uol.edu.pk to provision your account.",
+  AccountInactive:
+    "Your account is currently inactive. Please contact HR at pms@hrd.uol.edu.pk to reactivate it.",
+
+  // --- Generic / provider errors ---
+  CallbackRouteError:
+    "Something went wrong during sign-in. Please try again, or contact HR if the problem persists.",
+  OAuthAccountNotLinked:
+    "This email is already linked to a different sign-in method. Please use the original provider.",
+  OAuthCallback:
+    "Google rejected the sign-in request. Please check your connection and try again.",
+  OAuthSignin:
+    "Could not start Google sign-in. Please check your connection and try again.",
+  Configuration:
+    "The sign-in system is not configured correctly. If this is the test SSO, make sure ALLOW_TEST_SSO=true is set.",
+  Verification:
+    "Sign-in verification failed. Please try again.",
+
+  // --- Test SSO errors (returned by the pre-check endpoint) ---
+  CredentialsSignin: "Sign-in failed. Please check the email and try again.",
+  MissingEmail: "Please enter an email address.",
+  InvalidEmail: "Please enter a valid email address.",
+  InvalidRole:
+    'Your account has an unrecognized role. Please contact HR to fix your account configuration.',
 };
 
 export const getAuthErrorMessage = (code: string | null): string => {
@@ -44,8 +69,29 @@ export async function signInWithGoogle() {
  * Test-only SSO simulation (dev/staging only — the provider is not registered
  * in production). Signs in as the given employee email without a password,
  * producing a session identical to a real Google SSO login.
+ *
+ * A pre-check request is sent to /api/auth/test-sso-check first so that we
+ * can show a specific, user-readable error (e.g. "account inactive" vs
+ * "user not found") instead of NextAuth's generic "CredentialsSignin".
  */
 export async function signInWithTestSso(email: string) {
+  // --- Pre-check: validate the email and get a specific error if any ---
+  const checkResponse = await fetch("/api/auth/test-sso-check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!checkResponse.ok) {
+    const data = await checkResponse.json().catch(() => null);
+    const errorCode = data?.error ?? "CredentialsSignin";
+    const customMessage = data?.message as string | undefined;
+    throw new Error(
+      customMessage ?? getAuthErrorMessage(errorCode ?? null),
+    );
+  }
+
+  // --- Pre-check passed — proceed with NextAuth signIn ---
   const response = await signIn("test-sso", {
     email,
     redirect: false,
@@ -53,11 +99,7 @@ export async function signInWithTestSso(email: string) {
   });
 
   if (!response || response.error) {
-    throw new Error(
-      response?.error === "CredentialsSignin"
-        ? "No active user found with that email."
-        : getAuthErrorMessage(response?.error ?? null),
-    );
+    throw new Error(getAuthErrorMessage(response?.error ?? null));
   }
 
   const destination = await resolvePostLoginPath();

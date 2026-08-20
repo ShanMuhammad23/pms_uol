@@ -72,15 +72,27 @@ export const authOptions: NextAuthOptions = {
               }
 
               const user = await getUserByEmail(email);
-              if (!user || !user.isActive) {
+              if (!user) {
                 await logSecurityEvent({
                   eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_sso_missing_or_inactive" },
+                  meta: { email, reason: "test_sso_user_not_found" },
+                });
+                return null;
+              }
+
+              if (!user.isActive) {
+                await logSecurityEvent({
+                  eventType: "LOGIN_FAILURE",
+                  meta: { email, reason: "test_sso_account_inactive" },
                 });
                 return null;
               }
 
               if (!isSystemRole(user.systemRole)) {
+                await logSecurityEvent({
+                  eventType: "LOGIN_FAILURE",
+                  meta: { email, reason: "test_sso_invalid_role" },
+                });
                 return null;
               }
 
@@ -105,16 +117,25 @@ export const authOptions: NextAuthOptions = {
 
       const email = profile?.email?.toString().trim();
       if (!email) {
-        return false;
+        // No email in Google profile — redirect with specific error.
+        return `/?error=NoEmail`;
       }
 
       const existingUser = await getUserByEmail(email);
-      if (!existingUser?.isActive) {
+      if (!existingUser) {
         await logSecurityEvent({
           eventType: "LOGIN_FAILURE",
-          meta: { email, reason: "google_not_provisioned_or_inactive" },
+          meta: { email, reason: "google_user_not_found" },
         });
-        return false;
+        return `/?error=UserNotFound`;
+      }
+
+      if (!existingUser.isActive) {
+        await logSecurityEvent({
+          eventType: "LOGIN_FAILURE",
+          meta: { email, reason: "google_account_inactive" },
+        });
+        return `/?error=AccountInactive`;
       }
 
       return true;
