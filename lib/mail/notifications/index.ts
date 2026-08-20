@@ -1,14 +1,10 @@
 import "server-only";
 
-import type { AppraisalStatus } from "@/types/forms";
 import type { ReturnLevel } from "@/types/form-submissions";
 import { getSubmissionRecipients, type NotificationRecipient } from "./recipients";
 import { dispatchNotification, type NotificationTarget } from "./dispatch";
 import {
   boardApprovedTemplate,
-  hrApprovedTemplate,
-  manager1ApprovedTemplate,
-  manager2ApprovedTemplate,
   returnedToEmployeeTemplate,
   returnedToManager1ManagerTemplate,
   returnedToManager2ManagerTemplate,
@@ -40,71 +36,27 @@ export async function notifySelfAssessmentSubmitted(
   const recipients = await getSubmissionRecipients(appraisalId);
   if (!recipients?.employee) return;
 
-  // After the self-assessment is submitted, the appraisal status has already
-  // been updated to the next workflow stage (PENDING_HEAD_REVIEW or
-  // PENDING_HR_CALIBRATION). Use that as the "next status" in the email.
   const content = selfAssessmentSubmittedTemplate({
     employeeName: recipients.employee.name,
-    nextStatus: recipients.appraisalStatus,
   });
 
   void dispatchNotification(appraisalId, "self_assessment_submitted", recipients.employee, content);
 }
 
 /* -------------------------------------------------------------------------- */
-/* 2 & 3. Manager 1 / Manager 2 Approved                                      */
+/* 5. Board Approved (Final)                                                  */
 /* -------------------------------------------------------------------------- */
 
-export async function notifyManagerApproved(
+export async function notifyBoardApproved(
   appraisalId: number,
-  managerLevel: number,
-  nextStatus: AppraisalStatus,
 ): Promise<void> {
   const recipients = await getSubmissionRecipients(appraisalId);
   if (!recipients?.employee) return;
 
-  const content =
-    managerLevel === 2
-      ? manager2ApprovedTemplate({
-          employeeName: recipients.employee.name,
-          nextStatus,
-        })
-      : manager1ApprovedTemplate({
-          employeeName: recipients.employee.name,
-          nextStatus,
-        });
-
-  const event = managerLevel === 2 ? "manager2_approved" : "manager1_approved";
-  void dispatchNotification(appraisalId, event, recipients.employee, content);
-}
-
-/* -------------------------------------------------------------------------- */
-/* 4 & 5. HR / Board Approved                                                 */
-/* -------------------------------------------------------------------------- */
-
-export async function notifyHrOrBoardApproved(
-  appraisalId: number,
-  previousStatus: AppraisalStatus,
-  nextStatus: AppraisalStatus,
-): Promise<void> {
-  const recipients = await getSubmissionRecipients(appraisalId);
-  if (!recipients?.employee) return;
-
-  if (previousStatus === "PENDING_BOARD_APPROVAL") {
-    // Board approval — final, no next status.
-    const content = boardApprovedTemplate({
-      employeeName: recipients.employee.name,
-    });
-    void dispatchNotification(appraisalId, "board_approved", recipients.employee, content);
-    return;
-  }
-
-  // HR approval.
-  const content = hrApprovedTemplate({
+  const content = boardApprovedTemplate({
     employeeName: recipients.employee.name,
-    nextStatus,
   });
-  void dispatchNotification(appraisalId, "hr_approved", recipients.employee, content);
+  void dispatchNotification(appraisalId, "board_approved", recipients.employee, content);
 }
 
 /* -------------------------------------------------------------------------- */

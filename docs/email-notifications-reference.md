@@ -25,13 +25,10 @@ All emails share a consistent professional layout:
 | # | Trigger | Recipient | Subject Line |
 |---|---------|-----------|--------------|
 | 1 | Employee submits self-assessment | Employee | PMS Submission Received – Self-Assessment Completed |
-| 2 | Manager 1 approves submission | Employee | PMS Submission Update – Manager 1 Approval |
-| 3 | Manager 2 approves submission | Employee | PMS Submission Update – Manager 2 Approval |
-| 4 | HR approves submission | Employee | PMS Submission Update – HR Approval |
 | 5 | Board grants final approval | Employee | PMS Submission Approved – Final Approval |
 | 6 | Submission returned to Employee | Employee | Action Required – PMS Submission Returned |
-| 7 | Submission returned to Manager 1 | Manager 1 | Action Required – PMS Submission Returned to Manager 1 |
-| 8 | Submission returned to Manager 2 | Manager 2 | Action Required – PMS Submission Returned to Manager 2 |
+| 7a | Submission returned to Manager 1 | Manager 1 | Action Required – PMS Submission Returned to Manager 1 |
+| 8a | Submission returned to Manager 2 | Manager 2 | Action Required – PMS Submission Returned to Manager 2 |
 
 ---
 
@@ -42,72 +39,15 @@ All emails share a consistent professional layout:
 **Trigger:** Employee completes and submits their self-assessment.
 **Recipient:** Employee
 
-> Dear [Employee Name],
->
-> Your performance assessment submission has been successfully received.
+> Dear [Employee Name]
 >
 > Your self-assessment has been completed and submitted successfully.
 >
 > **Current Status:** Self-Assessment Completed
-> **Next Stage:** [Next workflow stage label]
 >
 > Your submission will now proceed to the next stage of the performance assessment process.
 >
 > You do not need to take any further action at this stage unless requested by the PMS.
-
----
-
-### 2. Manager 1 Approved
-
-**Trigger:** Manager 1 reviews and approves the submission.
-**Recipient:** Employee
-
-> Dear [Employee Name]
->
-> Your performance assessment submission has been reviewed and approved by Manager 1.
->
-> **Current Status:** Manager 1 Approved
-> **Next Stage:** [Next workflow stage label]
->
-> Your submission will now proceed to the next stage of the performance assessment process.
->
-> No further action is required from you at this stage unless the PMS requests it.
-
----
-
-### 3. Manager 2 Approved
-
-**Trigger:** Manager 2 reviews and approves the submission.
-**Recipient:** Employee
-
-> Dear [Employee Name]
->
-> Your performance assessment submission has been reviewed and approved by Manager 2.
->
-> **Current Status:** Manager 2 Approved
-> **Next Stage:** [Next workflow stage label]
->
-> Your submission will now proceed to the next stage of the performance assessment process.
->
-> No further action is required from you at this stage unless the PMS requests it.
-
----
-
-### 4. HR Approved
-
-**Trigger:** HR reviews and approves the submission.
-**Recipient:** Employee
-
-> Dear [Employee Name]
->
-> Your performance assessment submission has been reviewed and approved by Human Resources.
->
-> **Current Status:** HR Approved
-> **Next Stage:** [Next workflow stage label]
->
-> Your submission will now proceed to the next stage of the performance assessment process.
->
-> No further action is required from you at this stage unless the PMS requests it.
 
 ---
 
@@ -118,11 +58,8 @@ All emails share a consistent professional layout:
 
 > Dear [Employee Name]
 >
-> We are pleased to inform you that your performance assessment submission has been approved by the Board.
+> We are pleased to inform you that your performance assessment has been approved by the Board.
 >
-> Your submission has successfully completed the required approval process.
->
-> **Current Status:** Board Approved
 > **Status:** Final Approval Completed
 >
 > Thank you for completing the performance assessment process.
@@ -136,26 +73,24 @@ All emails share a consistent professional layout:
 
 > Dear [Employee Name]
 >
-> Your performance assessment submission has been returned to you for further review and action.
+> Your self-assessment submission has been returned to you for further review and action.
 >
 > **Current Status:** Returned to Employee
 >
-> Please log in to the Performance Management System, review the submission, make the required changes, and resubmit it when ready.
->
-> Please ensure that all required information is complete before submitting again.
+> Please log in to the Performance Management System, review your submission, and make the required changes. Please ensure that all required information is complete before submitting again.
 >
 > **Return Reason:** [Reason provided by the reviewer, if any]
 
 ---
 
-### 7. Returned to Manager 1
+### 7a. Returned to Manager 1 — Manager Notification
 
 **Trigger:** Submission is returned to Manager 1 for further action.
 **Recipient:** Manager 1 only (employee is NOT notified)
 
 > Dear [Manager 1 Name]
 >
-> A performance assessment submission has been returned to you for further review and action.
+> A self-assessment submission of your staff has been returned to you for further review and action.
 >
 > **Employee:** [Employee Name]
 > **Current Status:** Returned to Manager 1
@@ -166,14 +101,14 @@ All emails share a consistent professional layout:
 
 ---
 
-### 8. Returned to Manager 2
+### 8a. Returned to Manager 2 — Manager Notification
 
 **Trigger:** Submission is returned to Manager 2 for further action.
 **Recipient:** Manager 2 only (employee is NOT notified)
 
 > Dear [Manager 2 Name]
 >
-> A performance assessment submission has been returned to you for further review and action.
+> A self-assessment submission of your staff has been returned to you for further review and action.
 >
 > **Employee:** [Employee Name]
 > **Current Status:** Returned to Manager 2
