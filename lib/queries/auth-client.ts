@@ -35,10 +35,18 @@ const authErrorMap: Record<string, string> = {
   OAuthSignin:
     "Could not start Google sign-in. Please check your connection and try again.",
   Configuration:
-    "The sign-in system is not configured correctly. Please contact HR if the problem persists.",
+    "The sign-in system is not configured correctly. If this is the test login, make sure ALLOW_TEST_LOGIN=true is set.",
   Verification:
     "Sign-in verification failed. Please try again.",
-  CredentialsSignin: "Sign-in failed. Please try again.",
+  CredentialsSignin: "Sign-in failed. Please check your email and password and try again.",
+
+  // --- Test credentials errors (returned by the pre-check endpoint) ---
+  MissingEmail: "Please enter an email address.",
+  MissingPassword: "Please enter a password.",
+  InvalidEmail: "Please enter a valid email address.",
+  InvalidPassword: "Incorrect password. Please check your password and try again.",
+  InvalidRole:
+    "Your account has an unrecognized role. Please contact HR to fix your account configuration.",
 };
 
 export const getAuthErrorMessage = (code: string | null): string => {
@@ -57,6 +65,51 @@ export async function resolvePostLoginPath(): Promise<string> {
 export async function signInWithGoogle() {
   const destination = DEFAULT_HOME_PATH;
   await signIn("google", { callbackUrl: destination });
+}
+
+/**
+ * Test-only email/password sign-in (dev/staging only — the provider is not
+ * registered in production unless ALLOW_TEST_LOGIN=true). Verifies the
+ * password against the stored bcrypt hash and produces a session identical
+ * to a real Google SSO login.
+ *
+ * A pre-check request is sent to /api/auth/test-credentials-check first so
+ * that we can show a specific, user-readable error (e.g. "account inactive"
+ * vs "user not found" vs "invalid password") instead of NextAuth's generic
+ * "CredentialsSignin".
+ */
+export async function signInWithTestCredentials(email: string, password: string) {
+  // --- Pre-check: validate inputs and get a specific error if any ---
+  const checkResponse = await fetch("/api/auth/test-credentials-check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!checkResponse.ok) {
+    const data = await checkResponse.json().catch(() => null);
+    const errorCode = data?.error ?? "CredentialsSignin";
+    const customMessage = data?.message as string | undefined;
+    throw new Error(customMessage ?? getAuthErrorMessage(errorCode ?? null));
+  }
+
+  // --- Pre-check passed — proceed with NextAuth signIn ---
+  const response = await signIn("test-credentials", {
+    email,
+    password,
+    redirect: false,
+    callbackUrl: DEFAULT_HOME_PATH,
+  });
+
+  if (!response || response.error) {
+    throw new Error(getAuthErrorMessage(response?.error ?? null));
+  }
+
+  const destination = await resolvePostLoginPath();
+  return {
+    ...response,
+    url: destination,
+  };
 }
 
 export async function signOutAndRedirect() {

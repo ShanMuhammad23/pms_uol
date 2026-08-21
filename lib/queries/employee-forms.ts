@@ -367,10 +367,19 @@ async function getOrCreateAppraisal(
 
   const executor = client ?? getDbClient();
   const result = await executor.query<AppraisalRow>(
-    `INSERT INTO appraisals (employee_id, template_id, status)
-     VALUES ($1, $2, $3)
+    `INSERT INTO appraisals (employee_id, template_id, cycle_id, status)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (employee_id, cycle_id) WHERE cycle_id IS NOT NULL
+     DO UPDATE SET
+       template_id = COALESCE(appraisals.template_id, EXCLUDED.template_id),
+       status = CASE
+         WHEN appraisals.submitted_at IS NULL AND appraisals.template_id IS NULL
+           THEN EXCLUDED.status
+         ELSE appraisals.status
+       END,
+       updated_at = CURRENT_TIMESTAMP
      RETURNING id, status, submitted_at::text, updated_at::text, system_raw_score`,
-    [userId, templateId, initialStatus],
+    [userId, templateId, template.cycleId ?? null, initialStatus],
   );
 
   return result.rows[0];
