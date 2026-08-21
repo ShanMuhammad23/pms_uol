@@ -1,6 +1,4 @@
 import type { NextAuthOptions } from "next-auth";
-import bcrypt from "bcryptjs";
-import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { getUserByEmail } from "./lib/queries/auth";
 import { getAuthCookieSecure } from "./lib/env";
@@ -52,78 +50,6 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
-    // --- Test-only email/password credentials provider ---
-    // Only available outside production OR when ALLOW_TEST_LOGIN=true is set.
-    // This is NOT for end users — it exists purely for testing the auth flow
-    // without going through Google OAuth. The resulting session is identical
-    // to a real Google SSO session because it flows through the same
-    // jwt/session callbacks.
-    ...(process.env.ALLOW_TEST_LOGIN === "true" ||
-    process.env.NODE_ENV !== "production"
-      ? [
-          Credentials({
-            id: "test-credentials",
-            name: "Test Credentials",
-            credentials: {
-              email: { label: "Email", type: "email" },
-              password: { label: "Password", type: "password" },
-            },
-            async authorize(credentials) {
-              const email = credentials?.email?.toString().trim() ?? "";
-              const password = credentials?.password?.toString() ?? "";
-              if (!email || !password) {
-                return null;
-              }
-
-              const user = await getUserByEmail(email);
-              if (!user) {
-                await logSecurityEvent({
-                  eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_credentials_user_not_found" },
-                });
-                return null;
-              }
-
-              if (!user.isActive) {
-                await logSecurityEvent({
-                  eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_credentials_account_inactive" },
-                });
-                return null;
-              }
-
-              if (!isSystemRole(user.systemRole)) {
-                await logSecurityEvent({
-                  eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_credentials_invalid_role" },
-                });
-                return null;
-              }
-
-              const passwordValid = await bcrypt.compare(
-                password,
-                user.passwordHash,
-              );
-              if (!passwordValid) {
-                await logSecurityEvent({
-                  eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_credentials_invalid_password" },
-                });
-                return null;
-              }
-
-              return {
-                id: user.id,
-                email: user.email,
-                name: `${user.firstName} ${user.lastName}`.trim(),
-                role: user.systemRole,
-                designation: user.designation,
-                entityId: user.entityId,
-              };
-            },
-          }),
-        ]
-      : []),
   ],
   callbacks: {
     async signIn({ account, profile }) {
