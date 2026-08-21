@@ -142,6 +142,7 @@ function mapOverviewRow(
     empSubCategory: null,
     templateId: null,
     templateTitle: null,
+    templateCode: null,
     formAssigned: false,
     directScoreEntry: false,
     entityId: row.entity_id ? Number(row.entity_id) : null,
