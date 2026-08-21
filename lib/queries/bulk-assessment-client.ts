@@ -18,6 +18,7 @@ export interface BulkReviewQueueItem {
   orgLevel2Name: string | null;
   templateId: number | null;
   templateTitle: string | null;
+  templateCode: string | null;
   status: AppraisalStatus;
   managerLevel: number | null;
   manager1UserId: number | null;

@@ -59,6 +59,7 @@ interface SubmissionListRow {
   emp_sub_category: string | null;
   template_id: number | null;
   template_title: string | null;
+  template_code: string | null;
   entity_id: string | null;
   entity_name: string | null;
   parent_entity_name: string | null;
@@ -267,6 +268,7 @@ function mapSubmissionRow(
     empSubCategory: row.emp_sub_category,
     templateId: row.template_id,
     templateTitle: row.template_title,
+    templateCode: row.template_code,
     formAssigned: Boolean(row.form_assigned),
     directScoreEntry: Boolean(row.direct_score_entry),
     entityId: row.entity_id ? Number(row.entity_id) : null,
@@ -517,6 +519,7 @@ export async function listFormSubmissions(
        ${qualSelect}
        COALESCE(ap.template_id, efa.template_id) AS template_id,
        ft.title AS template_title,
+       ft.code AS template_code,
        (
          EXISTS (
            SELECT 1
@@ -730,6 +733,7 @@ export interface BulkReviewQueueItem {
   orgLevel2Name: string | null;
   templateId: number | null;
   templateTitle: string | null;
+  templateCode: string | null;
   status: AppraisalStatus;
   managerLevel: number | null;
   manager1UserId: number | null;
@@ -771,6 +775,7 @@ export async function listBulkReviewQueue(
       orgLevel2Name: s.orgLevel2Name,
       templateId: s.templateId,
       templateTitle: s.templateTitle,
+      templateCode: s.templateCode,
       status: s.status,
       managerLevel: s.managerLevel,
       manager1UserId: s.manager1UserId ?? null,
@@ -1625,6 +1630,7 @@ export async function getFormSubmissionById(
     employeeEmail: summary.employeeEmail,
     templateId: summary.templateId,
     templateTitle: summary.templateTitle,
+    templateCode: summary.templateCode,
     status: summary.status,
     managerLevel: summary.managerLevel,
     manager1UserId: summary.manager1UserId,

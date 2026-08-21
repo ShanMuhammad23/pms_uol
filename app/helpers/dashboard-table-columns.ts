@@ -270,9 +270,11 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
       row.directScoreEntry
         ? "DS"
         : isFormAssigned(row)
-          ? row.selfAssessmentEnabled
-            ? "✔"
-            : "MA"
+          ? row.templateCode?.trim()
+            ? row.templateCode.trim()
+            : row.selfAssessmentEnabled
+              ? "✔"
+              : "MA"
           : "✖",
   },
   designation: {

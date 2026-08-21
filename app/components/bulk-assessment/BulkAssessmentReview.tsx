@@ -4,14 +4,17 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
+  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Filter,
   Loader2,
   RefreshCw,
   Search,
+  X,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchBulkReviewQueue,
@@ -23,7 +26,9 @@ import {
   type SaveBulkReviewEntry,
 } from "@/lib/queries/bulk-assessment-client";
 import { APPRAISAL_STATUS_LABELS } from "@/types/forms";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { useIsClient } from "@/app/hooks/use-is-client";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
@@ -71,7 +76,10 @@ export default function BulkAssessmentReview({
 
   // --- Queue state ---
   const [search, setSearch] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState<string>("");
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
+  const [designationFilter, setDesignationFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [levelFilter, setLevelFilter] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   const pageSize = 20;
@@ -109,12 +117,39 @@ export default function BulkAssessmentReview({
     [queueData],
   );
 
-  // --- Department options ---
+  // --- Filter options (derived from queue data) ---
   const departmentOptions = useMemo(() => {
     const set = new Map<string, string>();
     for (const item of queueItems) {
       const dept = item.orgLevel1Name ?? item.entityName ?? null;
       if (dept) set.set(dept, dept);
+    }
+    return Array.from(set.entries()).map(([value, label]) => ({ value, label }));
+  }, [queueItems]);
+
+  const designationOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    for (const item of queueItems) {
+      if (item.designation) set.set(item.designation, item.designation);
+    }
+    return Array.from(set.entries()).map(([value, label]) => ({ value, label }));
+  }, [queueItems]);
+
+  const statusOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    for (const item of queueItems) {
+      const label = APPRAISAL_STATUS_LABELS[item.status] ?? item.status;
+      set.set(item.status, label);
+    }
+    return Array.from(set.entries()).map(([value, label]) => ({ value, label }));
+  }, [queueItems]);
+
+  const levelOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    for (const item of queueItems) {
+      const lvl = item.managerLevel ?? 1;
+      const value = String(lvl);
+      set.set(value, `M${lvl}`);
     }
     return Array.from(set.entries()).map(([value, label]) => ({ value, label }));
   }, [queueItems]);
@@ -129,9 +164,19 @@ export default function BulkAssessmentReview({
           item.employeeId.toLowerCase().includes(q);
         if (!matches) return false;
       }
-      if (departmentFilter) {
+      if (departmentFilter.length > 0) {
         const dept = item.orgLevel1Name ?? item.entityName ?? "";
-        if (dept !== departmentFilter) return false;
+        if (!departmentFilter.includes(dept)) return false;
+      }
+      if (designationFilter.length > 0) {
+        if (!item.designation || !designationFilter.includes(item.designation)) return false;
+      }
+      if (statusFilter.length > 0) {
+        if (!statusFilter.includes(item.status)) return false;
+      }
+      if (levelFilter.length > 0) {
+        const lvl = String(item.managerLevel ?? 1);
+        if (!levelFilter.includes(lvl)) return false;
       }
       if (dateFilter) {
         if (!item.submittedAt) return false;
@@ -140,7 +185,7 @@ export default function BulkAssessmentReview({
       }
       return true;
     });
-  }, [queueItems, search, departmentFilter, dateFilter]);
+  }, [queueItems, search, departmentFilter, designationFilter, statusFilter, levelFilter, dateFilter]);
 
   // --- Pagination ---
   const totalPages = Math.max(1, Math.ceil(filteredQueue.length / pageSize));
@@ -154,7 +199,7 @@ export default function BulkAssessmentReview({
     [filteredQueue, currentPage],
   );
 
-  const filterResetKey = `${search}\0${departmentFilter}\0${dateFilter}`;
+  const filterResetKey = `${search}\0${departmentFilter.join(",")}\0${designationFilter.join(",")}\0${statusFilter.join(",")}\0${levelFilter.join(",")}\0${dateFilter}`;
   const [prevFilterResetKey, setPrevFilterResetKey] = useState(filterResetKey);
   if (filterResetKey !== prevFilterResetKey) {
     setPrevFilterResetKey(filterResetKey);
@@ -430,14 +475,23 @@ export default function BulkAssessmentReview({
       isFetching={queueFetching}
       search={search}
       departmentFilter={departmentFilter}
+      designationFilter={designationFilter}
+      statusFilter={statusFilter}
+      levelFilter={levelFilter}
       dateFilter={dateFilter}
       departmentOptions={departmentOptions}
+      designationOptions={designationOptions}
+      statusOptions={statusOptions}
+      levelOptions={levelOptions}
       currentPage={currentPage}
       totalPages={totalPages}
       totalFiltered={filteredQueue.length}
       role={role}
       onSearch={setSearch}
       onDepartmentFilter={setDepartmentFilter}
+      onDesignationFilter={setDesignationFilter}
+      onStatusFilter={setStatusFilter}
+      onLevelFilter={setLevelFilter}
       onDateFilter={setDateFilter}
       onToggleSelectAll={toggleSelectAll}
       onToggleSelect={toggleSelect}
@@ -461,15 +515,24 @@ interface ListViewProps {
   isLoading: boolean;
   isFetching: boolean;
   search: string;
-  departmentFilter: string;
+  departmentFilter: string[];
+  designationFilter: string[];
+  statusFilter: string[];
+  levelFilter: string[];
   dateFilter: string;
   departmentOptions: Array<{ value: string; label: string }>;
+  designationOptions: Array<{ value: string; label: string }>;
+  statusOptions: Array<{ value: string; label: string }>;
+  levelOptions: Array<{ value: string; label: string }>;
   currentPage: number;
   totalPages: number;
   totalFiltered: number;
   role: string | null;
   onSearch: (value: string) => void;
-  onDepartmentFilter: (value: string) => void;
+  onDepartmentFilter: (value: string[]) => void;
+  onDesignationFilter: (value: string[]) => void;
+  onStatusFilter: (value: string[]) => void;
+  onLevelFilter: (value: string[]) => void;
   onDateFilter: (value: string) => void;
   onToggleSelectAll: () => void;
   onToggleSelect: (id: number) => void;
@@ -488,14 +551,23 @@ function ListView({
   isFetching,
   search,
   departmentFilter,
+  designationFilter,
+  statusFilter,
+  levelFilter,
   dateFilter,
   departmentOptions,
+  designationOptions,
+  statusOptions,
+  levelOptions,
   currentPage,
   totalPages,
   totalFiltered,
   role,
   onSearch,
   onDepartmentFilter,
+  onDesignationFilter,
+  onStatusFilter,
+  onLevelFilter,
   onDateFilter,
   onToggleSelectAll,
   onToggleSelect,
@@ -528,54 +600,6 @@ function ListView({
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-slate-900">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => onSearch(e.target.value)}
-            placeholder="Search employee name or ID..."
-            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 dark:border-white/10 dark:bg-slate-950 dark:text-white"
-          />
-        </div>
-
-        <select
-          value={departmentFilter}
-          onChange={(e) => onDepartmentFilter(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 dark:border-white/10 dark:bg-slate-950 dark:text-white"
-        >
-          <option value="">All Departments</option>
-          {departmentOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-
-        <input
-          type="date"
-          value={dateFilter}
-          onChange={(e) => onDateFilter(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 dark:border-white/10 dark:bg-slate-950 dark:text-white"
-        />
-
-        {(search || departmentFilter || dateFilter) && (
-          <button
-            type="button"
-            onClick={() => {
-              onSearch("");
-              onDepartmentFilter("");
-              onDateFilter("");
-            }}
-            className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-          >
-            Clear filters
-          </button>
-        )}
-      </div>
-
       {/* Selection bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
@@ -593,6 +617,22 @@ function ListView({
               {selectedCount} selected
             </span>
           ) : null}
+          {(search || departmentFilter.length > 0 || designationFilter.length > 0 || statusFilter.length > 0 || levelFilter.length > 0 || dateFilter) && (
+            <button
+              type="button"
+              onClick={() => {
+                onSearch("");
+                onDepartmentFilter([]);
+                onDesignationFilter([]);
+                onStatusFilter([]);
+                onLevelFilter([]);
+                onDateFilter("");
+              }}
+              className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -620,15 +660,61 @@ function ListView({
       {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
         <table className="w-full text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-slate-800/40">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <thead className="border-b border-slate-200 bg-primary dark:border-white/10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wider text-white">
               <th className="px-3 py-3 w-10"></th>
-              <th className="px-3 py-3">Employee</th>
-              <th className="px-3 py-3">Department</th>
-              <th className="px-3 py-3">Designation</th>
-              <th className="px-3 py-3">Submitted</th>
-              <th className="px-3 py-3">Status</th>
-              <th className="px-3 py-3">Level</th>
+              <th className="px-3 py-3">
+                <BulkHeaderFilter
+                  label="Employee"
+                  type="text"
+                  value={search}
+                  onChange={onSearch}
+                />
+              </th>
+              <th className="px-3 py-3">
+                <BulkHeaderFilter
+                  label="Department"
+                  type="multi"
+                  options={departmentOptions}
+                  selected={departmentFilter}
+                  onChange={onDepartmentFilter}
+                />
+              </th>
+              <th className="px-3 py-3">
+                <BulkHeaderFilter
+                  label="Designation"
+                  type="multi"
+                  options={designationOptions}
+                  selected={designationFilter}
+                  onChange={onDesignationFilter}
+                />
+              </th>
+              <th className="px-3 py-3">
+                <BulkHeaderFilter
+                  label="Submitted"
+                  type="date"
+                  value={dateFilter}
+                  onChange={onDateFilter}
+                />
+              </th>
+              <th className="px-3 py-3">
+                <BulkHeaderFilter
+                  label="Status"
+                  type="multi"
+                  options={statusOptions}
+                  selected={statusFilter}
+                  onChange={onStatusFilter}
+                />
+              </th>
+              <th className="px-3 py-3">
+                <BulkHeaderFilter
+                  label="Level"
+                  type="multi"
+                  options={levelOptions}
+                  selected={levelFilter}
+                  onChange={onLevelFilter}
+                />
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40">
@@ -727,6 +813,354 @@ function ListView({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Header Filter Dropdown                                                      */
+/* -------------------------------------------------------------------------- */
+
+interface FilterOption {
+  value: string;
+  label: string;
+}
+
+type BulkHeaderFilterType = "text" | "multi" | "date";
+
+interface BulkHeaderFilterProps {
+  label: string;
+  type: BulkHeaderFilterType;
+  /** For text/date filters */
+  value?: string;
+  /** For multi-select filters */
+  selected?: string[];
+  options?: FilterOption[];
+  onChange: (value: string) => void;
+}
+
+interface BulkHeaderFilterMultiProps {
+  label: string;
+  type: "multi";
+  selected: string[];
+  options: FilterOption[];
+  onChange: (value: string[]) => void;
+}
+
+function getMenuPosition(trigger: HTMLElement) {
+  const rect = trigger.getBoundingClientRect();
+  const gap = 4;
+  const preferredMaxHeight = 300;
+  const preferredWidth = 240;
+  const spaceBelow = window.innerHeight - rect.bottom - gap - 8;
+  const spaceAbove = rect.top - gap - 8;
+  const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(
+    180,
+    Math.min(preferredMaxHeight, openUpward ? spaceAbove : spaceBelow),
+  );
+
+  let left = rect.left;
+  if (left + preferredWidth > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - preferredWidth - 8);
+  }
+
+  return {
+    top: openUpward ? rect.top - gap : rect.bottom + gap,
+    left,
+    width: preferredWidth,
+    maxHeight,
+    openUpward,
+  };
+}
+
+function BulkHeaderFilter(props: BulkHeaderFilterProps | BulkHeaderFilterMultiProps) {
+  const { label, type } = props;
+  const value = "value" in props ? props.value ?? "" : "";
+  const selected = "selected" in props ? props.selected ?? [] : [];
+  const options = "options" in props ? props.options ?? [] : [];
+  const onChange = props.onChange;
+  // Normalize onChange to accept both string and string[] depending on type
+  const onChangeAny = onChange as (value: string | string[]) => void;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [draftText, setDraftText] = useState("");
+  const [position, setPosition] = useState<ReturnType<typeof getMenuPosition> | null>(null);
+  const mounted = useIsClient();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+
+  const isActive = useMemo(() => {
+    if (type === "text") return value.trim().length > 0;
+    if (type === "date") return value.length > 0;
+    return selected.length > 0;
+  }, [type, value, selected.length]);
+
+  // Sync draft text when opening text filter
+  const draftSyncKey = open && type === "text" ? `${label}:${value}` : "";
+  const [prevDraftSyncKey, setPrevDraftSyncKey] = useState(draftSyncKey);
+  if (draftSyncKey !== prevDraftSyncKey) {
+    setPrevDraftSyncKey(draftSyncKey);
+    if (open && type === "text") {
+      setDraftText(value);
+    }
+  }
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const updatePosition = () => {
+      if (triggerRef.current) {
+        setPosition(getMenuPosition(triggerRef.current));
+      }
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+      setQuery("");
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const selectedSet = new Set(selected);
+  const allSelected = options.length > 0 && selected.length === options.length;
+  const noneSelected = selected.length === 0;
+
+  const filteredOptions = options.filter((opt) => {
+    if (!query.trim()) return true;
+    return opt.label.toLowerCase().includes(query.trim().toLowerCase());
+  });
+
+  const handleToggle = (val: string) => {
+    const next = selected.includes(val)
+      ? selected.filter((v) => v !== val)
+      : [...selected, val];
+    onChangeAny(next);
+  };
+
+  const clearFilter = () => {
+    if (type === "text" || type === "date") {
+      onChangeAny("");
+    } else {
+      onChangeAny([]);
+    }
+    setQuery("");
+    setOpen(false);
+  };
+
+  const applyTextFilter = () => {
+    onChangeAny(draftText);
+    setOpen(false);
+  };
+
+  const menu =
+    open && mounted && position
+      ? createPortal(
+          <div
+            ref={menuRef}
+            id={listId}
+            role="dialog"
+            aria-label={`Filter ${label}`}
+            style={{
+              position: "fixed",
+              top: position.openUpward ? undefined : position.top,
+              bottom: position.openUpward
+                ? window.innerHeight - position.top
+                : undefined,
+              left: position.left,
+              width: position.width,
+              maxHeight: position.maxHeight,
+              zIndex: 1000,
+            }}
+            className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl dark:border-white/10 dark:bg-slate-900"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-white/5">
+              <p className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">
+                {label}
+              </p>
+              <button
+                type="button"
+                onClick={clearFilter}
+                disabled={!isActive}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                <X className="h-3 w-3" />
+                Clear
+              </button>
+            </div>
+
+            {type === "text" ? (
+              <div className="space-y-2 p-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="search"
+                    autoFocus
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        applyTextFilter();
+                      }
+                    }}
+                    placeholder="Contains..."
+                    className="w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300/60 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={applyTextFilter}
+                  className="w-full rounded-md bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+                >
+                  Apply
+                </button>
+              </div>
+            ) : type === "date" ? (
+              <div className="p-3">
+                <input
+                  type="date"
+                  autoFocus
+                  value={value}
+                  onChange={(e) => onChangeAny(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 px-3 text-xs text-slate-700 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300/60 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
+                />
+              </div>
+            ) : (
+              <>
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5 dark:border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => onChangeAny(options.map((o) => o.value))}
+                    disabled={allSelected || options.length === 0}
+                    className="text-[11px] font-semibold text-slate-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-slate-300"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChangeAny([])}
+                    disabled={noneSelected || options.length === 0}
+                    className="text-[11px] font-semibold text-slate-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-slate-300"
+                  >
+                    Unselect all
+                  </button>
+                </div>
+
+                {options.length > 8 ? (
+                  <div className="relative shrink-0 border-b border-slate-100 px-2 py-2 dark:border-white/5">
+                    <Search className="absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search..."
+                      className="w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300/60 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300"
+                    />
+                  </div>
+                ) : null}
+
+                <ul className="min-h-0 flex-1 overflow-y-auto py-1">
+                  {filteredOptions.length === 0 ? (
+                    <li className="px-3 py-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                      No options
+                    </li>
+                  ) : (
+                    filteredOptions.map((opt) => {
+                      const checked = selectedSet.has(opt.value);
+                      return (
+                        <li key={opt.value}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={checked}
+                            onClick={() => handleToggle(opt.value)}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-white/4"
+                          >
+                            <span
+                              className={cn(
+                                "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
+                                checked
+                                  ? "border-slate-700 bg-slate-700 text-white dark:border-slate-300 dark:bg-slate-300 dark:text-slate-900"
+                                  : "border-slate-300 dark:border-white/20",
+                              )}
+                            >
+                              {checked ? (
+                                <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                              ) : null}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate">
+                              {opt.label}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              </>
+            )}
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <div className="inline-flex items-center gap-1">
+      <span>{label}</span>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`Filter by ${label}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen((c) => !c)}
+        onKeyDown={(e: KeyboardEvent<HTMLButtonElement>) => {
+          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        className={cn(
+          "inline-flex h-5 w-5 items-center justify-center rounded transition-colors",
+          isActive
+            ? "bg-white text-primary"
+            : "text-white/70 hover:bg-white/15 hover:text-white",
+          open && !isActive && "bg-white/15 text-white",
+        )}
+      >
+        <Filter className="h-3 w-3" />
+      </button>
+      {menu}
     </div>
   );
 }
