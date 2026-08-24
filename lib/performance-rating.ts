@@ -1,5 +1,6 @@
 import { isQuartileScoreMinExclusive } from "@/types/performance-matrices";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
+import { getReportingManagerScore } from "@/app/helpers/score-o";
 
 export interface PerformanceQuartileBand {
   performanceLevelId: number;
@@ -110,19 +111,25 @@ export function resolvePerformanceQuartileForRawScore(
 
 /**
  * Compute the adjusted score (Score O + CH Adj + ORIC Adj + QEC Adj).
- * Returns null when Score O is not available.
+ * Uses the official reporting-manager score (getReportingManagerScore),
+ * NOT self-assessment rawScore. Returns null when no approved manager
+ * score is available.
  */
 export function getAdjustedScore(
   row: Pick<
     FormSubmissionListItem,
+    | "directScoreEntry"
     | "scoreO"
-    | "rawScore"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
     | "creditHrsErpScoreAdj"
     | "pubOricScoreAdj"
     | "qecScoreAdj"
   >,
 ): number | null {
-  const scoreO = row.scoreO ?? row.rawScore;
+  const scoreO = getReportingManagerScore(row);
   if (scoreO === null || scoreO === undefined || Number.isNaN(scoreO)) {
     return null;
   }
@@ -144,8 +151,12 @@ export function getNormalizedScore(
   row: Pick<
     FormSubmissionListItem,
     | "normalizedScore"
+    | "directScoreEntry"
     | "scoreO"
-    | "rawScore"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
     | "creditHrsErpScoreAdj"
     | "pubOricScoreAdj"
     | "qecScoreAdj"
@@ -179,8 +190,12 @@ export function getNormalizedScorePercent(
   row: Pick<
     FormSubmissionListItem,
     | "normalizedScore"
+    | "directScoreEntry"
     | "scoreO"
-    | "rawScore"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
     | "creditHrsErpScoreAdj"
     | "pubOricScoreAdj"
     | "qecScoreAdj"
@@ -206,8 +221,12 @@ export function resolveSubmissionPerformanceQuartile(
   row: Pick<
     FormSubmissionListItem,
     | "normalizedScore"
+    | "directScoreEntry"
     | "scoreO"
-    | "rawScore"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
     | "creditHrsErpScoreAdj"
     | "pubOricScoreAdj"
     | "qecScoreAdj"
@@ -217,6 +236,125 @@ export function resolveSubmissionPerformanceQuartile(
   bands: PerformanceQuartileBand[],
 ): ResolvedPerformanceQuartile | null {
   const scorePercent = getNormalizedScorePercent(row);
+  if (scorePercent === null) return null;
+  return resolvePerformanceQuartile(scorePercent, bands);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Score-type-aware resolvers for the Rating × Quartile Matrix dropdown        */
+/* -------------------------------------------------------------------------- */
+
+export type MatrixScoreType = "normalized" | "scoreO" | "adjusted";
+
+/**
+ * Compute Score(O) as a percentage of maxRawScore.
+ * Uses the official reporting-manager score (getReportingManagerScore),
+ * NOT self-assessment rawScore. Returns null when no approved manager
+ * score is available or maxRawScore is not valid.
+ */
+export function getScoreOPercent(
+  row: Pick<
+    FormSubmissionListItem,
+    | "directScoreEntry"
+    | "scoreO"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
+    | "maxRawScore"
+  >,
+): number | null {
+  const scoreO = getReportingManagerScore(row);
+  if (scoreO === null || scoreO === undefined || Number.isNaN(scoreO)) {
+    return null;
+  }
+  if (row.maxRawScore <= 0) return null;
+  return Number(((scoreO / row.maxRawScore) * 100).toFixed(2));
+}
+
+/**
+ * Compute the adjusted score as a percentage of maxRawScore.
+ * Adjusted = Score(O) + CH Adj + ORIC Adj + QEC Adj.
+ * Returns null when Score(O) or maxRawScore is not valid.
+ */
+export function getAdjustedScorePercent(
+  row: Pick<
+    FormSubmissionListItem,
+    | "directScoreEntry"
+    | "scoreO"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
+    | "creditHrsErpScoreAdj"
+    | "pubOricScoreAdj"
+    | "qecScoreAdj"
+    | "maxRawScore"
+  >,
+): number | null {
+  const adjusted = getAdjustedScore(row);
+  if (adjusted === null || row.maxRawScore <= 0) return null;
+  return Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
+}
+
+/**
+ * Get the score percentage for the specified score type.
+ * This is the single entry point used by the matrix dropdown.
+ */
+export function getScorePercentByType(
+  row: Pick<
+    FormSubmissionListItem,
+    | "normalizedScore"
+    | "directScoreEntry"
+    | "scoreO"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
+    | "creditHrsErpScoreAdj"
+    | "pubOricScoreAdj"
+    | "qecScoreAdj"
+    | "calibrationFactor"
+    | "maxRawScore"
+  >,
+  scoreType: MatrixScoreType,
+): number | null {
+  switch (scoreType) {
+    case "scoreO":
+      return getScoreOPercent(row);
+    case "adjusted":
+      return getAdjustedScorePercent(row);
+    case "normalized":
+    default:
+      return getNormalizedScorePercent(row);
+  }
+}
+
+/**
+ * Map a submission to its performance level and quartile using the
+ * specified score type percentage. Used by the matrix dropdown to
+ * segregate employees by Score(O), Adjusted Score, or Normalized Score.
+ */
+export function resolveSubmissionPerformanceQuartileByType(
+  row: Pick<
+    FormSubmissionListItem,
+    | "normalizedScore"
+    | "directScoreEntry"
+    | "scoreO"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
+    | "creditHrsErpScoreAdj"
+    | "pubOricScoreAdj"
+    | "qecScoreAdj"
+    | "calibrationFactor"
+    | "maxRawScore"
+  >,
+  bands: PerformanceQuartileBand[],
+  scoreType: MatrixScoreType,
+): ResolvedPerformanceQuartile | null {
+  const scorePercent = getScorePercentByType(row, scoreType);
   if (scorePercent === null) return null;
   return resolvePerformanceQuartile(scorePercent, bands);
 }

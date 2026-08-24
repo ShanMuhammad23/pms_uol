@@ -238,8 +238,14 @@ function mapSubmissionRow(
     ? resolveSubmissionPerformanceQuartile(
         {
           normalizedScore,
+          directScoreEntry: Boolean(row.direct_score_entry),
           scoreO,
-          rawScore,
+          manager1Score: toNumber(row.manager_1_score),
+          manager2Score: toNumber(row.manager_2_score),
+          manager2UserId: row.manager_2_user_id
+            ? Number(row.manager_2_user_id)
+            : null,
+          status: row.status,
           creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
           pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
           qecScoreAdj: toNumber(row.qec_score_adj),
@@ -1612,8 +1618,12 @@ export async function getFormSubmissionById(
   const resolved = resolveSubmissionPerformanceQuartile(
     {
       normalizedScore: summary.normalizedScore,
+      directScoreEntry: summary.directScoreEntry,
       scoreO: summary.scoreO,
-      rawScore: summary.rawScore,
+      manager1Score: summary.manager1Score,
+      manager2Score: summary.manager2Score,
+      manager2UserId: summary.manager2UserId,
+      status: summary.status,
       creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,
       pubOricScoreAdj: summary.pubOricScoreAdj,
       qecScoreAdj: summary.qecScoreAdj,

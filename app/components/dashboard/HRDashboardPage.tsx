@@ -104,6 +104,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     ratingQuartileMatrix,
     chartSubmissionsCount,
     matrixForDistribution,
+    matrixScoreType,
+    setMatrixScoreType,
   } = useDashboardPage();
 
   const tableClearAllRef = useRef<(() => void) | null>(null);
@@ -251,6 +253,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
                     employeeCount={chartSubmissionsCount}
                     performanceMatrixLoading={performanceMatrixLoading}
                     role={role}
+                    matrixScoreType={matrixScoreType}
+                    onMatrixScoreTypeChange={setMatrixScoreType}
                   />
                 </motion.div>
               ) : null}

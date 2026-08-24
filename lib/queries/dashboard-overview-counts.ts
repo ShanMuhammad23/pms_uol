@@ -1,5 +1,6 @@
 import {
   contributesToPerformanceDistribution,
+  contributesToMatrixByScoreType,
 } from "@/app/helpers/dashboard-chart-submissions";
 import { getSubmissionEligibilityDisplayStatus } from "@/app/helpers/dashboard-eligibility";
 import {
@@ -18,7 +19,11 @@ import {
 } from "@/app/helpers/dashboard-workflow-stats";
 import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormState } from "@/app/helpers/dashboard-types";
-import { resolveSubmissionPerformanceQuartile } from "@/lib/performance-rating";
+import {
+  resolveSubmissionPerformanceQuartile,
+  resolveSubmissionPerformanceQuartileByType,
+  type MatrixScoreType,
+} from "@/lib/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import type {
   CountOption,
@@ -73,6 +78,7 @@ function countByValue(
 function buildRatingQuartileCounts(
   submissions: FormSubmissionListItem[],
   bands: PerformanceQuartileBand[],
+  scoreType: MatrixScoreType = "normalized",
 ): DashboardOverviewCounts["ratingQuartileCounts"] {
   const counts = new Map<string, number>();
 
@@ -81,10 +87,9 @@ function buildRatingQuartileCounts(
   }
 
   for (const submission of submissions) {
-    // Curve/matrix: HR alignment completed + valid normalized score only.
-    if (!contributesToPerformanceDistribution(submission)) continue;
+    if (!contributesToMatrixByScoreType(submission, scoreType)) continue;
 
-    const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
+    const resolved = resolveSubmissionPerformanceQuartileByType(submission, bands, scoreType);
     if (!resolved) continue;
 
     const key = `${resolved.performanceLevelId}-${resolved.quartileId}`;
@@ -121,6 +126,7 @@ export function buildDashboardOverviewCounts(
   filters: DashboardFilterParams,
   entities: EntityRecord[],
   quartileBands: PerformanceQuartileBand[],
+  scoreType: MatrixScoreType = "normalized",
 ): DashboardOverviewCounts {
   const filterState = toSubmissionFilterState(filters, entities);
   const filtered = submissions.filter((submission) =>
@@ -266,7 +272,7 @@ export function buildDashboardOverviewCounts(
       boardApproval: buildBoardApprovalStats(filtered),
     },
     ratingDistribution: buildRatingDistribution(filtered, quartileBands),
-    ratingQuartileCounts: buildRatingQuartileCounts(filtered, quartileBands),
+    ratingQuartileCounts: buildRatingQuartileCounts(filtered, quartileBands, scoreType),
     chartEmployeeCount: filtered.filter(contributesToPerformanceDistribution)
       .length,
   };

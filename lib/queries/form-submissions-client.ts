@@ -12,6 +12,7 @@ import {
   buildFormSubmissionsSearchParams,
   buildOverviewSearchParams,
 } from "@/lib/dashboard/filter-params";
+import type { MatrixScoreType } from "@/lib/performance-rating";
 
 async function parseResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
@@ -56,8 +57,12 @@ export async function fetchFormSubmissions(): Promise<FormSubmissionListItem[]> 
 /** Aggregated counts for filters, workflow stats, and charts. */
 export async function fetchDashboardOverview(
   filters: DashboardFilterParams,
+  scoreType?: MatrixScoreType,
 ): Promise<DashboardOverviewCounts> {
   const params = buildOverviewSearchParams(filters);
+  if (scoreType && scoreType !== "normalized") {
+    params.set("scoreType", scoreType);
+  }
   const query = params.toString();
   const response = await fetch(
     `/api/submissions/overview${query ? `?${query}` : ""}`,

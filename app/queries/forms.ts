@@ -11,6 +11,7 @@ import {
   buildFormSubmissionsSearchParams,
   buildOverviewSearchParams,
 } from "@/lib/dashboard/filter-params";
+import type { MatrixScoreType } from "@/lib/performance-rating";
 import type {
   DashboardFilterParams,
   FormSubmissionsQueryParams,
@@ -26,12 +27,17 @@ export function useFormSubmissionsQuery(query: FormSubmissionsQueryParams) {
   });
 }
 
-export function useDashboardOverviewQuery(filters: DashboardFilterParams) {
+export function useDashboardOverviewQuery(
+  filters: DashboardFilterParams,
+  scoreType?: MatrixScoreType,
+) {
   const paramsKey = buildOverviewSearchParams(filters).toString();
+  const scoreKey = scoreType ?? "normalized";
+  const cacheKey = `${paramsKey}&st=${scoreKey}`;
 
   return useQuery({
-    queryKey: queryKeys.dashboardOverviewCounts(paramsKey),
-    queryFn: () => fetchDashboardOverview(filters),
+    queryKey: queryKeys.dashboardOverviewCounts(cacheKey),
+    queryFn: () => fetchDashboardOverview(filters, scoreType),
     ...DASHBOARD_QUERY_CACHE,
   });
 }

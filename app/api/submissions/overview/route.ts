@@ -8,10 +8,13 @@ import { listEntities } from "@/lib/queries/entities";
 import { listDashboardOverview } from "@/lib/queries/dashboard-overview";
 import { buildDashboardOverviewCounts } from "@/lib/queries/dashboard-overview-counts";
 import { getActiveFinancialYearQuartileBands } from "@/lib/queries/performance-rating";
+import type { MatrixScoreType } from "@/lib/performance-rating";
 import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+
+const VALID_SCORE_TYPES = new Set<MatrixScoreType>(["normalized", "scoreO", "adjusted"]);
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await requireDashboardSubmissionsApi();
@@ -52,6 +55,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     const filters = parseDashboardFilterParams(request.nextUrl.searchParams);
 
+    // Parse the optional scoreType query param for the Rating × Quartile
+    // Matrix dropdown. Defaults to "normalized" (the original behavior).
+    const scoreTypeParam = request.nextUrl.searchParams.get("scoreType");
+    const scoreType: MatrixScoreType =
+      scoreTypeParam && VALID_SCORE_TYPES.has(scoreTypeParam as MatrixScoreType)
+        ? (scoreTypeParam as MatrixScoreType)
+        : "normalized";
+
     const [overview, entities, quartileBands] = await Promise.all([
       listDashboardOverview({
         scopedEntityIds,
@@ -81,6 +92,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
         filters,
         entities,
         quartileBands,
+        scoreType,
       ),
     );
   } catch (error) {

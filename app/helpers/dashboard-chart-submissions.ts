@@ -1,5 +1,9 @@
 import type { FormSubmissionListItem } from "@/types/form-submissions";
-import { getNormalizedScorePercent } from "@/lib/performance-rating";
+import {
+  getNormalizedScorePercent,
+  getScorePercentByType,
+  type MatrixScoreType,
+} from "@/lib/performance-rating";
 import {
   isHrAlignmentAligned,
   isSubmissionEligible,
@@ -41,4 +45,24 @@ export function contributesToPerformanceDistribution(
     isHrAlignmentAligned(submission) &&
     hasValidNormalizedScoreForCharts(submission)
   );
+}
+
+/**
+ * Generalized contribution check for the Rating × Quartile Matrix dropdown.
+ * For `normalized` (default): requires HR alignment + valid normalized score.
+ * For `scoreO` / `adjusted`: only requires appraisal progress + eligibility +
+ * a valid score of the selected type (no HR alignment needed).
+ */
+export function contributesToMatrixByScoreType(
+  submission: FormSubmissionListItem,
+  scoreType: MatrixScoreType,
+): boolean {
+  if (!hasAppraisalProgress(submission) || !isSubmissionEligible(submission)) {
+    return false;
+  }
+  if (scoreType === "normalized") {
+    return isHrAlignmentAligned(submission) && hasValidNormalizedScoreForCharts(submission);
+  }
+  const pct = getScorePercentByType(submission, scoreType);
+  return pct !== null && pct > 0;
 }
