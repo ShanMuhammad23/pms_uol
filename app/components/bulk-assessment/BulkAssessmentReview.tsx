@@ -1315,11 +1315,11 @@ function WorkspaceView({
           {/* Question header */}
           <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
             {currentQuestion.sectionTitle ? (
-              <p className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              <p className="whitespace-pre-wrap text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                 {currentQuestion.sectionTitle}
               </p>
             ) : null}
-            <h2 className="mt-1 text-base font-semibold text-slate-900 dark:text-white">
+            <h2 className="mt-1 whitespace-pre-wrap text-base font-semibold text-slate-900 dark:text-white">
               Question {currentQuestionIdx + 1}: {currentQuestion.questionText}
               <QuestionRequiredIndicator isRequired={currentQuestion.isRequired} />
             </h2>

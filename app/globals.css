@@ -9,6 +9,7 @@
   padding-left: 1rem;
   padding-right: 1rem;
   vertical-align: middle;
+  white-space: pre-wrap;
 }
 
 :root {

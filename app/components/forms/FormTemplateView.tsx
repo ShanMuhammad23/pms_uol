@@ -149,7 +149,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                         {row.sr}
                       </td>
                       <td className="border-r border-indigo-100 px-3 py-2.5 dark:border-indigo-500/15">
-                        <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">{question!.questionText}<QuestionRequiredIndicator isRequired={question!.isRequired} /></p>
+                        <p className="max-w-[450px] break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">{question!.questionText}<QuestionRequiredIndicator isRequired={question!.isRequired} /></p>
                         {question!.options.length > 0 ? (
                           <ul className="mt-1.5 space-y-0.5">
                             {question!.options.map((option) => (
