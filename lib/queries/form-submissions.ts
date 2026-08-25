@@ -8,8 +8,11 @@ import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import {
   calculateScorePercent,
   getActiveFinancialYearQuartileBands,
+  getActiveFinancialYearQuartileBandsByMatrixLabel,
+  getActiveIncrementPercentageLookup,
   resolveSubmissionPerformanceQuartile,
 } from "@/lib/queries/performance-rating";
+import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { deleteFormAttachmentFile } from "@/lib/uploads/form-attachments";
@@ -118,6 +121,9 @@ interface SubmissionListRow {
   return_reason: string | null;
   manager_1_name: string | null;
   manager_2_name: string | null;
+  assigned_performance_matrix: string | null;
+  assigned_performance_matrix_label: string | null;
+  assigned_increment_matrix_label: string | null;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -323,6 +329,7 @@ function mapSubmissionRow(
     currentSalary: toNumber(row.current_salary),
     previousSalary: toNumber(row.previous_salary),
     applicableSalaryForIncrement: toNumber(row.applicable_salary_for_increment),
+    assignedPerformanceMatrix: row.assigned_performance_matrix,
     applicableMatrix: row.applicable_matrix,
     applicableIncrementPercent: toNumber(row.calculated_increment_percentage),
     incrementPerMatrix: toNumber(row.increment_per_matrix),
@@ -381,6 +388,40 @@ function formatReferenceDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function resolveApplicableIncrementPercent(
+  item: FormSubmissionListItem,
+  performanceMatrixLabel: string | null,
+  incrementMatrixLabel: string | null,
+  bandsByLabel: Map<string, PerformanceQuartileBand[]>,
+  incrementPctByMatrixAndQuartile: Map<string, number>,
+): number | null {
+  if (!performanceMatrixLabel?.trim() || !incrementMatrixLabel?.trim()) {
+    return null;
+  }
+
+  const bands = bandsByLabel.get(performanceMatrixLabel);
+  if (!bands?.length) {
+    return null;
+  }
+
+  const resolved = resolveSubmissionPerformanceQuartile(item, bands);
+  if (!resolved) {
+    return null;
+  }
+
+  const byId = incrementPctByMatrixAndQuartile.get(
+    `${incrementMatrixLabel}:${resolved.quartileId}`,
+  );
+  if (byId != null && !Number.isNaN(byId)) {
+    return byId;
+  }
+
+  const byName = incrementPctByMatrixAndQuartile.get(
+    `${incrementMatrixLabel}:${resolved.performanceLevelName}:${resolved.quartileName}`,
+  );
+  return byName == null || Number.isNaN(byName) ? null : byName;
+}
+
 export async function listFormSubmissions(
   options?: StaffListScope,
 ): Promise<FormSubmissionListItem[]> {
@@ -388,15 +429,19 @@ export async function listFormSubmissions(
     excelReady,
     roleCategoryReady,
     qualsReady,
-    quartileBands,
+    bandsByMatrixLabel,
+    incrementPctLookup,
     eligibilityContext,
   ] = await Promise.all([
     hasExcelSheetColumns(),
     hasRoleCategoryColumn(),
     hasQualificationsTable(),
-    getActiveFinancialYearQuartileBands(),
+    getActiveFinancialYearQuartileBandsByMatrixLabel(),
+    getActiveIncrementPercentageLookup(),
     getEligibilityContext(),
   ]);
+
+  const quartileBands = [...bandsByMatrixLabel.values()].flat();
 
   const roleCategorySelect = roleCategoryReady
     ? `u.role_category,`
@@ -523,6 +568,9 @@ export async function listFormSubmissions(
        u.email AS employee_email,
        ${excelSelect}
        ${qualSelect}
+       assigned_performance_matrix.title AS assigned_performance_matrix,
+       assigned_performance_matrix.matrix_label AS assigned_performance_matrix_label,
+       assigned_increment_matrix.matrix_label AS assigned_increment_matrix_label,
        COALESCE(ap.template_id, efa.template_id) AS template_id,
        ft.title AS template_title,
        ft.code AS template_code,
@@ -644,7 +692,9 @@ export async function listFormSubmissions(
        WHERE m.id = u.manager_2_id
      ) m2_user ON TRUE
      LEFT JOIN LATERAL (
-       SELECT COALESCE(imd.title, eima.matrix_label) AS title
+       SELECT
+         COALESCE(imd.title, eima.matrix_label) AS title,
+         eima.matrix_label
        FROM employee_increment_matrix_assignments eima
        INNER JOIN financial_years fy
          ON fy.id = eima.financial_year_id
@@ -655,6 +705,20 @@ export async function listFormSubmissions(
        WHERE eima.employee_id = u.id
        LIMIT 1
      ) assigned_increment_matrix ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT
+         COALESCE(pmd.title, epma.matrix_label) AS title,
+         epma.matrix_label
+       FROM employee_performance_matrix_assignments epma
+       INNER JOIN financial_years fy
+         ON fy.id = epma.financial_year_id
+        AND fy.is_active = TRUE
+       LEFT JOIN performance_matrix_defs pmd
+         ON pmd.financial_year_id = epma.financial_year_id
+        AND pmd.matrix_label = epma.matrix_label
+       WHERE epma.employee_id = u.id
+       LIMIT 1
+     ) assigned_performance_matrix ON TRUE
      ${quartileJoin}
      ${qualJoin}
      WHERE u.is_active = TRUE
@@ -664,12 +728,27 @@ export async function listFormSubmissions(
     [eligibilityContext.cycleId, ...scoped.params],
   );
 
-  return result.rows.map((row) =>
-    mapSubmissionRow(row, quartileBands, {
+  return result.rows.map((row) => {
+    const item = mapSubmissionRow(row, quartileBands, {
       financialYear: eligibilityContext.financialYear,
       cycleEndDate: eligibilityContext.cycleEndDate,
-    }),
-  );
+    });
+
+    const liveIncrementPercent = resolveApplicableIncrementPercent(
+      item,
+      row.assigned_performance_matrix_label,
+      row.assigned_increment_matrix_label,
+      bandsByMatrixLabel,
+      incrementPctLookup,
+    );
+
+    return {
+      ...item,
+      // Prefer live calculation from assigned matrices over any stored value.
+      applicableIncrementPercent:
+        liveIncrementPercent ?? item.applicableIncrementPercent,
+    };
+  });
 }
 
 export async function getFormSubmissionSummaryById(

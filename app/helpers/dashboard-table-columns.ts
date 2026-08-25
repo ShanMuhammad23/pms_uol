@@ -75,6 +75,7 @@ export type DashboardTableColumnId =
   | "calibrationFactor"
   | "hrApprovalStatus"
   | "normalizedScore"
+  | "performanceMatrixAssignment"
   | "ratingN"
   | "quartile"
   | "remarksEvaluation"
@@ -83,6 +84,7 @@ export type DashboardTableColumnId =
   | "salaryDiff"
   | "applicableSalaryForIncrement"
   | "applicableMatrix"
+  | "applicableIncrementPercent"
   | "incrementPerMatrix"
   | "incrementAdjusted"
   | "revisedSalary"
@@ -151,6 +153,7 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
       "calibrationFactor",
       "hrApprovalStatus",
       "normalizedScore",
+      "performanceMatrixAssignment",
       "ratingN",
       "quartile",
       "remarksEvaluation",
@@ -165,6 +168,7 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
       "salaryDiff",
       "applicableSalaryForIncrement",
       "applicableMatrix",
+      "applicableIncrementPercent",
       "incrementPerMatrix",
       "incrementAdjusted",
       "revisedSalary",
@@ -475,6 +479,16 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
       return `${formatNumber(pct)}`;
     },
   },
+  performanceMatrixAssignment: {
+    id: "performanceMatrixAssignment",
+    label: "Perf. Matrix",
+    width: 120,
+    wrap: true,
+    getValue: (row) =>
+      row.assignedPerformanceMatrix?.trim()
+        ? row.assignedPerformanceMatrix.trim()
+        : "✖",
+  },
   ratingN: {
     id: "ratingN",
     label: "Rating (N)",
@@ -536,6 +550,14 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     label: "Applicable Matrix",
     getValue: (row) =>
       row.applicableMatrix?.trim() ? row.applicableMatrix.trim() : "✖",
+  },
+  applicableIncrementPercent: {
+    id: "applicableIncrementPercent",
+    label: "Increment %",
+    align: "right",
+    width: 90,
+    numeric: true,
+    getValue: (row) => formatNumber(row.applicableIncrementPercent),
   },
   incrementPerMatrix: {
     id: "incrementPerMatrix",

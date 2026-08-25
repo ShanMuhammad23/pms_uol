@@ -24,6 +24,7 @@ import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCat
 import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScoreAdjustmentCell";
 import { HrInlineSaveButton } from "@/app/components/dashboard/HrInlineButtons";
 import { FormAssignmentCell } from "@/app/components/dashboard/FormAssignmentCell";
+import { PerformanceMatrixAssignmentCell } from "@/app/components/dashboard/PerformanceMatrixAssignmentCell";
 import EligibilityConfirmationModal from "@/app/components/forms/EligibilityConfirmationModal";
 import {
   StaffListingMasterFilter,
@@ -353,6 +354,15 @@ function renderCell(
         directScoreEntry={submission.directScoreEntry}
         selfAssessmentEnabled={submission.selfAssessmentEnabled}
         templateCode={submission.templateCode}
+      />
+    );
+  }
+
+  if (columnId === "performanceMatrixAssignment") {
+    return (
+      <PerformanceMatrixAssignmentCell
+        employeeName={submission.employeeName}
+        matrixTitle={submission.assignedPerformanceMatrix}
       />
     );
   }

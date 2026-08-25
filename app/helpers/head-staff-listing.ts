@@ -21,6 +21,7 @@ export function toHeadStaffListingItem(
     currentSalary: null,
     previousSalary: null,
     applicableSalaryForIncrement: null,
+    assignedPerformanceMatrix: null,
     applicableMatrix: null,
     applicableIncrementPercent: null,
     incrementPerMatrix: null,
