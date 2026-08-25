@@ -19,6 +19,7 @@ import { ChartCard } from "@/app/components/dashboard/ChartCard";
 import { CustomTooltip } from "@/app/components/dashboard/CustomTooltip";
 import { containerVariants } from "@/app/helpers/dashboard-animations";
 import type { RatingQuartileMatrixData } from "@/app/helpers/dashboard-types";
+import type { MatrixScoreType } from "@/lib/performance-rating";
 
 interface DashboardPrimaryChartsProps {
   calibrationData: Array<{ rating: string; quota: number; actual: number }>;
@@ -26,6 +27,8 @@ interface DashboardPrimaryChartsProps {
   employeeCount: number;
   performanceMatrixLoading: boolean;
   role?: string | null;
+  matrixScoreType?: MatrixScoreType;
+  onMatrixScoreTypeChange?: (scoreType: MatrixScoreType) => void;
 }
 
 export function DashboardPrimaryCharts({
@@ -34,6 +37,8 @@ export function DashboardPrimaryCharts({
   employeeCount,
   performanceMatrixLoading,
   role,
+  matrixScoreType,
+  onMatrixScoreTypeChange,
 }: DashboardPrimaryChartsProps) {
   const isHead = role === "MANAGER";
   const isClient = useIsClient();
@@ -168,6 +173,8 @@ export function DashboardPrimaryCharts({
               employeeCount={employeeCount}
               isLoading={performanceMatrixLoading}
               hideHeader
+              scoreType={matrixScoreType}
+              onScoreTypeChange={onMatrixScoreTypeChange}
             />
           </ChartCard>
         )}

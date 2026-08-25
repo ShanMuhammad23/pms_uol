@@ -3,12 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Paperclip, Trash2, X } from "lucide-react";
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import {
   deleteEmployeeFormAttachment,
   fetchEmployeeForm,
   getEmployeeFormAttachmentDownloadUrl,
+  MAX_FORM_ATTACHMENT_BYTES,
   saveEmployeeForm,
   uploadEmployeeFormAttachment,
 } from "@/lib/queries/employee-forms-client";
@@ -115,7 +116,7 @@ function toPayload(answers: AnswerState): EmployeeFormAnswerInput[] {
       questionId: Number(questionId),
       pointsEarned:
         value.pointsEarned !== "" ? Number(value.pointsEarned) : undefined,
-      remarks: value.remarks.trim() || null,
+      remarks: (value.remarks ?? "").trim() || null,
     }))
     .filter(
       (answer) =>
@@ -176,6 +177,27 @@ export default function EmployeeFormFill({
   const [uploadingQuestionId, setUploadingQuestionId] = useState<number | null>(
     null,
   );
+  const [uploadErrorByQuestion, setUploadErrorByQuestion] = useState<
+    Record<number, string>
+  >({});
+
+  // Auto-dismiss the global toast notifications after a few seconds so the
+  // user is not forced to hunt for them or manually dismiss them.
+  useEffect(() => {
+    if (!formError) {
+      return;
+    }
+    const timer = setTimeout(() => setFormError(null), 6000);
+    return () => clearTimeout(timer);
+  }, [formError]);
+
+  useEffect(() => {
+    if (!successMessage) {
+      return;
+    }
+    const timer = setTimeout(() => setSuccessMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: isPreview
@@ -282,13 +304,20 @@ export default function EmployeeFormFill({
     field: "pointsEarned" | "remarks",
     value: string,
   ) => {
-    setAnswers((current) => ({
-      ...current,
-      [questionId]: {
-        ...current[questionId],
-        [field]: value,
-      },
-    }));
+    setAnswers((current) => {
+      const existing = current[questionId] ?? {
+        pointsEarned: "",
+        remarks: "",
+        attachments: [],
+      };
+      return {
+        ...current,
+        [questionId]: {
+          ...existing,
+          [field]: value,
+        },
+      };
+    });
   };
 
   const updateScore = (questionId: number, maxMarks: number, value: string) => {
@@ -330,7 +359,7 @@ export default function EmployeeFormFill({
       // Remarks are required when the employee filled in a score — whether
       // the question is mandatory or optional. If an optional question is
       // skipped (no score), remarks are also optional.
-      if (hasScore && !answer!.remarks.trim()) {
+      if (hasScore && !(answer!.remarks ?? "").trim()) {
         return `Remarks are required for "${question.questionText.slice(0, 60)}..."`;
       }
     }
@@ -370,7 +399,27 @@ export default function EmployeeFormFill({
       return;
     }
 
+    if (file.size > MAX_FORM_ATTACHMENT_BYTES) {
+      setUploadErrorByQuestion((current) => ({
+        ...current,
+        [questionId]: `Attachment "${file.name}" is ${formatBytes(file.size)} and exceeds the 2 MB limit.`,
+      }));
+      const input = fileInputRefs.current[questionId];
+      if (input) {
+        input.value = "";
+      }
+      return;
+    }
+
     setFormError(null);
+    setUploadErrorByQuestion((current) => {
+      if (!current[questionId]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[questionId];
+      return next;
+    });
     setSuccessMessage(null);
     setUploadingQuestionId(questionId);
 
@@ -398,11 +447,13 @@ export default function EmployeeFormFill({
       await queryClient.invalidateQueries({ queryKey: ["my-form", templateId] });
       setSuccessMessage("Attachment uploaded.");
     } catch (uploadError) {
-      setFormError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Failed to upload attachment.",
-      );
+      setUploadErrorByQuestion((current) => ({
+        ...current,
+        [questionId]:
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Failed to upload attachment.",
+      }));
     } finally {
       setUploadingQuestionId(null);
       const input = fileInputRefs.current[questionId];
@@ -484,9 +535,44 @@ export default function EmployeeFormFill({
           { label: "Manager 2", value: data.manager2Name ?? "N/A" },
         ]}
       />
-      {formError ? <p className="no-print text-sm text-red-600">{formError}</p> : null}
-      {successMessage ? (
-        <p className="no-print text-sm text-emerald-600">{successMessage}</p>
+      {formError || successMessage ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={cn(
+            "no-print fixed bottom-6 right-6 z-50 flex max-w-sm items-start gap-3 rounded-md border bg-white px-4 py-3 shadow-lg dark:bg-slate-900",
+            formError
+              ? "border-red-200 dark:border-red-900"
+              : "border-emerald-200 dark:border-emerald-900",
+          )}
+        >
+          {formError ? (
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-red-500" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-500" />
+          )}
+          <p
+            className={cn(
+              "min-w-0 flex-1 text-sm",
+              formError
+                ? "text-red-600 dark:text-red-400"
+                : "text-emerald-600 dark:text-emerald-400",
+            )}
+          >
+            {formError ?? successMessage}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setFormError(null);
+              setSuccessMessage(null);
+            }}
+            className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Dismiss notification"
+          >
+            <X className="size-4 text-slate-400" />
+          </button>
+        </div>
       ) : null}
 
       {isPreview ? (
@@ -642,7 +728,7 @@ export default function EmployeeFormFill({
                                 {row.sr}
                               </td>
                               <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
-                                <p className="max-w-[420px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
+                                <p className="max-w-[420px] break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
                                   {question!.questionText}
                                   <QuestionRequiredIndicator isRequired={question!.isRequired} />
                                 </p>
@@ -792,6 +878,14 @@ export default function EmployeeFormFill({
                                           ? "Uploading..."
                                           : "Attach file"}
                                       </button>
+                                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                        Max 2 MB
+                                      </span>
+                                      {uploadErrorByQuestion[question!.id] ? (
+                                        <p className="text-[11px] font-medium text-red-600 dark:text-red-400">
+                                          {uploadErrorByQuestion[question!.id]}
+                                        </p>
+                                      ) : null}
                                     </>
                                   ) : null}
                                 </div>

@@ -10,8 +10,9 @@ import {
 } from "@/lib/queries/institutional-quotas";
 import { validateUpsertInstitutionalQuotasInput } from "@/lib/validation/institutional-quotas";
 import type { UpsertInstitutionalQuotasInput } from "@/types/institutional-quotas";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function GET(request: Request) {
+export const GET = apiHandler(async (request: Request) => {
   const auth = await requireModuleViewApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -44,9 +45,9 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -76,4 +77,4 @@ export async function PUT(request: Request) {
       { status: 500 },
     );
   }
-}
+});

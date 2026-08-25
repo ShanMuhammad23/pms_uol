@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { listFinancialYears } from "@/lib/queries/financial-years";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireDashboardSubmissionsApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -20,4 +21,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});

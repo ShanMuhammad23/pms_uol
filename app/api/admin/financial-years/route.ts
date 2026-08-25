@@ -10,8 +10,9 @@ import {
 } from "@/lib/queries/financial-years";
 import { validateCreateFinancialYearInput } from "@/lib/validation/financial-years";
 import type { CreateFinancialYearInput } from "@/types/financial-years";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireModuleViewApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -27,9 +28,9 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("MATRICES_AND_CYCLES");
   if (auth instanceof NextResponse) {
     return auth;
@@ -59,4 +60,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});

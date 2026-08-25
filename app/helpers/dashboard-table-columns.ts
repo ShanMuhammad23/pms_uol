@@ -270,9 +270,11 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
       row.directScoreEntry
         ? "DS"
         : isFormAssigned(row)
-          ? row.selfAssessmentEnabled
-            ? "✔"
-            : "MA"
+          ? row.templateCode?.trim()
+            ? row.templateCode.trim()
+            : row.selfAssessmentEnabled
+              ? "✔"
+              : "MA"
           : "✖",
   },
   designation: {
@@ -443,7 +445,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   hrApprovalStatus: {
     id: "hrApprovalStatus",
-    label: "Action",
+    label: "HR Actions",
     align: "center",
     width: 110,
     getValue: (row) => {

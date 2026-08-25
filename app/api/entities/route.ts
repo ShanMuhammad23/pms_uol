@@ -3,10 +3,11 @@ import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-sub
 import { isHeadRole } from "@/lib/auth/home-path";
 import { listEntities } from "@/lib/queries/entities";
 import { filterEntitiesForHeadDashboard } from "@/app/helpers/entity-scope";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireDashboardSubmissionsApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -32,4 +33,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});

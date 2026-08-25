@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "../db";
+import { getDbClient } from "@/lib/db-context";
 import type {
   CreateEntityInput,
   EntityRecord,
@@ -29,7 +30,7 @@ async function hasUsersEntityColumn(): Promise<boolean> {
     return cachedUsersEntityColumn;
   }
 
-  const result = await db.query<{ exists: boolean }>(
+  const result = await getDbClient().query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM information_schema.columns
@@ -106,7 +107,7 @@ function isForeignKeyViolation(error: unknown): boolean {
 }
 
 async function assertCategoryExists(categoryId: number): Promise<void> {
-  const result = await db.query(`SELECT id FROM entity_categories WHERE id = $1`, [
+  const result = await getDbClient().query(`SELECT id FROM entity_categories WHERE id = $1`, [
     categoryId,
   ]);
 
@@ -116,7 +117,7 @@ async function assertCategoryExists(categoryId: number): Promise<void> {
 }
 
 async function getParentEntityId(entityId: number): Promise<number | null> {
-  const result = await db.query<{ parent_entity_id: string | null }>(
+  const result = await getDbClient().query<{ parent_entity_id: string | null }>(
     `SELECT parent_entity_id FROM entities WHERE id = $1`,
     [entityId],
   );
@@ -130,7 +131,7 @@ async function getParentEntityId(entityId: number): Promise<number | null> {
 }
 
 async function entityExists(id: number): Promise<boolean> {
-  const result = await db.query(`SELECT id FROM entities WHERE id = $1`, [id]);
+  const result = await getDbClient().query(`SELECT id FROM entities WHERE id = $1`, [id]);
   return result.rows.length > 0;
 }
 
@@ -170,7 +171,7 @@ async function assertValidParent(
 
 export async function listEntities(): Promise<EntityRecord[]> {
   const entitySelect = await buildEntitySelect();
-  const result = await db.query<EntityRow>(
+  const result = await getDbClient().query<EntityRow>(
     `${entitySelect}
      ORDER BY e.name ASC`,
   );
@@ -182,7 +183,7 @@ export async function listEntities(): Promise<EntityRecord[]> {
 
 export async function getEntityById(id: number): Promise<EntityRecord | null> {
   const entitySelect = await buildEntitySelect();
-  const result = await db.query<EntityRow>(
+  const result = await getDbClient().query<EntityRow>(
     `${entitySelect}
      WHERE e.id = $1`,
     [id],
@@ -201,7 +202,7 @@ async function assertUniqueEntityName(
   entityCategoryId: number,
   parentEntityId: number | null,
 ): Promise<void> {
-  const result = await db.query<{ id: string; name: string }>(
+  const result = await getDbClient().query<{ id: string; name: string }>(
     `SELECT id, name
      FROM entities
      WHERE entity_category_id = $1
@@ -238,7 +239,7 @@ export async function createEntity(
   );
 
   try {
-    const result = await db.query<{ id: string }>(
+    const result = await getDbClient().query<{ id: string }>(
       `INSERT INTO entities (name, entity_category_id, parent_entity_id)
        VALUES ($1, $2, $3)
        RETURNING id`,
@@ -285,7 +286,7 @@ export async function updateEntity(
   );
 
   try {
-    const result = await db.query(
+    const result = await getDbClient().query(
       `UPDATE entities
        SET name = $1,
            entity_category_id = $2,
@@ -325,7 +326,7 @@ export async function updateEntity(
 }
 
 export async function deleteEntity(id: number): Promise<void> {
-  const result = await db.query(`DELETE FROM entities WHERE id = $1`, [id]);
+  const result = await getDbClient().query(`DELETE FROM entities WHERE id = $1`, [id]);
 
   if (result.rowCount === 0) {
     throw new EntityError("Entity not found.", 404);

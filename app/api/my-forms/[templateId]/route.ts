@@ -7,12 +7,13 @@ import {
 } from "@/lib/queries/employee-forms";
 import { notifySelfAssessmentSubmitted } from "@/lib/mail/notifications";
 import type { SaveEmployeeFormInput } from "@/types/employee-forms";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ templateId: string }>;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export const GET = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireSessionApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -47,9 +48,9 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function PUT(request: Request, context: RouteContext) {
+export const PUT = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSessionApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -101,4 +102,4 @@ export async function PUT(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

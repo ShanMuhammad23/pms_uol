@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "../db";
+import { getDbClient } from "@/lib/db-context";
 import type {
   CreateEntityCategoryInput,
   EntityCategoryCode,
@@ -44,7 +45,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 export async function listEntityCategories(): Promise<EntityCategoryRecord[]> {
-  const result = await db.query<EntityCategoryRow>(
+  const result = await getDbClient().query<EntityCategoryRow>(
     `SELECT id, code, created_at::text, updated_at::text
      FROM entity_categories
      ORDER BY code ASC`,
@@ -56,7 +57,7 @@ export async function listEntityCategories(): Promise<EntityCategoryRecord[]> {
 export async function getEntityCategoryById(
   id: number,
 ): Promise<EntityCategoryRecord | null> {
-  const result = await db.query<EntityCategoryRow>(
+  const result = await getDbClient().query<EntityCategoryRow>(
     `SELECT id, code, created_at::text, updated_at::text
      FROM entity_categories
      WHERE id = $1`,
@@ -74,7 +75,7 @@ export async function createEntityCategory(
   input: CreateEntityCategoryInput,
 ): Promise<EntityCategoryRecord> {
   try {
-    const result = await db.query<EntityCategoryRow>(
+    const result = await getDbClient().query<EntityCategoryRow>(
       `INSERT INTO entity_categories (code)
        VALUES ($1)
        RETURNING id, code, created_at::text, updated_at::text`,
@@ -99,7 +100,7 @@ export async function updateEntityCategory(
   input: UpdateEntityCategoryInput,
 ): Promise<EntityCategoryRecord> {
   try {
-    const result = await db.query<EntityCategoryRow>(
+    const result = await getDbClient().query<EntityCategoryRow>(
       `UPDATE entity_categories
        SET code = $1, updated_at = CURRENT_TIMESTAMP
        WHERE id = $2
@@ -129,7 +130,7 @@ export async function updateEntityCategory(
 }
 
 export async function deleteEntityCategory(id: number): Promise<void> {
-  const result = await db.query(
+  const result = await getDbClient().query(
     `DELETE FROM entity_categories WHERE id = $1`,
     [id],
   );

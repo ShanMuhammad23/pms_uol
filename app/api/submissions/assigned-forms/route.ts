@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { listAssignedFormsForEmployeeSap } from "@/lib/queries/employee-assigned-forms";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await requireDashboardSubmissionsApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -28,4 +29,4 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});

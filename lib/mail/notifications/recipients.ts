@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import type { AppraisalStatus } from "@/types/forms";
 
 /**
@@ -76,7 +77,7 @@ function buildRecipient(
 export async function getSubmissionRecipients(
   appraisalId: number,
 ): Promise<SubmissionRecipients | null> {
-  const result = await db.query<RecipientRow>(
+  const result = await getDbClient().query<RecipientRow>(
     `SELECT
        ap.status,
        ap.manager_level,

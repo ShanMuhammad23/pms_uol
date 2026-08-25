@@ -4,12 +4,13 @@ import {
   addEmployeeFormAttachment,
   EmployeeFormError,
 } from "@/lib/queries/employee-forms";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ templateId: string }>;
 }
 
-export async function POST(request: Request, context: RouteContext) {
+export const POST = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSessionApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -73,4 +74,4 @@ export async function POST(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

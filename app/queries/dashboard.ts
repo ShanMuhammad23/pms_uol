@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
 import {
@@ -11,6 +11,7 @@ import {
 import { useIsDarkMode } from "@/app/helpers/dashboard-theme";
 import { useDashboardFilters } from "@/app/queries/dashboard-filters";
 import { useDashboardOverviewQuery } from "@/app/queries/forms";
+import type { MatrixScoreType } from "@/lib/performance-rating";
 import {
   useDashboardEntitiesQuery,
   useUniqueDesignationsQuery,
@@ -123,10 +124,12 @@ export function useDashboardPage() {
     designations,
   });
 
+  const [matrixScoreType, setMatrixScoreType] = useState<MatrixScoreType>("normalized");
+
   const {
     data: overview,
     isLoading: overviewLoading,
-  } = useDashboardOverviewQuery(filterParams);
+  } = useDashboardOverviewQuery(filterParams, matrixScoreType);
 
   const category0Options = useMemo(
     () => mergeEntityOptions(baseCategory0Options, overview?.filters.category0),
@@ -285,5 +288,7 @@ export function useDashboardPage() {
     filteredCalibrationData,
     ratingQuartileMatrix,
     chartSubmissionsCount: overview?.chartEmployeeCount ?? 0,
+    matrixScoreType,
+    setMatrixScoreType,
   };
 }

@@ -6,12 +6,13 @@ import {
   listInstitutionalQuotaChartRows,
   listInstitutionalQuotaChartRowsForActiveYear,
 } from "@/lib/queries/institutional-quotas";
+import { apiHandler } from "@/lib/api-handler";
 
 /**
  * Dashboard chart endpoint: institutional quota rows.
  * Restricted to dashboard roles (not EMPLOYEE).
  */
-export const GET = withAuth(
+export const GET = apiHandler(withAuth(
   async (request) => {
     try {
       const { searchParams } = new URL(request.url);
@@ -47,4 +48,4 @@ export const GET = withAuth(
     }
   },
   { roles: ROLE_PERMISSION_SETS.dashboard },
-);
+));

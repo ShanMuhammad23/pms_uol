@@ -3,6 +3,7 @@
 import type { MatrixQuartileColumn } from "@/lib/performance-matrix";
 import type { RatingQuartileMatrixRow } from "@/app/helpers/dashboard-types";
 import { getPerformanceLevelColor } from "@/app/helpers/dashboard-helpers";
+import type { MatrixScoreType } from "@/lib/performance-rating";
 import { cn } from "@/lib/utils";
 
 interface CalibrationDistributionMatrixProps {
@@ -11,13 +12,23 @@ interface CalibrationDistributionMatrixProps {
   employeeCount: number;
   isLoading?: boolean;
   hideHeader?: boolean;
+  scoreType?: MatrixScoreType;
+  onScoreTypeChange?: (scoreType: MatrixScoreType) => void;
 }
+
+const SCORE_TYPE_LABELS: Record<MatrixScoreType, string> = {
+  normalized: "Normalized",
+  scoreO: "Score (O)",
+  adjusted: "Adjusted Score",
+};
 
 export function CalibrationDistributionMatrix({
   rows,
   columns,
   isLoading,
   hideHeader = false,
+  scoreType = "normalized",
+  onScoreTypeChange,
 }: CalibrationDistributionMatrixProps) {
   const levelColWidth = columns.length > 0 ? 26 : 100;
   const dataColWidth =
@@ -27,13 +38,50 @@ export function CalibrationDistributionMatrix({
     <div className="flex h-full min-w-0 flex-col">
       {!hideHeader ? (
         <div className="mb-3 min-w-0">
-          <p className="text-sm font-semibold text-slate-900 dark:text-white">
-            Rating × Quartile Matrix
-          </p>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            Employee headcount by performance level and quartile (normalized
-            score after HR alignment only)
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                Rating × Quartile Matrix
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Employee headcount by performance level and quartile
+              </p>
+            </div>
+            {onScoreTypeChange ? (
+              <select
+                value={scoreType}
+                onChange={(e) => onScoreTypeChange(e.target.value as MatrixScoreType)}
+                className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 outline-none focus:border-amber-400 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300"
+                aria-label="Select score type for matrix distribution"
+              >
+                {(Object.keys(SCORE_TYPE_LABELS) as MatrixScoreType[]).map((st) => (
+                  <option key={st} value={st}>
+                    {SCORE_TYPE_LABELS[st]}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {hideHeader && onScoreTypeChange ? (
+        <div className="mb-2 flex items-center justify-end">
+          <label className="mr-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            Score:
+          </label>
+          <select
+            value={scoreType}
+            onChange={(e) => onScoreTypeChange(e.target.value as MatrixScoreType)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 outline-none focus:border-amber-400 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300"
+            aria-label="Select score type for matrix distribution"
+          >
+            {(Object.keys(SCORE_TYPE_LABELS) as MatrixScoreType[]).map((st) => (
+              <option key={st} value={st}>
+                {SCORE_TYPE_LABELS[st]}
+              </option>
+            ))}
+          </select>
         </div>
       ) : null}
 

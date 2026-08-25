@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "../db";
+import { getDbClient } from "@/lib/db-context";
 import type {
   CreatePerformanceQuartileInput,
   PerformanceQuartileRecord,
@@ -73,7 +74,7 @@ function isCheckViolation(error: unknown): boolean {
 export async function listPerformanceQuartilesByLevelId(
   performanceLevelId: number,
 ): Promise<PerformanceQuartileRecord[]> {
-  const result = await db.query<PerformanceQuartileRow>(
+  const result = await getDbClient().query<PerformanceQuartileRow>(
     `SELECT id, performance_level_id, name, score_min, score_max, sort_order, created_at::text, updated_at::text
      FROM performance_quartiles
      WHERE performance_level_id = $1
@@ -87,7 +88,7 @@ export async function listPerformanceQuartilesByLevelId(
 export async function getPerformanceQuartileById(
   id: number,
 ): Promise<PerformanceQuartileRecord | null> {
-  const result = await db.query<PerformanceQuartileRow>(
+  const result = await getDbClient().query<PerformanceQuartileRow>(
     `SELECT id, performance_level_id, name, score_min, score_max, sort_order, created_at::text, updated_at::text
      FROM performance_quartiles
      WHERE id = $1`,
@@ -105,7 +106,7 @@ export async function createPerformanceQuartile(
   input: CreatePerformanceQuartileInput,
 ): Promise<PerformanceQuartileRecord> {
   try {
-    const result = await db.query<PerformanceQuartileRow>(
+    const result = await getDbClient().query<PerformanceQuartileRow>(
       `INSERT INTO performance_quartiles (performance_level_id, name, score_min, score_max, sort_order)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, performance_level_id, name, score_min, score_max, sort_order, created_at::text, updated_at::text`,
@@ -147,7 +148,7 @@ export async function updatePerformanceQuartile(
   input: UpdatePerformanceQuartileInput,
 ): Promise<PerformanceQuartileRecord> {
   try {
-    const result = await db.query<PerformanceQuartileRow>(
+    const result = await getDbClient().query<PerformanceQuartileRow>(
       `UPDATE performance_quartiles
        SET name = $1, score_min = $2, score_max = $3, sort_order = COALESCE($4, sort_order), updated_at = CURRENT_TIMESTAMP
        WHERE id = $5
@@ -190,7 +191,7 @@ export async function updatePerformanceQuartile(
 }
 
 export async function deletePerformanceQuartile(id: number): Promise<void> {
-  const result = await db.query(`DELETE FROM performance_quartiles WHERE id = $1`, [
+  const result = await getDbClient().query(`DELETE FROM performance_quartiles WHERE id = $1`, [
     id,
   ]);
 

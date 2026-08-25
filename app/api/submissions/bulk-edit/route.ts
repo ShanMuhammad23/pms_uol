@@ -7,6 +7,7 @@ import {
 import { canEditModule } from "@/lib/auth/additional-access";
 import type { AdditionalAccessModule } from "@/types/additional-access";
 import { USER_ROLES } from "@/types/users";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -50,7 +51,7 @@ function parseOptionalNumberField(
   return { provided: true, value: raw };
 }
 
-export async function PATCH(request: Request) {
+export const PATCH = apiHandler(async (request: Request) => {
   const auth = await requireSubmissionReviewerApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -210,4 +211,4 @@ export async function PATCH(request: Request) {
       { status: 500 },
     );
   }
-}
+});

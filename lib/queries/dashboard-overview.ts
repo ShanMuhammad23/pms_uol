@@ -2,6 +2,7 @@ import "server-only";
 
 import { computeAppraisalEligibility, resolveReferenceEndDate } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
 import type { StaffListScope } from "@/lib/queries/staff-list-scope";
@@ -46,7 +47,7 @@ interface OverviewRow {
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
-  const result = await db.query<{ exists: boolean }>(
+  const result = await getDbClient().query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM information_schema.columns
@@ -60,7 +61,7 @@ async function hasExcelSheetColumns(): Promise<boolean> {
 }
 
 async function hasRoleCategoryColumn(): Promise<boolean> {
-  const result = await db.query<{ exists: boolean }>(
+  const result = await getDbClient().query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM information_schema.columns
@@ -93,7 +94,7 @@ async function getEligibilityContext(): Promise<{
 }> {
   const [cycleResult, financialYearResult] = await Promise.all([
     getDefaultAppraisalCycle(),
-    db.query<{ year: number }>(
+    getDbClient().query<{ year: number }>(
       `SELECT year
        FROM financial_years
        WHERE is_active = TRUE
@@ -141,6 +142,7 @@ function mapOverviewRow(
     empSubCategory: null,
     templateId: null,
     templateTitle: null,
+    templateCode: null,
     formAssigned: false,
     directScoreEntry: false,
     entityId: row.entity_id ? Number(row.entity_id) : null,
@@ -280,7 +282,7 @@ export async function listDashboardOverview(
 
   const scoped = appendStaffVisibilityClause(options);
 
-  const result = await db.query<OverviewRow>(
+  const result = await getDbClient().query<OverviewRow>(
     `WITH template_max_marks AS (
        SELECT template_id, SUM(total_marks) AS max_raw
        FROM form_questions

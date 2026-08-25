@@ -114,6 +114,7 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
           <thead className="bg-primary text-left text-sm font-semibold whitespace-nowrap text-white">
             <tr className="divide-x divide-white/15">
               <th className="px-4 py-3.5">Title</th>
+              <th className="px-4 py-3.5">Code</th>
               <th className="px-2 py-2 w-1/16 text-center">Assigned </th>
               <th className="px-4 py-3.5 text-center w-1/16">Cycle</th>
               <th className="px-4 py-3.5 text-center w-1/16">Questions</th>
@@ -137,6 +138,11 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                   >
                     {template.title}
                   </a>
+                </td>
+                <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
+                  <span className="whitespace-nowrap font-mono text-xs font-medium text-slate-600 dark:text-slate-400">
+                    {template.code || "—"}
+                  </span>
                 </td>
                 <td className="px-2 py-2 text-center text-slate-700 dark:text-slate-300">
                   {template.assignedEmployeeCount}

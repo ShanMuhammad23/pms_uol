@@ -317,7 +317,7 @@ export default function MyFormsList({
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold text-text-primary sm:text-2xl">
-              Welcome back, {userName ?? "User"}
+              Welcome !, {userName ?? "User"}
             </h1>
             <p className="mt-0.5 truncate text-sm text-foreground/60">
               {subtitleParts.length > 0 ? subtitleParts.join(" · ") : "—"}

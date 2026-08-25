@@ -234,6 +234,7 @@ export interface IncrementMatrixInput {
 
 export interface FormTemplateInput {
   title: string;
+  code: string;
   description: string;
   cycleId?: number;
   targetCategory?: EmployeeCategory;
@@ -268,6 +269,7 @@ export interface QuestionRecord {
 export interface FormTemplateListItem {
   id: number;
   title: string;
+  code: string;
   description: string | null;
   cycleId: number;
   fiscalYear: number;
@@ -291,6 +293,7 @@ export interface FormTemplateListItem {
 export interface FormTemplateRecord {
   id: number;
   title: string;
+  code: string;
   description: string | null;
   cycleId: number;
   fiscalYear: number;

@@ -14,14 +14,14 @@ import {
   getFormSubmissionSummaryById,
   saveManagerReviewAnswers,
 } from "@/lib/queries/form-submissions";
-import { notifyManagerApproved } from "@/lib/mail/notifications";
 import type { SaveManagerReviewInput } from "@/types/employee-forms";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function PUT(request: Request, context: RouteContext) {
+export const PUT = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -114,9 +114,9 @@ export async function PUT(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(_request: Request, context: RouteContext) {
+export const POST = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -164,15 +164,6 @@ export async function POST(_request: Request, context: RouteContext) {
 
     const result = await approveManagerReview(submissionId);
 
-    // Fire-and-forget notification: determine which manager approved from the
-    // pre-approval managerLevel (1 = Manager 1, 2 = Manager 2). The result
-    // contains the NEXT status/level.
-    void notifyManagerApproved(
-      submissionId,
-      summary.managerLevel ?? 1,
-      result.status,
-    );
-
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof SubmissionAccessError) {
@@ -192,4 +183,4 @@ export async function POST(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

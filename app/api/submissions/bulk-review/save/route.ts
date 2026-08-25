@@ -10,6 +10,7 @@ import {
 import { db } from "@/lib/db";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import { flattenAllQuestions } from "@/types/forms";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -23,7 +24,7 @@ interface SaveRequestBody {
   }>;
 }
 
-export async function PUT(request: Request) {
+export const PUT = apiHandler(async (request: Request) => {
   const session = await getServerSession(authOptions);
 
   if (!session) {
@@ -111,5 +112,5 @@ export async function PUT(request: Request) {
       { status: 500 },
     );
   }
-}
+});
 

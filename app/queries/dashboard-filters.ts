@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, type Dispatch, type SetStateAction } from "react";
 import type { ActiveFilter } from "@/app/components/dashboard/DashboardFilterBar";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import {
@@ -13,6 +13,7 @@ import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { CardFilterId, FormState } from "@/app/helpers/dashboard-types";
 import type { DashboardFilterParams } from "@/types/dashboard-api";
 import type { EntityRecord } from "@/types/entities";
+import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
 
 interface UseDashboardFiltersParams {
   entities: EntityRecord[];
@@ -107,21 +108,45 @@ export function useDashboardFilters({
   entities,
   designations,
 }: UseDashboardFiltersParams) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useSessionStorageState<string>(
+    "pms:dashboard-filters:searchQuery",
+    "",
+  );
   const [selectedCategory0EntityIds, setSelectedCategory0EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:dashboard-filters:category0",
+      null,
+    );
   const [selectedCategory1EntityIds, setSelectedCategory1EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:dashboard-filters:category1",
+      null,
+    );
   const [selectedCategory2EntityIds, setSelectedCategory2EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:dashboard-filters:category2",
+      null,
+    );
   const [selectedRoleCategories, setSelectedRoleCategories] =
-    useState<MultiFilterSelection<string>>(null);
+    useSessionStorageState<MultiFilterSelection<string>>(
+      "pms:dashboard-filters:roleCategories",
+      null,
+    );
   const [selectedDesignations, setSelectedDesignations] =
-    useState<MultiFilterSelection<string>>(null);
+    useSessionStorageState<MultiFilterSelection<string>>(
+      "pms:dashboard-filters:designations",
+      null,
+    );
   const [selectedFormStates, setSelectedFormStates] =
-    useState<MultiFilterSelection<FormState>>(null);
+    useSessionStorageState<MultiFilterSelection<FormState>>(
+      "pms:dashboard-filters:formStates",
+      null,
+    );
   const [selectedCardFilter, setSelectedCardFilter] =
-    useState<CardFilterId | null>(null);
+    useSessionStorageState<CardFilterId | null>(
+      "pms:dashboard-filters:cardFilter",
+      null,
+    );
 
   const category0Entities = useMemo(
     () => getEntitiesForFilterLevels(entities, 0, null),

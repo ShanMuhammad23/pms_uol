@@ -1,7 +1,9 @@
 import "server-only";
 
+import type { PoolClient } from "pg";
 import { computeAppraisalEligibility, resolveReferenceEndDate } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
+import { getDbClient, withTransaction } from "@/lib/db-context";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import {
   calculateScorePercent,
@@ -57,6 +59,7 @@ interface SubmissionListRow {
   emp_sub_category: string | null;
   template_id: number | null;
   template_title: string | null;
+  template_code: string | null;
   entity_id: string | null;
   entity_name: string | null;
   parent_entity_name: string | null;
@@ -235,8 +238,14 @@ function mapSubmissionRow(
     ? resolveSubmissionPerformanceQuartile(
         {
           normalizedScore,
+          directScoreEntry: Boolean(row.direct_score_entry),
           scoreO,
-          rawScore,
+          manager1Score: toNumber(row.manager_1_score),
+          manager2Score: toNumber(row.manager_2_score),
+          manager2UserId: row.manager_2_user_id
+            ? Number(row.manager_2_user_id)
+            : null,
+          status: row.status,
           creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
           pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
           qecScoreAdj: toNumber(row.qec_score_adj),
@@ -265,6 +274,7 @@ function mapSubmissionRow(
     empSubCategory: row.emp_sub_category,
     templateId: row.template_id,
     templateTitle: row.template_title,
+    templateCode: row.template_code,
     formAssigned: Boolean(row.form_assigned),
     directScoreEntry: Boolean(row.direct_score_entry),
     entityId: row.entity_id ? Number(row.entity_id) : null,
@@ -515,6 +525,7 @@ export async function listFormSubmissions(
        ${qualSelect}
        COALESCE(ap.template_id, efa.template_id) AS template_id,
        ft.title AS template_title,
+       ft.code AS template_code,
        (
          EXISTS (
            SELECT 1
@@ -728,6 +739,7 @@ export interface BulkReviewQueueItem {
   orgLevel2Name: string | null;
   templateId: number | null;
   templateTitle: string | null;
+  templateCode: string | null;
   status: AppraisalStatus;
   managerLevel: number | null;
   manager1UserId: number | null;
@@ -769,6 +781,7 @@ export async function listBulkReviewQueue(
       orgLevel2Name: s.orgLevel2Name,
       templateId: s.templateId,
       templateTitle: s.templateTitle,
+      templateCode: s.templateCode,
       status: s.status,
       managerLevel: s.managerLevel,
       manager1UserId: s.manager1UserId ?? null,
@@ -1161,7 +1174,7 @@ export async function saveBulkReviewQuestionScores(
     const pointsArray = validEntries.map((e) => e.pointsEarned);
     const remarksArray = validEntries.map((e) => e.remarks);
 
-    await db.query(
+    await getDbClient().query(
       `INSERT INTO appraisal_answers (
          appraisal_id,
          question_id,
@@ -1269,7 +1282,7 @@ async function seedManagerAnswersFromSource(
   const pointsArray = sourceAnswers.map((a) => a.pointsEarned);
   const remarksArray = sourceAnswers.map((a) => a.remarks);
 
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO appraisal_answers (
        appraisal_id,
        question_id,
@@ -1335,7 +1348,7 @@ export async function saveManagerReviewAnswers(
     const pointsArray = validAnswers.map((a) => a.pointsEarned);
     const remarksArray = validAnswers.map((a) => a.remarks);
 
-    await db.query(
+    await getDbClient().query(
       `INSERT INTO appraisal_answers (
          appraisal_id,
          question_id,
@@ -1368,7 +1381,7 @@ export async function saveManagerReviewAnswers(
         ? "manager2_overall_remarks"
         : "manager1_overall_remarks";
 
-    await db.query(
+    await getDbClient().query(
       `UPDATE appraisals
        SET ${column} = $2,
            updated_at = CURRENT_TIMESTAMP
@@ -1424,7 +1437,7 @@ export async function approveManagerReview(appraisalId: number): Promise<{
     }),
   );
 
-  await db.query(
+  await getDbClient().query(
     `UPDATE appraisals
      SET status = $2,
          manager_level = $3,
@@ -1480,7 +1493,7 @@ export async function approveHrCalibration(appraisalId: number): Promise<{
     );
   }
 
-  await db.query(
+  await getDbClient().query(
     `UPDATE appraisals
      SET status = $2,
          hr_approval_status = 'approved',
@@ -1605,8 +1618,12 @@ export async function getFormSubmissionById(
   const resolved = resolveSubmissionPerformanceQuartile(
     {
       normalizedScore: summary.normalizedScore,
+      directScoreEntry: summary.directScoreEntry,
       scoreO: summary.scoreO,
-      rawScore: summary.rawScore,
+      manager1Score: summary.manager1Score,
+      manager2Score: summary.manager2Score,
+      manager2UserId: summary.manager2UserId,
+      status: summary.status,
       creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,
       pubOricScoreAdj: summary.pubOricScoreAdj,
       qecScoreAdj: summary.qecScoreAdj,
@@ -1623,6 +1640,7 @@ export async function getFormSubmissionById(
     employeeEmail: summary.employeeEmail,
     templateId: summary.templateId,
     templateTitle: summary.templateTitle,
+    templateCode: summary.templateCode,
     status: summary.status,
     managerLevel: summary.managerLevel,
     manager1UserId: summary.manager1UserId,
@@ -2075,7 +2093,7 @@ export async function bulkUpdateEmployeeListingFields(
     if (templateId != null) {
       // Upsert form assignment for each user
       for (const userId of userIds) {
-        await db.query(
+        await getDbClient().query(
           `INSERT INTO employee_form_assignments (employee_id, template_id)
            VALUES ($1, $2)
            ON CONFLICT (employee_id, template_id) DO NOTHING`,
@@ -2138,7 +2156,7 @@ export async function bulkUpdateEmployeeListingFields(
       if (existing.rows.length > 0) {
         // Update existing primary qualification
         qualValues.push(Number(existing.rows[0].id));
-        await db.query(
+        await getDbClient().query(
           `UPDATE employee_qualifications
            SET ${qualSetClauses.join(", ")}
            WHERE id = $${++qualParamIdx}`,
@@ -2177,7 +2195,7 @@ export async function bulkUpdateEmployeeListingFields(
           insertPlaceholders.push(`$${++insertIdx}`);
         }
 
-        await db.query(
+        await getDbClient().query(
           `INSERT INTO employee_qualifications (${insertCols.join(", ")})
            VALUES (${insertPlaceholders.join(", ")})`,
           insertVals,
@@ -2229,7 +2247,7 @@ export async function bulkUpdateEmployeeListingFields(
       appraisalValues.push(userIds);
       appraisalValues.push(cycleId);
 
-      await db.query(
+      await getDbClient().query(
         `UPDATE appraisals
          SET ${appraisalSetClauses.join(", ")}
          WHERE employee_id = ANY($${++appraisalParamIdx}::bigint[])
@@ -2290,10 +2308,8 @@ export async function resetFormSubmission(
   deletedAnswers: number;
   resetAppraisal: boolean;
 }> {
-  const client = await db.connect();
-
-  try {
-    await client.query("BEGIN");
+  return withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     // Capture the employee_id for the audit log before wiping data.
     const appraisalRow = await client.query<{ employee_id: string }>(
@@ -2407,8 +2423,6 @@ export async function resetFormSubmission(
       ],
     );
 
-    await client.query("COMMIT");
-
     // Debug logging - verify deletion counts for troubleshooting.
     console.info(
       `[resetFormSubmission] appraisal=${appraisalId} ` +
@@ -2423,12 +2437,7 @@ export async function resetFormSubmission(
       deletedAnswers,
       resetAppraisal,
     };
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2526,11 +2535,10 @@ export async function returnSubmission(
     throw new FormSubmissionError("A return reason is required.", 400);
   }
 
-  const client = await db.connect();
   let attachmentPaths: string[] = [];
 
-  try {
-    await client.query("BEGIN");
+  const result = await withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     // Fetch everything needed in a single query.
     const row = await client.query<ReturnSubmissionRow>(
@@ -2758,28 +2766,6 @@ export async function returnSubmission(
       ],
     );
 
-    await client.query("COMMIT");
-
-    // --- Delete physical attachment files after commit ---
-    // Orphaned DB rows are worse than orphaned files, so we delete files
-    // only after the transaction is safely committed. If a file deletion
-    // fails (e.g. already gone), the error is swallowed.
-    for (const relativePath of attachmentPaths) {
-      try {
-        await deleteFormAttachmentFile(relativePath);
-      } catch {
-        // Physical file may already be gone — not a data integrity issue.
-      }
-    }
-
-    console.info(
-      `[returnSubmission] appraisal=${appraisalId} ` +
-        `returnLevel=${returnLevel} ` +
-        `deletedAnswers=${deletedAnswers} ` +
-        `deletedAttachments=${deletedAttachments} ` +
-        `newStatus=${newStatus} newManagerLevel=${newManagerLevel}`,
-    );
-
     return {
       status: newStatus,
       managerLevel: newManagerLevel,
@@ -2788,10 +2774,27 @@ export async function returnSubmission(
       deletedAnswers,
       deletedAttachments,
     };
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
+  });
+
+  // --- Delete physical attachment files after commit ---
+  // Orphaned DB rows are worse than orphaned files, so we delete files
+  // only after the transaction is safely committed. If a file deletion
+  // fails (e.g. already gone), the error is swallowed.
+  for (const relativePath of attachmentPaths) {
+    try {
+      await deleteFormAttachmentFile(relativePath);
+    } catch {
+      // Physical file may already be gone — not a data integrity issue.
+    }
   }
+
+  console.info(
+    `[returnSubmission] appraisal=${appraisalId} ` +
+      `returnLevel=${returnLevel} ` +
+      `deletedAnswers=${result.deletedAnswers} ` +
+      `deletedAttachments=${result.deletedAttachments} ` +
+      `newStatus=${result.status} newManagerLevel=${result.managerLevel}`,
+  );
+
+  return result;
 }

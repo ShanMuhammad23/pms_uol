@@ -44,6 +44,7 @@ import {
 import { useUsersByEmployeeIdsQuery } from "@/app/queries/users";
 import type { UserRecord } from "@/types/users";
 import { ExcelExportButton } from "@/app/components/common/ExcelExportButton";
+import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -224,7 +225,8 @@ export function UsersListingTable({
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [hasFullDataset, setHasFullDataset] = useState(false);
-  const [masterFilters, setMasterFilters] = useState<UsersMasterFilterState>(
+  const [masterFilters, setMasterFilters] = useSessionStorageState<UsersMasterFilterState>(
+    "pms:users-master-filters",
     EMPTY_USERS_MASTER_FILTER_STATE,
   );
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(

@@ -28,6 +28,7 @@ export interface FormSubmissionListItem {
   empSubCategory: string | null;
   templateId: number | null;
   templateTitle: string | null;
+  templateCode: string | null;
   /** True when this employee has an individual row in employee_form_assignments for the cycle. */
   formAssigned: boolean;
   /** True when this employee is marked for direct score entry (no form assignment). */
@@ -136,6 +137,7 @@ export interface FormSubmissionDetail {
   employeeEmail: string;
   templateId: number | null;
   templateTitle: string | null;
+  templateCode: string | null;
   templateDescription: string | null;
   status: AppraisalStatus;
   /** 1 = Manager 1 review; 2 = Manager 2 review. */

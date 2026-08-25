@@ -4,8 +4,9 @@ import {
   EmployeeFormError,
   listAssignedFormsForUser,
 } from "@/lib/queries/employee-forms";
+import { apiHandler } from "@/lib/api-handler";
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireSessionApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -33,4 +34,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});

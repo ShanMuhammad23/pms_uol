@@ -90,6 +90,7 @@ import { useFormSubmissionsQuery } from "@/app/queries/forms";
 import { DEFAULT_PAGE_SIZE } from "@/lib/dashboard/filter-params";
 import type { DashboardFilterParams } from "@/types/dashboard-api";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
@@ -351,6 +352,7 @@ function renderCell(
         formAssigned={submission.formAssigned}
         directScoreEntry={submission.directScoreEntry}
         selfAssessmentEnabled={submission.selfAssessmentEnabled}
+        templateCode={submission.templateCode}
       />
     );
   }
@@ -687,10 +689,22 @@ function renderCell(
       if (!resolved) {
         return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
       }
-      const level = ctx.sortedMatrix.find((l) => l.id === resolved.performanceLevelId);
+      const levelIndex = ctx.sortedMatrix.findIndex(
+        (l) => l.id === resolved.performanceLevelId,
+      );
+      const level = levelIndex >= 0 ? ctx.sortedMatrix[levelIndex] : null;
       const levelName = level?.name ?? resolved.performanceLevelName;
+      const levelColor = getPerformanceLevelColor(
+        resolved.performanceLevelName,
+        levelIndex >= 0 ? levelIndex : 0,
+      );
       return (
-        <span className="block text-center text-xs font-semibold text-slate-700 dark:text-slate-300">
+        <span
+          className={cn(
+            "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold text-white",
+            levelColor,
+          )}
+        >
           {levelName}
         </span>
       );
@@ -819,7 +833,8 @@ export function DashboardSubmissionsTable({
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [hasFullDataset, setHasFullDataset] = useState(false);
-  const [masterFilters, setMasterFilters] = useState<MasterFilterState>(
+  const [masterFilters, setMasterFilters] = useSessionStorageState<MasterFilterState>(
+    "pms:dashboard-master-filters",
     EMPTY_MASTER_FILTER_STATE,
   );
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(

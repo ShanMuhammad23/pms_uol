@@ -7,11 +7,12 @@ import { parseFormSubmissionsQueryParams } from "@/lib/dashboard/filter-params";
 import { resolveEntitySubtreeIds } from "@/lib/queries/entity-scope";
 import { listEntities } from "@/lib/queries/entities";
 import { listFormSubmissionsPage } from "@/lib/queries/form-submissions-page";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-export async function GET(request: NextRequest) {
+export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await requireDashboardSubmissionsApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -89,4 +90,4 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});

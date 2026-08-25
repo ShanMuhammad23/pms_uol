@@ -14,8 +14,9 @@ import {
   getFormSubmissionSummaryById,
   saveManagerReviewAnswers,
 } from "@/lib/queries/form-submissions";
-import { notifyHrOrBoardApproved } from "@/lib/mail/notifications";
+import { notifyBoardApproved } from "@/lib/mail/notifications";
 import type { SaveManagerReviewInput } from "@/types/employee-forms";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -23,7 +24,7 @@ interface RouteContext {
 
 const HR_REVIEW_STATUSES = ["PENDING_HR_CALIBRATION", "PENDING_BOARD_APPROVAL"] as const;
 
-export async function PUT(request: Request, context: RouteContext) {
+export const PUT = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -108,9 +109,9 @@ export async function PUT(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request, context: RouteContext) {
+export const POST = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -166,11 +167,11 @@ export async function POST(request: Request, context: RouteContext) {
 
     const result = await approveHrCalibration(submissionId);
 
-    // Fire-and-forget notification: the previous status (summary.status)
-    // determines whether this was HR approval (PENDING_HR_CALIBRATION) or
-    // Board approval (PENDING_BOARD_APPROVAL). result.status is the next
-    // status.
-    void notifyHrOrBoardApproved(submissionId, summary.status, result.status);
+    // Only send a notification on Board approval (final approval).
+    // HR calibration approval does not trigger an email notification.
+    if (summary.status === "PENDING_BOARD_APPROVAL") {
+      void notifyBoardApproved(submissionId);
+    }
 
     return NextResponse.json(result);
   } catch (error) {
@@ -191,4 +192,4 @@ export async function POST(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

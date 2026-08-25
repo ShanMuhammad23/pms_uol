@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireModuleViewApi } from "@/lib/auth/require-module-api";
 import { listUsersOverview } from "@/lib/queries/users";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireModuleViewApi("USERS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -20,4 +21,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});

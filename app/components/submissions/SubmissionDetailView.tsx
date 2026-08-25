@@ -1083,7 +1083,7 @@ export default function SubmissionDetailView({
                       {row.sr}
                     </td>
                     <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
-                      <p className="max-w-[450px] break-words text-xs leading-snug text-slate-800 dark:text-slate-200">
+                      <p className="max-w-[450px] break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
                         {question!.questionText}
                         <QuestionRequiredIndicator isRequired={question!.isRequired} />
                       </p>

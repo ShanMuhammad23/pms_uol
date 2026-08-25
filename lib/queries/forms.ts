@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 import { db } from "../db";
+import { getDbClient, withTransaction } from "@/lib/db-context";
 import { upsertIncrementMatrices } from "./increment-matrices";
 import { getAppraisalCycleById, getDefaultAppraisalCycle, ensureDefaultAppraisalCycle } from "./appraisal-cycles";
 import { resolveEntitySubtreeIds } from "./entity-scope";
@@ -21,6 +22,7 @@ import { buildSectionLayoutOrder } from "@/types/forms";
 interface FormTemplateListRow {
   id: string;
   title: string;
+  code: string;
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
@@ -42,6 +44,7 @@ interface FormTemplateListRow {
 interface FormTemplateRow {
   id: string;
   title: string;
+  code: string;
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
@@ -103,6 +106,7 @@ function mapFormTemplateListItem(row: FormTemplateListRow): FormTemplateListItem
   return {
     id: Number(row.id),
     title: row.title,
+    code: row.code,
     description: row.description,
     cycleId: row.cycle_id,
     fiscalYear: row.fiscal_year,
@@ -147,7 +151,7 @@ async function checkDuplicateTarget(
     return;
   }
 
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
   const params: Array<number | EmployeeCategory | SubCategory> = [
     cycleId,
     targetCategory,
@@ -628,7 +632,7 @@ async function getOptionsByQuestionId(
     return optionsByQuestionId;
   }
 
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
   const optionsResult = await executor.query<OptionRow>(
     `SELECT id, question_id, option_label, points_assigned, sort_order
      FROM question_options
@@ -659,7 +663,7 @@ async function getFormStructureForTemplate(
   sections: FormTemplateRecord["sections"];
   questions: FormTemplateRecord["questions"];
 }> {
-  const executor = client ?? db;
+  const executor = client ?? getDbClient();
 
   const sectionsResult = await executor.query<SectionRow>(
     `SELECT id, parent_section_id, title, sort_order
@@ -774,7 +778,7 @@ async function getFormStructureForTemplate(
 export async function getFormTemplateAppraisalCount(
   templateId: number,
 ): Promise<number> {
-  const result = await db.query<{ count: string }>(
+  const result = await getDbClient().query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
      FROM appraisals
      WHERE template_id = $1`,
@@ -787,10 +791,11 @@ export async function getFormTemplateAppraisalCount(
 export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
   // Pre-aggregate child counts. Joining questions × appraisals × assignments
   // before GROUP BY creates a cartesian product (e.g. 38×405×406 ≈ 6M rows).
-  const result = await db.query<FormTemplateListRow>(
+  const result = await getDbClient().query<FormTemplateListRow>(
     `SELECT
        ft.id,
        ft.title,
+       ft.code,
        ft.description,
        ft.cycle_id,
        ac.fiscal_year,
@@ -860,10 +865,11 @@ export async function listDirectAssessmentTemplates(scope: {
     visibilityParams = [reviewerUserId];
   }
 
-  const result = await db.query<FormTemplateListRow>(
+  const result = await getDbClient().query<FormTemplateListRow>(
     `SELECT
        ft.id,
        ft.title,
+       ft.code,
        ft.description,
        ft.cycle_id,
        ac.fiscal_year,
@@ -918,10 +924,11 @@ export async function listDirectAssessmentTemplates(scope: {
 export async function getFormTemplateById(
   id: number,
 ): Promise<FormTemplateRecord | null> {
-  const result = await db.query<FormTemplateRow>(
+  const result = await getDbClient().query<FormTemplateRow>(
     `SELECT
        ft.id,
        ft.title,
+       ft.code,
        ft.description,
        ft.cycle_id,
        ac.fiscal_year,
@@ -948,6 +955,7 @@ export async function getFormTemplateById(
   return {
     id: Number(row.id),
     title: row.title,
+    code: row.code,
     description: row.description,
     cycleId: row.cycle_id,
     fiscalYear: row.fiscal_year,
@@ -967,16 +975,15 @@ export async function createFormTemplate(
   input: FormTemplateInput,
   createdById?: number,
 ): Promise<FormTemplateRecord> {
-  const client = await db.connect();
-
-  try {
-    await client.query("BEGIN");
+  return withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     const cycleId = await resolveCycleId(input.cycleId);
 
     const templateResult = await client.query<{ id: string }>(
       `INSERT INTO form_templates (
          title,
+         code,
          description,
          cycle_id,
          target_category,
@@ -985,10 +992,11 @@ export async function createFormTemplate(
          additional_remarks_enabled,
          created_by,
          updated_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
        RETURNING id`,
       [
         input.title,
+        input.code.trim(),
         input.description || null,
         cycleId,
         input.targetCategory ?? null,
@@ -1007,20 +1015,13 @@ export async function createFormTemplate(
       await upsertIncrementMatrices(cycleId, input.incrementMatrices, client);
     }
 
-    await client.query("COMMIT");
-
     const created = await getFormTemplateById(templateId);
     if (!created) {
       throw new FormTemplateError("Failed to load created form template.", 500);
     }
 
     return created;
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function updateFormTemplate(
@@ -1028,10 +1029,8 @@ export async function updateFormTemplate(
   input: FormTemplateInput,
   updatedById?: number,
 ): Promise<FormTemplateRecord> {
-  const client = await db.connect();
-
-  try {
-    await client.query("BEGIN");
+  return withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     const existing = await client.query<{ id: string; cycle_id: number }>(
       `SELECT id, cycle_id FROM form_templates WHERE id = $1`,
@@ -1057,17 +1056,19 @@ export async function updateFormTemplate(
     await client.query(
       `UPDATE form_templates
        SET title = $1,
-           description = $2,
-           cycle_id = $3,
-           target_category = $4,
-           target_sub_category = $5,
-           self_assessment_enabled = $6,
-           additional_remarks_enabled = $7,
-           updated_by = COALESCE($8, updated_by),
+           code = $2,
+           description = $3,
+           cycle_id = $4,
+           target_category = $5,
+           target_sub_category = $6,
+           self_assessment_enabled = $7,
+           additional_remarks_enabled = $8,
+           updated_by = COALESCE($9, updated_by),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9`,
+       WHERE id = $10`,
       [
         input.title,
+        input.code.trim(),
         input.description || null,
         cycleId,
         input.targetCategory ?? null,
@@ -1085,29 +1086,20 @@ export async function updateFormTemplate(
       await upsertIncrementMatrices(cycleId, input.incrementMatrices, client);
     }
 
-    await client.query("COMMIT");
-
     const updated = await getFormTemplateById(id);
     if (!updated) {
       throw new FormTemplateError("Failed to load updated form template.", 500);
     }
 
     return updated;
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function deleteFormTemplate(id: number): Promise<{
   appraisalCount: number;
 }> {
-  const client = await db.connect();
-
-  try {
-    await client.query("BEGIN");
+  return withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     const appraisalResult = await client.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count
@@ -1144,18 +1136,11 @@ export async function deleteFormTemplate(id: number): Promise<{
     );
 
     if (result.rows.length === 0) {
-      await client.query("ROLLBACK");
       throw new FormTemplateError("Form template not found.", 404);
     }
 
-    await client.query("COMMIT");
     return { appraisalCount };
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function assignFormTemplateToEmployees(
@@ -1168,7 +1153,7 @@ export async function assignFormTemplateToEmployees(
     throw new FormTemplateError("At least one employee is required.", 400);
   }
 
-  const templateResult = await db.query<{ id: string; cycle_id: number | null; self_assessment_enabled: boolean }>(
+  const templateResult = await getDbClient().query<{ id: string; cycle_id: number | null; self_assessment_enabled: boolean }>(
     `SELECT id, cycle_id, self_assessment_enabled
      FROM form_templates
      WHERE id = $1`,
@@ -1183,7 +1168,7 @@ export async function assignFormTemplateToEmployees(
     ? Number(templateResult.rows[0].cycle_id)
     : null;
 
-  const usersResult = await db.query<{ id: string; employee_id: string }>(
+  const usersResult = await getDbClient().query<{ id: string; employee_id: string }>(
     `SELECT id, employee_id
      FROM users
      WHERE employee_id = ANY($1::text[])
@@ -1199,7 +1184,7 @@ export async function assignFormTemplateToEmployees(
 
   // One form per employee per appraisal cycle.
   if (cycleId !== null) {
-    const conflicts = await db.query<{
+    const conflicts = await getDbClient().query<{
       employee_id: string;
       employee_name: string;
       other_title: string;
@@ -1272,7 +1257,7 @@ export async function assignFormTemplateToEmployees(
   }));
 
   // Insert assignments with per-employee self_assessment_disabled
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO employee_form_assignments (employee_id, template_id, self_assessment_disabled)
      SELECT u.id, $2, COALESCE(d.disabled, false)
      FROM unnest($1::bigint[]) WITH ORDINALITY AS u(id, ord)
@@ -1291,7 +1276,7 @@ export async function assignFormTemplateToEmployees(
 
     if (selfAssessEmployees.length > 0) {
       const initialStatus = "PENDING_SELF_ASSESSMENT";
-      await db.query(
+      await getDbClient().query(
         `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
          SELECT u.id, $2, $3, $4
          FROM unnest($1::bigint[]) AS u(id)
@@ -1309,7 +1294,7 @@ export async function assignFormTemplateToEmployees(
 
     if (directAssessEmployees.length > 0) {
       const directStatus = "PENDING_HEAD_REVIEW";
-      await db.query(
+      await getDbClient().query(
         `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
          SELECT u.id, $2, $3, $4
          FROM unnest($1::bigint[]) AS u(id)
@@ -1341,7 +1326,7 @@ export async function unassignFormTemplateFromEmployees(
     throw new FormTemplateError("At least one employee is required.", 400);
   }
 
-  const templateResult = await db.query<{ id: string; cycle_id: number | null }>(
+  const templateResult = await getDbClient().query<{ id: string; cycle_id: number | null }>(
     `SELECT id, cycle_id
      FROM form_templates
      WHERE id = $1`,
@@ -1356,7 +1341,7 @@ export async function unassignFormTemplateFromEmployees(
     ? Number(templateResult.rows[0].cycle_id)
     : null;
 
-  const usersResult = await db.query<{ id: string; employee_id: string }>(
+  const usersResult = await getDbClient().query<{ id: string; employee_id: string }>(
     `SELECT id, employee_id
      FROM users
      WHERE employee_id = ANY($1::text[])`,
@@ -1368,10 +1353,9 @@ export async function unassignFormTemplateFromEmployees(
   }
 
   const userIds = usersResult.rows.map((r) => r.id);
-  const client = await db.connect();
 
-  try {
-    await client.query("BEGIN");
+  return withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     const deletedAssignments = await client.query<{ employee_id: string }>(
       `DELETE FROM employee_form_assignments
@@ -1382,7 +1366,6 @@ export async function unassignFormTemplateFromEmployees(
     );
 
     if (deletedAssignments.rows.length === 0) {
-      await client.query("ROLLBACK");
       throw new FormTemplateError(
         "None of the selected employees are assigned to this form.",
         404,
@@ -1436,18 +1419,11 @@ export async function unassignFormTemplateFromEmployees(
       );
     }
 
-    await client.query("COMMIT");
-
     return {
       unassignedCount: deletedAssignments.rows.length,
       templateId,
     };
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function updateAssignmentSelfAssessmentDisabled(
@@ -1455,7 +1431,7 @@ export async function updateAssignmentSelfAssessmentDisabled(
   employeeCode: string,
   selfAssessmentDisabled: boolean,
 ): Promise<{ templateId: number; employeeId: string; selfAssessmentDisabled: boolean }> {
-  const userResult = await db.query<{ id: string }>(
+  const userResult = await getDbClient().query<{ id: string }>(
     `SELECT id FROM users WHERE employee_id = $1 AND is_active = TRUE`,
     [employeeCode.trim()],
   );
@@ -1466,7 +1442,7 @@ export async function updateAssignmentSelfAssessmentDisabled(
 
   const userId = userResult.rows[0].id;
 
-  const result = await db.query<{ employee_id: string }>(
+  const result = await getDbClient().query<{ employee_id: string }>(
     `UPDATE employee_form_assignments
      SET self_assessment_disabled = $3,
          updated_at = CURRENT_TIMESTAMP
@@ -1480,7 +1456,7 @@ export async function updateAssignmentSelfAssessmentDisabled(
   }
 
   // Update appraisal status if not yet submitted
-  const templateResult = await db.query<{ cycle_id: number | null }>(
+  const templateResult = await getDbClient().query<{ cycle_id: number | null }>(
     `SELECT cycle_id FROM form_templates WHERE id = $1`,
     [templateId],
   );
@@ -1491,7 +1467,7 @@ export async function updateAssignmentSelfAssessmentDisabled(
 
   if (cycleId !== null) {
     const newStatus = selfAssessmentDisabled ? "PENDING_HEAD_REVIEW" : "PENDING_SELF_ASSESSMENT";
-    await db.query(
+    await getDbClient().query(
       `UPDATE appraisals
        SET status = $4,
            updated_at = CURRENT_TIMESTAMP
@@ -1503,7 +1479,7 @@ export async function updateAssignmentSelfAssessmentDisabled(
     );
   } else {
     const newStatus = selfAssessmentDisabled ? "PENDING_HEAD_REVIEW" : "PENDING_SELF_ASSESSMENT";
-    await db.query(
+    await getDbClient().query(
       `UPDATE appraisals
        SET status = $3,
            updated_at = CURRENT_TIMESTAMP
@@ -1524,7 +1500,7 @@ export async function updateAssignmentSelfAssessmentDisabled(
 export async function listFormTemplateAssignedEmployees(
   templateId: number,
 ): Promise<Array<{ employeeId: string; employeeName: string; email: string | null; selfAssessmentDisabled: boolean }>> {
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     employee_id: string;
     employee_name: string;
     email: string | null;
@@ -1567,7 +1543,7 @@ export async function assignDirectScoreEntryToEmployees(
   const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
   const cycleId = cycle.id;
 
-  const usersResult = await db.query<{ id: string; employee_id: string }>(
+  const usersResult = await getDbClient().query<{ id: string; employee_id: string }>(
     `SELECT id, employee_id FROM users WHERE employee_id = ANY($1::text[]) AND is_active = TRUE`,
     [normalizedCodes],
   );
@@ -1579,7 +1555,7 @@ export async function assignDirectScoreEntryToEmployees(
   const userIds = usersResult.rows.map((r) => r.id);
 
   // Conflict check: employees already have a form assignment in this cycle
-  const alreadyAssigned = await db.query<{ employee_id: string }>(
+  const alreadyAssigned = await getDbClient().query<{ employee_id: string }>(
     `SELECT efa.employee_id::text
      FROM employee_form_assignments efa
      INNER JOIN form_templates ft ON ft.id = efa.template_id
@@ -1598,7 +1574,7 @@ export async function assignDirectScoreEntryToEmployees(
   }
 
   // Insert direct score entry assignments
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO direct_score_entry_assignments (employee_id, cycle_id)
      SELECT u.id, $2
      FROM unnest($1::bigint[]) AS u(id)
@@ -1608,7 +1584,7 @@ export async function assignDirectScoreEntryToEmployees(
   );
 
   // Create appraisals with NULL template_id and PENDING_HEAD_REVIEW status
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO appraisals (employee_id, cycle_id, template_id, status)
      SELECT u.id, $2, NULL, $3
      FROM unnest($1::bigint[]) AS u(id)
@@ -1639,7 +1615,7 @@ export async function unassignDirectScoreEntryFromEmployees(
   const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
   const cycleId = cycle.id;
 
-  const usersResult = await db.query<{ id: string; employee_id: string }>(
+  const usersResult = await getDbClient().query<{ id: string; employee_id: string }>(
     `SELECT id, employee_id FROM users WHERE employee_id = ANY($1::text[])`,
     [normalizedCodes],
   );
@@ -1649,10 +1625,9 @@ export async function unassignDirectScoreEntryFromEmployees(
   }
 
   const userIds = usersResult.rows.map((r) => r.id);
-  const client = await db.connect();
 
-  try {
-    await client.query("BEGIN");
+  return withTransaction(async () => {
+    const client = getDbClient() as PoolClient;
 
     const deletedAssignments = await client.query<{ employee_id: string }>(
       `DELETE FROM direct_score_entry_assignments
@@ -1662,7 +1637,6 @@ export async function unassignDirectScoreEntryFromEmployees(
     );
 
     if (deletedAssignments.rows.length === 0) {
-      await client.query("ROLLBACK");
       throw new FormTemplateError(
         "None of the selected employees are marked for direct score entry.",
         404,
@@ -1688,24 +1662,17 @@ export async function unassignDirectScoreEntryFromEmployees(
       [removedUserIds, cycleId],
     );
 
-    await client.query("COMMIT");
-
     return {
       unassignedCount: deletedAssignments.rows.length,
     };
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function listDirectScoreEntryEmployees(): Promise<Array<{ employeeId: string; employeeName: string; email: string | null }>> {
   const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
   const cycleId = cycle.id;
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     employee_id: string;
     employee_name: string;
     email: string | null;

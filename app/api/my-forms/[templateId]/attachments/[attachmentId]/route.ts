@@ -7,12 +7,13 @@ import {
   EmployeeFormError,
   getEmployeeFormAttachmentForDownload,
 } from "@/lib/queries/employee-forms";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ templateId: string; attachmentId: string }>;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export const GET = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireSessionApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -63,9 +64,9 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export const DELETE = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireSessionApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -102,4 +103,4 @@ export async function DELETE(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

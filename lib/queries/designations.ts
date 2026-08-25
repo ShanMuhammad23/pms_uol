@@ -1,9 +1,10 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 
 async function hasDesignationColumn(): Promise<boolean> {
-  const result = await db.query<{ exists: boolean }>(
+  const result = await getDbClient().query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM information_schema.columns
@@ -21,7 +22,7 @@ export async function listUniqueDesignations(): Promise<string[]> {
     return [];
   }
 
-  const result = await db.query<{ designation: string }>(
+  const result = await getDbClient().query<{ designation: string }>(
     `
       SELECT DISTINCT TRIM(designation) AS designation
       FROM users

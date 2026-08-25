@@ -57,6 +57,8 @@ export interface UserRecord {
   assessmentEligibility: boolean;
   /** Whether a form template is assigned to this user in the active cycle. */
   formAssigned: boolean;
+  /** The code of the assigned form template (if any), e.g. "FAC-2026". */
+  formCode: string | null;
   /** Whether the user is marked for direct score entry in the active cycle. */
   directScoreEntry: boolean;
   /** Whether self-assessment is enabled for this user's form assignment. */

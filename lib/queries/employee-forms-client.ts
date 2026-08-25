@@ -5,6 +5,11 @@ import type {
   SaveEmployeeFormInput,
 } from "@/types/employee-forms";
 
+// Mirror of MAX_FORM_ATTACHMENT_BYTES in lib/uploads/form-attachments.ts
+// (which is `server-only` and cannot be imported into client bundles).
+// Keep these two values in sync.
+export const MAX_FORM_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+
 async function parseResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
 

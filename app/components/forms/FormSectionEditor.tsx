@@ -74,14 +74,14 @@ export default function FormSectionEditor({
           <label className="mb-1.5 block text-xs font-medium text-foreground/70">
             Section Name
           </label>
-          <input
-            type="text"
+          <textarea
             value={section.title}
             onChange={(event) =>
               onChange({ ...section, title: event.target.value })
             }
-            className="h-10 w-full rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
-            placeholder="Section title"
+            rows={2}
+            className="w-full resize-y rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
+            placeholder="Section title (Press Enter for new line)"
           />
           {errors[titleErrorKey] ? (
             <p className="mt-1 text-xs text-red-600">{errors[titleErrorKey]}</p>

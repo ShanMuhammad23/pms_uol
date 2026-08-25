@@ -5,7 +5,6 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
-  useState,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -26,6 +25,7 @@ import {
 } from "@/app/helpers/users-page-filters";
 import type { EntityRecord } from "@/types/entities";
 import type { UserRecord } from "@/types/users";
+import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
 
 interface UseUsersPageFiltersParams {
   users: UserRecord[];
@@ -103,15 +103,30 @@ export function useUsersPageFilters({
   designations,
 }: UseUsersPageFiltersParams) {
   const [selectedCategory0EntityIds, setSelectedCategory0EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:users-filters:category0",
+      null,
+    );
   const [selectedCategory1EntityIds, setSelectedCategory1EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:users-filters:category1",
+      null,
+    );
   const [selectedCategory2EntityIds, setSelectedCategory2EntityIds] =
-    useState<MultiFilterSelection<number>>(null);
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:users-filters:category2",
+      null,
+    );
   const [selectedRoleCategories, setSelectedRoleCategories] =
-    useState<MultiFilterSelection<string>>(null);
+    useSessionStorageState<MultiFilterSelection<string>>(
+      "pms:users-filters:roleCategories",
+      null,
+    );
   const [selectedDesignations, setSelectedDesignations] =
-    useState<MultiFilterSelection<string>>(null);
+    useSessionStorageState<MultiFilterSelection<string>>(
+      "pms:users-filters:designations",
+      null,
+    );
 
   const category0Entities = useMemo(
     () => getEntitiesForFilterLevels(entities, 0, null),

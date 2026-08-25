@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import { isHeadRole } from "@/lib/auth/home-path";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +71,7 @@ function sanitizeConfig(raw: unknown): ColumnConfig {
   return config;
 }
 
-export async function GET(request: Request) {
+export const GET = apiHandler(async (request: Request) => {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -86,7 +88,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     column_config: ColumnConfig;
   }>(
     `SELECT column_config FROM user_column_preferences
@@ -99,9 +101,9 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ columnConfig: sanitizeConfig(result.rows[0].column_config) });
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = apiHandler(async (request: Request) => {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -137,7 +139,7 @@ export async function PUT(request: Request) {
 
   const sanitized = sanitizeConfig(columnConfig);
 
-  await db.query(
+  await getDbClient().query(
     `INSERT INTO user_column_preferences (user_id, table_key, column_config, updated_at)
      VALUES ($1, $2, $3::jsonb, CURRENT_TIMESTAMP)
      ON CONFLICT (user_id, table_key)
@@ -146,4 +148,4 @@ export async function PUT(request: Request) {
   );
 
   return NextResponse.json({ success: true });
-}
+});

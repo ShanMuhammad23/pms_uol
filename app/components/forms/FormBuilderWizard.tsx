@@ -69,6 +69,7 @@ interface QuestionLocation {
 
 function draftToTemplateRecord(
   title: string,
+  code: string,
   description: string,
   selfAssessmentEnabled: boolean,
   additionalRemarksEnabled: boolean,
@@ -132,6 +133,7 @@ function draftToTemplateRecord(
   return {
     id: 0,
     title,
+    code,
     description: description || null,
     cycleId: 0,
     fiscalYear: 0,
@@ -208,6 +210,7 @@ function mapRecordToState(record: FormTemplateRecord) {
 
   return {
     title: record.title,
+    code: record.code ?? "",
     description: record.description ?? "",
     cycleId: record.cycleId,
     selfAssessmentEnabled: record.selfAssessmentEnabled,
@@ -268,6 +271,7 @@ function validateQuestionFields(
 
 interface ModernFormDesignStepProps {
   title: string;
+  code: string;
   description: string;
   selfAssessmentEnabled: boolean;
   additionalRemarksEnabled: boolean;
@@ -275,6 +279,7 @@ interface ModernFormDesignStepProps {
   questions: QuestionInput[];
   errors: Record<string, string>;
   onTitleChange: (title: string) => void;
+  onCodeChange: (code: string) => void;
   onDescriptionChange: (description: string) => void;
   onSelfAssessmentEnabledChange: (enabled: boolean) => void;
   onAdditionalRemarksEnabledChange: (enabled: boolean) => void;
@@ -283,6 +288,7 @@ interface ModernFormDesignStepProps {
 
 function ModernFormDesignStep({
   title,
+  code,
   description,
   selfAssessmentEnabled,
   additionalRemarksEnabled,
@@ -290,6 +296,7 @@ function ModernFormDesignStep({
   questions,
   errors,
   onTitleChange,
+  onCodeChange,
   onDescriptionChange,
   onAdditionalRemarksEnabledChange,
   onStructureChange,
@@ -800,8 +807,8 @@ function ModernFormDesignStep({
     [sections, questions],
   );
   const previewTemplate = useMemo(
-    () => draftToTemplateRecord(title, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions),
-    [title, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions],
+    () => draftToTemplateRecord(title, code, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions),
+    [title, code, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions],
   );
 
   return (
@@ -855,6 +862,31 @@ function ModernFormDesignStep({
             {errors.title && (
               <p className="flex items-center gap-1 text-xs text-red-500">
                 <AlertCircle className="h-3 w-3" /> {errors.title}
+              </p>
+            )}
+          </div>
+
+          {/* Code Field */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Form Code
+            </label>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => onCodeChange(e.target.value)}
+              placeholder="e.g. FAC-2026"
+              maxLength={50}
+              className={cn(
+                "w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900",
+                errors.code
+                  ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 dark:border-red-800"
+                  : "border-slate-200 focus:border-primary focus:ring-primary/20 dark:border-slate-700"
+              )}
+            />
+            {errors.code && (
+              <p className="flex items-center gap-1 text-xs text-red-500">
+                <AlertCircle className="h-3 w-3" /> {errors.code}
               </p>
             )}
           </div>
@@ -1248,13 +1280,18 @@ function SubsectionCard({
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-teal-100 text-[10px] font-bold text-teal-700 dark:bg-teal-800/50 dark:text-teal-200">
           {sectionIndex + 1}.{subsectionIndex + 1}
         </div>
-        <input
-          type="text"
+        <textarea
           value={subsection.title}
           onChange={(e) => onUpdate({ title: e.target.value })}
-          placeholder="Subsection Title"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.stopPropagation();
+            }
+          }}
+          placeholder="Subsection Title (Press Enter for new line)"
+          rows={1}
           className={cn(
-            "min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none",
+            "min-w-0 flex-1 resize-y bg-transparent text-sm font-semibold outline-none whitespace-pre-wrap",
             titleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400" : "text-teal-900 placeholder:text-teal-400 dark:text-teal-100"
           )}
         />
@@ -1472,14 +1509,19 @@ function SectionCard({
         
         <div className="flex-1 min-w-0">
           {isExpanded ? (
-            <input
-              type="text"
+            <textarea
               value={section.title}
               onChange={(e) => onUpdate({ title: e.target.value })}
               onClick={(e) => e.stopPropagation()}
-              placeholder="Section Title"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.stopPropagation();
+                }
+              }}
+              placeholder="Section Title (Press Enter for new line)"
+              rows={1}
               className={cn(
-                "w-full bg-transparent text-sm font-semibold outline-none",
+                "w-full resize-y bg-transparent text-sm font-semibold outline-none whitespace-pre-wrap",
                 hasTitleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-indigo-900 placeholder:text-indigo-400 dark:text-indigo-100 dark:placeholder:text-indigo-400"
               )}
             />
@@ -1798,13 +1840,22 @@ function QuestionCard({
         
         <div className="flex-1 space-y-3">
           <div className="flex gap-2">
-            <input
-              type="text"
+            <textarea
               value={question.questionText}
               onChange={(e) => onChange({ questionText: e.target.value })}
-              placeholder="Enter question text..."
+              onKeyDown={(e) => {
+                // Enter inserts a new line; Shift+Enter also inserts a new line.
+                // No special handling needed — textarea handles newlines natively.
+                // Stop event bubbling so parent onKeyDown handlers (e.g. section
+                // collapse on Enter) don't interfere while typing.
+                if (e.key === "Enter") {
+                  e.stopPropagation();
+                }
+              }}
+              placeholder="Enter question text... (Press Enter for new line)"
+              rows={1}
               className={cn(
-                "flex-1 bg-transparent text-sm outline-none",
+                "flex-1 resize-y min-h-[2rem] bg-transparent text-sm outline-none whitespace-pre-wrap",
                 textError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-sky-900 placeholder:text-sky-400 dark:text-sky-50 dark:placeholder:text-sky-500"
               )}
             />
@@ -1816,7 +1867,7 @@ function QuestionCard({
                 onChange={(e) => onChange({ totalMarks: Number(e.target.value) })}
                 placeholder="Marks"
                 className={cn(
-                  "w-20 rounded border px-2 py-1 text-right text-xs outline-none bg-white/70 dark:bg-slate-900/50",
+                  "w-20 shrink-0 self-start rounded border px-2 py-1 text-right text-xs outline-none bg-white/70 dark:bg-slate-900/50",
                   marksError
                     ? "border-red-400 text-red-700 dark:border-red-700 dark:text-red-400"
                     : "border-sky-200 text-sky-800 dark:border-sky-600/40 dark:text-sky-100"
@@ -1998,6 +2049,7 @@ export default function FormBuilderWizard({
       ? `${initialState.title} (Copy)`
       : initialState?.title ?? "",
   );
+  const [code, setCode] = useState(initialState?.code ?? "");
   const [description, setDescription] = useState(initialState?.description ?? "");
   const [selfAssessmentEnabled, setSelfAssessmentEnabled] = useState(initialState?.selfAssessmentEnabled ?? true);
   const [additionalRemarksEnabled, setAdditionalRemarksEnabled] = useState(initialState?.additionalRemarksEnabled ?? false);
@@ -2052,6 +2104,7 @@ export default function FormBuilderWizard({
 
     return {
       title: title.trim(),
+      code: code.trim(),
       description: description.trim(),
       selfAssessmentEnabled,
       additionalRemarksEnabled,
@@ -2061,6 +2114,7 @@ export default function FormBuilderWizard({
     };
   }, [
     title,
+    code,
     description,
     selfAssessmentEnabled,
     additionalRemarksEnabled,
@@ -2099,6 +2153,10 @@ export default function FormBuilderWizard({
 
     if (!title.trim()) {
       nextErrors.title = "Form title is required.";
+    }
+
+    if (!code.trim()) {
+      nextErrors.code = "Form code is required.";
     }
 
     if (countAllQuestions(sections, questions) === 0) {
@@ -2282,6 +2340,7 @@ export default function FormBuilderWizard({
         {step === 0 ? (
           <ModernFormDesignStep
             title={title}
+            code={code}
             description={description}
             selfAssessmentEnabled={selfAssessmentEnabled}
             additionalRemarksEnabled={additionalRemarksEnabled}
@@ -2289,6 +2348,7 @@ export default function FormBuilderWizard({
             questions={questions}
             errors={errors}
             onTitleChange={setTitle}
+            onCodeChange={setCode}
             onDescriptionChange={setDescription}
             onSelfAssessmentEnabledChange={setSelfAssessmentEnabled}
             onAdditionalRemarksEnabledChange={setAdditionalRemarksEnabled}

@@ -9,6 +9,7 @@ import {
   listDirectScoreEntryEmployees,
   unassignDirectScoreEntryFromEmployees,
 } from "@/lib/queries/forms";
+import { apiHandler } from "@/lib/api-handler";
 
 function parseEmployeeIds(body: { employeeIds?: unknown }): string[] | NextResponse {
   if (!Array.isArray(body.employeeIds) || body.employeeIds.length === 0) {
@@ -28,7 +29,7 @@ function parseEmployeeIds(body: { employeeIds?: unknown }): string[] | NextRespo
   return body.employeeIds as string[];
 }
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireModuleViewApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -47,9 +48,9 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -75,9 +76,9 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -103,4 +104,4 @@ export async function DELETE(request: Request) {
       { status: 500 },
     );
   }
-}
+});

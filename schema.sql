@@ -78,6 +78,7 @@ CREATE TABLE appraisal_cycles (
 CREATE TABLE form_templates (
     id BIGSERIAL PRIMARY KEY,
     title VARCHAR(150) NOT NULL, -- e.g., 'Annual Faculty Evaluation Form'
+    code VARCHAR(50) NOT NULL DEFAULT '', -- user-defined short identifier, e.g. 'FAC-2026'
     description TEXT,
     cycle_id INT NOT NULL REFERENCES appraisal_cycles(id) ON DELETE CASCADE,
     
@@ -98,7 +99,8 @@ CREATE TABLE form_templates (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    CONSTRAINT unique_target_form_per_cycle UNIQUE (cycle_id, target_category, target_sub_category)
+    CONSTRAINT unique_target_form_per_cycle UNIQUE (cycle_id, target_category, target_sub_category),
+    CONSTRAINT form_templates_code_unique UNIQUE (code)
 );
 
 -- Form sections and subsections (parent_section_id NULL = top-level section)

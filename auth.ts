@@ -1,5 +1,4 @@
 import type { NextAuthOptions } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { getUserByEmail } from "./lib/queries/auth";
 import { getAuthCookieSecure } from "./lib/env";
@@ -51,50 +50,6 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
-    // --- Test-only SSO simulation provider ---
-    // Only available outside production. Allows testing the SSO login flow
-    // for any employee by email, without going through Google OAuth. The
-    // resulting session is identical to a real Google SSO session because it
-    // flows through the same jwt/session callbacks.
-    ...(process.env.NODE_ENV !== "production"
-      ? [
-          Credentials({
-            id: "test-sso",
-            name: "Test SSO",
-            credentials: {
-              email: { label: "Email", type: "email" },
-            },
-            async authorize(credentials) {
-              const email = credentials?.email?.toString().trim() ?? "";
-              if (!email) {
-                return null;
-              }
-
-              const user = await getUserByEmail(email);
-              if (!user || !user.isActive) {
-                await logSecurityEvent({
-                  eventType: "LOGIN_FAILURE",
-                  meta: { email, reason: "test_sso_missing_or_inactive" },
-                });
-                return null;
-              }
-
-              if (!isSystemRole(user.systemRole)) {
-                return null;
-              }
-
-              return {
-                id: user.id,
-                email: user.email,
-                name: `${user.firstName} ${user.lastName}`.trim(),
-                role: user.systemRole,
-                designation: user.designation,
-                entityId: user.entityId,
-              };
-            },
-          }),
-        ]
-      : []),
   ],
   callbacks: {
     async signIn({ account, profile }) {
@@ -104,16 +59,25 @@ export const authOptions: NextAuthOptions = {
 
       const email = profile?.email?.toString().trim();
       if (!email) {
-        return false;
+        // No email in Google profile — redirect with specific error.
+        return `/?error=NoEmail`;
       }
 
       const existingUser = await getUserByEmail(email);
-      if (!existingUser?.isActive) {
+      if (!existingUser) {
         await logSecurityEvent({
           eventType: "LOGIN_FAILURE",
-          meta: { email, reason: "google_not_provisioned_or_inactive" },
+          meta: { email, reason: "google_user_not_found" },
         });
-        return false;
+        return `/?error=UserNotFound`;
+      }
+
+      if (!existingUser.isActive) {
+        await logSecurityEvent({
+          eventType: "LOGIN_FAILURE",
+          meta: { email, reason: "google_account_inactive" },
+        });
+        return `/?error=AccountInactive`;
       }
 
       return true;

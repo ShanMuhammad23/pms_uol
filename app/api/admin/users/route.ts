@@ -6,13 +6,14 @@ import {
 import { createUser, listUsers, listUsersByEmployeeIds, UserError } from "@/lib/queries/users";
 import { validateCreateUserInput } from "@/lib/validation/users";
 import type { CreateUserInput } from "@/types/users";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const MAX_EMPLOYEE_IDS = 200;
 
-export async function GET(request: NextRequest) {
+export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await requireModuleViewApi("USERS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -41,9 +42,9 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("USERS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -73,4 +74,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});

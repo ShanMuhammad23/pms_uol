@@ -23,6 +23,7 @@ import {
   type AppraisalRemarksField,
   type AppraisalScoreAdjustmentField,
 } from "@/lib/queries/form-submissions";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -33,7 +34,7 @@ const REMARKS_FIELDS = [
   "remarksCompensation",
 ] as const satisfies readonly AppraisalRemarksField[];
 
-export async function GET(_request: Request, context: RouteContext) {
+export const GET = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -169,9 +170,9 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function PATCH(request: Request, context: RouteContext) {
+export const PATCH = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireSubmissionAccessApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -345,4 +346,4 @@ export async function PATCH(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});

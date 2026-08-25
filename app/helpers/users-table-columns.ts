@@ -74,7 +74,7 @@ export const USERS_TABLE_COLUMNS: UsersTableColumnDef[] = [
         ? "DS"
         : row.formAssigned
           ? row.selfAssessmentEnabled
-            ? "✔"
+            ? row.formCode || "✔"
             : "MA"
           : "✖",
   },

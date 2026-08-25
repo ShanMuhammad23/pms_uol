@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getDbClient } from "@/lib/db-context";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 
 export type EmployeeAssignedForm = {
@@ -19,7 +20,7 @@ export async function listAssignedFormsForEmployeeSap(
   const cycle = await getDefaultAppraisalCycle();
   const cycleId = cycle?.id ?? null;
 
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     template_id: string;
     title: string;
   }>(

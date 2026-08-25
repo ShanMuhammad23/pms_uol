@@ -10,11 +10,12 @@ import {
 } from "@/lib/queries/entities";
 import { validateCreateEntityInput } from "@/lib/validation/entities";
 import type { CreateEntityInput } from "@/types/entities";
+import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   const auth = await requireModuleViewApi("ORGANIZATION_LEVELS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -30,9 +31,9 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = apiHandler(async (request: Request) => {
   const auth = await requireModuleEditApi("ORGANIZATION_LEVELS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -62,4 +63,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "../db";
+import { getDbClient } from "../db-context";
 
 export interface AuthUser {
   id: string;
@@ -15,7 +16,7 @@ export interface AuthUser {
 }
 
 export async function getUserByEmail(email: string): Promise<AuthUser | null> {
-  const result = await db.query<{
+  const result = await getDbClient().query<{
     id: string;
     email: string;
     password_hash: string;

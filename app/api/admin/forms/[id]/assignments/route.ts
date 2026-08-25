@@ -10,6 +10,7 @@ import {
   unassignFormTemplateFromEmployees,
   updateAssignmentSelfAssessmentDisabled,
 } from "@/lib/queries/forms";
+import { apiHandler } from "@/lib/api-handler";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -33,7 +34,7 @@ function parseEmployeeIds(body: { employeeIds?: unknown }): string[] | NextRespo
   return body.employeeIds as string[];
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export const GET = apiHandler(async (_request: Request, context: RouteContext) => {
   const auth = await requireModuleViewApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -59,9 +60,9 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: Request, context: RouteContext) {
+export const POST = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireModuleEditApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -94,9 +95,9 @@ export async function POST(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function DELETE(request: Request, context: RouteContext) {
+export const DELETE = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireModuleEditApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -132,9 +133,9 @@ export async function DELETE(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
 
-export async function PATCH(request: Request, context: RouteContext) {
+export const PATCH = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireModuleEditApi("FORMS");
   if (auth instanceof NextResponse) {
     return auth;
@@ -179,4 +180,4 @@ export async function PATCH(request: Request, context: RouteContext) {
       { status: 500 },
     );
   }
-}
+});
