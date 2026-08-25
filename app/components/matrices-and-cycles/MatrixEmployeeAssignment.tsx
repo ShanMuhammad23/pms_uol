@@ -2,22 +2,25 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronLeft, ChevronRight, Filter, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Filter, RotateCcw, Search, Users } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ColumnHeaderFilter } from "@/app/components/common/ColumnHeaderFilter";
 import {
   MultiSelectFilterDropdown,
   type MultiSelectOption,
 } from "@/app/components/dashboard/MultiSelectFilterDropdown";
+import { useResettingPage } from "@/app/hooks/use-resetting-page";
 import { DASHBOARD_QUERY_CACHE } from "@/app/queries/query-cache";
 import { queryKeys } from "@/app/queries/keys";
 import { fetchUsers } from "@/lib/queries/users-client";
 import { cn } from "@/lib/utils";
 import type { UserRecord } from "@/types/users";
-import { useResettingPage } from "@/app/hooks/use-resetting-page";
 
-const PAGE_SIZE = 50;
+type PageSizeOption = 50 | 200 | 1000 | 5000 | "all";
+const PAGE_SIZE_OPTIONS: PageSizeOption[] = [50, 200, 1000, 5000, "all"];
+const DEFAULT_PAGE_SIZE: PageSizeOption = 50;
 
-type FilterId =
+type MultiFilterId =
   | "entityName"
   | "designation"
   | "roleCategory"
@@ -25,10 +28,16 @@ type FilterId =
   | "manager2Name"
   | "assignmentStatus";
 
-type FilterSelection = string[] | null;
-type FilterState = Record<FilterId, FilterSelection>;
+type TextFilterId = "employeeId" | "name";
 
-const FILTER_CONFIG: { id: FilterId; label: string }[] = [
+type FilterSelection = string[] | null;
+
+type FilterState = {
+  text: Partial<Record<TextFilterId, string>>;
+  multi: Record<MultiFilterId, FilterSelection>;
+};
+
+const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
   { id: "assignmentStatus", label: "Assignment Status" },
   { id: "entityName", label: "Entity" },
   { id: "designation", label: "Designation" },
@@ -38,33 +47,26 @@ const FILTER_CONFIG: { id: FilterId; label: string }[] = [
 ];
 
 const EMPTY_FILTERS: FilterState = {
-  assignmentStatus: null,
-  entityName: null,
-  designation: null,
-  roleCategory: null,
-  headName: null,
-  manager2Name: null,
+  text: {},
+  multi: {
+    assignmentStatus: null,
+    entityName: null,
+    designation: null,
+    roleCategory: null,
+    headName: null,
+    manager2Name: null,
+  },
 };
 
-const USER_COLUMNS: {
-  id: string;
+type UserColumnId = TextFilterId | MultiFilterId;
+
+type UserColumn = {
+  id: UserColumnId;
   label: string;
   width?: number;
+  mode: "text" | "multi";
   getValue: (user: UserRecord) => string;
-}[] = [
-  { id: "employeeId", label: "SAP Code", width: 120, getValue: (user) => user.employeeId },
-  {
-    id: "name",
-    label: "Employee Name",
-    width: 200,
-    getValue: (user) => `${user.firstName} ${user.lastName}`.trim(),
-  },
-  { id: "designation", label: "Designation", width: 180, getValue: (user) => user.designation ?? "—" },
-  { id: "entityName", label: "Entity", width: 160, getValue: (user) => user.entityName ?? "—" },
-  { id: "roleCategory", label: "Role Category", width: 150, getValue: (user) => user.roleCategory ?? "—" },
-  { id: "headName", label: "Manager 1", width: 160, getValue: (user) => user.headName ?? "—" },
-  { id: "manager2Name", label: "Manager 2", width: 160, getValue: (user) => user.manager2Name ?? "—" },
-];
+};
 
 const STICKY_SHADOW_LEFT =
   "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.5)]";
@@ -96,9 +98,73 @@ function getAssignmentStatus(
   return assignedLabel === targetLabel ? "Assigned" : "Assigned elsewhere";
 }
 
+function getFilterValue(
+  user: UserRecord,
+  field: UserColumnId,
+  assignedLabelByEmployeeId: Map<string, string>,
+  targetLabel: string,
+): string {
+  if (field === "assignmentStatus") {
+    return getAssignmentStatus(user, assignedLabelByEmployeeId, targetLabel);
+  }
+  if (field === "employeeId") return user.employeeId;
+  if (field === "name") return `${user.firstName} ${user.lastName}`.trim();
+  return String(user[field] ?? "—");
+}
+
+function matchesTextQuery(cellValue: string, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  if (cellValue === "—") return false;
+  return cellValue.toLowerCase().includes(normalizedQuery);
+}
+
+function userMatchesFiltersExcluding(
+  user: UserRecord,
+  filters: FilterState,
+  assignedLabelByEmployeeId: Map<string, string>,
+  targetLabel: string,
+  excludeField: UserColumnId | null,
+): boolean {
+  for (const id of ["employeeId", "name"] as const) {
+    if (excludeField === id) continue;
+    const query = filters.text[id];
+    if (!query?.trim()) continue;
+    if (!matchesTextQuery(getFilterValue(user, id, assignedLabelByEmployeeId, targetLabel), query)) {
+      return false;
+    }
+  }
+
+  for (const filter of FILTER_CONFIG) {
+    if (excludeField === filter.id) continue;
+    const sel = filters.multi[filter.id];
+    if (sel === null || sel === undefined) continue;
+    if (sel.length === 0) return false;
+    const val = getFilterValue(user, filter.id, assignedLabelByEmployeeId, targetLabel);
+    if (!sel.includes(val)) return false;
+  }
+
+  return true;
+}
+
+function userMatchesFilters(
+  user: UserRecord,
+  filters: FilterState,
+  assignedLabelByEmployeeId: Map<string, string>,
+  targetLabel: string,
+): boolean {
+  return userMatchesFiltersExcluding(
+    user,
+    filters,
+    assignedLabelByEmployeeId,
+    targetLabel,
+    null,
+  );
+}
+
 function buildOptions(
   users: UserRecord[],
-  field: FilterId,
+  field: MultiFilterId,
   filters: FilterState,
   selected: FilterSelection,
   assignedLabelByEmployeeId: Map<string, string>,
@@ -107,30 +173,19 @@ function buildOptions(
   const counts = new Map<string, number>();
 
   for (const user of users) {
-    let passesOtherFilters = true;
-    for (const filter of FILTER_CONFIG) {
-      if (filter.id === field) continue;
-      const sel = filters[filter.id];
-      if (sel === null || sel === undefined) continue;
-      if (sel.length === 0) {
-        passesOtherFilters = false;
-        break;
-      }
-      const val =
-        filter.id === "assignmentStatus"
-          ? getAssignmentStatus(user, assignedLabelByEmployeeId, targetLabel)
-          : String(user[filter.id] ?? "—");
-      if (!sel.includes(val)) {
-        passesOtherFilters = false;
-        break;
-      }
+    if (
+      !userMatchesFiltersExcluding(
+        user,
+        filters,
+        assignedLabelByEmployeeId,
+        targetLabel,
+        field,
+      )
+    ) {
+      continue;
     }
-    if (!passesOtherFilters) continue;
 
-    const value =
-      field === "assignmentStatus"
-        ? getAssignmentStatus(user, assignedLabelByEmployeeId, targetLabel)
-        : String(user[field] ?? "—");
+    const value = getFilterValue(user, field, assignedLabelByEmployeeId, targetLabel);
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
@@ -154,30 +209,16 @@ function buildOptions(
     });
 }
 
-function userMatchesFilters(
-  user: UserRecord,
-  filters: FilterState,
-  assignedLabelByEmployeeId: Map<string, string>,
-  targetLabel: string,
-): boolean {
-  for (const filter of FILTER_CONFIG) {
-    const sel = filters[filter.id];
-    if (sel === null || sel === undefined) continue;
-    if (sel.length === 0) return false;
-    const val =
-      filter.id === "assignmentStatus"
-        ? getAssignmentStatus(user, assignedLabelByEmployeeId, targetLabel)
-        : String(user[filter.id] ?? "—");
-    if (!sel.includes(val)) return false;
-  }
-  return true;
-}
-
 function countActiveFilters(filters: FilterState): number {
-  return FILTER_CONFIG.reduce(
-    (count, filter) => (filters[filter.id] !== null ? count + 1 : count),
+  const textCount = (["employeeId", "name"] as const).reduce(
+    (count, id) => (filters.text[id]?.trim() ? count + 1 : count),
     0,
   );
+  const multiCount = FILTER_CONFIG.reduce(
+    (count, filter) => (filters.multi[filter.id] !== null ? count + 1 : count),
+    0,
+  );
+  return textCount + multiCount;
 }
 
 export default function MatrixEmployeeAssignment({
@@ -197,6 +238,7 @@ export default function MatrixEmployeeAssignment({
   const [isError, setIsError] = useState(false);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
 
   const { data: users } = useQuery({
     queryKey: queryKeys.users,
@@ -226,7 +268,7 @@ export default function MatrixEmployeeAssignment({
   }, [assignedLabelByEmployeeId, targetLabel]);
 
   const optionsByFilter = useMemo(() => {
-    const map = new Map<FilterId, MultiSelectOption[]>();
+    const map = new Map<MultiFilterId, MultiSelectOption[]>();
     for (const filter of FILTER_CONFIG) {
       map.set(
         filter.id,
@@ -234,7 +276,7 @@ export default function MatrixEmployeeAssignment({
           allUsers,
           filter.id,
           filters,
-          filters[filter.id],
+          filters.multi[filter.id],
           assignedLabelByEmployeeId,
           targetLabel,
         ),
@@ -256,9 +298,10 @@ export default function MatrixEmployeeAssignment({
   }, [search, allUsers, filters, assignedLabelByEmployeeId, targetLabel]);
 
   const totalCount = filteredUsers.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const displayPageSize = pageSize === "all" ? Math.max(totalCount, 1) : pageSize;
+  const totalPages = Math.max(1, Math.ceil(totalCount / displayPageSize));
   const [page, setPage] = useResettingPage(
-    `${search}\0${JSON.stringify(filters)}\0${targetLabel}`,
+    `${search}\0${JSON.stringify(filters)}\0${targetLabel}\0${pageSize}`,
     totalPages,
   );
 
@@ -281,23 +324,22 @@ export default function MatrixEmployeeAssignment({
     }
   }
 
-  const paginatedUsers = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filteredUsers.slice(start, start + PAGE_SIZE);
-  }, [page, filteredUsers]);
-
-  const pageEmployeeIds = useMemo(
-    () => paginatedUsers.map((user) => user.employeeId),
-    [paginatedUsers],
+  const filteredEmployeeIds = useMemo(
+    () => filteredUsers.map((user) => user.employeeId),
+    [filteredUsers],
   );
-  const selectedOnPageCount = pageEmployeeIds.filter((id) =>
-    selectedEmployeeIds.has(id),
-  ).length;
-  const allPageSelected =
-    pageEmployeeIds.length > 0 && selectedOnPageCount === pageEmployeeIds.length;
-  const somePageSelected =
-    selectedOnPageCount > 0 && selectedOnPageCount < pageEmployeeIds.length;
+
+  const paginatedUsers = useMemo(() => {
+    if (pageSize === "all") return filteredUsers;
+    const start = (page - 1) * pageSize;
+    return filteredUsers.slice(start, start + pageSize);
+  }, [page, filteredUsers, pageSize]);
+
   const selectedCount = selectedEmployeeIds.size;
+  const allFilteredSelected =
+    filteredEmployeeIds.length > 0 &&
+    filteredEmployeeIds.every((id) => selectedEmployeeIds.has(id));
+  const someFilteredSelected = selectedCount > 0 && !allFilteredSelected;
   const selectedAssignedIds = useMemo(
     () => [...selectedEmployeeIds].filter((id) => assignedEmployeeIds.has(id)),
     [assignedEmployeeIds, selectedEmployeeIds],
@@ -311,10 +353,18 @@ export default function MatrixEmployeeAssignment({
   );
   const selectedAssignedCount = selectedAssignedIds.length;
   const selectedUnassignedCount = selectedUnassignedIds.length;
-  const selectedElsewhereCount = selectedCount - selectedAssignedCount - selectedUnassignedCount;
+  const selectedElsewhereCount =
+    selectedCount - selectedAssignedCount - selectedUnassignedCount;
 
-  const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
+  const rangeStart =
+    totalCount === 0
+      ? 0
+      : pageSize === "all"
+        ? 1
+        : (page - 1) * displayPageSize + 1;
+  const rangeEnd =
+    pageSize === "all" ? totalCount : Math.min(page * displayPageSize, totalCount);
+  const showPageControls = pageSize !== "all" && totalPages > 1;
 
   const toggleEmployeeSelection = (employeeId: string) => {
     setSelectedEmployeeIds((current) => {
@@ -328,19 +378,15 @@ export default function MatrixEmployeeAssignment({
     });
   };
 
-  const toggleSelectAllOnPage = () => {
+  const toggleSelectAllFiltered = () => {
     setSelectedEmployeeIds((current) => {
-      const next = new Set(current);
-      if (allPageSelected) {
-        for (const id of pageEmployeeIds) {
-          next.delete(id);
-        }
-      } else {
-        for (const id of pageEmployeeIds) {
-          next.add(id);
-        }
+      if (
+        filteredEmployeeIds.length > 0 &&
+        filteredEmployeeIds.every((id) => current.has(id))
+      ) {
+        return new Set();
       }
-      return next;
+      return new Set(filteredEmployeeIds);
     });
   };
 
@@ -374,28 +420,75 @@ export default function MatrixEmployeeAssignment({
 
   const isMutating = assignMutation.isPending || unassignMutation.isPending;
 
-  function handleFilterChange(id: FilterId, next: FilterSelection) {
-    setFilters((prev) => ({ ...prev, [id]: next }));
+  function handleMultiFilterChange(id: MultiFilterId, next: FilterSelection) {
+    setFilters((prev) => ({
+      ...prev,
+      multi: { ...prev.multi, [id]: next },
+    }));
+  }
+
+  function handleTextFilterChange(id: TextFilterId, next: string) {
+    setFilters((prev) => {
+      const text = { ...prev.text };
+      if (!next.trim()) {
+        delete text[id];
+      } else {
+        text[id] = next;
+      }
+      return { ...prev, text };
+    });
   }
 
   function handleClearAllFilters() {
     setFilters(EMPTY_FILTERS);
   }
 
+  const USER_COLUMNS: UserColumn[] = [
+    { id: "employeeId", label: "SAP Code", width: 120, mode: "text", getValue: (u) => u.employeeId },
+    {
+      id: "name",
+      label: "Employee Name",
+      width: 220,
+      mode: "text",
+      getValue: (u) => `${u.firstName} ${u.lastName}`.trim(),
+    },
+    { id: "designation", label: "Designation", width: 180, mode: "multi", getValue: (u) => u.designation ?? "—" },
+    { id: "entityName", label: "Entity", width: 160, mode: "multi", getValue: (u) => u.entityName ?? "—" },
+    { id: "roleCategory", label: "Role Category", width: 150, mode: "multi", getValue: (u) => u.roleCategory ?? "—" },
+    { id: "headName", label: "Manager 1", width: 160, mode: "multi", getValue: (u) => u.headName ?? "—" },
+    { id: "manager2Name", label: "Manager 2", width: 160, mode: "multi", getValue: (u) => u.manager2Name ?? "—" },
+    {
+      id: "assignmentStatus",
+      label: "Status",
+      width: 150,
+      mode: "multi",
+      getValue: (u) => getAssignmentStatus(u, assignedLabelByEmployeeId, targetLabel),
+    },
+  ];
+
+  const hasToolbarFilters = activeCount > 0 || search.trim().length > 0;
+
   return (
-    <div className="flex flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
-      <div className="shrink-0 px-5 pt-4">
-        <h2 className="text-base font-semibold text-text-primary">Assign Employees</h2>
-        <p className="mt-0.5 text-sm text-foreground/70">
-          {description}{" "}
-          <span className="font-medium">{targetLabel}</span>. An employee can
-          only have one assignment in the same financial year.
-        </p>
+    <div className="flex flex-col overflow-hidden rounded-xl border border-primary/15 bg-surface shadow-sm dark:border-primary/25 dark:bg-slate-900">
+      <div className="shrink-0 bg-primary px-5 py-4 text-white">
+        <div className="flex items-start gap-3">
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-white/15">
+            <Users className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold">Assign Employees</h2>
+            <p className="mt-0.5 text-sm text-white/80">
+              {description}{" "}
+              <span className="font-medium text-white">{targetLabel}</span>. An
+              employee can only have one assignment in the same financial year.
+            </p>
+          </div>
+        </div>
       </div>
 
       {message ? (
         <div
-          className={`mx-5 mt-3 shrink-0 rounded-lg border px-3 py-2 text-sm ${
+          className={`mx-5 mt-4 shrink-0 rounded-lg border px-3 py-2 text-sm ${
             isError
               ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300"
               : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300"
@@ -405,24 +498,24 @@ export default function MatrixEmployeeAssignment({
         </div>
       ) : null}
 
-      <div className="mt-3 shrink-0 border-y border-slate-200/80 bg-slate-50/90 dark:border-white/5 dark:bg-slate-950/40">
+      <div className="mt-4 shrink-0 border-y border-primary/10 bg-primary/5 dark:border-primary/20 dark:bg-primary/10">
         <div className="flex items-center justify-between gap-3 px-5 py-2">
           <button
             type="button"
             onClick={() => setFilterPanelOpen((current) => !current)}
-            className="inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30 dark:text-slate-300 dark:hover:text-white"
+            className="inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             aria-expanded={filterPanelOpen}
           >
-            <Filter className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+            <Filter className="h-3.5 w-3.5" />
             <span>Master filter</span>
             {activeCount > 0 ? (
-              <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700 dark:bg-white/10 dark:text-slate-200">
+              <span className="rounded-md bg-primary px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
                 {activeCount}
               </span>
             ) : null}
             <ChevronDown
               className={cn(
-                "h-3.5 w-3.5 text-slate-400 transition-transform duration-300",
+                "h-3.5 w-3.5 text-primary/60 transition-transform duration-300",
                 filterPanelOpen && "rotate-180",
               )}
             />
@@ -432,7 +525,7 @@ export default function MatrixEmployeeAssignment({
             <button
               type="button"
               onClick={handleClearAllFilters}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary transition-colors hover:text-primary/80"
             >
               <RotateCcw className="h-3 w-3" />
               Clear all
@@ -450,15 +543,15 @@ export default function MatrixEmployeeAssignment({
               transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
               className="overflow-hidden"
             >
-              <div className="space-y-3 border-t border-slate-200/70 px-5 pb-4 pt-3 dark:border-white/5">
-                <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-3 border-t border-primary/10 px-5 pb-4 pt-3 dark:border-primary/20">
+                <div className="grid gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
                   {FILTER_CONFIG.map((filter) => (
                     <MultiSelectFilterDropdown
                       key={filter.id}
                       label={filter.label}
                       options={optionsByFilter.get(filter.id) ?? []}
-                      selectedValues={filters[filter.id]}
-                      onChange={(next) => handleFilterChange(filter.id, next)}
+                      selectedValues={filters.multi[filter.id]}
+                      onChange={(next) => handleMultiFilterChange(filter.id, next)}
                       placeholder="All"
                       searchable={(optionsByFilter.get(filter.id) ?? []).length > 8}
                       quiet
@@ -472,22 +565,37 @@ export default function MatrixEmployeeAssignment({
         </AnimatePresence>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-5 py-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-5 py-3">
         <div className="min-w-0 flex-1">
           <div className="relative max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/50" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by SAP or name"
-              className="w-full rounded-lg border border-slate-300 bg-background py-2 pl-10 pr-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+              className="w-full rounded-lg border border-primary/20 bg-background py-2 pl-10 pr-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-primary/30"
             />
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-3">
+          {hasToolbarFilters ? (
+            <button
+              type="button"
+              onClick={() => {
+                handleClearAllFilters();
+                setSearch("");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/20 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/10 dark:border-primary/30"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Clear filters
+            </button>
+          ) : null}
+          <p className="text-xs text-foreground/70">
             {totalCount} of {allUsers.length} employees
-            {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
+            {selectedCount > 0
+              ? ` · ${selectedCount} selected${allFilteredSelected ? " (all)" : ""}`
+              : ""}
             {selectedElsewhereCount > 0
               ? ` · ${selectedElsewhereCount} assigned elsewhere`
               : ""}
@@ -521,37 +629,70 @@ export default function MatrixEmployeeAssignment({
         </div>
       </div>
 
-      <div className="min-h-0 max-h-[28rem] w-full overflow-auto overscroll-contain">
+      <div className="min-h-0 max-h-[calc(100vh-18rem)] w-full overflow-auto overscroll-contain">
         <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
-            <tr>
+            <tr className="bg-primary text-white">
               <th
                 className={cn(
-                  "sticky left-0 top-0 z-40 border-b border-slate-200 bg-slate-50 px-3 py-3 dark:border-white/10 dark:bg-slate-900",
+                  "sticky left-0 top-0 z-40 border-b border-primary/80 bg-primary px-3 py-3",
                   STICKY_SHADOW_LEFT,
                 )}
               >
                 <input
                   type="checkbox"
-                  checked={allPageSelected}
+                  checked={allFilteredSelected}
                   ref={(element) => {
                     if (element) {
-                      element.indeterminate = somePageSelected;
+                      element.indeterminate = someFilteredSelected;
                     }
                   }}
-                  onChange={toggleSelectAllOnPage}
-                  disabled={pageEmployeeIds.length === 0 || disabled}
-                  aria-label="Select all employees on this page"
-                  className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
+                  onChange={toggleSelectAllFiltered}
+                  disabled={filteredEmployeeIds.length === 0 || disabled}
+                  aria-label="Select all filtered employees"
+                  className="h-4 w-4 rounded border-white/40 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40"
                 />
               </th>
               {USER_COLUMNS.map((column) => (
                 <th
                   key={column.id}
-                  className="sticky top-0 z-30 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400"
+                  className="sticky top-0 z-30 whitespace-nowrap border-b border-primary/80 bg-primary px-2 py-3 text-xs font-semibold uppercase tracking-wider text-white"
                   style={column.width ? { minWidth: column.width } : undefined}
                 >
-                  {column.label}
+                  <ColumnHeaderFilter
+                    label={column.label}
+                    mode={column.mode}
+                    options={
+                      column.mode === "multi"
+                        ? optionsByFilter.get(column.id as MultiFilterId)
+                        : undefined
+                    }
+                    selectedValues={
+                      column.mode === "multi"
+                        ? filters.multi[column.id as MultiFilterId]
+                        : undefined
+                    }
+                    textValue={
+                      column.mode === "text"
+                        ? filters.text[column.id as TextFilterId] ?? ""
+                        : undefined
+                    }
+                    active={
+                      column.mode === "text"
+                        ? Boolean(filters.text[column.id as TextFilterId]?.trim())
+                        : filters.multi[column.id as MultiFilterId] != null
+                    }
+                    onTextChange={
+                      column.mode === "text"
+                        ? (next) => handleTextFilterChange(column.id as TextFilterId, next)
+                        : undefined
+                    }
+                    onMultiChange={
+                      column.mode === "multi"
+                        ? (next) => handleMultiFilterChange(column.id as MultiFilterId, next)
+                        : undefined
+                    }
+                  />
                 </th>
               ))}
             </tr>
@@ -561,7 +702,7 @@ export default function MatrixEmployeeAssignment({
               <tr>
                 <td
                   colSpan={USER_COLUMNS.length + 1}
-                  className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400"
+                  className="px-5 py-12 text-center text-sm text-foreground/60"
                 >
                   No employees match your filters.
                 </td>
@@ -575,17 +716,21 @@ export default function MatrixEmployeeAssignment({
                   <tr
                     key={user.id}
                     className={cn(
-                      "group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
-                      isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
+                      "group transition-colors hover:bg-primary/5 dark:hover:bg-primary/10",
+                      isAssignedHere && "bg-emerald-50/70 dark:bg-emerald-950/20",
+                      assignedLabel && !isAssignedHere && "bg-amber-50/40 dark:bg-amber-950/10",
+                      isSelected && "bg-amber-50/70 dark:bg-amber-500/10",
                     )}
                   >
                     <td
                       className={cn(
-                        "sticky left-0 z-20 border-b border-slate-100 px-3 py-1.5 dark:border-white/[0.03]",
+                        "sticky left-0 z-20 border-b border-primary/10 px-3 py-1.5 dark:border-white/5",
                         STICKY_SHADOW_LEFT,
                         isSelected
-                          ? "bg-amber-50/60 dark:bg-amber-500/5"
-                          : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
+                          ? "bg-amber-50 dark:bg-amber-950"
+                          : isAssignedHere
+                            ? "bg-emerald-50 group-hover:bg-emerald-100/80 dark:bg-emerald-950 dark:group-hover:bg-emerald-900"
+                            : "bg-surface group-hover:bg-primary/5 dark:bg-slate-900 dark:group-hover:bg-primary/10",
                       )}
                     >
                       <input
@@ -602,28 +747,35 @@ export default function MatrixEmployeeAssignment({
                       return (
                         <td
                           key={column.id}
-                          className="whitespace-nowrap border-b border-slate-100 px-2 py-1.5 align-middle dark:border-white/[0.03]"
+                          className="whitespace-nowrap border-b border-primary/10 px-2 py-1.5 align-middle dark:border-white/5"
                           style={column.width ? { maxWidth: column.width } : undefined}
                         >
-                          <span
-                            className={cn(
-                              "block truncate text-slate-700 dark:text-slate-300",
-                              column.id === "name" && "font-semibold text-slate-900 dark:text-white",
-                            )}
-                            title={value === "—" ? undefined : value}
-                          >
-                            {value}
-                            {column.id === "name" && isAssignedHere ? (
-                              <span className="ml-2 inline-flex items-center rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                Assigned
-                              </span>
-                            ) : null}
-                            {column.id === "name" && assignedLabel && !isAssignedHere ? (
-                              <span className="ml-2 inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                                Assigned to {assignedLabel}
-                              </span>
-                            ) : null}
-                          </span>
+                          {column.id === "assignmentStatus" ? (
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                                value === "Assigned"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                  : value === "Assigned elsewhere"
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                    : "bg-primary/10 text-primary",
+                              )}
+                            >
+                              {value === "Assigned elsewhere"
+                                ? `Assigned to ${assignedLabel}`
+                                : value}
+                            </span>
+                          ) : (
+                            <span
+                              className={cn(
+                                "block truncate text-text-primary",
+                                column.id === "name" && "font-semibold",
+                              )}
+                              title={value === "—" ? undefined : value}
+                            >
+                              {value}
+                            </span>
+                          )}
                         </td>
                       );
                     })}
@@ -636,41 +788,63 @@ export default function MatrixEmployeeAssignment({
       </div>
 
       {totalCount > 0 ? (
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-2 dark:border-white/5">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Showing {rangeStart}–{rangeEnd} of {totalCount}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={page <= 1}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/[0.04]"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Previous
-            </button>
-            <span className="min-w-20 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
-              Page {page} of {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-              disabled={page >= totalPages}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/[0.04]"
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-primary/10 bg-primary/5 px-5 py-3 dark:border-primary/20">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs text-foreground/70">
+              Showing {rangeStart}–{rangeEnd} of {totalCount}
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-foreground/60">Show</span>
+              <div className="inline-flex overflow-hidden rounded-lg border border-primary/20 dark:border-primary/30">
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <button
+                    key={String(option)}
+                    type="button"
+                    onClick={() => setPageSize(option)}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-medium transition-colors",
+                      pageSize === option
+                        ? "bg-primary text-white"
+                        : "text-primary hover:bg-primary/10",
+                    )}
+                  >
+                    {option === "all" ? "All" : option}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
+          {showPageControls ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page <= 1}
+                className="inline-flex items-center gap-1 rounded-lg border border-primary/20 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary/30"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Previous
+              </button>
+              <span className="min-w-20 text-center text-xs font-medium text-text-primary">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={page >= totalPages}
+                className="inline-flex items-center gap-1 rounded-lg border border-primary/20 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary/30"
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="shrink-0 border-t border-slate-200 px-5 py-2 dark:border-white/5">
-        <p className="text-xs text-foreground/60">
-          <span className="font-semibold text-text-primary">
-            {assignedEmployeeIds.size}
-          </span>{" "}
+      <div className="shrink-0 border-t border-primary/10 bg-primary px-5 py-2.5 text-white">
+        <p className="text-xs text-white/80">
+          <span className="font-semibold text-white">{assignedEmployeeIds.size}</span>{" "}
           employee(s) currently assigned to this matrix.
         </p>
       </div>

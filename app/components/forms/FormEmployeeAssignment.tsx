@@ -2,8 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Filter, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Filter, RotateCcw, Search, Users } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { ColumnHeaderFilter } from "@/app/components/common/ColumnHeaderFilter";
+import SelfAssessmentConfirmModal from "@/app/components/forms/SelfAssessmentConfirmModal";
 import {
   MultiSelectFilterDropdown,
   type MultiSelectOption,
@@ -26,27 +28,35 @@ import {
 } from "@/app/helpers/dashboard-eligibility";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 50;
+type PageSizeOption = 50 | 200 | 1000 | 5000 | "all";
+const PAGE_SIZE_OPTIONS: PageSizeOption[] = [50, 200, 1000, 5000, "all"];
+const DEFAULT_PAGE_SIZE: PageSizeOption = 50;
 
 interface FormEmployeeAssignmentProps {
   templateId: number;
   templateTitle: string;
 }
 
-type FilterId =
+type MultiFilterId =
   | "entityName"
   | "designation"
   | "roleCategory"
   | "headName"
   | "manager2Name"
   | "assignmentStatus"
-  | "assessmentEligibility";
+  | "assessmentEligibility"
+  | "selfAssessment";
+
+type TextFilterId = "employeeId" | "name";
 
 type FilterSelection = string[] | null;
 
-type FilterState = Record<FilterId, FilterSelection>;
+type FilterState = {
+  text: Partial<Record<TextFilterId, string>>;
+  multi: Record<MultiFilterId, FilterSelection>;
+};
 
-const FILTER_CONFIG: { id: FilterId; label: string }[] = [
+const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
   { id: "assignmentStatus", label: "Assignment Status" },
   { id: "assessmentEligibility", label: "Eligibility" },
   { id: "entityName", label: "Entity" },
@@ -54,16 +64,31 @@ const FILTER_CONFIG: { id: FilterId; label: string }[] = [
   { id: "roleCategory", label: "Role Category" },
   { id: "headName", label: "Manager 1" },
   { id: "manager2Name", label: "Manager 2" },
+  { id: "selfAssessment", label: "Self Assessment" },
 ];
 
 const EMPTY_FILTERS: FilterState = {
-  assignmentStatus: null,
-  assessmentEligibility: null,
-  entityName: null,
-  designation: null,
-  roleCategory: null,
-  headName: null,
-  manager2Name: null,
+  text: {},
+  multi: {
+    assignmentStatus: null,
+    assessmentEligibility: null,
+    entityName: null,
+    designation: null,
+    roleCategory: null,
+    headName: null,
+    manager2Name: null,
+    selfAssessment: null,
+  },
+};
+
+type UserColumnId = TextFilterId | MultiFilterId;
+
+type UserColumn = {
+  id: UserColumnId;
+  label: string;
+  width?: number;
+  mode: "text" | "multi";
+  getValue: (user: UserRecord) => string;
 };
 
 function getAssignmentStatus(user: UserRecord, assignedIds: Set<string>): string {
@@ -91,46 +116,108 @@ function getEligibilityLabel(
   return user.assessmentEligibility ? "Full" : "N/A";
 }
 
+function getSelfAssessmentLabel(
+  user: UserRecord,
+  assignedIds: Set<string>,
+  disabledMap: Map<string, boolean>,
+): string {
+  if (!assignedIds.has(user.employeeId)) return "—";
+  return disabledMap.get(user.employeeId) ? "Disabled" : "Enabled";
+}
+
 function getFilterValue(
   user: UserRecord,
-  field: FilterId,
+  field: UserColumnId,
   assignedIds: Set<string>,
   eligibilityOverride: Map<string, string>,
+  disabledMap: Map<string, boolean>,
 ): string {
   if (field === "assignmentStatus") return getAssignmentStatus(user, assignedIds);
   if (field === "assessmentEligibility") return getEligibilityLabel(user, eligibilityOverride);
+  if (field === "selfAssessment") return getSelfAssessmentLabel(user, assignedIds, disabledMap);
+  if (field === "employeeId") return user.employeeId;
+  if (field === "name") return `${user.firstName} ${user.lastName}`.trim();
   return String(user[field] ?? "—");
+}
+
+function matchesTextQuery(cellValue: string, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  if (cellValue === "—") return false;
+  return cellValue.toLowerCase().includes(normalizedQuery);
+}
+
+function userMatchesFiltersExcluding(
+  user: UserRecord,
+  filters: FilterState,
+  assignedEmployeeIds: Set<string>,
+  eligibilityOverride: Map<string, string>,
+  disabledMap: Map<string, boolean>,
+  excludeField: UserColumnId | null,
+): boolean {
+  for (const id of ["employeeId", "name"] as const) {
+    if (excludeField === id) continue;
+    const query = filters.text[id];
+    if (!query?.trim()) continue;
+    const value = getFilterValue(
+      user,
+      id,
+      assignedEmployeeIds,
+      eligibilityOverride,
+      disabledMap,
+    );
+    if (!matchesTextQuery(value, query)) return false;
+  }
+
+  for (const f of FILTER_CONFIG) {
+    if (excludeField === f.id) continue;
+    const sel = filters.multi[f.id];
+    if (sel === null || sel === undefined) continue;
+    if (sel.length === 0) return false;
+    const val = getFilterValue(
+      user,
+      f.id,
+      assignedEmployeeIds,
+      eligibilityOverride,
+      disabledMap,
+    );
+    if (!sel.includes(val)) return false;
+  }
+  return true;
 }
 
 function buildOptions(
   users: UserRecord[],
-  field: FilterId,
+  field: MultiFilterId,
   filters: FilterState,
   selected: FilterSelection,
   assignedEmployeeIds: Set<string>,
   eligibilityOverride: Map<string, string>,
+  disabledMap: Map<string, boolean>,
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 
   for (const user of users) {
-    let passesOtherFilters = true;
-    for (const f of FILTER_CONFIG) {
-      if (f.id === field) continue;
-      const sel = filters[f.id];
-      if (sel === null || sel === undefined) continue;
-      if (sel.length === 0) {
-        passesOtherFilters = false;
-        break;
-      }
-      const val = getFilterValue(user, f.id, assignedEmployeeIds, eligibilityOverride);
-      if (!sel.includes(val)) {
-        passesOtherFilters = false;
-        break;
-      }
+    if (
+      !userMatchesFiltersExcluding(
+        user,
+        filters,
+        assignedEmployeeIds,
+        eligibilityOverride,
+        disabledMap,
+        field,
+      )
+    ) {
+      continue;
     }
-    if (!passesOtherFilters) continue;
 
-    const value = getFilterValue(user, field, assignedEmployeeIds, eligibilityOverride);
+    const value = getFilterValue(
+      user,
+      field,
+      assignedEmployeeIds,
+      eligibilityOverride,
+      disabledMap,
+    );
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
@@ -156,23 +243,33 @@ function userMatchesFilters(
   filters: FilterState,
   assignedEmployeeIds: Set<string>,
   eligibilityOverride: Map<string, string>,
+  disabledMap: Map<string, boolean>,
 ): boolean {
-  for (const f of FILTER_CONFIG) {
-    const sel = filters[f.id];
-    if (sel === null || sel === undefined) continue;
-    if (sel.length === 0) return false;
-    const val = getFilterValue(user, f.id, assignedEmployeeIds, eligibilityOverride);
-    if (!sel.includes(val)) return false;
-  }
-  return true;
+  return userMatchesFiltersExcluding(
+    user,
+    filters,
+    assignedEmployeeIds,
+    eligibilityOverride,
+    disabledMap,
+    null,
+  );
 }
 
 function countActiveFilters(filters: FilterState): number {
-  return FILTER_CONFIG.reduce(
-    (count, f) => (filters[f.id] !== null ? count + 1 : count),
+  const textCount = (["employeeId", "name"] as const).reduce(
+    (count, id) => (filters.text[id]?.trim() ? count + 1 : count),
     0,
   );
+  const multiCount = FILTER_CONFIG.reduce(
+    (count, f) => (filters.multi[f.id] !== null ? count + 1 : count),
+    0,
+  );
+  return textCount + multiCount;
 }
+
+type SelfAssessmentConfirmPending =
+  | { mode: "single"; employeeId: string; employeeName: string; disabled: boolean }
+  | { mode: "bulk"; employeeIds: string[]; disabled: boolean };
 
 export default function FormEmployeeAssignment({
   templateId,
@@ -185,6 +282,9 @@ export default function FormEmployeeAssignment({
   const [isError, setIsError] = useState(false);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
+  const [selfAssessmentConfirm, setSelfAssessmentConfirm] =
+    useState<SelfAssessmentConfirmPending | null>(null);
 
   const { data: users } = useQuery({
     queryKey: queryKeys.users,
@@ -234,20 +334,44 @@ export default function FormEmployeeAssignment({
   }, [assignedEmployees]);
 
   const optionsByFilter = useMemo(() => {
-    const map = new Map<FilterId, MultiSelectOption[]>();
+    const map = new Map<MultiFilterId, MultiSelectOption[]>();
     for (const f of FILTER_CONFIG) {
       map.set(
         f.id,
-        buildOptions(allUsers, f.id, filters, filters[f.id], assignedEmployeeIds, eligibilityOverride),
+        buildOptions(
+          allUsers,
+          f.id,
+          filters,
+          filters.multi[f.id],
+          assignedEmployeeIds,
+          eligibilityOverride,
+          assignedSelfAssessmentDisabled,
+        ),
       );
     }
     return map;
-  }, [allUsers, filters, assignedEmployeeIds, eligibilityOverride]);
+  }, [
+    allUsers,
+    filters,
+    assignedEmployeeIds,
+    eligibilityOverride,
+    assignedSelfAssessmentDisabled,
+  ]);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allUsers.filter((user) => {
-      if (!userMatchesFilters(user, filters, assignedEmployeeIds, eligibilityOverride)) return false;
+      if (
+        !userMatchesFilters(
+          user,
+          filters,
+          assignedEmployeeIds,
+          eligibilityOverride,
+          assignedSelfAssessmentDisabled,
+        )
+      ) {
+        return false;
+      }
       if (!query) return true;
       const name = `${user.firstName} ${user.lastName}`.toLowerCase();
       return (
@@ -255,7 +379,14 @@ export default function FormEmployeeAssignment({
         name.includes(query)
       );
     });
-  }, [search, allUsers, filters, assignedEmployeeIds, eligibilityOverride]);
+  }, [
+    search,
+    allUsers,
+    filters,
+    assignedEmployeeIds,
+    eligibilityOverride,
+    assignedSelfAssessmentDisabled,
+  ]);
 
   const filteredAssignedEmployeeIds = useMemo(
     () => filteredUsers.filter((u) => assignedEmployeeIds.has(u.employeeId)).map((u) => u.employeeId),
@@ -274,17 +405,42 @@ export default function FormEmployeeAssignment({
 
   function handleBulkToggleSelfAssessment() {
     if (filteredAssignedEmployeeIds.length === 0) return;
-    const disableAll = filteredAssignedAllEnabled;
-    bulkToggleSelfAssessment.mutate({
+    setSelfAssessmentConfirm({
+      mode: "bulk",
       employeeIds: filteredAssignedEmployeeIds,
-      disabled: disableAll,
+      disabled: filteredAssignedAllEnabled,
     });
   }
 
+  function handleConfirmSelfAssessmentToggle() {
+    if (!selfAssessmentConfirm) return;
+
+    if (selfAssessmentConfirm.mode === "single") {
+      toggleSelfAssessment.mutate(
+        {
+          employeeId: selfAssessmentConfirm.employeeId,
+          disabled: selfAssessmentConfirm.disabled,
+        },
+        { onSuccess: () => setSelfAssessmentConfirm(null) },
+      );
+      return;
+    }
+
+    bulkToggleSelfAssessment.mutate(
+      {
+        employeeIds: selfAssessmentConfirm.employeeIds,
+        disabled: selfAssessmentConfirm.disabled,
+      },
+      { onSuccess: () => setSelfAssessmentConfirm(null) },
+    );
+  }
+
   const totalCount = filteredUsers.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const displayPageSize =
+    pageSize === "all" ? Math.max(totalCount, 1) : pageSize;
+  const totalPages = Math.max(1, Math.ceil(totalCount / displayPageSize));
   const [page, setPage] = useResettingPage(
-    `${search}\0${JSON.stringify(filters)}`,
+    `${search}\0${JSON.stringify(filters)}\0${pageSize}`,
     totalPages,
   );
 
@@ -307,23 +463,22 @@ export default function FormEmployeeAssignment({
     }
   }
 
-  const paginatedUsers = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filteredUsers.slice(start, start + PAGE_SIZE);
-  }, [page, filteredUsers]);
-
-  const pageEmployeeIds = useMemo(
-    () => paginatedUsers.map((u) => u.employeeId),
-    [paginatedUsers],
+  const filteredEmployeeIds = useMemo(
+    () => filteredUsers.map((u) => u.employeeId),
+    [filteredUsers],
   );
-  const selectedOnPageCount = pageEmployeeIds.filter((id) =>
-    selectedEmployeeIds.has(id),
-  ).length;
-  const allPageSelected =
-    pageEmployeeIds.length > 0 && selectedOnPageCount === pageEmployeeIds.length;
-  const somePageSelected =
-    selectedOnPageCount > 0 && selectedOnPageCount < pageEmployeeIds.length;
+
+  const paginatedUsers = useMemo(() => {
+    if (pageSize === "all") return filteredUsers;
+    const start = (page - 1) * pageSize;
+    return filteredUsers.slice(start, start + pageSize);
+  }, [page, filteredUsers, pageSize]);
+
   const selectedCount = selectedEmployeeIds.size;
+  const allFilteredSelected =
+    filteredEmployeeIds.length > 0 &&
+    filteredEmployeeIds.every((id) => selectedEmployeeIds.has(id));
+  const someFilteredSelected = selectedCount > 0 && !allFilteredSelected;
   const selectedAssignedIds = useMemo(
     () => [...selectedEmployeeIds].filter((id) => assignedEmployeeIds.has(id)),
     [assignedEmployeeIds, selectedEmployeeIds],
@@ -335,8 +490,15 @@ export default function FormEmployeeAssignment({
   const selectedAssignedCount = selectedAssignedIds.length;
   const selectedUnassignedCount = selectedUnassignedIds.length;
 
-  const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
+  const rangeStart =
+    totalCount === 0
+      ? 0
+      : pageSize === "all"
+        ? 1
+        : (page - 1) * displayPageSize + 1;
+  const rangeEnd =
+    pageSize === "all" ? totalCount : Math.min(page * displayPageSize, totalCount);
+  const showPageControls = pageSize !== "all" && totalPages > 1;
 
   const toggleEmployeeSelection = (employeeId: string) => {
     setSelectedEmployeeIds((current) => {
@@ -350,19 +512,15 @@ export default function FormEmployeeAssignment({
     });
   };
 
-  const toggleSelectAllOnPage = () => {
+  const toggleSelectAllFiltered = () => {
     setSelectedEmployeeIds((current) => {
-      const next = new Set(current);
-      if (allPageSelected) {
-        for (const id of pageEmployeeIds) {
-          next.delete(id);
-        }
-      } else {
-        for (const id of pageEmployeeIds) {
-          next.add(id);
-        }
+      if (
+        filteredEmployeeIds.length > 0 &&
+        filteredEmployeeIds.every((id) => current.has(id))
+      ) {
+        return new Set();
       }
-      return next;
+      return new Set(filteredEmployeeIds);
     });
   };
 
@@ -467,40 +625,79 @@ export default function FormEmployeeAssignment({
   });
 
   const isMutating = assignMutation.isPending || unassignMutation.isPending || toggleSelfAssessment.isPending || bulkToggleSelfAssessment.isPending;
-  function handleFilterChange(id: FilterId, next: FilterSelection) {
-    setFilters((prev) => ({ ...prev, [id]: next }));
+
+  function handleMultiFilterChange(id: MultiFilterId, next: FilterSelection) {
+    setFilters((prev) => ({
+      ...prev,
+      multi: { ...prev.multi, [id]: next },
+    }));
+  }
+
+  function handleTextFilterChange(id: TextFilterId, next: string) {
+    setFilters((prev) => {
+      const text = { ...prev.text };
+      if (!next.trim()) {
+        delete text[id];
+      } else {
+        text[id] = next;
+      }
+      return { ...prev, text };
+    });
   }
 
   function handleClearAllFilters() {
     setFilters(EMPTY_FILTERS);
   }
 
-  const USER_COLUMNS: { id: string; label: string; width?: number; getValue: (u: UserRecord) => string }[] = [
-    { id: "employeeId", label: "SAP Code", width: 120, getValue: (u) => u.employeeId },
-    { id: "name", label: "Employee Name", width: 200, getValue: (u) => `${u.firstName} ${u.lastName}`.trim() },
-    { id: "designation", label: "Designation", width: 180, getValue: (u) => u.designation ?? "—" },
-    { id: "entityName", label: "Entity", width: 160, getValue: (u) => u.entityName ?? "—" },
-    { id: "roleCategory", label: "Role Category", width: 150, getValue: (u) => u.roleCategory ?? "—" },
-    { id: "headName", label: "Manager 1", width: 160, getValue: (u) => u.headName ?? "—" },
-    { id: "manager2Name", label: "Manager 2", width: 160, getValue: (u) => u.manager2Name ?? "—" },
+  const USER_COLUMNS: UserColumn[] = [
+    { id: "employeeId", label: "SAP Code", width: 120, mode: "text", getValue: (u) => u.employeeId },
+    { id: "name", label: "Employee Name", width: 200, mode: "text", getValue: (u) => `${u.firstName} ${u.lastName}`.trim() },
+    { id: "designation", label: "Designation", width: 180, mode: "multi", getValue: (u) => u.designation ?? "—" },
+    { id: "entityName", label: "Entity", width: 160, mode: "multi", getValue: (u) => u.entityName ?? "—" },
+    { id: "roleCategory", label: "Role Category", width: 150, mode: "multi", getValue: (u) => u.roleCategory ?? "—" },
+    { id: "headName", label: "Manager 1", width: 160, mode: "multi", getValue: (u) => u.headName ?? "—" },
+    { id: "manager2Name", label: "Manager 2", width: 160, mode: "multi", getValue: (u) => u.manager2Name ?? "—" },
+    {
+      id: "assessmentEligibility",
+      label: "Eligibility",
+      width: 110,
+      mode: "multi",
+      getValue: (u) => getEligibilityLabel(u, eligibilityOverride),
+    },
+    {
+      id: "assignmentStatus",
+      label: "Status",
+      width: 120,
+      mode: "multi",
+      getValue: (u) => getAssignmentStatus(u, assignedEmployeeIds),
+    },
   ];
 
-  const STICKY_SHADOW_LEFT = "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.5)]";
+  const STICKY_SHADOW_LEFT =
+    "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.5)]";
+  const hasToolbarFilters = activeCount > 0 || search.trim().length > 0;
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/50">
-      <div className="shrink-0 px-5 pt-4">
-        <h2 className="text-base font-semibold text-text-primary">Assign Employees</h2>
-        <p className="mt-0.5 text-sm text-foreground/70">
-          Select employees to assign or unassign:{" "}
-          <span className="font-medium">{templateTitle}</span>. An employee can
-          only have one form in the same appraisal cycle.
-        </p>
+    <div className="flex flex-col overflow-hidden rounded-xl border border-primary/15 bg-surface shadow-sm dark:border-primary/25 dark:bg-slate-900">
+      <div className="shrink-0 bg-primary px-5 py-4 text-white">
+        <div className="flex items-start gap-3">
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-white/15">
+            <Users className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold">Assign Employees</h2>
+            <p className="mt-0.5 text-sm text-white/80">
+              Select employees for{" "}
+              <span className="font-medium text-white">{templateTitle}</span>. An
+              employee can only have one form in the same appraisal cycle.
+            </p>
+          </div>
+        </div>
       </div>
 
       {message ? (
         <div
-          className={`mx-5 mt-3 shrink-0 rounded-lg border px-3 py-2 text-sm ${
+          className={`mx-5 mt-4 shrink-0 rounded-lg border px-3 py-2 text-sm ${
             isError
               ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300"
               : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300"
@@ -510,25 +707,24 @@ export default function FormEmployeeAssignment({
         </div>
       ) : null}
 
-      {/* Master Filters */}
-      <div className="mt-3 shrink-0 border-y border-slate-200/80 bg-slate-50/90 dark:border-white/5 dark:bg-slate-950/40">
+      <div className="mt-4 shrink-0 border-y border-primary/10 bg-primary/5 dark:border-primary/20 dark:bg-primary/10">
         <div className="flex items-center justify-between gap-3 px-5 py-2">
           <button
             type="button"
             onClick={() => setFilterPanelOpen((c) => !c)}
-            className="inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30 dark:text-slate-300 dark:hover:text-white"
+            className="inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             aria-expanded={filterPanelOpen}
           >
-            <Filter className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+            <Filter className="h-3.5 w-3.5" />
             <span>Master filter</span>
             {activeCount > 0 ? (
-              <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700 dark:bg-white/10 dark:text-slate-200">
+              <span className="rounded-md bg-primary px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
                 {activeCount}
               </span>
             ) : null}
             <ChevronDown
               className={cn(
-                "h-3.5 w-3.5 text-slate-400 transition-transform duration-300",
+                "h-3.5 w-3.5 text-primary/60 transition-transform duration-300",
                 filterPanelOpen && "rotate-180",
               )}
             />
@@ -538,7 +734,7 @@ export default function FormEmployeeAssignment({
             <button
               type="button"
               onClick={handleClearAllFilters}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary transition-colors hover:text-primary/80"
             >
               <RotateCcw className="h-3 w-3" />
               Clear all
@@ -556,15 +752,15 @@ export default function FormEmployeeAssignment({
               transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
               className="overflow-hidden"
             >
-              <div className="space-y-3 border-t border-slate-200/70 px-5 pb-4 pt-3 dark:border-white/5">
-                <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-3 border-t border-primary/10 px-5 pb-4 pt-3 dark:border-primary/20">
+                <div className="grid gap-x-4 gap-y-3 sm:grid-cols-4 lg:grid-cols-8">
                   {FILTER_CONFIG.map((f) => (
                     <MultiSelectFilterDropdown
                       key={f.id}
                       label={f.label}
                       options={optionsByFilter.get(f.id) ?? []}
-                      selectedValues={filters[f.id]}
-                      onChange={(next) => handleFilterChange(f.id, next)}
+                      selectedValues={filters.multi[f.id]}
+                      onChange={(next) => handleMultiFilterChange(f.id, next)}
                       placeholder="All"
                       searchable={(optionsByFilter.get(f.id) ?? []).length > 8}
                       quiet
@@ -578,36 +774,37 @@ export default function FormEmployeeAssignment({
         </AnimatePresence>
       </div>
 
-      {/* Toolbar: search + count + assign button */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-5 py-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-5 py-3">
         <div className="min-w-0 flex-1">
           <div className="relative max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/50" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by SAP or name"
-              className="w-full rounded-lg border border-slate-300 bg-background py-2 pl-10 pr-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+              className="w-full rounded-lg border border-primary/20 bg-background py-2 pl-10 pr-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-primary/30"
             />
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {(activeCount > 0 || search.trim().length > 0) ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {hasToolbarFilters ? (
             <button
               type="button"
               onClick={() => {
                 handleClearAllFilters();
                 setSearch("");
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/20 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/10 dark:border-primary/30"
             >
               <RotateCcw className="h-3 w-3" />
               Clear filters
             </button>
           ) : null}
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-foreground/70">
             {totalCount} of {allUsers.length} employees
-            {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
+            {selectedCount > 0
+              ? ` · ${selectedCount} selected${allFilteredSelected ? " (all)" : ""}`
+              : ""}
           </p>
           <button
             type="button"
@@ -638,43 +835,73 @@ export default function FormEmployeeAssignment({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="min-h-0 max-h-[28rem] w-full overflow-auto overscroll-contain">
+      <div className="min-h-0 max-h-[calc(100vh-18rem)] w-full overflow-auto overscroll-contain">
         <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead>
-            <tr>
+            <tr className="bg-primary text-white">
               <th
                 className={cn(
-                  "sticky left-0 top-0 z-40 border-b border-slate-200 bg-slate-50 px-3 py-3 dark:border-white/10 dark:bg-slate-900",
+                  "sticky left-0 top-0 z-40 border-b border-primary/80 bg-primary px-3 py-3",
                   STICKY_SHADOW_LEFT,
                 )}
               >
                 <input
                   type="checkbox"
-                  checked={allPageSelected}
+                  checked={allFilteredSelected}
                   ref={(element) => {
                     if (element) {
-                      element.indeterminate = somePageSelected;
+                      element.indeterminate = someFilteredSelected;
                     }
                   }}
-                  onChange={toggleSelectAllOnPage}
-                  disabled={pageEmployeeIds.length === 0}
-                  aria-label="Select all employees on this page"
-                  className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
+                  onChange={toggleSelectAllFiltered}
+                  disabled={filteredEmployeeIds.length === 0}
+                  aria-label="Select all filtered employees"
+                  className="h-4 w-4 rounded border-white/40 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40"
                 />
               </th>
               {USER_COLUMNS.map((column) => (
                 <th
                   key={column.id}
-                  className="sticky top-0 z-30 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400"
+                  className="sticky top-0 z-30 whitespace-nowrap border-b border-primary/80 bg-primary px-2 py-3 text-xs font-semibold uppercase tracking-wider text-white"
                   style={column.width ? { minWidth: column.width } : undefined}
                 >
-                  {column.label}
+                  <ColumnHeaderFilter
+                    label={column.label}
+                    mode={column.mode}
+                    options={
+                      column.mode === "multi"
+                        ? optionsByFilter.get(column.id as MultiFilterId)
+                        : undefined
+                    }
+                    selectedValues={
+                      column.mode === "multi"
+                        ? filters.multi[column.id as MultiFilterId]
+                        : undefined
+                    }
+                    textValue={
+                      column.mode === "text"
+                        ? filters.text[column.id as TextFilterId] ?? ""
+                        : undefined
+                    }
+                    active={
+                      column.mode === "text"
+                        ? Boolean(filters.text[column.id as TextFilterId]?.trim())
+                        : filters.multi[column.id as MultiFilterId] != null
+                    }
+                    onTextChange={
+                      column.mode === "text"
+                        ? (next) => handleTextFilterChange(column.id as TextFilterId, next)
+                        : undefined
+                    }
+                    onMultiChange={
+                      column.mode === "multi"
+                        ? (next) => handleMultiFilterChange(column.id as MultiFilterId, next)
+                        : undefined
+                    }
+                  />
                 </th>
               ))}
-              <th
-                className="sticky top-0 z-30 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400"
-              >
+              <th className="sticky top-0 z-30 whitespace-nowrap border-b border-primary/80 bg-primary px-2 py-3 text-xs font-semibold uppercase tracking-wider text-white">
                 <div className="flex items-center gap-1.5">
                   <input
                     type="checkbox"
@@ -688,9 +915,16 @@ export default function FormEmployeeAssignment({
                     onChange={handleBulkToggleSelfAssessment}
                     disabled={filteredAssignedEmployeeIds.length === 0 || bulkToggleSelfAssessment.isPending}
                     aria-label="Toggle self assessment for all filtered assigned employees"
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
+                    className="h-4 w-4 rounded border-white/40 text-amber-600 focus:ring-amber-500/30 disabled:opacity-40"
                   />
-                  Self Assessment
+                  <ColumnHeaderFilter
+                    label="Self Assessment"
+                    mode="multi"
+                    options={optionsByFilter.get("selfAssessment")}
+                    selectedValues={filters.multi.selfAssessment}
+                    active={filters.multi.selfAssessment != null}
+                    onMultiChange={(next) => handleMultiFilterChange("selfAssessment", next)}
+                  />
                 </div>
               </th>
             </tr>
@@ -698,28 +932,32 @@ export default function FormEmployeeAssignment({
           <tbody>
             {paginatedUsers.length === 0 ? (
               <tr>
-                <td colSpan={USER_COLUMNS.length + 2} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                <td colSpan={USER_COLUMNS.length + 2} className="px-5 py-12 text-center text-sm text-foreground/60">
                   No employees match your filters.
                 </td>
               </tr>
             ) : (
               paginatedUsers.map((user) => {
                 const isSelected = selectedEmployeeIds.has(user.employeeId);
+                const isAssigned = assignedEmployeeIds.has(user.employeeId);
                 return (
                   <tr
                     key={user.id}
                     className={cn(
-                      "group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.02]",
-                      isSelected && "bg-amber-50/60 dark:bg-amber-500/5",
+                      "group transition-colors hover:bg-primary/5 dark:hover:bg-primary/10",
+                      isAssigned && "bg-emerald-50/70 dark:bg-emerald-950/20",
+                      isSelected && "bg-amber-50/70 dark:bg-amber-500/10",
                     )}
                   >
                     <td
                       className={cn(
-                        "sticky left-0 z-20 border-b border-slate-100 px-3 py-1.5 dark:border-white/[0.03]",
+                        "sticky left-0 z-20 border-b border-primary/10 px-3 py-1.5 dark:border-white/5",
                         STICKY_SHADOW_LEFT,
                         isSelected
-                          ? "bg-amber-50/60 dark:bg-amber-500/5"
-                          : "bg-white group-hover:bg-slate-50/50 dark:bg-slate-900 dark:group-hover:bg-white/[0.02]",
+                          ? "bg-amber-50 dark:bg-amber-950"
+                          : isAssigned
+                            ? "bg-emerald-50 group-hover:bg-emerald-100/80 dark:bg-emerald-950 dark:group-hover:bg-emerald-900"
+                            : "bg-surface group-hover:bg-primary/5 dark:bg-slate-900 dark:group-hover:bg-primary/10",
                       )}
                     >
                       <input
@@ -732,51 +970,73 @@ export default function FormEmployeeAssignment({
                     </td>
                     {USER_COLUMNS.map((column) => {
                       const value = column.getValue(user);
-                      const isAssigned = column.id === "name" && assignedEmployeeIds.has(user.employeeId);
                       return (
                         <td
                           key={column.id}
-                          className="whitespace-nowrap border-b border-slate-100 px-2 py-1.5 align-middle dark:border-white/[0.03]"
+                          className="whitespace-nowrap border-b border-primary/10 px-2 py-1.5 align-middle dark:border-white/5"
                           style={column.width ? { maxWidth: column.width } : undefined}
                         >
-                          <span
-                            className={cn(
-                              "block truncate text-slate-700 dark:text-slate-300",
-                              column.id === "name" && "font-semibold text-slate-900 dark:text-white",
-                            )}
-                            title={value === "—" ? undefined : value}
-                          >
-                            {value}
-                            {isAssigned ? (
-                              <span className="ml-2 inline-flex items-center rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                Assigned
-                              </span>
-                            ) : null}
-                          </span>
+                          {column.id === "assignmentStatus" ? (
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                                value === "Assigned"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                  : "bg-primary/10 text-primary",
+                              )}
+                            >
+                              {value}
+                            </span>
+                          ) : column.id === "assessmentEligibility" ? (
+                            <span
+                              className={cn(
+                                "inline-flex min-w-10 items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-semibold",
+                                value === "Full"
+                                  ? "bg-success/15 text-success"
+                                  : value === "N/A" || value === "None"
+                                    ? "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400"
+                                    : "bg-warning/15 text-warning",
+                              )}
+                            >
+                              {value}
+                            </span>
+                          ) : (
+                            <span
+                              className={cn(
+                                "block truncate text-text-primary",
+                                column.id === "name" && "font-semibold",
+                              )}
+                              title={value === "—" ? undefined : value}
+                            >
+                              {value}
+                            </span>
+                          )}
                         </td>
                       );
                     })}
-                    <td className="whitespace-nowrap border-b border-slate-100 px-2 py-1.5 text-center align-middle dark:border-white/[0.03]">
-                      {assignedEmployeeIds.has(user.employeeId) ? (
-                        <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+                    <td className="whitespace-nowrap border-b border-primary/10 px-2 py-1.5 text-center align-middle dark:border-white/5">
+                      {isAssigned ? (
+                        <label className="inline-flex items-center gap-1.5 text-xs text-text-primary">
                           <input
                             type="checkbox"
                             checked={!assignedSelfAssessmentDisabled.get(user.employeeId)}
                             onChange={(e) => {
-                              toggleSelfAssessment.mutate({
+                              setSelfAssessmentConfirm({
+                                mode: "single",
                                 employeeId: user.employeeId,
+                                employeeName: `${user.firstName} ${user.lastName}`.trim(),
                                 disabled: !e.target.checked,
                               });
                             }}
                             disabled={toggleSelfAssessment.isPending}
                             className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 disabled:opacity-40 dark:border-white/20 dark:bg-slate-950"
                           />
-                          <span className="text-[10px]">
+                          <span className="text-[10px] font-medium">
                             {assignedSelfAssessmentDisabled.get(user.employeeId) ? "Disabled" : "Enabled"}
                           </span>
                         </label>
                       ) : (
-                        <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+                        <span className="text-xs text-foreground/40">—</span>
                       )}
                     </td>
                   </tr>
@@ -787,44 +1047,89 @@ export default function FormEmployeeAssignment({
         </table>
       </div>
 
-      {/* Pagination */}
       {totalCount > 0 ? (
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-2 dark:border-white/5">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Showing {rangeStart}–{rangeEnd} of {totalCount}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((c) => Math.max(1, c - 1))}
-              disabled={page <= 1}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/[0.04]"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Previous
-            </button>
-            <span className="min-w-20 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
-              Page {page} of {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((c) => Math.min(totalPages, c + 1))}
-              disabled={page >= totalPages}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/[0.04]"
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-primary/10 bg-primary/5 px-5 py-3 dark:border-primary/20">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs text-foreground/70">
+              Showing {rangeStart}–{rangeEnd} of {totalCount}
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-foreground/60">Show</span>
+              <div className="inline-flex overflow-hidden rounded-lg border border-primary/20 dark:border-primary/30">
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <button
+                    key={String(option)}
+                    type="button"
+                    onClick={() => setPageSize(option)}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-medium transition-colors",
+                      pageSize === option
+                        ? "bg-primary text-white"
+                        : "text-primary hover:bg-primary/10",
+                    )}
+                  >
+                    {option === "all" ? "All" : option}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
+          {showPageControls ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((c) => Math.max(1, c - 1))}
+                disabled={page <= 1}
+                className="inline-flex items-center gap-1 rounded-lg border border-primary/20 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary/30"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Previous
+              </button>
+              <span className="min-w-20 text-center text-xs font-medium text-text-primary">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((c) => Math.min(totalPages, c + 1))}
+                disabled={page >= totalPages}
+                className="inline-flex items-center gap-1 rounded-lg border border-primary/20 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary/30"
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      {/* Currently Assigned */}
-      <div className="shrink-0 border-t border-slate-200 px-5 py-2 dark:border-white/5">
-        <p className="text-xs text-foreground/60">
-          <span className="font-semibold text-text-primary">{assignedEmployees?.length ?? 0}</span> employee(s) currently assigned to this form.
+      <div className="shrink-0 border-t border-primary/10 bg-primary px-5 py-2.5 text-white">
+        <p className="text-xs text-white/80">
+          <span className="font-semibold text-white">{assignedEmployees?.length ?? 0}</span>{" "}
+          employee(s) currently assigned to this form.
         </p>
       </div>
+
+      <SelfAssessmentConfirmModal
+        open={selfAssessmentConfirm != null}
+        disabled={selfAssessmentConfirm?.disabled ?? false}
+        employeeName={
+          selfAssessmentConfirm?.mode === "single"
+            ? selfAssessmentConfirm.employeeName
+            : undefined
+        }
+        employeeCount={
+          selfAssessmentConfirm?.mode === "bulk"
+            ? selfAssessmentConfirm.employeeIds.length
+            : undefined
+        }
+        onConfirm={handleConfirmSelfAssessmentToggle}
+        onClose={() => setSelfAssessmentConfirm(null)}
+        isPending={
+          selfAssessmentConfirm?.mode === "bulk"
+            ? bulkToggleSelfAssessment.isPending
+            : toggleSelfAssessment.isPending
+        }
+      />
     </div>
   );
 }

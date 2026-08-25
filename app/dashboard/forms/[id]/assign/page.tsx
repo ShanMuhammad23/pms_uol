@@ -29,16 +29,16 @@ export default async function AssignFormPage({ params }: AssignFormPageProps) {
     }
 
     return (
-      <div className="space-y-6 text-text-primary">
+      <div className="space-y-5 text-text-primary">
         <div>
           <Link
             href={`/dashboard/forms/${templateId}/view`}
-            className="inline-flex items-center gap-1.5 text-sm text-foreground/70 hover:text-text-primary"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80"
           >
             <ArrowLeft className="size-4" />
             Back to Form
           </Link>
-          <h1 className="mt-3 text-2xl font-bold">Assign Form to Employees</h1>
+          <h1 className="mt-3 text-2xl font-bold text-primary">Assign Form to Employees</h1>
           <p className="mt-1 text-sm text-foreground/70">
             Choose any number of employees for this form template.
           </p>

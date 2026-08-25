@@ -1694,3 +1694,17 @@ export async function listDirectScoreEntryEmployees(): Promise<Array<{ employeeI
     email: row.email,
   }));
 }
+
+export async function countDirectScoreEntryEmployees(): Promise<number> {
+  const cycle = (await getDefaultAppraisalCycle()) ?? (await ensureDefaultAppraisalCycle());
+  const cycleId = cycle.id;
+
+  const result = await getDbClient().query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count
+     FROM direct_score_entry_assignments
+     WHERE cycle_id = $1`,
+    [cycleId],
+  );
+
+  return Number(result.rows[0]?.count ?? 0);
+}

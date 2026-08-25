@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ClipboardCheck, Plus } from "lucide-react";
 import FormsListTable from "@/app/components/forms/FormsListTable";
-import { listFormTemplates } from "@/lib/queries/forms";
+import { countDirectScoreEntryEmployees, listFormTemplates } from "@/lib/queries/forms";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { isAdminRole } from "@/lib/auth/submission-review-roles";
@@ -34,7 +34,10 @@ export default async function FormsPage() {
       "FORMS",
       session.user.role,
     );
-    const templates = await listFormTemplates();
+    const [templates, directScoreEntryCount] = await Promise.all([
+      listFormTemplates(),
+      countDirectScoreEntryEmployees(),
+    ]);
 
     return (
       <div className="space-y-6 text-text-primary">
@@ -54,6 +57,12 @@ export default async function FormsPage() {
               >
                 <ClipboardCheck className="size-4" />
                 Direct Score Entry
+                <span
+                  className="inline-flex min-w-6 items-center justify-center rounded-full bg-violet-600 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white dark:bg-violet-500"
+                  title={`${directScoreEntryCount} employee${directScoreEntryCount === 1 ? "" : "s"} with Direct Scoring enabled`}
+                >
+                  {directScoreEntryCount}
+                </span>
               </Link>
               <Link
                 href="/dashboard/forms/new"
