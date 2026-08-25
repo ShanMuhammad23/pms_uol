@@ -764,21 +764,13 @@ export function DashboardSubmissionsTable({
   const isHrRole = canReviewSubmissions(role ?? undefined);
   const isManagerRole = isHeadRole(role ?? undefined);
   const canManageColumns = canManageStaffListingColumns(role ?? undefined);
-
-  // For Manager role, the base column set is the fixed manager layout.
-  // Additional-access columns (Credit Hours, ORIC, QEC) from the parent
-  // are merged in so that managers with those permissions can see them.
-  // Only columns beyond the HEAD base set are added — the HEAD base set
-  // includes columns that are intentionally excluded from the Manager's
-  // fixed layout (e.g. roleCategory, facultyName, eligible).
   const managerAllowedColumnIds = useMemo(() => {
     if (!isManagerRole) return allowedColumnIds;
     const base = new Set<string>(MANAGER_FIXED_COLUMN_IDS);
     if (allowedColumnIds) {
       const headBase = new Set<string>(HEAD_DASHBOARD_TABLE_COLUMN_IDS);
       for (const id of allowedColumnIds) {
-        // Only add columns that are NOT in the HEAD base set — these are
-        // the additional-access columns (creditHrsErpAdj, pubOricScoreAdj, etc.)
+
         if (!headBase.has(id) && !base.has(id)) {
           base.add(id);
         }
@@ -786,11 +778,6 @@ export function DashboardSubmissionsTable({
     }
     return [...base] as DashboardTableColumnId[];
   }, [isManagerRole, allowedColumnIds]);
-
-  // Fixed column configuration for Manager 1 / Manager 2 roles.
-  // Managers do not get column management — they always see the predefined
-  // layout with the first four columns frozen. Saved preferences are ignored.
-  // Additional-access columns are appended after the fixed columns.
   const managerFixedConfig = useMemo<ColumnConfig | undefined>(
     () =>
       isManagerRole && managerAllowedColumnIds
@@ -821,10 +808,6 @@ export function DashboardSubmissionsTable({
     hasSelectColumn: isHrRole,
     fixedConfig: managerFixedConfig,
   });
-
-  // Compute the RBAC-filtered column list for the Column Management panel.
-  // This ensures restricted columns never appear in the panel, even if
-  // previously saved preferences reference them.
   const allowedColumns = useMemo(() => {
     if (!managerAllowedColumnIds) return DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[];
     const allowed = new Set<string>(managerAllowedColumnIds);
@@ -862,10 +845,6 @@ export function DashboardSubmissionsTable({
   }>({ open: false, submissionId: 0, error: null });
   const masterFilterActiveCount = getMasterFilterActiveCount(masterFilters);
 
-  // When Show All is active OR we have a cached full dataset, always request
-  // page 1 with SHOW_ALL_PAGE_SIZE. This keeps the query key identical so
-  // React Query returns the cached full-dataset response without refetching
-  // when the user toggles between Show All and Show Paginated.
   const useFullDataset = showAll || hasFullDataset;
   const queryPage = useFullDataset ? 1 : page;
   const queryPageSize = useFullDataset ? SHOW_ALL_PAGE_SIZE : PAGE_SIZE;
@@ -945,10 +924,6 @@ export function DashboardSubmissionsTable({
     if (canEditModule("ORIC_ADJUSTMENTS")) modules.add("ORIC_ADJUSTMENTS");
     if (canEditModule("QEC_ADJUSTMENTS")) modules.add("QEC_ADJUSTMENTS");
     return modules;
-    // canEditModule is excluded from deps because it is a new function reference
-    // on every render. It closes over `permissions`, so depending on `permissions`
-    // is sufficient to recompute when access actually changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissions]);
   const queryClient = useQueryClient();
   const [pendingScoreChanges, setPendingScoreChanges] = useState<
