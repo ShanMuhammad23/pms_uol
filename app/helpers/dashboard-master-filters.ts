@@ -217,8 +217,8 @@ export function buildMasterFilterOptions(
         option.count > 0 || selectedValues?.includes(option.value),
     )
     .sort((left, right) => {
-      if (left.value === "—") return 1;
-      if (right.value === "—") return -1;
+      if (left.value === "—" || left.value === "✖") return 1;
+      if (right.value === "—" || right.value === "✖") return -1;
       return left.label.localeCompare(right.label, undefined, {
         numeric: true,
         sensitivity: "base",

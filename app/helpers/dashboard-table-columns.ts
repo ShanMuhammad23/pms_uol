@@ -534,7 +534,8 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   applicableMatrix: {
     id: "applicableMatrix",
     label: "Applicable Matrix",
-    getValue: (row) => formatNullable(row.applicableMatrix),
+    getValue: (row) =>
+      row.applicableMatrix?.trim() ? row.applicableMatrix.trim() : "✖",
   },
   incrementPerMatrix: {
     id: "incrementPerMatrix",

@@ -429,7 +429,7 @@ export async function listFormSubmissions(
          ap.current_salary::text,
          ap.previous_salary::text,
          ap.applicable_salary_for_increment::text,
-         ap.applicable_matrix,
+         assigned_increment_matrix.title AS applicable_matrix,
          ap.calculated_increment_percentage::text,
          ap.increment_per_matrix::text,
          ap.approved_increment_percentage::text,
@@ -464,7 +464,7 @@ export async function listFormSubmissions(
          NULL::text AS current_salary,
          NULL::text AS previous_salary,
          NULL::text AS applicable_salary_for_increment,
-         NULL::text AS applicable_matrix,
+         assigned_increment_matrix.title AS applicable_matrix,
          ap.calculated_increment_percentage::text,
          NULL::text AS increment_per_matrix,
          ap.approved_increment_percentage::text,
@@ -643,6 +643,18 @@ export async function listFormSubmissions(
        FROM users m
        WHERE m.id = u.manager_2_id
      ) m2_user ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(imd.title, eima.matrix_label) AS title
+       FROM employee_increment_matrix_assignments eima
+       INNER JOIN financial_years fy
+         ON fy.id = eima.financial_year_id
+        AND fy.is_active = TRUE
+       LEFT JOIN increment_matrix_defs imd
+         ON imd.financial_year_id = eima.financial_year_id
+        AND imd.matrix_label = eima.matrix_label
+       WHERE eima.employee_id = u.id
+       LIMIT 1
+     ) assigned_increment_matrix ON TRUE
      ${quartileJoin}
      ${qualJoin}
      WHERE u.is_active = TRUE

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
@@ -354,6 +354,29 @@ function renderCell(
         selfAssessmentEnabled={submission.selfAssessmentEnabled}
         templateCode={submission.templateCode}
       />
+    );
+  }
+
+  if (columnId === "applicableMatrix") {
+    const title = submission.applicableMatrix?.trim();
+    if (!title) {
+      return (
+        <span
+          className="inline-flex size-6 items-center justify-center rounded-md text-slate-400 dark:text-slate-500"
+          title="No increment matrix assigned"
+          aria-label="No increment matrix assigned"
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+        </span>
+      );
+    }
+    return (
+      <span
+        className="block min-w-0 break-words text-slate-700 dark:text-slate-300"
+        title={title}
+      >
+        {title}
+      </span>
     );
   }
 

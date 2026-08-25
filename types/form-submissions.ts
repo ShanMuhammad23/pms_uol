@@ -93,6 +93,7 @@ export interface FormSubmissionListItem {
   currentSalary: number | null;
   previousSalary: number | null;
   applicableSalaryForIncrement: number | null;
+  /** Title of the increment matrix assigned to the employee for the active FY. */
   applicableMatrix: string | null;
   applicableIncrementPercent: number | null;
   incrementPerMatrix: number | null;
