@@ -27,11 +27,20 @@ import {
 import DirectAssessmentRemarksModal, {
   type DirectAssessmentRemarksModalValue,
 } from "@/app/components/dashboard/DirectAssessmentRemarksModal";
+import { ResizableHeader } from "@/app/components/common/ResizableHeader";
 
 interface DirectAssessmentSpreadsheetProps {
   templateId: number;
   onBack: () => void;
 }
+
+/** Default widths for the fixed left columns. */
+const DEFAULT_SR_WIDTH = 48;
+const DEFAULT_KPI_WIDTH = 320;
+const DEFAULT_MAX_WIDTH = 64;
+const DEFAULT_EMPLOYEE_WIDTH = 140;
+const MIN_COL_WIDTH = 60;
+const MAX_COL_WIDTH = 500;
 
 type ScoreDraft = {
   pointsEarned: string;
@@ -156,6 +165,31 @@ export default function DirectAssessmentSpreadsheet({
   >(null);
   // Tracks whether the modal is currently saving (separate from score save).
   const [remarksSaving, setRemarksSaving] = useState(false);
+
+  // Column resize state — keyed by column id ("sr", "kpi", "max", or
+  // `emp-${submissionId}` for employee columns).
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+
+  const getColumnWidth = useCallback(
+    (columnId: string, defaultWidth: number): number => {
+      const w = columnWidths[columnId];
+      if (w != null) {
+        return Math.max(MIN_COL_WIDTH, Math.min(MAX_COL_WIDTH, Math.round(w)));
+      }
+      return defaultWidth;
+    },
+    [columnWidths],
+  );
+
+  const handleColumnResize = useCallback(
+    (columnId: string, width: number) => {
+      setColumnWidths((prev) => ({
+        ...prev,
+        [columnId]: Math.max(MIN_COL_WIDTH, Math.min(MAX_COL_WIDTH, Math.round(width))),
+      }));
+    },
+    [],
+  );
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["direct-assessment", templateId],
@@ -496,22 +530,37 @@ export default function DirectAssessmentSpreadsheet({
 
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
         Showing {filteredEmployees.length} of {data.employees.length} employees
-        — scroll horizontally to view all
+        — drag column borders to resize
       </div>
 
       <div className="overflow-auto max-h-[75vh] rounded-md border border-slate-300 dark:border-slate-700">
-        <table className="min-w-full border-collapse text-left text-sm">
+        <table className="border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-800 dark:bg-slate-950/80">
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+              <ResizableHeader
+                columnId="sr"
+                width={getColumnWidth("sr", DEFAULT_SR_WIDTH)}
+                onResize={handleColumnResize}
+                className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200"
+              >
                 Sr.
-              </th>
-              <th className="min-w-[260px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+              </ResizableHeader>
+              <ResizableHeader
+                columnId="kpi"
+                width={getColumnWidth("kpi", DEFAULT_KPI_WIDTH)}
+                onResize={handleColumnResize}
+                className="border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200"
+              >
                 Key Performance Indicators (KPIs)
-              </th>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+              </ResizableHeader>
+              <ResizableHeader
+                columnId="max"
+                width={getColumnWidth("max", DEFAULT_MAX_WIDTH)}
+                onResize={handleColumnResize}
+                className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200"
+              >
                 Max
-              </th>
+              </ResizableHeader>
               {filteredEmployees.map((emp) => {
                 const isEditable = emp.canEdit;
                 const statusLabel = isEditable
@@ -523,10 +572,14 @@ export default function DirectAssessmentSpreadsheet({
                       : emp.status === "APPROVED" || emp.status === "COMPLETED"
                         ? "Locked"
                         : emp.status.replace(/_/g, " ");
+                const empColId = `emp-${emp.submissionId}`;
                 return (
-                  <th
+                  <ResizableHeader
                     key={emp.submissionId}
-                    className="min-w-[120px] border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider"
+                    columnId={empColId}
+                    width={getColumnWidth(empColId, DEFAULT_EMPLOYEE_WIDTH)}
+                    onResize={handleColumnResize}
+                    className="border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider"
                   >
                     <div className="flex flex-col gap-0.5">
                       <span className="text-slate-100">
@@ -546,7 +599,7 @@ export default function DirectAssessmentSpreadsheet({
                         {statusLabel}
                       </span>
                     </div>
-                  </th>
+                  </ResizableHeader>
                 );
               })}
             </tr>
@@ -604,32 +657,44 @@ export default function DirectAssessmentSpreadsheet({
                           : "bg-slate-50/60 dark:bg-slate-800/20",
                       )}
                     >
-                      <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40">
+                      <td
+                        className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40"
+                        style={{ width: getColumnWidth("sr", DEFAULT_SR_WIDTH), minWidth: getColumnWidth("sr", DEFAULT_SR_WIDTH), maxWidth: getColumnWidth("sr", DEFAULT_SR_WIDTH) }}
+                      >
                         {row.sr}
                       </td>
-                      <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
-                      <p className="max-w-[450px] break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
-                        {question!.questionText}
-                        <QuestionRequiredIndicator isRequired={question!.isRequired} />
-                      </p>
-                    </td>
-                    <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
-                      {scored ? question!.totalMarks : "—"}
-                    </td>
-                    {filteredEmployees.map((emp) => {
-                      const isEditable = emp.canEdit;
-                      const empDrafts = drafts[emp.submissionId];
-                      const draft = empDrafts?.[question!.id];
+                      <td
+                        className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40"
+                        style={{ width: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), minWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), maxWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH) }}
+                      >
+                        <p className="break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
+                          {question!.questionText}
+                          <QuestionRequiredIndicator isRequired={question!.isRequired} />
+                        </p>
+                      </td>
+                      <td
+                        className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
+                        style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
+                      >
+                        {scored ? question!.totalMarks : "—"}
+                      </td>
+                      {filteredEmployees.map((emp) => {
+                        const isEditable = emp.canEdit;
+                        const empDrafts = drafts[emp.submissionId];
+                        const draft = empDrafts?.[question!.id];
+                        const empColId = `emp-${emp.submissionId}`;
+                        const empWidth = getColumnWidth(empColId, DEFAULT_EMPLOYEE_WIDTH);
 
-                      return (
-                        <td
-                          key={emp.submissionId}
-                          className={cn(
-                            "border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40",
-                            !isEditable &&
-                              "bg-slate-50/50 dark:bg-slate-800/20",
-                          )}
-                        >
+                        return (
+                          <td
+                            key={emp.submissionId}
+                            className={cn(
+                              "border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40",
+                              !isEditable &&
+                                "bg-slate-50/50 dark:bg-slate-800/20",
+                            )}
+                            style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
+                          >
                           {scored ? (
                             isEditable ? (
                               <input
@@ -670,12 +735,15 @@ export default function DirectAssessmentSpreadsheet({
             <tfoot>
               <tr className="bg-slate-800 dark:bg-slate-950/80">
                 <td
-                  colSpan={3}
+                  colSpan={2}
                   className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200"
                 >
                   Total
                 </td>
-                <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-100">
+                <td
+                  className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-100"
+                  style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
+                >
                   {maxRawScore}
                 </td>
                 {filteredEmployees.map((emp) => {
@@ -685,11 +753,14 @@ export default function DirectAssessmentSpreadsheet({
                     const val = Number(empDrafts?.[q.id]?.pointsEarned ?? 0);
                     return sum + (Number.isNaN(val) ? 0 : val);
                   }, 0);
+                  const empColId = `emp-${emp.submissionId}`;
+                  const empWidth = getColumnWidth(empColId, DEFAULT_EMPLOYEE_WIDTH);
 
                   return (
                     <td
                       key={emp.submissionId}
                       className="border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums"
+                      style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
                     >
                       <span
                         className={

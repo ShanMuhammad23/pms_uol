@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 const VALID_TABLE_KEYS = new Set([
   "dashboard-staff-listing",
   "user-management",
+  "reports-process-status",
 ]);
 
 const MIN_WIDTH = 80;

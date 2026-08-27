@@ -19,6 +19,16 @@ export interface OrgReportNode {
   eligible: number;
   /** Forms assigned to employees in this entity's subtree. */
   formsAssigned: number;
+  /** Employees without a form assigned (and not direct score entry). */
+  formsNotAssigned: number;
+  /** Employees with a direct score entry assignment for the cycle. */
+  directScoreEntry: number;
+  /** Employees assessed directly by manager (self-assessment disabled). */
+  managerDirectAssessment: number;
+  /** Employees with a performance matrix assigned for the active FY. */
+  performanceMatrixAssigned: number;
+  /** Employees with an increment matrix assigned for the active FY. */
+  incrementMatrixAssigned: number;
   /** Employees who have submitted self-assessment (status >= PENDING_HEAD_REVIEW). */
   selfAssessed: number;
   /** Employees past manager review (status >= PENDING_HR_CALIBRATION). */
@@ -37,6 +47,11 @@ interface EntityCountRow {
   subtree_staff_count: string;
   eligible: string;
   forms_assigned: string;
+  forms_not_assigned: string;
+  direct_score_entry: string;
+  manager_direct_assessment: string;
+  performance_matrix_assigned: string;
+  increment_matrix_assigned: string;
   self_assessed: string;
   assessed_by_managers: string;
   hr_alignment: string;
@@ -57,9 +72,10 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   const defaultCycle = await getDefaultAppraisalCycle();
   const cycleId = defaultCycle?.id ?? null;
 
-  const fyResult = await getDbClient().query<{ year: number }>(
-    `SELECT year FROM financial_years WHERE is_active = TRUE ORDER BY year DESC LIMIT 1`,
+  const fyResult = await getDbClient().query<{ id: number; year: number }>(
+    `SELECT id, year FROM financial_years WHERE is_active = TRUE ORDER BY year DESC LIMIT 1`,
   );
+  const financialYearId = fyResult.rows[0]?.id ?? null;
   const financialYear = fyResult.rows[0]?.year ?? defaultCycle?.fiscalYear ?? null;
 
   // FY end is June 30 of the financial year (UoL fiscal year runs 1 Jul – 30 Jun).
@@ -95,6 +111,28 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
          COUNT(DISTINCT u.id) FILTER (
            WHERE efa.template_id IS NOT NULL
          ) AS forms_assigned,
+         -- Forms not assigned = no form assignment AND no direct score entry
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE efa.template_id IS NULL
+             AND dsea.employee_id IS NULL
+         ) AS forms_not_assigned,
+         -- Direct score entry assignment for the cycle
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE dsea.employee_id IS NOT NULL
+         ) AS direct_score_entry,
+         -- Manager direct assessment (self-assessment disabled on form assignment)
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE efa.template_id IS NOT NULL
+             AND efa.self_assessment_disabled = TRUE
+         ) AS manager_direct_assessment,
+         -- Performance matrix assigned for active FY
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE epma.employee_id IS NOT NULL
+         ) AS performance_matrix_assigned,
+         -- Increment matrix assigned for active FY
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE eima.employee_id IS NOT NULL
+         ) AS increment_matrix_assigned,
          COUNT(DISTINCT ap.id) FILTER (
            WHERE ap.status IN (
              'PENDING_HEAD_REVIEW',
@@ -128,6 +166,17 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
            OR ap.cycle_id = $1
            OR ($1::int IS NULL AND ap.cycle_id IS NULL))
        LEFT JOIN employee_form_assignments efa ON efa.employee_id = u.id
+       LEFT JOIN direct_score_entry_assignments dsea
+         ON dsea.employee_id = u.id
+         AND ($1::int IS NULL
+           OR dsea.cycle_id = $1
+           OR ($1::int IS NULL AND dsea.cycle_id IS NULL))
+       LEFT JOIN employee_performance_matrix_assignments epma
+         ON epma.employee_id = u.id
+         AND ($3::int IS NULL OR epma.financial_year_id = $3)
+       LEFT JOIN employee_increment_matrix_assignments eima
+         ON eima.employee_id = u.id
+         AND ($3::int IS NULL OR eima.financial_year_id = $3)
        WHERE u.is_active = TRUE
          AND u.employee_id <> 'EMP-0001'
          AND u.entity_id IS NOT NULL
@@ -149,6 +198,11 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
        COALESCE(SUM(dc.total_employees), 0)::text AS subtree_staff_count,
        COALESCE(SUM(dc.eligible), 0)::text AS eligible,
        COALESCE(SUM(dc.forms_assigned), 0)::text AS forms_assigned,
+       COALESCE(SUM(dc.forms_not_assigned), 0)::text AS forms_not_assigned,
+       COALESCE(SUM(dc.direct_score_entry), 0)::text AS direct_score_entry,
+       COALESCE(SUM(dc.manager_direct_assessment), 0)::text AS manager_direct_assessment,
+       COALESCE(SUM(dc.performance_matrix_assigned), 0)::text AS performance_matrix_assigned,
+       COALESCE(SUM(dc.increment_matrix_assigned), 0)::text AS increment_matrix_assigned,
        COALESCE(SUM(dc.self_assessed), 0)::text AS self_assessed,
        COALESCE(SUM(dc.assessed_by_managers), 0)::text AS assessed_by_managers,
        COALESCE(SUM(dc.hr_alignment), 0)::text AS hr_alignment,
@@ -157,7 +211,7 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
      LEFT JOIN direct_counts dc ON dc.entity_id = s.descendant_id
      LEFT JOIN direct_counts dc_direct ON dc_direct.entity_id = s.root_id
      GROUP BY s.root_id, dc_direct.total_employees`,
-    [cycleId, fyEndDate],
+    [cycleId, fyEndDate, financialYearId],
   );
 
   // Build a map of entity_id → rolled-up subtree counts (and direct staff
@@ -169,6 +223,11 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       subtreeStaffCount: number;
       eligible: number;
       formsAssigned: number;
+      formsNotAssigned: number;
+      directScoreEntry: number;
+      managerDirectAssessment: number;
+      performanceMatrixAssigned: number;
+      incrementMatrixAssigned: number;
       selfAssessed: number;
       assessedByManagers: number;
       hrAlignment: number;
@@ -183,6 +242,11 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       subtreeStaffCount: Number(row.subtree_staff_count ?? 0),
       eligible: Number(row.eligible ?? 0),
       formsAssigned: Number(row.forms_assigned ?? 0),
+      formsNotAssigned: Number(row.forms_not_assigned ?? 0),
+      directScoreEntry: Number(row.direct_score_entry ?? 0),
+      managerDirectAssessment: Number(row.manager_direct_assessment ?? 0),
+      performanceMatrixAssigned: Number(row.performance_matrix_assigned ?? 0),
+      incrementMatrixAssigned: Number(row.increment_matrix_assigned ?? 0),
       selfAssessed: Number(row.self_assessed ?? 0),
       assessedByManagers: Number(row.assessed_by_managers ?? 0),
       hrAlignment: Number(row.hr_alignment ?? 0),
@@ -203,6 +267,11 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       subtreeStaffCount: counts?.subtreeStaffCount ?? 0,
       eligible: counts?.eligible ?? 0,
       formsAssigned: counts?.formsAssigned ?? 0,
+      formsNotAssigned: counts?.formsNotAssigned ?? 0,
+      directScoreEntry: counts?.directScoreEntry ?? 0,
+      managerDirectAssessment: counts?.managerDirectAssessment ?? 0,
+      performanceMatrixAssigned: counts?.performanceMatrixAssigned ?? 0,
+      incrementMatrixAssigned: counts?.incrementMatrixAssigned ?? 0,
       selfAssessed: counts?.selfAssessed ?? 0,
       assessedByManagers: counts?.assessedByManagers ?? 0,
       hrAlignment: counts?.hrAlignment ?? 0,

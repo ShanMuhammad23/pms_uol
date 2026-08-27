@@ -3,6 +3,7 @@ import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-sub
 import { isHeadRole } from "@/lib/auth/home-path";
 import { listFormTemplates, listDirectAssessmentTemplates } from "@/lib/queries/forms";
 import { apiHandler } from "@/lib/api-handler";
+import { isAdminRole } from "@/lib/auth/submission-review-roles";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,9 @@ export const GET = apiHandler(async (request: Request) => {
     const directAssessment = url.searchParams.get("directAssessment") === "true";
 
     const reviewerUserId = auth.user?.id ? Number(auth.user.id) : null;
-    const isHead = isHeadRole(auth.user?.role);
+    const role = auth.user?.role;
+    const isHead = isHeadRole(role);
+    const isAdmin = isAdminRole(role);
     const headEntityId =
       isHead && auth.user?.entityId != null
         ? Number(auth.user.entityId)
@@ -26,6 +29,15 @@ export const GET = apiHandler(async (request: Request) => {
     if (directAssessment) {
       if (reviewerUserId == null || !Number.isFinite(reviewerUserId)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      // Admin roles (SUPER_ADMIN, HR, BOARD) see all direct assessment
+      // templates. Managers only see templates for employees they review.
+      if (isAdmin) {
+        const templates = await listDirectAssessmentTemplates({
+          reviewerUserId: null,
+          headEntityId: null,
+        });
+        return NextResponse.json(templates);
       }
       const templates = await listDirectAssessmentTemplates({
         reviewerUserId,

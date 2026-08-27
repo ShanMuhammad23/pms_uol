@@ -52,13 +52,15 @@ function selectionLabel(
     return placeholder;
   }
 
-  if (selectedValues.length === options.length) {
-    return `All (${options.length})`;
-  }
-
+  // When there's only one option and it's selected, show its label rather
+  // than "All (1)" — the user explicitly chose it as a filter.
   if (selectedValues.length === 1) {
     return options.find((option) => option.value === selectedValues[0])?.label
       ?? selectedValues[0];
+  }
+
+  if (selectedValues.length === options.length) {
+    return `All (${options.length})`;
   }
 
   return `${selectedValues.length} selected`;
@@ -177,7 +179,15 @@ export function MultiSelectFilterDropdown({
   });
 
   const commitSelection = (nextSelected: string[]) => {
-    if (nextSelected.length === 0 || nextSelected.length === allValues.length) {
+    if (nextSelected.length === 0) {
+      onChange(null);
+      return;
+    }
+
+    // Only treat "all selected" as "no filter" when there are multiple
+    // options. When there's a single option, selecting it should apply
+    // as a real filter (otherwise the user can never select it).
+    if (allValues.length > 1 && nextSelected.length === allValues.length) {
       onChange(null);
       return;
     }

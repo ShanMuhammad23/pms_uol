@@ -42,7 +42,7 @@ export const GET = apiHandler(async (_request: Request, context: RouteContext) =
     const data = await getDirectAssessmentData(
       templateId,
       reviewerUserId,
-      true,
+      isHead,
       headEntityId,
     );
 

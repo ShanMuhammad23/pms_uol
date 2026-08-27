@@ -9,6 +9,11 @@ export interface OrgReportNode {
   subtreeStaffCount: number;
   eligible: number;
   formsAssigned: number;
+  formsNotAssigned: number;
+  directScoreEntry: number;
+  managerDirectAssessment: number;
+  performanceMatrixAssigned: number;
+  incrementMatrixAssigned: number;
   selfAssessed: number;
   assessedByManagers: number;
   hrAlignment: number;

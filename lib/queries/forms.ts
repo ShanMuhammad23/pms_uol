@@ -837,10 +837,66 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
 }
 
 export async function listDirectAssessmentTemplates(scope: {
-  reviewerUserId: number;
+  reviewerUserId: number | null;
   headEntityId: number | null;
 }): Promise<FormTemplateListItem[]> {
   const { reviewerUserId, headEntityId } = scope;
+
+  // Admin mode (reviewerUserId === null): no visibility filter — show all
+  // templates with self-assessment-disabled assignments.
+  if (reviewerUserId == null) {
+    const result = await getDbClient().query<FormTemplateListRow>(
+      `SELECT
+         ft.id,
+         ft.title,
+         ft.code,
+         ft.description,
+         ft.cycle_id,
+         ac.fiscal_year,
+         ft.target_category,
+         ft.target_sub_category,
+         ft.self_assessment_enabled,
+         ft.additional_remarks_enabled,
+         COALESCE(qc.question_count, '0') AS question_count,
+         COALESCE(apc.appraisal_count, '0') AS appraisal_count,
+         COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
+         ft.created_at::text,
+         ft.updated_at::text,
+         ft.updated_by::text,
+         ub.first_name AS updated_by_first_name,
+         ub.last_name AS updated_by_last_name,
+         ub.employee_id AS updated_by_employee_id
+       FROM form_templates ft
+       INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
+       LEFT JOIN users ub ON ub.id = ft.updated_by
+       LEFT JOIN (
+         SELECT template_id, COUNT(*)::text AS question_count
+         FROM form_questions
+         GROUP BY template_id
+       ) qc ON qc.template_id = ft.id
+       LEFT JOIN (
+         SELECT template_id, COUNT(*)::text AS appraisal_count
+         FROM appraisals
+         GROUP BY template_id
+       ) apc ON apc.template_id = ft.id
+       INNER JOIN employee_form_assignments efa ON efa.template_id = ft.id
+       INNER JOIN users u ON u.id = efa.employee_id
+         AND u.is_active = TRUE
+         AND u.employee_id <> 'EMP-0001'
+         AND COALESCE(u.assessment_eligibility, true) = true
+         AND efa.self_assessment_disabled = true
+       GROUP BY
+         ft.id,
+         ac.fiscal_year,
+         ub.first_name,
+         ub.last_name,
+         ub.employee_id,
+         qc.question_count,
+         apc.appraisal_count
+       ORDER BY ft.title ASC`,
+    );
+    return result.rows.map(mapFormTemplateListItem);
+  }
 
   const scopedEntityIds =
     headEntityId != null && Number.isFinite(headEntityId)
