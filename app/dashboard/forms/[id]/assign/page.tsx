@@ -44,7 +44,11 @@ export default async function AssignFormPage({ params }: AssignFormPageProps) {
           </p>
         </div>
 
-        <FormEmployeeAssignment templateId={templateId} templateTitle={template.title} />
+        <FormEmployeeAssignment
+          templateId={templateId}
+          templateTitle={template.title}
+          templateCode={template.code}
+        />
       </div>
     );
   });

@@ -19,6 +19,7 @@ interface CategoryAssignmentStepProps {
   onSubCategoryChange: (subCategory: SubCategory) => void;
   templateId?: number;
   templateTitle: string;
+  templateCode?: string | null;
 }
 
 export default function CategoryAssignmentStep({
@@ -30,6 +31,7 @@ export default function CategoryAssignmentStep({
   onCycleChange,
   templateId,
   templateTitle,
+  templateCode,
 }: CategoryAssignmentStepProps) {
   return (
     <div className="space-y-6">
@@ -98,7 +100,11 @@ export default function CategoryAssignmentStep({
       ) : null}
 
       {templateId ? (
-        <FormEmployeeAssignment templateId={templateId} templateTitle={templateTitle} />
+        <FormEmployeeAssignment
+          templateId={templateId}
+          templateTitle={templateTitle}
+          templateCode={templateCode}
+        />
       ) : (
         <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm text-text-primary">
           Employee assignment will be available after you publish this form.

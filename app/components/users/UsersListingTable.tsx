@@ -177,13 +177,16 @@ function renderCell(
   }
 
   if (column.id === "formAssignment") {
+    const formCode = user.formCode?.trim();
     const badge =
       user.directScoreEntry
         ? { label: "DS", title: "Direct Score Entry", className: "bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300" }
         : user.formAssigned
-          ? user.selfAssessmentEnabled
-            ? { label: "✔", title: "Form assigned — Self Assessment enabled", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" }
-            : { label: "MA", title: "Form assigned — Manager Assessment only", className: "bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300" }
+          ? formCode
+            ? { label: formCode, title: `${formCode} — Form assigned`, className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" }
+            : user.selfAssessmentEnabled
+              ? { label: "✔", title: "Form assigned — Self Assessment enabled", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" }
+              : { label: "MA", title: "Form assigned — Manager Assessment only", className: "bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300" }
           : { label: "✖", title: "No form assigned", className: "bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400" };
     return (
       <span

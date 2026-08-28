@@ -2357,7 +2357,11 @@ export default function FormBuilderWizard({
         ) : (
           <div className="flex h-full min-h-0 flex-col overflow-hidden">
             {savedTemplateId ? (
-              <FormEmployeeAssignment templateId={savedTemplateId} templateTitle={title} />
+              <FormEmployeeAssignment
+                templateId={savedTemplateId}
+                templateTitle={title}
+                templateCode={code}
+              />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
                 Saving form...

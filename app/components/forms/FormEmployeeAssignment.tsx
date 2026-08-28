@@ -35,6 +35,7 @@ const DEFAULT_PAGE_SIZE: PageSizeOption = 50;
 interface FormEmployeeAssignmentProps {
   templateId: number;
   templateTitle: string;
+  templateCode?: string | null;
 }
 
 type MultiFilterId =
@@ -274,6 +275,7 @@ type SelfAssessmentConfirmPending =
 export default function FormEmployeeAssignment({
   templateId,
   templateTitle,
+  templateCode,
 }: FormEmployeeAssignmentProps) {
   const queryClient = useQueryClient();
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(() => new Set());
@@ -688,8 +690,16 @@ export default function FormEmployeeAssignment({
             <h2 className="text-base font-semibold">Assign Employees</h2>
             <p className="mt-0.5 text-sm text-white/80">
               Select employees for{" "}
-              <span className="font-medium text-white">{templateTitle}</span>. An
-              employee can only have one form in the same appraisal cycle.
+              <span className="font-medium text-white">{templateTitle}</span>
+              {templateCode?.trim() ? (
+                <>
+                  {" "}
+                  <span className="inline-flex items-center rounded bg-white/15 px-1.5 py-0.5 text-xs font-semibold text-white">
+                    {templateCode.trim()}
+                  </span>
+                </>
+              ) : null}
+              . An employee can only have one form in the same appraisal cycle.
             </p>
           </div>
         </div>

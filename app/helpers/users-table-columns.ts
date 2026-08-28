@@ -73,9 +73,11 @@ export const USERS_TABLE_COLUMNS: UsersTableColumnDef[] = [
       row.directScoreEntry
         ? "DS"
         : row.formAssigned
-          ? row.selfAssessmentEnabled
-            ? row.formCode || "✔"
-            : "MA"
+          ? row.formCode?.trim()
+            ? row.formCode.trim()
+            : row.selfAssessmentEnabled
+              ? "✔"
+              : "MA"
           : "✖",
   },
   {
