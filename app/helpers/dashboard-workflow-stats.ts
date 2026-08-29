@@ -67,10 +67,38 @@ export function isSelfAssessmentEligible(
   return isSubmissionEligible(submission);
 }
 
+/**
+ * Direct assessment employees skip the employee form and are created already
+ * at PENDING_HEAD_REVIEW / manager_level 1. Until a manager completes review
+ * they should stay in Self Assessment Eligible only — not Submitted, and not
+ * Manager 1 Submitted. After review, status advances (manager_level > 1 or
+ * HR/board states) and they count as Submitted on both cards.
+ */
+export function isDirectAssessmentAwaitingFirstManagerReview(
+  submission: Pick<
+    FormSubmissionListItem,
+    "status" | "managerLevel" | "selfAssessmentEnabled"
+  >,
+): boolean {
+  if (submission.selfAssessmentEnabled !== false) {
+    return false;
+  }
+
+  if (submission.status !== "PENDING_HEAD_REVIEW") {
+    return false;
+  }
+
+  return (submission.managerLevel ?? 1) === 1;
+}
+
 /** Self Assessment "Submitted" — past self assessment stage. */
 export function isSelfAssessmentSubmitted(
   submission: FormSubmissionListItem,
 ): boolean {
+  if (isDirectAssessmentAwaitingFirstManagerReview(submission)) {
+    return false;
+  }
+
   return SUBMITTED_SELF_ASSESSMENT_STATES.includes(submission.status);
 }
 
@@ -78,6 +106,10 @@ export function isSelfAssessmentSubmitted(
 export function isManager1Submitted(
   submission: FormSubmissionListItem,
 ): boolean {
+  if (isDirectAssessmentAwaitingFirstManagerReview(submission)) {
+    return false;
+  }
+
   return (
     submission.status === "PENDING_HEAD_REVIEW" ||
     SUBMITTED_FOR_HR_STATES.includes(submission.status)
@@ -180,8 +212,7 @@ export function buildSelfAssessmentStats(
   submissions: FormSubmissionListItem[],
 ): WorkflowStageStats {
   const eligible = countEligibleSubmissions(submissions);
-
-  const submitted = countByStatuses(submissions, SUBMITTED_SELF_ASSESSMENT_STATES);
+  const submitted = submissions.filter(isSelfAssessmentSubmitted).length;
 
   return toWorkflowStageStats(eligible, submitted);
 }
@@ -191,53 +222,24 @@ export type ManagerReviewDualStats = {
   manager2: WorkflowStageStats;
 };
 
-function buildManagerReviewStatsForLevel(
-  submissions: FormSubmissionListItem[],
-  level: 1 | 2,
-): WorkflowStageStats {
-  const pendingAtLevel = submissions.filter(
-    (submission) =>
-      submission.status === "PENDING_HEAD_REVIEW" &&
-      (submission.managerLevel ?? 1) === level,
-  ).length;
-
-  const completed = submissions.filter((submission) => {
-    const managerLevel = submission.managerLevel ?? 1;
-
-    if (level === 1) {
-      return (
-        (submission.status === "PENDING_HEAD_REVIEW" && managerLevel > 1) ||
-        SUBMITTED_FOR_HR_STATES.includes(submission.status)
-      );
-    }
-
-    return SUBMITTED_FOR_HR_STATES.includes(submission.status);
-  }).length;
-
-  // Submitted = still pending at this level + already reviewed (all that reached this stage).
-  const submitted = pendingAtLevel + completed;
-  return {
-    awaiting: submitted,
-    completed,
-    percentageLabel: formatWorkflowPercentage(completed, submitted),
-  };
-}
-
 /**
- * Manager 1 / Manager 2 stats are scoped by appraisals.manager_level.
- * Submitted = pending at level + already reviewed; % = reviewed / submitted.
- * Manager 2 pool only includes submissions that require a second review.
+ * Manager 1 / Manager 2 stats use the same predicates as the card filters.
+ * Submitted = reached this stage; Reviewed = passed it; % = reviewed / submitted.
+ * Direct assessment employees awaiting first manager review are excluded from
+ * Manager 1 Submitted until a manager completes review.
  */
 export function buildManagerReviewStats(
   submissions: FormSubmissionListItem[],
 ): ManagerReviewDualStats {
-  const manager2Pool = submissions.filter((submission) =>
-    submissionRequiresSecondManagerReview(submission),
-  );
-
   return {
-    manager1: buildManagerReviewStatsForLevel(submissions, 1),
-    manager2: buildManagerReviewStatsForLevel(manager2Pool, 2),
+    manager1: toWorkflowStageStats(
+      submissions.filter(isManager1Submitted).length,
+      submissions.filter(isManager1Reviewed).length,
+    ),
+    manager2: toWorkflowStageStats(
+      submissions.filter(isManager2Submitted).length,
+      submissions.filter(isManager2Reviewed).length,
+    ),
   };
 }
 

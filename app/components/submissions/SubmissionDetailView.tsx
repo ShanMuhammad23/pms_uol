@@ -86,7 +86,9 @@ function buildManagerDraftMap(
     const employee = employeeMap.get(question.id);
     const manager1 = manager1Map.get(question.id);
 
-    // For Manager 2 review, fall back to Manager 1's answers, then self-assessment
+    // Prefill from the previous stage so the manager only changes scores
+    // they disagree with: Manager 1 ← self-assessment; Manager 2 ← Manager 1,
+    // then self-assessment. HOD-only questions have no employee answer.
     const fallbackSource =
       managerLevel === 2 ? (manager1 ?? employee) : employee;
     const points =
@@ -100,6 +102,25 @@ function buildManagerDraftMap(
   }
 
   return drafts;
+}
+
+function managerColumnAnswer(
+  question: QuestionRecord,
+  formSelfAssessmentEnabled: boolean,
+  primary: EmployeeFormAnswerRecord | undefined,
+  previousManager: EmployeeFormAnswerRecord | undefined,
+  employee: EmployeeFormAnswerRecord | undefined,
+): EmployeeFormAnswerRecord | undefined {
+  if (primary) return primary;
+  if (previousManager) return previousManager;
+  if (
+    formSelfAssessmentEnabled &&
+    question.selfAssessmentEnabled &&
+    employee
+  ) {
+    return employee;
+  }
+  return undefined;
 }
 
 interface ScoreAdjustmentsPanelProps {
@@ -687,23 +708,29 @@ export default function SubmissionDetailView({
   };
 
   const selfTotal = data.answers.reduce((sum, a) => sum + a.pointsEarned, 0);
-  const manager1Answers = data.manager1Answers ?? [];
-  const manager2Answers = data.manager2Answers ?? [];
-  const manager1Total = manager1Answers.reduce(
-    (sum, a) => sum + a.pointsEarned,
-    0,
-  );
-  const manager2SavedTotal = manager2Answers.reduce(
-    (sum, a) => sum + a.pointsEarned,
-    0,
-  );
-  // Manager 2 total falls back to Manager 1's total, then self total
+  const manager1Total = data.questions.reduce((sum, question) => {
+    if (!isScoredQuestion(question)) return sum;
+    const resolved = managerColumnAnswer(
+      question,
+      selfAssessmentEnabled,
+      manager1AnswerMap.get(question.id),
+      undefined,
+      answerMap.get(question.id),
+    );
+    return sum + (resolved?.pointsEarned ?? 0);
+  }, 0);
   const manager2Total = hasManager2
-    ? manager2Answers.length > 0
-      ? manager2SavedTotal
-      : manager1Answers.length > 0
-        ? manager1Total
-        : selfTotal
+    ? data.questions.reduce((sum, question) => {
+        if (!isScoredQuestion(question)) return sum;
+        const resolved = managerColumnAnswer(
+          question,
+          selfAssessmentEnabled,
+          manager2AnswerMap.get(question.id),
+          manager1AnswerMap.get(question.id),
+          answerMap.get(question.id),
+        );
+        return sum + (resolved?.pointsEarned ?? 0);
+      }, 0)
     : null;
   const managerDraftTotal = [...managerDrafts.values()].reduce((sum, draft) => {
     const value = Number(draft.pointsEarned);
@@ -1046,6 +1073,20 @@ export default function SubmissionDetailView({
                 };
                 const mgr1Answer = manager1AnswerMap.get(question!.id);
                 const mgr2Answer = manager2AnswerMap.get(question!.id);
+                const mgr1Display = managerColumnAnswer(
+                  question!,
+                  selfAssessmentEnabled,
+                  mgr1Answer,
+                  undefined,
+                  answer,
+                );
+                const mgr2Display = managerColumnAnswer(
+                  question!,
+                  selfAssessmentEnabled,
+                  mgr2Answer,
+                  mgr1Answer,
+                  answer,
+                );
                 const isEvenRow = rowIdx % 2 === 0;
 
                 return (
@@ -1143,7 +1184,7 @@ export default function SubmissionDetailView({
                           />
                         ) : (
                           <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
-                            {mgr1Answer?.pointsEarned ?? 0}
+                            {mgr1Display?.pointsEarned ?? 0}
                           </span>
                         )
                       ) : (
@@ -1165,9 +1206,9 @@ export default function SubmissionDetailView({
                             className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                             placeholder="Optional remarks"
                           />
-                        ) : mgr1Answer?.remarks?.trim() ? (
+                        ) : mgr1Display?.remarks?.trim() ? (
                           <p className="whitespace-pre-wrap break-words text-xs text-slate-600 dark:text-slate-300">
-                            {mgr1Answer.remarks}
+                            {mgr1Display.remarks}
                           </p>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -1200,10 +1241,7 @@ export default function SubmissionDetailView({
                               />
                             ) : (
                               <span className="font-bold tabular-nums text-indigo-700 dark:text-indigo-300">
-                                {mgr2Answer?.pointsEarned
-                                  ?? mgr1Answer?.pointsEarned
-                                  ?? answer?.pointsEarned
-                                  ?? 0}
+                                {mgr2Display?.pointsEarned ?? 0}
                               </span>
                             )
                           ) : (
@@ -1224,9 +1262,9 @@ export default function SubmissionDetailView({
                                 className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                                 placeholder="Optional remarks"
                               />
-                            ) : (mgr2Answer?.remarks?.trim() || mgr1Answer?.remarks?.trim() || answer?.remarks?.trim()) ? (
+                            ) : mgr2Display?.remarks?.trim() ? (
                               <p className="whitespace-pre-wrap break-words text-xs text-slate-600 dark:text-slate-300">
-                                {mgr2Answer?.remarks?.trim() || mgr1Answer?.remarks?.trim() || answer?.remarks}
+                                {mgr2Display.remarks}
                               </p>
                             ) : (
                               <span className="text-slate-400">—</span>
