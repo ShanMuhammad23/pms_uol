@@ -1349,13 +1349,19 @@ export async function finishBulkReview(
   return { approved, skipped };
 }
 
+/**
+ * Copy scores/remarks from a source reviewer onto a target reviewer for
+ * questions the target has not yet answered. Existing target answers are
+ * never overwritten (ON CONFLICT DO NOTHING), so a manager who already
+ * scored HOD-only questions still receives self-assessment copies for the
+ * remaining items.
+ */
 async function seedManagerAnswersFromSource(
   appraisalId: number,
-  reviewerUserId: number,
+  targetUserId: number,
   sourceUserId: number,
 ): Promise<void> {
-  const existing = await getAnswersForSubmission(appraisalId, reviewerUserId);
-  if (existing.length > 0) {
+  if (targetUserId === sourceUserId) {
     return;
   }
 
@@ -1368,7 +1374,6 @@ async function seedManagerAnswersFromSource(
     return;
   }
 
-  // BATCH: Single multi-row INSERT with UNNEST instead of looping.
   const questionIds = sourceAnswers.map((a) => a.questionId);
   const pointsArray = sourceAnswers.map((a) => a.pointsEarned);
   const remarksArray = sourceAnswers.map((a) => a.remarks);
@@ -1385,7 +1390,7 @@ async function seedManagerAnswersFromSource(
      )
      SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::text[])
      ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
-    [appraisalId, questionIds, reviewerUserId, pointsArray, remarksArray],
+    [appraisalId, questionIds, targetUserId, pointsArray, remarksArray],
   );
 }
 
@@ -1659,15 +1664,27 @@ export async function getFormSubmissionById(
     reviewerUserId != null &&
     summary.status === "PENDING_HEAD_REVIEW"
   ) {
-    const seedSourceUserId =
-      summary.managerLevel === 2 && summary.manager1UserId != null
-        ? summary.manager1UserId
-        : employeeUserId;
-    await seedManagerAnswersFromSource(
-      id,
-      reviewerUserId,
-      seedSourceUserId,
-    );
+    const manager1Id = summary.manager1UserId ?? null;
+    const manager2Id = summary.manager2UserId ?? null;
+    const managerLevel = summary.managerLevel ?? 1;
+    const copyFromSelf = summary.selfAssessmentEnabled !== false;
+
+    // Manager 1 starts from the employee's self-assessment. Missing
+    // questions only — scores the manager already entered stay put.
+    if (manager1Id != null && copyFromSelf) {
+      await seedManagerAnswersFromSource(id, manager1Id, employeeUserId);
+    }
+
+    // Manager 2 starts from Manager 1, then fills any remaining gaps
+    // from self-assessment. Direct assessment skips the employee copy.
+    if (managerLevel === 2 && manager2Id != null) {
+      if (manager1Id != null) {
+        await seedManagerAnswersFromSource(id, manager2Id, manager1Id);
+      }
+      if (copyFromSelf) {
+        await seedManagerAnswersFromSource(id, manager2Id, employeeUserId);
+      }
+    }
   }
 
   // BATCH: Fetch all four answer sets in parallel instead of sequentially.

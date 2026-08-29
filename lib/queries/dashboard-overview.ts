@@ -44,6 +44,7 @@ interface OverviewRow {
   hr_approval_status: string | null;
   assessment_eligibility: boolean | null;
   ineligibility_reason: string | null;
+  self_assessment_disabled: boolean | null;
 }
 
 async function hasExcelSheetColumns(): Promise<boolean> {
@@ -212,7 +213,7 @@ function mapOverviewRow(
     qualificationInstitute: null,
     qualificationCountry: null,
     submittedAt: null,
-    selfAssessmentEnabled: true,
+    selfAssessmentEnabled: !row.self_assessment_disabled,
     assessmentEligibility: row.assessment_eligibility ?? true,
     ineligibilityReason: row.ineligibility_reason ?? null,
     isReturned: false,
@@ -302,6 +303,7 @@ export async function listDashboardOverview(
        p1.name AS parent_entity_name,
        COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT') AS status,
        ap.manager_level,
+       COALESCE(assigned.self_assessment_disabled, false) AS self_assessment_disabled,
        u.head_id::text AS manager_1_user_id,
        u.manager_2_id::text AS manager_2_user_id,
        ap.initial_rating,
@@ -321,7 +323,7 @@ export async function listDashboardOverview(
        LIMIT 1
      ) ap ON TRUE
      LEFT JOIN LATERAL (
-       SELECT efa.template_id
+       SELECT efa.template_id, efa.self_assessment_disabled
        FROM employee_form_assignments efa
        INNER JOIN form_templates efa_ft ON efa_ft.id = efa.template_id
        WHERE efa.employee_id = u.id
@@ -329,7 +331,12 @@ export async function listDashboardOverview(
            $1::int IS NULL
            OR efa_ft.cycle_id = $1
          )
-       ORDER BY efa.template_id DESC
+       ORDER BY
+         CASE
+           WHEN ap.template_id IS NOT NULL AND efa.template_id = ap.template_id THEN 0
+           ELSE 1
+         END,
+         efa.template_id DESC
        LIMIT 1
      ) assigned ON TRUE
      LEFT JOIN template_max_marks tm
