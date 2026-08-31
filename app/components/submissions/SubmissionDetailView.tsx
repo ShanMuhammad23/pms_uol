@@ -1,7 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ElementType,
+} from "react";
 import {
   fetchFormSubmission,
   approveManagerReview,
@@ -41,7 +48,14 @@ import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScor
 import QuartileBadge from "@/app/components/dashboard/QuartileBadge";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  CalendarDays,
+  Gauge,
+  Network,
+  RotateCcw,
+} from "lucide-react";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
@@ -59,6 +73,76 @@ function clampScore(value: string, maxMarks: number): string {
   if (parsed < 0) return "0";
   if (parsed > maxMarks) return String(maxMarks);
   return value;
+}
+
+function formatNameWithSap(
+  name: string | null | undefined,
+  sap: string | null | undefined,
+): string {
+  const trimmedName = name?.trim() || null;
+  const trimmedSap = sap?.trim() || null;
+  if (trimmedName && trimmedSap) return `${trimmedName} (SAP ${trimmedSap})`;
+  if (trimmedName) return trimmedName;
+  if (trimmedSap) return `SAP ${trimmedSap}`;
+  return "Unassigned";
+}
+
+function displayOrgValue(value: string | null | undefined): string {
+  if (value == null || value.trim() === "") return "—";
+  return value.trim();
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function SubmissionInfoTile({
+  icon: Icon,
+  label,
+  value,
+  accent = false,
+}: {
+  icon: ElementType;
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 rounded-lg border px-3.5 py-3",
+        accent
+          ? "border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40"
+          : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900",
+      )}
+    >
+      <dt
+        className={cn(
+          "flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide",
+          accent
+            ? "text-indigo-600 dark:text-indigo-300"
+            : "text-slate-500 dark:text-slate-400",
+        )}
+      >
+        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          "mt-1.5 wrap-break-word text-sm font-semibold",
+          accent
+            ? "text-indigo-800 dark:text-indigo-200"
+            : "text-slate-900 dark:text-slate-100",
+        )}
+        title={value}
+      >
+        {value}
+      </dd>
+    </div>
+  );
 }
 
 function buildManagerDraftMap(
@@ -600,12 +684,25 @@ export default function SubmissionDetailView({
 
   const hasManager2 = data?.manager2UserId != null;
   const currentManagerLevel = data?.managerLevel ?? 1;
+  const pastHeadReview =
+    data?.status === "PENDING_HR_CALIBRATION" ||
+    data?.status === "PENDING_BOARD_APPROVAL" ||
+    data?.status === "APPROVED" ||
+    data?.status === "COMPLETED";
+  const manager1ReviewComplete =
+    (data?.status === "PENDING_HEAD_REVIEW" && currentManagerLevel > 1) ||
+    pastHeadReview;
+  const manager2ReviewComplete = hasManager2 && pastHeadReview;
   // Manager 2 data is visible to HR/Board/SuperAdmin and Manager 2 themselves.
   // Manager 1 must never see Manager 2 assessment data.
   const showManager2Data =
     isAdminRole ||
     (userRole === "MANAGER" && Number(session?.user?.id) === data?.manager2UserId);
   const selfAssessmentEnabled = data?.selfAssessmentEnabled ?? true;
+  const selfAssessmentComplete =
+    selfAssessmentEnabled &&
+    data?.status != null &&
+    data.status !== "PENDING_SELF_ASSESSMENT";
   const isEligible = data?.assessmentEligibility ?? true;
   const editingManager1 =
     isEligible && data?.canEditManagerReview && currentManagerLevel === 1;
@@ -757,33 +854,84 @@ export default function SubmissionDetailView({
         metaItems={[
           { label: "Employee", value: data.employeeName },
           { label: "SAP ID", value: data.employeeId ?? "—" },
+          { label: "ORG Level 1", value: displayOrgValue(data.orgLevel1Name) },
+          { label: "ORG Level 2", value: displayOrgValue(data.orgLevel2Name) },
           { label: "Form", value: data.templateTitle },
           { label: "Status", value: APPRAISAL_STATUS_LABELS[data.status] },
           { label: "Score", value: `${data.rawScore}/${data.maxRawScore} (${data.scorePercent}%)` },
+          {
+            label: "Manager 1",
+            value: formatNameWithSap(data.manager1Name, data.manager1EmployeeId),
+          },
+          {
+            label: "Manager 2",
+            value: formatNameWithSap(data.manager2Name, data.manager2EmployeeId),
+          },
         ]}
       />
-      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
-            {data.employeeName}
-          </span>
-          {data.employeeId ? (
-            <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
-              SAP {data.employeeId}
-            </span>
-          ) : null}
-          <span
-            className={cn(
-              "rounded-md px-2 py-0.5 text-xs font-semibold",
-              statusStyles[data.status],
-            )}
-          >
-            {APPRAISAL_STATUS_LABELS[data.status]}
-          </span>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {data.templateTitle}
-          </span>
-          <div className="ml-auto no-print flex flex-wrap items-center gap-2">
+      <div className="border-b border-slate-200/50 bg-slate-200 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/40">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3.5">
+            <div
+              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
+              aria-hidden="true"
+            >
+              {getInitials(data.employeeName)}
+            </div>
+            <div className="min-w-0 space-y-2">
+              <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">
+                {data.employeeName}
+              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                {data.employeeId ? (
+                  <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                    SAP {data.employeeId}
+                  </span>
+                ) : null}
+                <span
+                  className={cn(
+                    "rounded-md px-2 py-0.5 text-xs font-semibold",
+                    statusStyles[data.status],
+                  )}
+                >
+                  {APPRAISAL_STATUS_LABELS[data.status]}
+                </span>
+              </div>
+              {data.templateTitle ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {data.templateTitle}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SubmissionInfoTile
+            icon={Gauge}
+            label="Score"
+            value={`${data.rawScore}/${data.maxRawScore} (${data.scorePercent}%)`}
+            accent
+          />
+          <SubmissionInfoTile
+            icon={Building2}
+            label="ORG Level 1"
+            value={displayOrgValue(data.orgLevel1Name)}
+          />
+          <SubmissionInfoTile
+            icon={Network}
+            label="ORG Level 2"
+            value={displayOrgValue(data.orgLevel2Name)}
+          />
+          <SubmissionInfoTile
+            icon={CalendarDays}
+            label="Submitted"
+            value={
+              data.submittedAt
+                ? new Date(data.submittedAt).toLocaleString()
+                : "—"
+            }
+          />
+        </dl>
+          <div className="no-print flex flex-wrap items-center gap-2 h-full">
             {/* Reset Form — admin only */}
             {isAdminRole && rows.length > 0 ? (
               <button
@@ -873,17 +1021,8 @@ export default function SubmissionDetailView({
             />
           </div>
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
-          <span className="font-semibold text-indigo-700 dark:text-indigo-300">
-            Score {data.rawScore}/{data.maxRawScore} ({data.scorePercent}%)
-          </span>
 
-          {data.submittedAt ? (
-            <span className="text-slate-500 dark:text-slate-400">
-              {new Date(data.submittedAt).toLocaleString()}
-            </span>
-          ) : null}
-        </div>
+  
       </div>
 
       {!isEligible ? (
@@ -1345,6 +1484,7 @@ export default function SubmissionDetailView({
                     totalMarks: data.maxRawScore,
                     accentClass:
                       "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+                    completed: selfAssessmentComplete,
                   },
                 ]
               : []),
@@ -1358,6 +1498,11 @@ export default function SubmissionDetailView({
                 (data.additionalRemarksEnabled ?? false)
                   ? manager1OverallRemarks
                   : null,
+              personLabel: formatNameWithSap(
+                data.manager1Name,
+                data.manager1EmployeeId,
+              ),
+              completed: manager1ReviewComplete,
             },
             ...(hasManager2 && showManager2Data
               ? [
@@ -1373,6 +1518,11 @@ export default function SubmissionDetailView({
                       (data.additionalRemarksEnabled ?? false)
                         ? manager2OverallRemarks
                         : null,
+                    personLabel: formatNameWithSap(
+                      data.manager2Name,
+                      data.manager2EmployeeId,
+                    ),
+                    completed: manager2ReviewComplete,
                   },
                 ]
               : []),

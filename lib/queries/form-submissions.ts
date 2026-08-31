@@ -1700,7 +1700,10 @@ export async function getFormSubmissionById(
   }
 
   // BATCH: Fetch all four answer sets in parallel instead of sequentially.
-  const [answers, managerAnswers, manager1Answers, manager2Answers] =
+  const managerIds = [summary.manager1UserId, summary.manager2UserId].filter(
+    (id): id is number => id != null && Number.isFinite(id),
+  );
+  const [answers, managerAnswers, manager1Answers, manager2Answers, managerSapResult] =
     await Promise.all([
       getAnswersForSubmission(id, employeeUserId),
       reviewerUserId != null
@@ -1712,7 +1715,19 @@ export async function getFormSubmissionById(
       summary.manager2UserId != null
         ? getAnswersForSubmission(id, summary.manager2UserId)
         : Promise.resolve([]),
+      managerIds.length > 0
+        ? db.query<{ id: string; employee_id: string }>(
+            `SELECT id::text, employee_id
+             FROM users
+             WHERE id = ANY($1::int[])`,
+            [managerIds],
+          )
+        : Promise.resolve({ rows: [] as { id: string; employee_id: string }[] }),
     ]);
+
+  const managerSapByUserId = new Map(
+    managerSapResult.rows.map((row) => [Number(row.id), row.employee_id]),
+  );
 
   let questions: FormSubmissionDetail["questions"] = [];
   let sections: FormSubmissionDetail["sections"] = [];
@@ -1761,6 +1776,18 @@ export async function getFormSubmissionById(
     templateId: summary.templateId,
     templateTitle: summary.templateTitle,
     templateCode: summary.templateCode,
+    orgLevel1Name: summary.orgLevel1Name,
+    orgLevel2Name: summary.orgLevel2Name,
+    manager1Name: summary.manager1Name,
+    manager1EmployeeId:
+      summary.manager1UserId != null
+        ? (managerSapByUserId.get(summary.manager1UserId) ?? null)
+        : null,
+    manager2Name: summary.manager2Name,
+    manager2EmployeeId:
+      summary.manager2UserId != null
+        ? (managerSapByUserId.get(summary.manager2UserId) ?? null)
+        : null,
     status: summary.status,
     managerLevel: summary.managerLevel,
     manager1UserId: summary.manager1UserId,

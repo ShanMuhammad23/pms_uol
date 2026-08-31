@@ -232,11 +232,6 @@ export default function DirectAssessmentSpreadsheet({
     }
   }
 
-  const editableEmployees = useMemo(
-    () => filteredEmployees.filter((e) => e.canEdit),
-    [filteredEmployees],
-  );
-
   const rows = useMemo(() => (data ? buildTableRows(data) : []), [data]);
 
   const saveMutation = useMutation({
@@ -749,7 +744,7 @@ export default function DirectAssessmentSpreadsheet({
             )}
           </tbody>
           {rows.length > 0 ? (
-            <tfoot>
+            <tfoot className="sticky bottom-0 z-10 shadow-[0_-6px_12px_rgba(15,23,42,0.12)]">
               <tr className="bg-slate-800 dark:bg-slate-950/80">
                 <td
                   colSpan={2}
@@ -790,94 +785,115 @@ export default function DirectAssessmentSpreadsheet({
                   );
                 })}
               </tr>
+              <tr className="border-t border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
+                <td
+                  colSpan={2}
+                  className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300"
+                >
+                  Review actions
+                </td>
+                <td
+                  className="border-r border-slate-200 dark:border-slate-700"
+                  style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
+                />
+                {filteredEmployees.map((emp) => {
+                  const empColId = `emp-${emp.submissionId}`;
+                  const empWidth = getColumnWidth(empColId, DEFAULT_EMPLOYEE_WIDTH);
+                  const empRemarks = remarksDrafts[emp.submissionId] ?? {
+                    manager1: "",
+                    manager2: "",
+                  };
+                  const hasRemarks =
+                    empRemarks.manager1.trim().length > 0 ||
+                    empRemarks.manager2.trim().length > 0;
+                  const remarksEnabled = data.additionalRemarksEnabled ?? false;
+                  const isSavingThis =
+                    saveMutation.isPending &&
+                    saveMutation.variables === emp.submissionId;
+                  const isApprovingThis =
+                    approveMutation.isPending &&
+                    approveMutation.variables === emp.submissionId;
+                  const actionsBusy =
+                    saveMutation.isPending ||
+                    approveMutation.isPending ||
+                    remarksSaving;
+
+                  return (
+                    <td
+                      key={emp.submissionId}
+                      className="border-r border-slate-200 px-1.5 py-2 align-top dark:border-slate-700"
+                      style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
+                    >
+                      {emp.canEdit ? (
+                        <div className="flex flex-col gap-1">
+                          {remarksEnabled ? (
+                            <button
+                              type="button"
+                              onClick={() => openRemarksModal(emp.submissionId)}
+                              disabled={actionsBusy}
+                              className={cn(
+                                "inline-flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-1 text-[11px] font-semibold disabled:opacity-60",
+                                hasRemarks
+                                  ? "border-violet-400 bg-violet-50 text-violet-800 hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60"
+                                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-white/10",
+                              )}
+                              title={
+                                hasRemarks
+                                  ? `Edit remarks for ${emp.employeeName}`
+                                  : `Add remarks for ${emp.employeeName}`
+                              }
+                              aria-label={
+                                hasRemarks
+                                  ? `Edit remarks for ${emp.employeeName}`
+                                  : `Add remarks for ${emp.employeeName}`
+                              }
+                            >
+                              <MessageSquareText className="size-3 shrink-0" />
+                              Remarks
+                              {hasRemarks ? (
+                                <span
+                                  className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-500 dark:bg-violet-400"
+                                  aria-hidden="true"
+                                />
+                              ) : null}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => saveMutation.mutate(emp.submissionId)}
+                            disabled={actionsBusy}
+                            className="inline-flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border border-violet-300 bg-white px-1.5 py-1 text-[11px] font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-800 dark:text-violet-200 dark:hover:bg-violet-950/40"
+                            aria-label={`Save scores for ${emp.employeeName}`}
+                          >
+                            <Save className="size-3 shrink-0" />
+                            {isSavingThis ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              approveMutation.mutate(emp.submissionId)
+                            }
+                            disabled={actionsBusy}
+                            className="inline-flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md bg-primary px-1.5 py-1 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                            aria-label={`Approve review for ${emp.employeeName}`}
+                          >
+                            <CheckCircle className="size-3 shrink-0" />
+                            {isApprovingThis ? "Approving..." : "Approve"}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="block text-center text-xs text-slate-400 dark:text-slate-500">
+                          —
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
             </tfoot>
           ) : null}
         </table>
       </div>
-
-      {editableEmployees.length > 0 ? (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-text-primary">
-            Review Actions
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {editableEmployees.map((emp) => {
-              const empRemarks = remarksDrafts[emp.submissionId] ?? {
-                manager1: "",
-                manager2: "",
-              };
-              const hasRemarks =
-                empRemarks.manager1.trim().length > 0 ||
-                empRemarks.manager2.trim().length > 0;
-              const remarksEnabled =
-                (data.additionalRemarksEnabled ?? false) && rows.length > 0;
-              return (
-                <div
-                  key={emp.submissionId}
-                  className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
-                >
-                  <span className="text-xs font-medium text-text-primary">
-                    {emp.employeeName}
-                  </span>
-                  {remarksEnabled ? (
-                    <button
-                      type="button"
-                      onClick={() => openRemarksModal(emp.submissionId)}
-                      disabled={
-                        saveMutation.isPending ||
-                        approveMutation.isPending ||
-                        remarksSaving
-                      }
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold disabled:opacity-60",
-                        hasRemarks
-                          ? "border-violet-400 bg-violet-50 text-violet-800 hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60"
-                          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/15 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/10",
-                      )}
-                      title={
-                        hasRemarks
-                          ? "Additional remarks already added — click to view/edit"
-                          : "Add additional remarks"
-                      }
-                    >
-                      <MessageSquareText className="size-3" />
-                      Remarks
-                      {hasRemarks ? (
-                        <span
-                          className="ml-0.5 inline-flex h-1.5 w-1.5 rounded-full bg-violet-500 dark:bg-violet-400"
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => saveMutation.mutate(emp.submissionId)}
-                    disabled={
-                      saveMutation.isPending || approveMutation.isPending
-                    }
-                    className="inline-flex items-center gap-1 rounded-md border border-violet-300 bg-white px-2 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
-                  >
-                    <Save className="size-3" />
-                    {saveMutation.isPending ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => approveMutation.mutate(emp.submissionId)}
-                    disabled={
-                      saveMutation.isPending || approveMutation.isPending
-                    }
-                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
-                  >
-                    <CheckCircle className="size-3" />
-                    {approveMutation.isPending ? "Approving..." : "Approve"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
 
       <DirectAssessmentRemarksModal
         open={remarksModalOpen}

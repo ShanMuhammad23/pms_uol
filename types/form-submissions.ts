@@ -146,6 +146,18 @@ export interface FormSubmissionDetail {
   templateTitle: string | null;
   templateCode: string | null;
   templateDescription: string | null;
+  /** Entity with category code C1 on the assignment chain (self or ancestor). */
+  orgLevel1Name: string | null;
+  /** Entity with category code C2 on the assignment chain (self or ancestor). */
+  orgLevel2Name: string | null;
+  /** Display name of the assigned Manager 1 (users.head_id). */
+  manager1Name: string | null;
+  /** SAP / employee_id of the assigned Manager 1. */
+  manager1EmployeeId: string | null;
+  /** Display name of the assigned Manager 2 (users.manager_2_id). */
+  manager2Name: string | null;
+  /** SAP / employee_id of the assigned Manager 2. */
+  manager2EmployeeId: string | null;
   status: AppraisalStatus;
   /** 1 = Manager 1 review; 2 = Manager 2 review. */
   managerLevel: number | null;
