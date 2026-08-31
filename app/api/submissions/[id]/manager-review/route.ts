@@ -25,9 +25,9 @@ function filledByUserIdForManagerReview(
   reviewerUserId: number,
   isAdmin: boolean,
   summary: {
-    managerLevel: number | null;
-    manager1UserId: number | null;
-    manager2UserId: number | null;
+    managerLevel?: number | null;
+    manager1UserId?: number | null;
+    manager2UserId?: number | null;
   },
 ): number {
   if (!isAdmin) {
