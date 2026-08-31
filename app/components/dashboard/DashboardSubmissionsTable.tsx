@@ -34,7 +34,7 @@ import {
 } from "@/app/components/dashboard/StaffListingMasterFilter";
 import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
 import { TopHorizontalScrollbar } from "@/app/components/common/TopHorizontalScrollbar";
-import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
+import { getSubmissionStatusConfig } from "@/app/helpers/dashboard-form-state";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
 import {
@@ -277,16 +277,7 @@ function renderCell(
   const columnId = column.id;
 
   if (columnId === "status") {
-    if (submission.directScoreEntry) {
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700/50"
-        >
-          Direct Score Entry
-        </span>
-      );
-    }
-    const stateConfig = APPRAISAL_STATE_CONFIG[submission.status];
+    const stateConfig = getSubmissionStatusConfig(submission);
     const StateIcon = stateConfig.icon;
     return (
       <span

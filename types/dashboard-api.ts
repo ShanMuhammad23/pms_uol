@@ -1,9 +1,8 @@
 import type { WorkflowStageStats } from "@/app/helpers/dashboard-workflow-stats";
 import type { MasterFilterState } from "@/app/helpers/dashboard-master-filters";
 import type { DashboardTableColumnId } from "@/app/helpers/dashboard-table-columns";
-import type { CardFilterId } from "@/app/helpers/dashboard-types";
+import type { CardFilterId, FormState } from "@/app/helpers/dashboard-types";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
-import type { AppraisalStatus } from "@/types/forms";
 
 export type CountOption = {
   value: string;
@@ -17,7 +16,7 @@ export type DashboardFilterParams = {
   category2EntityIds: number[] | null;
   roleCategories: string[] | null;
   designations: string[] | null;
-  formStates: AppraisalStatus[] | null;
+  formStates: FormState[] | null;
   /** Active dashboard card filter (set when a card number is clicked). */
   cardFilter: CardFilterId | null;
 };

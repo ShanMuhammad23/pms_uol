@@ -17,8 +17,11 @@ import {
   buildSelfAssessmentStats,
   countEligibleSubmissions,
 } from "@/app/helpers/dashboard-workflow-stats";
-import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
-import type { FormState } from "@/app/helpers/dashboard-types";
+import {
+  FORM_STATE_IDS,
+  matchesFormStateOption,
+  normalizeSelectedFormStates,
+} from "@/app/helpers/dashboard-form-state";
 import {
   bandsForAssignedMatrix,
   resolveSubmissionPerformanceQuartile,
@@ -45,7 +48,7 @@ export function toSubmissionFilterState(
     selectedCategory2EntityIds: filters.category2EntityIds,
     selectedRoleCategories: filters.roleCategories,
     selectedDesignations: filters.designations,
-    selectedFormStates: filters.formStates as FormState[] | null,
+    selectedFormStates: normalizeSelectedFormStates(filters.formStates),
     selectedCardFilter: filters.cardFilter ?? null,
     entities,
   };
@@ -278,15 +281,12 @@ export function buildDashboardOverviewCounts(
     (submission) => submission.designation?.trim() || "—",
   ).filter((option) => option.count > 0 && option.value !== "—");
 
-  const formStates = (Object.keys(FORM_STATE_CONFIG) as FormState[]).map(
-    (state) => ({
-      value: state,
-      count: countForDimension(
-        "formState",
-        (submission) => submission.status === state,
-      ),
-    }),
-  );
+  const formStates = FORM_STATE_IDS.map((state) => ({
+    value: state,
+    count: countForDimension("formState", (submission) =>
+      matchesFormStateOption(submission, state),
+    ),
+  }));
 
   const eligibility = {
     "Fully Eligible": 0,

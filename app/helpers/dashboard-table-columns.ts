@@ -3,7 +3,7 @@ import {
   getSubmissionApplicableDurationFactor,
   getSubmissionEligibilityDisplayStatus,
 } from "@/app/helpers/dashboard-eligibility";
-import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
+import { getSubmissionStatusLabel } from "@/app/helpers/dashboard-form-state";
 import { getReportingManagerScore } from "@/app/helpers/score-o";
 import {
   getAdjustedScore as sharedGetAdjustedScore,
@@ -357,11 +357,8 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   status: {
     id: "status",
     label: "Status",
-    width: 160,
-    getValue: (row) =>
-      row.directScoreEntry
-        ? "Direct Score Entry"
-        : APPRAISAL_STATE_CONFIG[row.status]?.label ?? row.status,
+    width: 180,
+    getValue: (row) => getSubmissionStatusLabel(row),
   },
   eligible: {
     id: "eligible",

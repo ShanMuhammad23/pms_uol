@@ -9,7 +9,12 @@ import {
   pruneMultiSelection,
   type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
-import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
+import {
+  FORM_STATE_CONFIG,
+  FORM_STATE_IDS,
+  LEGACY_HEAD_REVIEW_FORM_STATE,
+  normalizeSelectedFormStates,
+} from "@/app/helpers/dashboard-form-state";
 import type { CardFilterId, FormState } from "@/app/helpers/dashboard-types";
 import type { DashboardFilterParams } from "@/types/dashboard-api";
 import type { EntityRecord } from "@/types/entities";
@@ -142,6 +147,20 @@ export function useDashboardFilters({
       "pms:dashboard-filters:formStates",
       null,
     );
+
+  useEffect(() => {
+    if (selectedFormStates === null) {
+      return;
+    }
+    if (
+      (selectedFormStates as readonly string[]).includes(
+        LEGACY_HEAD_REVIEW_FORM_STATE,
+      )
+    ) {
+      setSelectedFormStates(normalizeSelectedFormStates(selectedFormStates));
+    }
+  }, [selectedFormStates, setSelectedFormStates]);
+
   const [selectedCardFilter, setSelectedCardFilter] =
     useSessionStorageState<CardFilterId | null>(
       "pms:dashboard-filters:cardFilter",
@@ -185,7 +204,7 @@ export function useDashboardFilters({
       category2EntityIds: selectedCategory2EntityIds,
       roleCategories: selectedRoleCategories,
       designations: selectedDesignations,
-      formStates: selectedFormStates,
+      formStates: normalizeSelectedFormStates(selectedFormStates),
       cardFilter: selectedCardFilter,
     }),
     [
@@ -267,7 +286,7 @@ export function useDashboardFilters({
 
   const formStateOptions = useMemo<MultiSelectOption[]>(
     () =>
-      (Object.keys(FORM_STATE_CONFIG) as FormState[]).map((state) => ({
+      FORM_STATE_IDS.map((state) => ({
         value: state,
         label: FORM_STATE_CONFIG[state].label,
         count: 0,

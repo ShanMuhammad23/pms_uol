@@ -6,12 +6,14 @@ import {
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
 import type { DashboardTableColumnId } from "@/app/helpers/dashboard-table-columns";
+import {
+  normalizeSelectedFormStates,
+} from "@/app/helpers/dashboard-form-state";
 import type {
   DashboardFilterParams,
   FormSubmissionsQueryParams,
 } from "@/types/dashboard-api";
 import type { CardFilterId } from "@/app/helpers/dashboard-types";
-import { APPRAISAL_STATUSES, type AppraisalStatus } from "@/types/forms";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -55,9 +57,7 @@ export function parseDashboardFilterParams(
   const formStates =
     formStateParts === null
       ? null
-      : (formStateParts.filter((state) =>
-          APPRAISAL_STATUSES.includes(state as AppraisalStatus),
-        ) as AppraisalStatus[]);
+      : normalizeSelectedFormStates(formStateParts);
 
   return {
     searchQuery: searchParams.get("search")?.trim() ?? "",

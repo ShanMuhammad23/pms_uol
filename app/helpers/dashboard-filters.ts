@@ -17,9 +17,12 @@ import {
   isEntityInCachedSubtree,
   type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
+import {
+  matchesFormStateOption,
+  normalizeSelectedFormStates,
+} from "@/app/helpers/dashboard-form-state";
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
-import { APPRAISAL_STATUSES, type AppraisalStatus } from "@/types/forms";
 
 export function formatRoleCategoryValue(
   value: string | null | undefined,
@@ -150,7 +153,7 @@ export function matchesSubmissionEntityMultiFilter(
 export { getEntityDescendantIds };
 
 export function matchesAppraisalFormStates(
-  submissionStatus: AppraisalStatus,
+  submission: Pick<FormSubmissionListItem, "status" | "managerLevel">,
   selectedFormStates: MultiFilterSelection<FormState>,
 ): boolean {
   if (selectedFormStates === null) {
@@ -161,23 +164,24 @@ export function matchesAppraisalFormStates(
     return false;
   }
 
-  return selectedFormStates.some(
-    (state) =>
-      APPRAISAL_STATUSES.includes(state as AppraisalStatus) &&
-      submissionStatus === state,
-  );
+  const normalized = normalizeSelectedFormStates(selectedFormStates);
+  if (normalized === null || normalized.length === 0) {
+    return false;
+  }
+
+  return normalized.some((state) => matchesFormStateOption(submission, state));
 }
 
 /** @deprecated Prefer matchesAppraisalFormStates for multi-select. */
 export function matchesAppraisalFormState(
-  submissionStatus: AppraisalStatus,
+  submission: Pick<FormSubmissionListItem, "status" | "managerLevel">,
   selectedFormState: FormState | "ALL",
 ): boolean {
   if (selectedFormState === "ALL") {
     return true;
   }
 
-  return matchesAppraisalFormStates(submissionStatus, [selectedFormState]);
+  return matchesAppraisalFormStates(submission, [selectedFormState]);
 }
 
 export function matchesSubmissionFilters(
@@ -219,7 +223,7 @@ export function matchesSubmissionFilters(
   );
 
   const matchesFormState = matchesAppraisalFormStates(
-    submission.status,
+    submission,
     filters.selectedFormStates,
   );
 

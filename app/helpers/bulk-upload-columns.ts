@@ -1,4 +1,4 @@
-import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
+import { getSubmissionStatusLabel } from "@/app/helpers/dashboard-form-state";
 import {
   getEligibilityShortLabel,
   getSubmissionApplicableDurationFactor,
@@ -356,9 +356,7 @@ export function buildBulkUploadRowValues(
   const scoreO = getReportingManagerScore(row);
   const adjustedPct = getAdjustedScorePercent(row);
   const normalizedPct = getNormalizedScorePercent(row);
-  const appraisalLabel = row.directScoreEntry
-    ? "Direct Score Entry"
-    : (APPRAISAL_STATE_CONFIG[row.status]?.label ?? row.status);
+  const appraisalLabel = getSubmissionStatusLabel(row);
 
   return {
     employeeName: row.employeeName ?? "",

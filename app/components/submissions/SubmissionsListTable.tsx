@@ -5,7 +5,7 @@ import { ClipboardCheck, Eye } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { fetchFormSubmissions } from "@/lib/queries/form-submissions-client";
-import { APPRAISAL_STATUS_LABELS } from "@/types/forms";
+import { getSubmissionStatusLabel } from "@/app/helpers/dashboard-form-state";
 import { canViewQuartile } from "@/lib/auth/submission-review-roles";
 
 export default function SubmissionsListTable() {
@@ -108,7 +108,7 @@ export default function SubmissionsListTable() {
                 </td>
               ) : null}
               <td className="px-4 py-3 text-text-primary">
-                {APPRAISAL_STATUS_LABELS[submission.status]}
+                {getSubmissionStatusLabel(submission)}
               </td>
               <td className="px-4 py-3 text-text-primary">
                 {submission.submittedAt
