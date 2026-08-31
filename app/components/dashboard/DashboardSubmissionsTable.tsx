@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
+import { BulkUploadStaffModal } from "@/app/components/dashboard/BulkUploadStaffModal";
 import { ResizableHeader } from "@/app/components/common/ResizableHeader";
 import {
   ColumnManagementPanel,
@@ -895,6 +896,7 @@ export function DashboardSubmissionsTable({
     () => new Set(),
   );
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [masterFilterOpen, setMasterFilterOpen] = useState(false);
   const [columnMgmtOpen, setColumnMgmtOpen] = useState(false);
   const [eligibilityModalState, setEligibilityModalState] = useState<{
@@ -1469,6 +1471,16 @@ export function DashboardSubmissionsTable({
             onOpenChange={setMasterFilterOpen}
             activeCount={masterFilterActiveCount}
           />
+          {isHrRole ? (
+            <button
+              type="button"
+              onClick={() => setBulkUploadOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.04]"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Bulk Upload
+            </button>
+          ) : null}
           {hasActiveFilters ? (
             <button
               type="button"
@@ -1987,6 +1999,16 @@ export function DashboardSubmissionsTable({
           onClose={() => setBulkEditOpen(false)}
           onSuccess={() => setSelectedEmployeeIds(new Set())}
           role={role}
+        />
+      ) : null}
+
+      {isHrRole ? (
+        <BulkUploadStaffModal
+          open={bulkUploadOpen}
+          filterParams={filterParams}
+          masterFilters={masterFilters}
+          onClose={() => setBulkUploadOpen(false)}
+          onSuccess={() => setSelectedEmployeeIds(new Set())}
         />
       ) : null}
 

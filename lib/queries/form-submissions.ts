@@ -2310,17 +2310,18 @@ export async function bulkUpdateEmployeeListingFields(
           qualValues,
         );
       } else {
-        // Insert new primary qualification
-        const insertCols: string[] = ["user_id", "is_primary"];
-        const insertPlaceholders: string[] = ["$1", "TRUE"];
-        const insertVals: unknown[] = [userId];
-        let insertIdx = 1;
+        // No primary row yet — insert only the provided columns.
+        // `qualification` is NOT NULL, so use the supplied title or "".
+        const insertCols: string[] = ["user_id", "is_primary", "qualification"];
+        const insertPlaceholders: string[] = ["$1", "TRUE", "$2"];
+        const insertVals: unknown[] = [
+          userId,
+          updatesQualification && typeof fields.qualification === "string"
+            ? fields.qualification
+            : "",
+        ];
+        let insertIdx = 2;
 
-        if (updatesQualification) {
-          insertCols.push("qualification");
-          insertVals.push(fields.qualification ?? null);
-          insertPlaceholders.push(`$${++insertIdx}`);
-        }
         if (updatesQualificationYear) {
           insertCols.push("year");
           insertVals.push(fields.qualificationYear ?? null);
