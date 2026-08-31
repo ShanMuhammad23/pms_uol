@@ -24,6 +24,7 @@ export const ASSESSMENT_STATUS_OPTIONS: { value: AssessmentStatusFilter; label: 
 ];
 
 export interface DirectAssessmentFilterState {
+  searchQuery: string;
   selectedDesignations: MultiFilterSelection<string>;
   selectedRoleCategories: MultiFilterSelection<string>;
   selectedAssessmentStatuses: MultiFilterSelection<AssessmentStatusFilter>;
@@ -33,6 +34,7 @@ export interface DirectAssessmentFilterState {
 }
 
 export const EMPTY_DIRECT_ASSESSMENT_FILTER_STATE: DirectAssessmentFilterState = {
+  searchQuery: "",
   selectedDesignations: null,
   selectedRoleCategories: null,
   selectedAssessmentStatuses: null,
@@ -73,12 +75,28 @@ export type DirectAssessmentFilterDimension =
  * *except* X's own filter, so users can see how many records each option
  * would add/remove.
  */
+function matchesDirectAssessmentSearch(
+  emp: Pick<DirectAssessmentEmployee, "employeeId" | "employeeName">,
+  searchQuery: string,
+): boolean {
+  const query = searchQuery.trim().toLowerCase();
+  if (!query) return true;
+  return (
+    emp.employeeName.toLowerCase().includes(query) ||
+    emp.employeeId.toLowerCase().includes(query)
+  );
+}
+
 function matchesDirectAssessmentFiltersExcluding(
   emp: DirectAssessmentEmployee,
   filters: DirectAssessmentFilterState,
   entities: EntityRecord[],
   excludeDimension: DirectAssessmentFilterDimension | null,
 ): boolean {
+  if (!matchesDirectAssessmentSearch(emp, filters.searchQuery)) {
+    return false;
+  }
+
   // Designation filter
   if (
     excludeDimension !== "designation" &&
@@ -194,15 +212,7 @@ export function filterDirectAssessmentEmployees(
   filters: DirectAssessmentFilterState,
   entities: EntityRecord[],
 ): DirectAssessmentEmployee[] {
-  const hasActiveFilters =
-    filters.selectedDesignations !== null ||
-    filters.selectedRoleCategories !== null ||
-    filters.selectedAssessmentStatuses !== null ||
-    filters.selectedCategory0EntityIds !== null ||
-    filters.selectedCategory1EntityIds !== null ||
-    filters.selectedCategory2EntityIds !== null;
-
-  if (!hasActiveFilters) return employees;
+  if (!hasActiveDirectAssessmentFilters(filters)) return employees;
 
   return employees.filter((emp) =>
     matchesDirectAssessmentFilters(emp, filters, entities),
@@ -213,6 +223,7 @@ export function hasActiveDirectAssessmentFilters(
   filters: DirectAssessmentFilterState,
 ): boolean {
   return (
+    filters.searchQuery.trim() !== "" ||
     filters.selectedDesignations !== null ||
     filters.selectedRoleCategories !== null ||
     filters.selectedAssessmentStatuses !== null ||
@@ -224,6 +235,7 @@ export function hasActiveDirectAssessmentFilters(
 
 export interface UseDirectAssessmentFiltersResult {
   filterState: DirectAssessmentFilterState;
+  searchQuery: string;
   selectedDesignations: string[] | null;
   selectedRoleCategories: string[] | null;
   selectedAssessmentStatuses: string[] | null;
@@ -237,6 +249,7 @@ export interface UseDirectAssessmentFiltersResult {
   category1Options: MultiSelectOption[];
   category2Options: MultiSelectOption[];
   hasActiveFilters: boolean;
+  handleSearchQueryChange: (value: string) => void;
   handleDesignationChange: (values: string[] | null) => void;
   handleRoleCategoryChange: (values: string[] | null) => void;
   handleAssessmentStatusChange: (values: string[] | null) => void;
@@ -329,6 +342,10 @@ export function useDirectAssessmentFilters(
   employees: DirectAssessmentEmployee[],
   entities: EntityRecord[],
 ): UseDirectAssessmentFiltersResult {
+  const [searchQuery, setSearchQuery] = useSessionStorageState<string>(
+    "pms:da-filters:search",
+    "",
+  );
   const [selectedDesignations, setSelectedDesignations] =
     useSessionStorageState<MultiFilterSelection<string>>(
       "pms:da-filters:designations",
@@ -392,6 +409,7 @@ export function useDirectAssessmentFilters(
   // option's own dimension).
   const filterState: DirectAssessmentFilterState = useMemo(
     () => ({
+      searchQuery,
       selectedDesignations,
       selectedRoleCategories,
       selectedAssessmentStatuses,
@@ -400,6 +418,7 @@ export function useDirectAssessmentFilters(
       selectedCategory2EntityIds: prunedCategory2,
     }),
     [
+      searchQuery,
       selectedDesignations,
       selectedRoleCategories,
       selectedAssessmentStatuses,
@@ -521,6 +540,10 @@ export function useDirectAssessmentFilters(
 
   const hasActiveFilters = hasActiveDirectAssessmentFilters(filterState);
 
+  const handleSearchQueryChange = useCallback((value: string) => {
+    setSearchQuery(value);
+  }, []);
+
   const handleDesignationChange = useCallback((values: string[] | null) => {
     setSelectedDesignations(values);
   }, []);
@@ -551,6 +574,7 @@ export function useDirectAssessmentFilters(
   }, []);
 
   const clearAllFilters = useCallback(() => {
+    setSearchQuery("");
     setSelectedDesignations(null);
     setSelectedRoleCategories(null);
     setSelectedAssessmentStatuses(null);
@@ -561,6 +585,7 @@ export function useDirectAssessmentFilters(
 
   return {
     filterState,
+    searchQuery,
     selectedDesignations,
     selectedRoleCategories,
     selectedAssessmentStatuses:
@@ -577,6 +602,7 @@ export function useDirectAssessmentFilters(
     category1Options,
     category2Options,
     hasActiveFilters,
+    handleSearchQueryChange,
     handleDesignationChange,
     handleRoleCategoryChange,
     handleAssessmentStatusChange,

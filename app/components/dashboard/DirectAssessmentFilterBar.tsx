@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Briefcase, Building2, IdCard, RotateCcw, Tags } from "lucide-react";
+import { Briefcase, Building2, IdCard, RotateCcw, Search, Tags } from "lucide-react";
 import { FilterChip, type FilterChipColor } from "@/app/components/dashboard/FilterChip";
 import {
   MultiSelectFilterDropdown,
@@ -46,6 +46,8 @@ interface DirectAssessmentFilterBarProps {
   onRemoveCategory0: () => void;
   onRemoveCategory1: () => void;
   onRemoveCategory2: () => void;
+  onSearchQueryChange: (value: string) => void;
+  onRemoveSearch: () => void;
   hasActiveFilters: boolean;
 }
 
@@ -87,6 +89,8 @@ export function DirectAssessmentFilterBar({
   onRemoveCategory0,
   onRemoveCategory1,
   onRemoveCategory2,
+  onSearchQueryChange,
+  onRemoveSearch,
   hasActiveFilters,
 }: DirectAssessmentFilterBarProps) {
   const entitySelections = [
@@ -103,6 +107,13 @@ export function DirectAssessmentFilterBar({
 
   const activeFilters: ActiveDirectAssessmentFilter[] = [];
 
+  if (filterState.searchQuery.trim()) {
+    activeFilters.push({
+      label: `Search: ${filterState.searchQuery.trim()}`,
+      onRemove: onRemoveSearch,
+      color: "blue",
+    });
+  }
   if (filterState.selectedCategory0EntityIds !== null) {
     activeFilters.push({
       label: formatMultiChipLabel(
@@ -179,6 +190,17 @@ export function DirectAssessmentFilterBar({
     <div className="mb-4 space-y-3">
       <div className="rounded-md border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
         <div className="border-t border-slate-200 px-4 pb-4 pt-3 dark:border-white/10">
+          <div className="relative mb-3 max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={filterState.searchQuery}
+              onChange={(event) => onSearchQueryChange(event.target.value)}
+              placeholder="Search by name or SAP"
+              aria-label="Search by name or SAP"
+              className="w-full rounded-md border border-slate-200 bg-white py-2 pl-10 pr-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-violet-400 focus:ring-1 focus:ring-violet-300/50 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-500 dark:focus:ring-violet-600/40"
+            />
+          </div>
           <div className="grid gap-3 grid-cols-[repeat(6,minmax(0,1fr))]">
             {ENTITY_FILTER_LEVELS.map((level, index) => (
               <MultiSelectFilterDropdown

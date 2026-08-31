@@ -8,6 +8,10 @@ import { isHeadRole } from "@/lib/auth/home-path";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
 import { requireSubmissionAccessApi } from "@/lib/auth/require-submission-reviewer";
 import {
+  getReviewingManagerUserId,
+  toEmployeeManagers,
+} from "@/app/helpers/manager-review";
+import {
   FormSubmissionError,
   approveManagerReview,
   getFormSubmissionById,
@@ -16,6 +20,25 @@ import {
 } from "@/lib/queries/form-submissions";
 import type { SaveManagerReviewInput } from "@/types/employee-forms";
 import { apiHandler } from "@/lib/api-handler";
+
+function filledByUserIdForManagerReview(
+  reviewerUserId: number,
+  isAdmin: boolean,
+  summary: {
+    managerLevel: number | null;
+    manager1UserId: number | null;
+    manager2UserId: number | null;
+  },
+): number {
+  if (!isAdmin) {
+    return reviewerUserId;
+  }
+  const assigned = getReviewingManagerUserId(
+    toEmployeeManagers(summary),
+    summary.managerLevel ?? 1,
+  );
+  return assigned ?? reviewerUserId;
+}
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -80,9 +103,15 @@ export const PUT = apiHandler(async (request: Request, context: RouteContext) =>
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
     }
 
+    const filledByUserId = filledByUserIdForManagerReview(
+      reviewerUserId,
+      canReviewSubmissions(role),
+      summary,
+    );
+
     const managerAnswers = await saveManagerReviewAnswers(
       submissionId,
-      reviewerUserId,
+      filledByUserId,
       body.answers,
       detail.questions,
       {

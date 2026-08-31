@@ -26,7 +26,7 @@ export default function DirectAssessmentTab({
   role,
 }: DirectAssessmentTabProps) {
   const showSplitViews = isAdminRole(role ?? undefined);
-  const [view, setView] = useState<DirectAssessmentTemplateScope>("managed");
+  const [view, setView] = useState<DirectAssessmentTemplateScope>("all");
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
     null,
   );

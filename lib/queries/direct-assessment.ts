@@ -91,6 +91,11 @@ export async function getDirectAssessmentData(
    * include entity-subtree visibility.
    */
   managedOnly = false,
+  /**
+   * Super Admin / HR / Board. In the org-wide list (`managedOnly` false)
+   * they may score any pending employee, not only people they manage.
+   */
+  isAdmin = false,
 ): Promise<DirectAssessmentData | null> {
   const template = await getFormTemplateById(templateId);
   if (!template) {
@@ -182,11 +187,15 @@ export async function getDirectAssessmentData(
 
     const assignedReviewerAtLevel =
       (managerLevel ?? 1) === 2 ? manager2UserId : manager1UserId;
+    const isAssignedReviewer = assignedReviewerAtLevel === reviewerUserId;
+    // Org-wide admin view: score anyone still in manager review.
+    // "My Direct Assessments" stays limited to people the admin manages.
+    const adminMayEditAnyone = isAdmin && !managedOnly;
 
     const canEdit =
       submissionId !== 0 &&
       status === "PENDING_HEAD_REVIEW" &&
-      assignedReviewerAtLevel === reviewerUserId;
+      (isAssignedReviewer || adminMayEditAnyone);
 
     return {
       submissionId,
@@ -332,10 +341,22 @@ export async function getDirectAssessmentData(
     if (emp.submissionId === 0) continue;
 
     if (emp.canEdit) {
-      managerAnswersBySubmission[emp.submissionId] = getAnswersForUser(
-        emp.submissionId,
-        reviewerUserId,
-      );
+      const assignedReviewerId =
+        (emp.managerLevel ?? 1) === 2
+          ? emp.manager2UserId ?? emp.manager1UserId
+          : emp.manager1UserId;
+      const assignedAnswers =
+        assignedReviewerId != null
+          ? getAnswersForUser(emp.submissionId, assignedReviewerId)
+          : [];
+      const ownAnswers = getAnswersForUser(emp.submissionId, reviewerUserId);
+      // Admin proxying a manager should see that manager's scores (Score O).
+      managerAnswersBySubmission[emp.submissionId] =
+        assignedReviewerId === reviewerUserId
+          ? ownAnswers
+          : assignedAnswers.length > 0
+            ? assignedAnswers
+            : ownAnswers;
     } else {
       const lastReviewerId =
         (emp.managerLevel ?? 1) === 2

@@ -52,6 +52,7 @@ export const GET = apiHandler(async (request: Request, context: RouteContext) =>
       isHead,
       headEntityId,
       managedOnly,
+      isAdmin,
     );
 
     if (!data) {

@@ -468,6 +468,8 @@ export default function DirectAssessmentSpreadsheet({
           onRemoveCategory0={() => filters.handleCategory0EntityChange(null)}
           onRemoveCategory1={() => filters.handleCategory1EntityChange(null)}
           onRemoveCategory2={() => filters.handleCategory2EntityChange(null)}
+          onSearchQueryChange={filters.handleSearchQueryChange}
+          onRemoveSearch={() => filters.handleSearchQueryChange("")}
           hasActiveFilters={filters.hasActiveFilters}
         />
         <div className="rounded-md border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
@@ -538,6 +540,8 @@ export default function DirectAssessmentSpreadsheet({
         onRemoveCategory0={() => filters.handleCategory0EntityChange(null)}
         onRemoveCategory1={() => filters.handleCategory1EntityChange(null)}
         onRemoveCategory2={() => filters.handleCategory2EntityChange(null)}
+        onSearchQueryChange={filters.handleSearchQueryChange}
+        onRemoveSearch={() => filters.handleSearchQueryChange("")}
         hasActiveFilters={filters.hasActiveFilters}
       />
 
