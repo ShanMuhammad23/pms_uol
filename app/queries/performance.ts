@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DASHBOARD_QUERY_CACHE } from "@/app/queries/query-cache";
 import { queryKeys } from "@/app/queries/keys";
 import { MOCK_PERFORMANCE_MATRIX } from "@/app/helpers/dashboard-performance-matrix";
+import { collapsePerformanceMatrixByLevelName } from "@/lib/performance-matrix";
 import { fetchDashboardFinancialYears } from "@/lib/queries/financial-years-client";
 import { fetchInstitutionalQuotaChartRows } from "@/lib/queries/institutional-quotas-client";
 import { fetchDashboardPerformanceMatrix } from "@/lib/queries/performance-matrices-client";
@@ -57,11 +58,10 @@ export function useInstitutionalQuotaChartQuery(
 export function useMatrixForDistribution(
   performanceMatrix: PerformanceLevelWithQuartiles[] | undefined,
 ) {
-  return useMemo(
-    () =>
-      performanceMatrix && performanceMatrix.length > 0
-        ? performanceMatrix
-        : MOCK_PERFORMANCE_MATRIX,
-    [performanceMatrix],
-  );
+  return useMemo(() => {
+    if (performanceMatrix && performanceMatrix.length > 0) {
+      return collapsePerformanceMatrixByLevelName(performanceMatrix);
+    }
+    return MOCK_PERFORMANCE_MATRIX;
+  }, [performanceMatrix]);
 }

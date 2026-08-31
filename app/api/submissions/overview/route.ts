@@ -7,7 +7,7 @@ import { resolveEntitySubtreeIds } from "@/lib/queries/entity-scope";
 import { listEntities } from "@/lib/queries/entities";
 import { listDashboardOverview } from "@/lib/queries/dashboard-overview";
 import { buildDashboardOverviewCounts } from "@/lib/queries/dashboard-overview-counts";
-import { getActiveFinancialYearQuartileBands } from "@/lib/queries/performance-rating";
+import { getActiveFinancialYearQuartileBandsByMatrixLabel } from "@/lib/queries/performance-rating";
 import type { MatrixScoreType } from "@/lib/performance-rating";
 import { apiHandler } from "@/lib/api-handler";
 
@@ -63,14 +63,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
         ? (scoreTypeParam as MatrixScoreType)
         : "normalized";
 
-    const [overview, entities, quartileBands] = await Promise.all([
+    const [overview, entities, bandsByLabel] = await Promise.all([
       listDashboardOverview({
         scopedEntityIds,
         managedByUserId,
       }),
       listEntities(),
-      getActiveFinancialYearQuartileBands(),
+      getActiveFinancialYearQuartileBandsByMatrixLabel(),
     ]);
+    const quartileBands = [...bandsByLabel.values()].flat();
 
     let scopedOverview = overview;
     if (isHead) {
@@ -93,6 +94,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
         entities,
         quartileBands,
         scoreType,
+        bandsByLabel,
       ),
     );
   } catch (error) {

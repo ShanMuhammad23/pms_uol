@@ -49,6 +49,8 @@ export type DashboardOverviewCounts = {
   ratingQuartileCounts: Array<{
     performanceLevelId: number;
     quartileId: number;
+    performanceLevelName: string;
+    quartileName: string;
     count: number;
   }>;
   chartEmployeeCount: number;

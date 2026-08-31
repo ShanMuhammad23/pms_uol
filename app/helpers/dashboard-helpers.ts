@@ -28,6 +28,28 @@ const NAMED_LEVEL_COLORS: Record<string, string> = {
   Unsatisfactory: "bg-rose-500",
 };
 
+/** Staff-listing Rating (O) abbreviations → canonical performance level names. */
+const RATING_CODE_TO_LEVEL: Record<string, string> = {
+  OS: "Outstanding",
+  EX: "Excellent",
+  ST: "Strong",
+  IN: "Improvement Needed",
+  UN: "Unsatisfactory",
+};
+
+export function canonicalPerformanceLevelName(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.length <= 3) {
+    const fromCode = RATING_CODE_TO_LEVEL[trimmed.toUpperCase()];
+    if (fromCode) return fromCode;
+  }
+  const named = Object.keys(NAMED_LEVEL_COLORS).find(
+    (key) => key.toLowerCase() === trimmed.toLowerCase(),
+  );
+  return named ?? trimmed;
+}
+
 const NAMED_LEVEL_TINTS: Record<string, string> = {
   Outstanding:
     "bg-violet-500/15 text-violet-800 border-violet-300 dark:text-violet-200 dark:border-violet-500/40",
@@ -53,8 +75,9 @@ export const getPerformanceLevelColor = (
   performanceLevel: string,
   index = 0,
 ) => {
+  const key = canonicalPerformanceLevelName(performanceLevel);
   return (
-    NAMED_LEVEL_COLORS[performanceLevel] ??
+    NAMED_LEVEL_COLORS[key] ??
     PERFORMANCE_LEVEL_COLORS[index % PERFORMANCE_LEVEL_COLORS.length]
   );
 };
@@ -63,8 +86,9 @@ export const getPerformanceLevelTint = (
   performanceLevel: string,
   index = 0,
 ) => {
+  const key = canonicalPerformanceLevelName(performanceLevel);
   return (
-    NAMED_LEVEL_TINTS[performanceLevel] ??
+    NAMED_LEVEL_TINTS[key] ??
     PERFORMANCE_LEVEL_TINTS[index % PERFORMANCE_LEVEL_TINTS.length]
   );
 };

@@ -25,6 +25,10 @@ interface OverviewRow {
   manager_level: number | null;
   manager_1_user_id: string | null;
   manager_2_user_id: string | null;
+  manager_1_score: string | null;
+  manager_2_score: string | null;
+  direct_score_entry: boolean | null;
+  assigned_performance_matrix_label: string | null;
   initial_rating: PerformanceRating | null;
   calibrated_rating: PerformanceRating | null;
   normalized_score: string | null;
@@ -145,7 +149,7 @@ function mapOverviewRow(
     templateTitle: null,
     templateCode: null,
     formAssigned: false,
-    directScoreEntry: false,
+    directScoreEntry: Boolean(row.direct_score_entry),
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: null,
     parentEntityName: row.parent_entity_name,
@@ -166,11 +170,8 @@ function mapOverviewRow(
         ? Number(((rawScore / maxRawScore) * 100).toFixed(2))
         : 0,
     scoreO: toNumber(row.initial_score_numeric) ?? toNumber(row.system_raw_score),
-    // Overview rows do not aggregate per-manager answer totals; the reporting
-    // manager score is resolved only for the staff listing. Null here keeps the
-    // type satisfied without changing overview/counts calculations.
-    manager1Score: null,
-    manager2Score: null,
+    manager1Score: toNumber(row.manager_1_score),
+    manager2Score: toNumber(row.manager_2_score),
     ratingO: row.initial_rating,
     creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
     pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
@@ -198,7 +199,7 @@ function mapOverviewRow(
     currentSalary: null,
     previousSalary: null,
     applicableSalaryForIncrement: null,
-    assignedPerformanceMatrix: null,
+    assignedPerformanceMatrix: row.assigned_performance_matrix_label,
     applicableMatrix: null,
     applicableIncrementPercent: null,
     incrementPerMatrix: null,
@@ -306,6 +307,30 @@ export async function listDashboardOverview(
        COALESCE(assigned.self_assessment_disabled, false) AS self_assessment_disabled,
        u.head_id::text AS manager_1_user_id,
        u.manager_2_id::text AS manager_2_user_id,
+       (
+         SELECT SUM(aa.points_earned)::text
+         FROM appraisal_answers aa
+         WHERE aa.appraisal_id = ap.id
+           AND aa.filled_by_id = u.head_id
+       ) AS manager_1_score,
+       (
+         SELECT SUM(aa.points_earned)::text
+         FROM appraisal_answers aa
+         WHERE aa.appraisal_id = ap.id
+           AND aa.filled_by_id = u.manager_2_id
+       ) AS manager_2_score,
+       (
+         EXISTS (
+           SELECT 1
+           FROM direct_score_entry_assignments dsea
+           WHERE dsea.employee_id = u.id
+             AND (
+               $1::int IS NULL
+               OR dsea.cycle_id = $1
+             )
+         )
+       ) AS direct_score_entry,
+       assigned_performance_matrix.matrix_label AS assigned_performance_matrix_label,
        ap.initial_rating,
        ap.calibrated_rating,
        ${scoreSelect}
@@ -339,6 +364,15 @@ export async function listDashboardOverview(
          efa.template_id DESC
        LIMIT 1
      ) assigned ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT epma.matrix_label
+       FROM employee_performance_matrix_assignments epma
+       INNER JOIN financial_years fy
+         ON fy.id = epma.financial_year_id
+        AND fy.is_active = TRUE
+       WHERE epma.employee_id = u.id
+       LIMIT 1
+     ) assigned_performance_matrix ON TRUE
      LEFT JOIN template_max_marks tm
        ON tm.template_id = COALESCE(ap.template_id, assigned.template_id)
      LEFT JOIN entities ent ON ent.id = u.entity_id

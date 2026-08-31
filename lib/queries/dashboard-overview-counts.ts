@@ -20,6 +20,7 @@ import {
 import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import type { FormState } from "@/app/helpers/dashboard-types";
 import {
+  bandsForAssignedMatrix,
   resolveSubmissionPerformanceQuartile,
   resolveSubmissionPerformanceQuartileByType,
   type MatrixScoreType,
@@ -75,43 +76,91 @@ function countByValue(
   );
 }
 
+function bandsForSubmission(
+  submission: FormSubmissionListItem,
+  fallbackBands: PerformanceQuartileBand[],
+  bandsByLabel?: Map<string, PerformanceQuartileBand[]>,
+): PerformanceQuartileBand[] {
+  return bandsForAssignedMatrix(
+    submission.assignedPerformanceMatrix,
+    bandsByLabel,
+    fallbackBands,
+  );
+}
+
 function buildRatingQuartileCounts(
   submissions: FormSubmissionListItem[],
   bands: PerformanceQuartileBand[],
   scoreType: MatrixScoreType = "normalized",
+  bandsByLabel?: Map<string, PerformanceQuartileBand[]>,
 ): DashboardOverviewCounts["ratingQuartileCounts"] {
-  const counts = new Map<string, number>();
+  const counts = new Map<
+    string,
+    {
+      performanceLevelId: number;
+      quartileId: number;
+      performanceLevelName: string;
+      quartileName: string;
+      count: number;
+    }
+  >();
 
-  for (const band of bands) {
-    counts.set(`${band.performanceLevelId}-${band.quartileId}`, 0);
-  }
+  const bump = (
+    performanceLevelId: number,
+    quartileId: number,
+    performanceLevelName: string,
+    quartileName: string,
+  ) => {
+    const key = `${performanceLevelId}-${quartileId}`;
+    const existing = counts.get(key);
+    if (existing) {
+      existing.count += 1;
+      return;
+    }
+    counts.set(key, {
+      performanceLevelId,
+      quartileId,
+      performanceLevelName,
+      quartileName,
+      count: 1,
+    });
+  };
 
   for (const submission of submissions) {
     if (!contributesToMatrixByScoreType(submission, scoreType)) continue;
 
-    const resolved = resolveSubmissionPerformanceQuartileByType(submission, bands, scoreType);
+    const resolved = resolveSubmissionPerformanceQuartileByType(
+      submission,
+      bandsForSubmission(submission, bands, bandsByLabel),
+      scoreType,
+    );
     if (!resolved) continue;
 
-    const key = `${resolved.performanceLevelId}-${resolved.quartileId}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    bump(
+      resolved.performanceLevelId,
+      resolved.quartileId,
+      resolved.performanceLevelName,
+      resolved.quartileName,
+    );
   }
 
-  return [...counts.entries()].map(([key, count]) => {
-    const [performanceLevelId, quartileId] = key.split("-").map(Number);
-    return { performanceLevelId, quartileId, count };
-  });
+  return [...counts.values()];
 }
 
 function buildRatingDistribution(
   submissions: FormSubmissionListItem[],
   bands: PerformanceQuartileBand[],
+  bandsByLabel?: Map<string, PerformanceQuartileBand[]>,
 ): CountOption[] {
   const counts = new Map<string, number>();
 
   for (const submission of submissions) {
     if (!contributesToPerformanceDistribution(submission)) continue;
 
-    const resolved = resolveSubmissionPerformanceQuartile(submission, bands);
+    const resolved = resolveSubmissionPerformanceQuartile(
+      submission,
+      bandsForSubmission(submission, bands, bandsByLabel),
+    );
     if (!resolved) continue;
 
     const bucket = resolved.performanceLevelName;
@@ -127,6 +176,7 @@ export function buildDashboardOverviewCounts(
   entities: EntityRecord[],
   quartileBands: PerformanceQuartileBand[],
   scoreType: MatrixScoreType = "normalized",
+  bandsByMatrixLabel?: Map<string, PerformanceQuartileBand[]>,
 ): DashboardOverviewCounts {
   const filterState = toSubmissionFilterState(filters, entities);
   const filtered = submissions.filter((submission) =>
@@ -271,8 +321,17 @@ export function buildDashboardOverviewCounts(
       hrAlignment: buildHrAlignmentStats(filtered),
       boardApproval: buildBoardApprovalStats(filtered),
     },
-    ratingDistribution: buildRatingDistribution(filtered, quartileBands),
-    ratingQuartileCounts: buildRatingQuartileCounts(filtered, quartileBands, scoreType),
+    ratingDistribution: buildRatingDistribution(
+      filtered,
+      quartileBands,
+      bandsByMatrixLabel,
+    ),
+    ratingQuartileCounts: buildRatingQuartileCounts(
+      filtered,
+      quartileBands,
+      scoreType,
+      bandsByMatrixLabel,
+    ),
     chartEmployeeCount: filtered.filter(contributesToPerformanceDistribution)
       .length,
   };

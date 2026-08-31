@@ -76,3 +76,38 @@ export function getMatrixQuartileColumnHeaders(
 
   return headers;
 }
+
+/**
+ * One row per unique performance level name. Multiple matrices often share
+ * the same level names with different score bands; the dashboard grid must
+ * not list duplicates. Counts are matched by name after each employee is
+ * resolved against their assigned matrix.
+ */
+/** "IN-Q4", "Q4", "Quartile 4" → 4. Used to align counts across matrices. */
+export function parseQuartileSequenceNumber(
+  quartileName: string | null | undefined,
+): number | null {
+  const text = quartileName?.trim();
+  if (!text) return null;
+  const match = text.match(/(?:q(?:uartile)?[\s-]*)(\d+)\s*$/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+export function collapsePerformanceMatrixByLevelName(
+  levels: PerformanceLevelWithQuartiles[],
+): PerformanceLevelWithQuartiles[] {
+  const sorted = sortPerformanceMatrix(levels);
+  const seen = new Map<string, PerformanceLevelWithQuartiles>();
+  for (const level of sorted) {
+    const key = level.name.trim().toLowerCase();
+    if (!seen.has(key)) {
+      seen.set(key, level);
+    }
+  }
+  return [...seen.values()].sort(
+    (left, right) =>
+      left.sortOrder - right.sortOrder || left.name.localeCompare(right.name),
+  );
+}

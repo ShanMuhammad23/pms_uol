@@ -11,6 +11,7 @@ import {
   getActiveFinancialYearQuartileBandsByMatrixLabel,
   getActiveIncrementPercentageLookup,
   resolveSubmissionPerformanceQuartile,
+  bandsForAssignedMatrix,
 } from "@/lib/queries/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import { getFormTemplateById } from "@/lib/queries/forms";
@@ -223,6 +224,7 @@ function mapSubmissionRow(
     financialYear: number | null;
     cycleEndDate: string | null;
   },
+  bandsByLabel?: Map<string, PerformanceQuartileBand[]>,
 ): FormSubmissionListItem {
   const rawScore = toNumber(row.system_raw_score) ?? 0;
   const maxRawScore = Number(row.max_raw_score);
@@ -231,6 +233,11 @@ function mapSubmissionRow(
   const scoreO = toNumber(row.initial_score_numeric) ?? rawScore;
   const normalizedScore =
     toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric);
+  const resolvedBands = bandsForAssignedMatrix(
+    row.assigned_performance_matrix_label,
+    bandsByLabel,
+    quartileBands,
+  );
 
   // Build a partial submission-like object for the shared resolver.
   // The performance level and quartile must be resolved from the
@@ -258,7 +265,7 @@ function mapSubmissionRow(
           calibrationFactor: toNumber(row.calibration_factor),
           maxRawScore,
         },
-        quartileBands,
+        resolvedBands,
       )
     : null;
 
@@ -729,10 +736,15 @@ export async function listFormSubmissions(
   );
 
   return result.rows.map((row) => {
-    const item = mapSubmissionRow(row, quartileBands, {
-      financialYear: eligibilityContext.financialYear,
-      cycleEndDate: eligibilityContext.cycleEndDate,
-    });
+    const item = mapSubmissionRow(
+      row,
+      quartileBands,
+      {
+        financialYear: eligibilityContext.financialYear,
+        cycleEndDate: eligibilityContext.cycleEndDate,
+      },
+      bandsByMatrixLabel,
+    );
 
     const liveIncrementPercent = resolveApplicableIncrementPercent(
       item,

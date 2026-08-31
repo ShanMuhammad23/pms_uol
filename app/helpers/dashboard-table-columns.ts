@@ -466,16 +466,11 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     width: 80,
     wrap: true,
     numeric: true,
-    // Use the persisted normalized score percentage from the server.
-    // The server computes this from (normalizedScore / maxRawScore) * 100
-    // using the stored normalized_score or calibrated_score_numeric.
-    // This ensures consistency between the Staff Listing, Performance
-    // Matrix, and Reports.
+    // Same source as Rating (N), Quartile, and the dashboard matrix:
+    // persisted Norm. Score when present, otherwise Score (O) × Cal. Fr.
     getValue: (row) => {
-      if (row.normalizedScore == null || row.maxRawScore <= 0) return "—";
-      const pct = Number(
-        ((row.normalizedScore / row.maxRawScore) * 100).toFixed(2),
-      );
+      const pct = getNormalizedScorePercent(row);
+      if (pct === null) return "—";
       return `${formatNumber(pct)}`;
     },
   },

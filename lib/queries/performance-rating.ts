@@ -17,6 +17,7 @@ export {
   resolvePerformanceQuartile,
   resolvePerformanceQuartileForRawScore,
   resolveSubmissionPerformanceQuartile,
+  bandsForAssignedMatrix,
 } from "@/lib/performance-rating";
 
 export async function getActiveFinancialYearQuartileBands(): Promise<

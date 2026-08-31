@@ -109,6 +109,26 @@ export function resolvePerformanceQuartileForRawScore(
   return resolvePerformanceQuartile(scorePercent, bands);
 }
 
+/** Bands for the employee's assigned performance matrix, else the fallback set. */
+export function bandsForAssignedMatrix(
+  assignedMatrixLabel: string | null | undefined,
+  bandsByLabel: Map<string, PerformanceQuartileBand[]> | undefined,
+  fallback: PerformanceQuartileBand[],
+): PerformanceQuartileBand[] {
+  const label = assignedMatrixLabel?.trim();
+  if (label && bandsByLabel) {
+    const assigned =
+      bandsByLabel.get(label) ??
+      [...bandsByLabel.entries()].find(
+        ([key]) => key.trim().toLowerCase() === label.toLowerCase(),
+      )?.[1];
+    if (assigned && assigned.length > 0) {
+      return assigned;
+    }
+  }
+  return fallback;
+}
+
 /**
  * Compute the adjusted score (Score O + CH Adj + ORIC Adj + QEC Adj).
  * Uses the official reporting-manager score (getReportingManagerScore),
@@ -163,9 +183,12 @@ export function getNormalizedScore(
     | "calibrationFactor"
   >,
 ): number | null {
+  // Ignore 0 — a leftover / default stored value must not block derivation
+  // from Score (O) × calibration factor after HR alignment.
   if (
     row.normalizedScore != null &&
-    Number.isFinite(row.normalizedScore)
+    Number.isFinite(row.normalizedScore) &&
+    row.normalizedScore > 0
   ) {
     return row.normalizedScore;
   }

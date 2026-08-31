@@ -84,6 +84,7 @@ import {
   type ReturnSubmissionTarget,
 } from "@/app/components/dashboard/ReturnSubmissionModal";
 import {
+  canonicalPerformanceLevelName,
   getPerformanceLevelColor,
   getQuartileShade,
 } from "@/app/helpers/dashboard-helpers";
@@ -709,6 +710,26 @@ function renderCell(
     return (
       <span className="block text-slate-700 dark:text-slate-300">
         {value === "—" ? <span className="text-slate-400 italic dark:text-slate-500">—</span> : value}
+      </span>
+    );
+  }
+
+  if (columnId === "ratingO") {
+    if (value === "—") {
+      return (
+        <span className="text-slate-400 italic dark:text-slate-500">—</span>
+      );
+    }
+    const levelName = canonicalPerformanceLevelName(value);
+    return (
+      <span
+        className={cn(
+          "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold text-white",
+          getPerformanceLevelColor(levelName),
+        )}
+        title={levelName}
+      >
+        {value}
       </span>
     );
   }
