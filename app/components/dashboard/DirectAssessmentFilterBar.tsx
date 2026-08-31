@@ -258,3 +258,112 @@ export function DirectAssessmentFilterBar({
     </div>
   );
 }
+
+interface DirectAssessmentOrgLevelFilterBarProps {
+  selectedCategory1EntityIds: string[] | null;
+  selectedCategory2EntityIds: string[] | null;
+  category1Options: MultiSelectOption[];
+  category2Options: MultiSelectOption[];
+  onCategory1EntityChange: (values: string[] | null) => void;
+  onCategory2EntityChange: (values: string[] | null) => void;
+  onClearOrgFilters: () => void;
+  hasActiveOrgFilters: boolean;
+}
+
+export function DirectAssessmentOrgLevelFilterBar({
+  selectedCategory1EntityIds,
+  selectedCategory2EntityIds,
+  category1Options,
+  category2Options,
+  onCategory1EntityChange,
+  onCategory2EntityChange,
+  onClearOrgFilters,
+  hasActiveOrgFilters,
+}: DirectAssessmentOrgLevelFilterBarProps) {
+  const activeFilters: ActiveDirectAssessmentFilter[] = [];
+
+  if (selectedCategory1EntityIds !== null) {
+    activeFilters.push({
+      label: formatMultiChipLabel(
+        ENTITY_FILTER_LEVELS[1].label,
+        selectedCategory1EntityIds,
+        (value) =>
+          category1Options.find((option) => option.value === value)?.label ??
+          value,
+      ),
+      onRemove: () => onCategory1EntityChange(null),
+      color: "slate",
+    });
+  }
+  if (selectedCategory2EntityIds !== null) {
+    activeFilters.push({
+      label: formatMultiChipLabel(
+        ENTITY_FILTER_LEVELS[2].label,
+        selectedCategory2EntityIds,
+        (value) =>
+          category2Options.find((option) => option.value === value)?.label ??
+          value,
+      ),
+      onRemove: () => onCategory2EntityChange(null),
+      color: "slate",
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
+        <div className="px-4 pb-4 pt-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <MultiSelectFilterDropdown
+              label={ENTITY_FILTER_LEVELS[1].label}
+              icon={Building2}
+              options={category1Options}
+              selectedValues={selectedCategory1EntityIds}
+              onChange={onCategory1EntityChange}
+              placeholder="All"
+              searchable={category1Options.length > 8}
+            />
+            <MultiSelectFilterDropdown
+              label={ENTITY_FILTER_LEVELS[2].label}
+              icon={Building2}
+              options={category2Options}
+              selectedValues={selectedCategory2EntityIds}
+              onChange={onCategory2EntityChange}
+              disabled={selectedCategory1EntityIds?.length === 0}
+              placeholder="All"
+              searchable={category2Options.length > 8}
+            />
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {hasActiveOrgFilters && activeFilters.length > 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="flex flex-wrap items-center gap-2"
+          >
+            {activeFilters.map((filter, index) => (
+              <FilterChip
+                key={index}
+                label={filter.label}
+                onRemove={filter.onRemove}
+                color={filter.color}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={onClearOrgFilters}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Clear All
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}

@@ -156,7 +156,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
 
       {activeTab === "direct-assessment" && canAccessDirectAssessment ? (
         <div className="mx-auto w-full max-w-full min-w-0">
-          <DirectAssessmentTab />
+          <DirectAssessmentTab role={role} />
         </div>
       ) : (
         <>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { isHeadRole } from "@/lib/auth/home-path";
+import { isAdminRole } from "@/lib/auth/submission-review-roles";
 import { getDirectAssessmentData } from "@/lib/queries/direct-assessment";
 import { apiHandler } from "@/lib/api-handler";
 
@@ -11,7 +12,7 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export const GET = apiHandler(async (_request: Request, context: RouteContext) => {
+export const GET = apiHandler(async (request: Request, context: RouteContext) => {
   const auth = await requireDashboardSubmissionsApi();
   if (auth instanceof NextResponse) {
     return auth;
@@ -33,10 +34,16 @@ export const GET = apiHandler(async (_request: Request, context: RouteContext) =
   }
 
   const isHead = isHeadRole(auth.user?.role);
+  const isAdmin = isAdminRole(auth.user?.role);
   const headEntityId =
     isHead && auth.user?.entityId != null
       ? Number(auth.user.entityId)
       : null;
+  const url = new URL(request.url);
+  // Admins may request only employees they personally manage. Managers
+  // always receive the head-scoped list; `scope=managed` is ignored.
+  const managedOnly =
+    isAdmin && url.searchParams.get("scope") === "managed";
 
   try {
     const data = await getDirectAssessmentData(
@@ -44,6 +51,7 @@ export const GET = apiHandler(async (_request: Request, context: RouteContext) =
       reviewerUserId,
       isHead,
       headEntityId,
+      managedOnly,
     );
 
     if (!data) {

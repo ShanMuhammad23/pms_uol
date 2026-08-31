@@ -2,10 +2,24 @@ import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { listFormTemplates, listDirectAssessmentTemplates } from "@/lib/queries/forms";
+import { resolveEntitySubtreeIdsForRoots } from "@/lib/queries/entity-scope";
 import { apiHandler } from "@/lib/api-handler";
 import { isAdminRole } from "@/lib/auth/submission-review-roles";
 
 export const dynamic = "force-dynamic";
+
+function parseEntityIdList(value: string | null): number[] | null {
+  if (value == null) {
+    return null;
+  }
+  if (value === "") {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((part) => Number(part))
+    .filter((id) => Number.isFinite(id) && id > 0);
+}
 
 export const GET = apiHandler(async (request: Request) => {
   const auth = await requireDashboardSubmissionsApi();
@@ -30,18 +44,37 @@ export const GET = apiHandler(async (request: Request) => {
       if (reviewerUserId == null || !Number.isFinite(reviewerUserId)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      // Admin roles (SUPER_ADMIN, HR, BOARD) see all direct assessment
-      // templates. Managers only see templates for employees they review.
-      if (isAdmin) {
+      // Admin roles (SUPER_ADMIN, HR, BOARD) default to every direct
+      // assessment template. `scope=managed` limits that list to forms
+      // where the admin is Manager 1 or Manager 2. Managers always see
+      // only the templates for employees they review.
+      const managedOnly = url.searchParams.get("scope") === "managed";
+      if (isAdmin && !managedOnly) {
+        const category2Ids = parseEntityIdList(
+          url.searchParams.get("category2"),
+        );
+        const category1Ids = parseEntityIdList(
+          url.searchParams.get("category1"),
+        );
+        const selectedRoots =
+          category2Ids != null ? category2Ids : category1Ids;
+        const filterEntityIds =
+          selectedRoots == null
+            ? null
+            : await resolveEntitySubtreeIdsForRoots(selectedRoots);
+
         const templates = await listDirectAssessmentTemplates({
           reviewerUserId: null,
           headEntityId: null,
+          filterEntityIds,
         });
         return NextResponse.json(templates);
       }
       const templates = await listDirectAssessmentTemplates({
         reviewerUserId,
-        headEntityId,
+        // Admins in the managed view must not pick up entity-subtree
+        // visibility — only employees they personally manage.
+        headEntityId: isAdmin ? null : headEntityId,
       });
       return NextResponse.json(templates);
     }

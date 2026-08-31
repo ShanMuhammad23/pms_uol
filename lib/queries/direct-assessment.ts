@@ -84,6 +84,13 @@ export async function getDirectAssessmentData(
   reviewerUserId: number,
   isHead: boolean,
   headEntityId: number | null,
+  /**
+   * When true, only employees where the reviewer is Manager 1 (`head_id`)
+   * or Manager 2 (`manager_2_id`). Used so Super Admin / HR / Board can
+   * separate their own manager queue from the org-wide list. Does not
+   * include entity-subtree visibility.
+   */
+  managedOnly = false,
 ): Promise<DirectAssessmentData | null> {
   const template = await getFormTemplateById(templateId);
   if (!template) {
@@ -92,11 +99,16 @@ export async function getDirectAssessmentData(
 
   const questions = flattenAllQuestions(template);
 
-  // Build visibility clause for head roles
   let visibilityClause = "";
   let visibilityParams: unknown[] = [];
 
-  if (isHead) {
+  if (managedOnly) {
+    visibilityClause = `AND (
+      u.head_id = $2
+      OR u.manager_2_id = $2
+    )`;
+    visibilityParams = [reviewerUserId];
+  } else if (isHead) {
     const scopedEntityIds =
       headEntityId != null && Number.isFinite(headEntityId)
         ? await resolveEntitySubtreeIds(headEntityId)
@@ -118,9 +130,12 @@ export async function getDirectAssessmentData(
     }
   }
 
-  const templateParamIndex = isHead
-    ? (visibilityParams.length === 2 ? 4 : 3)
-    : 2;
+  const templateParamIndex =
+    visibilityParams.length === 0
+      ? 2
+      : visibilityParams.length === 1
+        ? 3
+        : 4;
 
   const result = await getDbClient().query<AssignmentRow>(
     `SELECT

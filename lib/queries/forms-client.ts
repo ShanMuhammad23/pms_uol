@@ -51,8 +51,30 @@ export async function fetchFormTemplatesForDashboard(): Promise<FormTemplateList
   return parseResponse<FormTemplateListItem[]>(response);
 }
 
-export async function fetchDirectAssessmentTemplates(): Promise<FormTemplateListItem[]> {
-  const response = await fetch("/api/templates?directAssessment=true", {
+export type DirectAssessmentTemplateScope = "all" | "managed";
+
+export interface DirectAssessmentOrgFilter {
+  category1EntityIds: number[] | null;
+  category2EntityIds: number[] | null;
+}
+
+export async function fetchDirectAssessmentTemplates(
+  scope: DirectAssessmentTemplateScope = "all",
+  orgFilter?: DirectAssessmentOrgFilter,
+): Promise<FormTemplateListItem[]> {
+  const params = new URLSearchParams({ directAssessment: "true" });
+  if (scope === "managed") {
+    params.set("scope", "managed");
+  }
+  if (scope === "all" && orgFilter) {
+    if (orgFilter.category1EntityIds !== null) {
+      params.set("category1", orgFilter.category1EntityIds.join(","));
+    }
+    if (orgFilter.category2EntityIds !== null) {
+      params.set("category2", orgFilter.category2EntityIds.join(","));
+    }
+  }
+  const response = await fetch(`/api/templates?${params.toString()}`, {
     credentials: "include",
     cache: "no-store",
   });

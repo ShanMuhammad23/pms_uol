@@ -839,11 +839,27 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
 export async function listDirectAssessmentTemplates(scope: {
   reviewerUserId: number | null;
   headEntityId: number | null;
+  /** When set, only assignments whose employee entity is in this set. */
+  filterEntityIds?: number[] | null;
 }): Promise<FormTemplateListItem[]> {
-  const { reviewerUserId, headEntityId } = scope;
+  const { reviewerUserId, headEntityId, filterEntityIds = null } = scope;
 
-  // Admin mode (reviewerUserId === null): no visibility filter — show all
-  // templates with self-assessment-disabled assignments.
+  if (filterEntityIds != null && filterEntityIds.length === 0) {
+    return [];
+  }
+
+  const adminEntityClause =
+    filterEntityIds != null
+      ? `AND u.entity_id = ANY($1::bigint[])`
+      : "";
+  const adminParams: unknown[] =
+    filterEntityIds != null ? [filterEntityIds] : [];
+
+  // Admin org-wide mode (reviewerUserId === null): no visibility filter —
+  // show all templates with self-assessment-disabled assignments.
+  // When reviewerUserId is set, only templates for employees that user
+  // manages as Manager 1 (`head_id`) or Manager 2 (`manager_2_id`),
+  // optionally expanded to the head's entity subtree.
   if (reviewerUserId == null) {
     const result = await getDbClient().query<FormTemplateListRow>(
       `SELECT
@@ -885,6 +901,7 @@ export async function listDirectAssessmentTemplates(scope: {
          AND u.employee_id <> 'EMP-0001'
          AND COALESCE(u.assessment_eligibility, true) = true
          AND efa.self_assessment_disabled = true
+         ${adminEntityClause}
        GROUP BY
          ft.id,
          ac.fiscal_year,
@@ -894,6 +911,7 @@ export async function listDirectAssessmentTemplates(scope: {
          qc.question_count,
          apc.appraisal_count
        ORDER BY ft.title ASC`,
+      adminParams,
     );
     return result.rows.map(mapFormTemplateListItem);
   }

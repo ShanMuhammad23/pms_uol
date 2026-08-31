@@ -587,4 +587,124 @@ export function useDirectAssessmentFilters(
   };
 }
 
+/**
+ * ORG Level 1 / Level 2 filters for the All Direct Assessments template list.
+ * Uses list-specific session keys so they do not fight the spreadsheet
+ * filter state. Opening a form copies the selection into the spreadsheet
+ * filters via {@link seedDirectAssessmentSpreadsheetOrgFilters}.
+ */
+export interface UseDirectAssessmentOrgLevelFiltersResult {
+  selectedCategory1EntityIds: string[] | null;
+  selectedCategory2EntityIds: string[] | null;
+  category1Options: MultiSelectOption[];
+  category2Options: MultiSelectOption[];
+  hasActiveOrgFilters: boolean;
+  handleCategory1EntityChange: (values: string[] | null) => void;
+  handleCategory2EntityChange: (values: string[] | null) => void;
+  clearOrgFilters: () => void;
+}
+
+export function seedDirectAssessmentSpreadsheetOrgFilters(
+  category1EntityIds: string[] | null,
+  category2EntityIds: string[] | null,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.sessionStorage.setItem(
+      "pms:da-filters:category1",
+      JSON.stringify(
+        category1EntityIds === null ? null : category1EntityIds.map(Number),
+      ),
+    );
+    window.sessionStorage.setItem(
+      "pms:da-filters:category2",
+      JSON.stringify(
+        category2EntityIds === null ? null : category2EntityIds.map(Number),
+      ),
+    );
+  } catch {
+    // sessionStorage unavailable — spreadsheet opens unfiltered
+  }
+}
+
+export function useDirectAssessmentOrgLevelFilters(
+  entities: EntityRecord[],
+): UseDirectAssessmentOrgLevelFiltersResult {
+  const [selectedCategory1EntityIds, setSelectedCategory1EntityIds] =
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:da-all-templates:category1",
+      null,
+    );
+  const [selectedCategory2EntityIds, setSelectedCategory2EntityIds] =
+    useSessionStorageState<MultiFilterSelection<number>>(
+      "pms:da-all-templates:category2",
+      null,
+    );
+
+  const category1Entities = useMemo(
+    () => getEntitiesForFilterLevels(entities, 1, null),
+    [entities],
+  );
+  const category2Entities = useMemo(
+    () => getEntitiesForFilterLevels(entities, 2, selectedCategory1EntityIds),
+    [entities, selectedCategory1EntityIds],
+  );
+
+  const prunedCategory2 = useMemo(
+    () =>
+      pruneMultiSelection(
+        selectedCategory2EntityIds,
+        category2Entities.map((entity) => entity.id),
+      ),
+    [selectedCategory2EntityIds, category2Entities],
+  );
+
+  const category1Options = useMemo<MultiSelectOption[]>(
+    () =>
+      category1Entities.map((entity) => ({
+        value: String(entity.id),
+        label: entity.name,
+        count: 0,
+      })),
+    [category1Entities],
+  );
+
+  const category2Options = useMemo<MultiSelectOption[]>(
+    () =>
+      category2Entities.map((entity) => ({
+        value: String(entity.id),
+        label: entity.name,
+        count: 0,
+      })),
+    [category2Entities],
+  );
+
+  const handleCategory1EntityChange = useCallback((values: string[] | null) => {
+    setSelectedCategory1EntityIds(fromStringIds(values));
+  }, []);
+
+  const handleCategory2EntityChange = useCallback((values: string[] | null) => {
+    setSelectedCategory2EntityIds(fromStringIds(values));
+  }, []);
+
+  const clearOrgFilters = useCallback(() => {
+    setSelectedCategory1EntityIds(null);
+    setSelectedCategory2EntityIds(null);
+  }, []);
+
+  return {
+    selectedCategory1EntityIds: toStringSelection(selectedCategory1EntityIds),
+    selectedCategory2EntityIds: toStringSelection(prunedCategory2),
+    category1Options,
+    category2Options,
+    hasActiveOrgFilters:
+      selectedCategory1EntityIds !== null || prunedCategory2 !== null,
+    handleCategory1EntityChange,
+    handleCategory2EntityChange,
+    clearOrgFilters,
+  };
+}
+
 export { ENTITY_FILTER_LEVELS };

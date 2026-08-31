@@ -56,11 +56,19 @@ export interface DirectAssessmentData {
   overallRemarksBySubmission: Record<number, DirectAssessmentOverallRemarks>;
 }
 
+export type DirectAssessmentScope = "all" | "managed";
+
 export async function fetchDirectAssessmentData(
   templateId: number,
+  scope: DirectAssessmentScope = "all",
 ): Promise<DirectAssessmentData> {
+  const params = new URLSearchParams();
+  if (scope === "managed") {
+    params.set("scope", "managed");
+  }
+  const query = params.toString();
   const response = await fetch(
-    `/api/templates/${templateId}/direct-assessment`,
+    `/api/templates/${templateId}/direct-assessment${query ? `?${query}` : ""}`,
     { cache: "no-store" },
   );
   return parseResponse<DirectAssessmentData>(response);

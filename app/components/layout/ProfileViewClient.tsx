@@ -1,19 +1,25 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import type { ElementType, ReactNode } from "react";
 import {
-  User,
-  Mail,
+  Briefcase,
   Building2,
+  CalendarDays,
+  Globe,
+  GraduationCap,
+  Hash,
+  Layers,
+  Mail,
   Phone,
   Shield,
-  Hash,
-  Briefcase,
-  CalendarDays,
-  GraduationCap,
-  Globe,
+  UserRound,
 } from "lucide-react";
-import { cn } from "../../../lib/utils";
+import {
+  containerVariants,
+  itemVariants,
+} from "@/app/helpers/dashboard-animations";
+import { cn } from "@/lib/utils";
 import type { UserProfile } from "@/lib/types/user-profile";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
@@ -23,114 +29,211 @@ type ProfileViewClientProps = {
   profile: UserProfile;
 };
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08, delayChildren: 0.2 },
-  },
-};
+function displayValue(value: string | null | undefined): string {
+  if (value == null || value.trim() === "" || value === "—") return "—";
+  return value.trim();
+}
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.5, ease: [0.23, 1, 0.32, 1] as const },
-  },
-};
+function isFilled(value: string | null | undefined): boolean {
+  return displayValue(value) !== "—";
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatJoinDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatTenure(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const start = new Date(value);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const now = new Date();
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  if (now.getDate() < start.getDate()) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (years < 0) return null;
+  if (years === 0 && months === 0) return "Joined this month";
+
+  const yearLabel =
+    years > 0 ? `${years} year${years === 1 ? "" : "s"}` : "";
+  const monthLabel =
+    months > 0 ? `${months} month${months === 1 ? "" : "s"}` : "";
+  return [yearLabel, monthLabel].filter(Boolean).join(" ");
+}
 
 function ProfileField({
   icon: Icon,
   label,
   value,
-  tone = "neutral",
-  delay,
+  href,
 }: {
-  icon: React.ElementType;
+  icon: ElementType;
   label: string;
   value: string;
-  tone?: "neutral" | "amber" | "emerald" | "blue";
-  delay: number;
+  href?: string;
 }) {
-  const toneStyles = {
-    neutral: {
-      iconBg: "bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-400",
-    },
-    amber: {
-      iconBg: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400",
-    },
-    emerald: {
-      iconBg: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400",
-    },
-    blue: {
-      iconBg: "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400",
-    },
-  };
+  const empty = value === "—";
 
   return (
-    <motion.div
-      variants={itemVariants}
-      transition={{ delay }}
-      className={cn(
-        "group relative overflow-hidden rounded-md border p-5 transition-all duration-300",
-        "border-slate-200 bg-white hover:shadow-md hover:border-slate-300",
-        "dark:border-white/10 dark:bg-white/[0.02] dark:hover:border-white/20 dark:hover:bg-white/[0.04]"
-      )}
-    >
-      <div className="flex items-start gap-4">
-        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", toneStyles[tone].iconBg)}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            {label}
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/50">
+        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+        {label}
+      </dt>
+      <dd className="mt-1.5">
+        {href && !empty ? (
+          <a
+            href={href}
+            className="break-all text-sm font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {value}
+          </a>
+        ) : (
+          <p
+            className={cn(
+              "wrap-break-word text-sm font-medium",
+              empty ? "text-foreground/40" : "text-text-primary",
+            )}
+          >
+            {value}
           </p>
-          <p className="text-base font-semibold text-slate-900 dark:text-white truncate">
-            {value || "—"}
-          </p>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function StatusBadge({ status, role }: { status: string | null; role: string | null }) {
-  const isActive = status === "1";
-
-  return (
-    <div className="flex items-center gap-2">
-      {role ? (
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
-            "bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-500/20",
-          )}
-        >
-          <Shield className="h-3 w-3" />
-          {role}
-        </span>
-      ) : null}
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
-          isActive
-            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 dark:bg-emerald-950/30 dark:text-emerald-400 dark:ring-emerald-500/20"
-            : "bg-slate-100 text-slate-600 ring-1 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-500/20"
         )}
-      >
-        <span className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-emerald-500" : "bg-slate-400")} />
-        {isActive ? "Active" : "Inactive"}
-      </span>
+      </dd>
     </div>
   );
 }
 
-export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
-  const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "—";
+function SectionCard({
+  icon: Icon,
+  title,
+  children,
+  className,
+}: {
+  icon: ElementType;
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.section
+      variants={itemVariants}
+      className={cn(
+        "rounded-xl border border-slate-200 bg-surface dark:border-white/10",
+        className,
+      )}
+    >
+      <header className="flex items-center gap-2 border-b border-slate-100 px-5 py-3 dark:border-white/10">
+        <Icon
+          className="size-4 text-primary"
+          aria-hidden="true"
+        />
+        <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
+      </header>
+      <div className="p-5">{children}</div>
+    </motion.section>
+  );
+}
+
+function StatusBadge({
+  status,
+  role,
+  category,
+}: {
+  status: string | null;
+  role: string | null;
+  category: string | null;
+}) {
+  const isActive = status === "1";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <ul className="flex flex-wrap items-center gap-2">
+      {role ? (
+        <li>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary ring-1 ring-primary/20">
+            <Shield className="size-3" aria-hidden="true" />
+            {role}
+          </span>
+        </li>
+      ) : null}
+      {category ? (
+        <li>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary/15 px-3 py-1 text-xs font-semibold text-secondary ring-1 ring-secondary/25">
+            <Layers className="size-3" aria-hidden="true" />
+            {category}
+          </span>
+        </li>
+      ) : null}
+      <li>
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1",
+            isActive
+              ? "bg-emerald-50 text-emerald-800 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-500/25"
+              : "bg-slate-100 text-slate-700 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-500/25",
+          )}
+        >
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              isActive ? "bg-emerald-600 dark:bg-emerald-400" : "bg-slate-500",
+            )}
+            aria-hidden="true"
+          />
+          {isActive ? "Active" : "Inactive"}
+        </span>
+      </li>
+    </ul>
+  );
+}
+
+export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
+  const reduceMotion = useReducedMotion();
+  const fullName =
+    [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "—";
+  const initials = getInitials(fullName === "—" ? "" : fullName);
+  const orgParts = [profile.orgLevel1, profile.orgLevel2].filter(isFilled);
+  const tenure = formatTenure(profile.dateOfJoining);
+  const joinDate = formatJoinDate(profile.dateOfJoining);
+  const hasQualification = [
+    profile.qualification,
+    profile.qualificationYear,
+    profile.qualificationSubject,
+    profile.qualificationInstitute,
+    profile.qualificationCountry,
+  ].some(isFilled);
+
+  const motionProps = reduceMotion
+    ? {}
+    : { variants: containerVariants, initial: "hidden" as const, animate: "visible" as const };
+
+  const heroMotionProps = reduceMotion
+    ? {}
+    : {
+        initial: { opacity: 0, y: 12 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.35, ease: [0.23, 1, 0.32, 1] as const },
+      };
+
+  return (
+    <div className=" space-y-6 text-text-primary">
       <PrintDocumentHeader
         title="Employee Profile"
         metaItems={[
@@ -140,145 +243,176 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
           { label: "Email", value: profile.emailAddress },
         ]}
       />
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] as const }}
-        className="no-print flex items-center justify-between"
-      >
+
+      <div className="no-print flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Employee Profile
-          </h1>
-
+          <h1 className="text-2xl font-bold">Profile</h1>
+          <p className="mt-1 max-w-xl text-sm text-foreground/70">
+            Your employment record in the Performance Management System.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <PrintButton
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
-          />
-          <StatusBadge status={profile.employmentStatus} role={profile.systemRole} />
-        </div>
-      </motion.div>
+        <PrintButton className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15" />
+      </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.1, ease: [0.23, 1, 0.32, 1] as const }}
-        className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/[0.02]"
+      <motion.section
+        {...heroMotionProps}
+        className="relative overflow-hidden rounded-xl border border-slate-200 bg-surface p-5 sm:p-6 dark:border-white/10"
       >
-        <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600" />
-
-        <div className="flex items-center gap-6">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/5">
-            <User className="h-10 w-10 text-slate-400 dark:text-slate-500" />
-          </div>
-
-          <div className="space-y-1">
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              {fullName}
-            </h2>
-            
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-400 dark:text-slate-500">
-              
-              {profile.orgLevel1 ? (
-                <span className="inline-flex items-center gap-1">
-                  <Building2 className="h-3.5 w-3.5" />
-                  {profile.orgLevel1}
-                </span>
+        <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div
+              className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-bold text-white sm:size-20 sm:text-xl"
+              aria-hidden="true"
+            >
+              {initials}
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
+                {fullName}
+              </h2>
+              <p className="text-sm font-medium text-foreground/80">
+                {displayValue(profile.designation)}
+              </p>
+              {orgParts.length > 0 ? (
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-foreground/60">
+                  <Building2 className="size-3.5 shrink-0" aria-hidden="true" />
+                  {orgParts.map((part, index) => (
+                    <span key={`${part}-${index}`} className="inline-flex items-center gap-2">
+                      {index > 0 ? (
+                        <span className="text-foreground/30" aria-hidden="true">
+                          /
+                        </span>
+                      ) : null}
+                      <span>{part}</span>
+                    </span>
+                  ))}
+                </p>
               ) : null}
-              {profile.orgLevel2 ? (
-                <>
-                  <span className="text-slate-300 dark:text-slate-600">/</span>
-                  <span>{profile.orgLevel2}</span>
-                </>
-              ) : null}
-              {!profile.systemRole && !profile.orgLevel1 && !profile.orgLevel2 ? "—" : null}
             </div>
           </div>
+          <StatusBadge
+            status={profile.employmentStatus}
+            role={profile.systemRole}
+            category={profile.empCategory}
+          />
         </div>
+      </motion.section>
+
+      <motion.div {...motionProps} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SectionCard icon={Briefcase} title="Employment">
+          <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <ProfileField
+              icon={Hash}
+              label="Employee ID"
+              value={displayValue(profile.employeeId)}
+            />
+            <ProfileField
+              icon={Briefcase}
+              label="Designation"
+              value={displayValue(profile.designation)}
+            />
+            <ProfileField
+              icon={Layers}
+              label="Category"
+              value={displayValue(profile.empCategory)}
+            />
+            <ProfileField
+              icon={CalendarDays}
+              label="Date of joining"
+              value={joinDate}
+            />
+            <ProfileField
+              icon={CalendarDays}
+              label="Tenure"
+              value={tenure ?? "—"}
+            />
+            <ProfileField
+              icon={Building2}
+              label="Organisation"
+              value={orgParts.length > 0 ? orgParts.join(" / ") : "—"}
+            />
+          </dl>
+        </SectionCard>
+
+        <SectionCard icon={UserRound} title="Contact">
+          <dl className="grid grid-cols-1 gap-5">
+            <ProfileField
+              icon={Mail}
+              label="Email address"
+              value={displayValue(profile.emailAddress)}
+              href={
+                isFilled(profile.emailAddress)
+                  ? `mailto:${profile.emailAddress}`
+                  : undefined
+              }
+            />
+            <ProfileField
+              icon={Phone}
+              label="Mobile number"
+              value={displayValue(profile.mobileNumber)}
+              href={
+                isFilled(profile.mobileNumber)
+                  ? `tel:${profile.mobileNumber}`
+                  : undefined
+              }
+            />
+          </dl>
+        </SectionCard>
+
+        <SectionCard
+          icon={GraduationCap}
+          title="Qualification"
+          className="lg:col-span-2"
+        >
+          {hasQualification ? (
+            <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <ProfileField
+                icon={GraduationCap}
+                label="Qualification"
+                value={displayValue(profile.qualification)}
+              />
+              <ProfileField
+                icon={CalendarDays}
+                label="Year"
+                value={displayValue(profile.qualificationYear)}
+              />
+              <ProfileField
+                icon={GraduationCap}
+                label="Subject"
+                value={displayValue(profile.qualificationSubject)}
+              />
+              <ProfileField
+                icon={Building2}
+                label="Institution"
+                value={displayValue(profile.qualificationInstitute)}
+              />
+              <ProfileField
+                icon={Globe}
+                label="Country"
+                value={displayValue(profile.qualificationCountry)}
+              />
+            </dl>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 px-6 py-10 text-center dark:border-white/15">
+              <GraduationCap
+                className="size-8 text-foreground/30"
+                aria-hidden="true"
+              />
+              <p className="mt-3 text-sm font-medium text-text-primary">
+                No qualification on file
+              </p>
+              <p className="mt-1 max-w-sm text-sm text-foreground/60">
+                Contact HR if your academic record should appear here.
+              </p>
+            </div>
+          )}
+        </SectionCard>
       </motion.div>
 
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-      >
-        <ProfileField
-          icon={Hash}
-          label="Employee ID"
-          value={profile.employeeId || "—"}
-          delay={0}
-        />
-       
-        <ProfileField
-          icon={Mail}
-          label="Email Address"
-          value={profile.emailAddress || "—"}
-          tone="blue"
-          delay={0.24}
-        />
-
-        <ProfileField
-          icon={Briefcase}
-          label="Designation"
-          value={profile.designation || "—"}
-          delay={0.4}
-        />
-        <ProfileField
-          icon={CalendarDays}
-          label="Date of Joining"
-          value={profile.dateOfJoining || "—"}
-          delay={0.48}
-        />
-
-        <ProfileField
-          icon={GraduationCap}
-          label="Qualification"
-          value={profile.qualification || "—"}
-          delay={0.72}
-        />
-        <ProfileField
-          icon={CalendarDays}
-          label="Qualification Year"
-          value={profile.qualificationYear || "—"}
-          delay={0.8}
-        />
-        <ProfileField
-          icon={GraduationCap}
-          label="Qualification Subject"
-          value={profile.qualificationSubject || "—"}
-          delay={0.88}
-        />
-        <ProfileField
-          icon={Building2}
-          label="Institution"
-          value={profile.qualificationInstitute || "—"}
-          delay={0.96}
-        />
-        <ProfileField
-          icon={Globe}
-          label="Country"
-          value={profile.qualificationCountry || "—"}
-          delay={1.04}
-        />
-        <ProfileField
-          icon={Phone}
-          label="Mobile Number"
-          value={profile.mobileNumber || "—"}
-          delay={1.12}
-        />
-
-      </motion.div>
-
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1 }}
-        className="no-print text-center text-xs text-slate-400 dark:text-slate-600"
-      >
+      <p className="no-print text-center text-xs text-foreground/45">
         Data sourced from the PMS database. Contact HR for corrections.
-      </motion.p>
+      </p>
       <PrintFooter />
     </div>
   );

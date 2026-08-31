@@ -7,6 +7,7 @@ import {
   saveDirectAssessmentScores,
   approveDirectAssessment,
   type DirectAssessmentData,
+  type DirectAssessmentScope,
 } from "@/lib/queries/direct-assessment-client";
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
@@ -32,6 +33,8 @@ import { ResizableHeader } from "@/app/components/common/ResizableHeader";
 interface DirectAssessmentSpreadsheetProps {
   templateId: number;
   onBack: () => void;
+  /** Admin split: `managed` is only employees this user manages. */
+  scope?: DirectAssessmentScope;
 }
 
 /** Default widths for the fixed left columns. */
@@ -148,6 +151,7 @@ function overallRemarksForSubmission(
 export default function DirectAssessmentSpreadsheet({
   templateId,
   onBack,
+  scope = "all",
 }: DirectAssessmentSpreadsheetProps) {
   const queryClient = useQueryClient();
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -192,8 +196,8 @@ export default function DirectAssessmentSpreadsheet({
   );
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["direct-assessment", templateId],
-    queryFn: () => fetchDirectAssessmentData(templateId),
+    queryKey: ["direct-assessment", templateId, scope],
+    queryFn: () => fetchDirectAssessmentData(templateId, scope),
   });
 
   const { data: entities = [] } = useQuery({
@@ -416,7 +420,9 @@ export default function DirectAssessmentSpreadsheet({
           Back to templates
         </button>
         <div className="rounded-md border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
-          No employees are assigned to this form for direct assessment.
+          {scope === "managed"
+            ? "You are not assigned as Manager 1 or Manager 2 for any employee on this form."
+            : "No employees are assigned to this form for direct assessment."}
         </div>
       </div>
     );
@@ -487,9 +493,16 @@ export default function DirectAssessmentSpreadsheet({
           <ArrowLeft className="size-3.5" />
           Back to templates
         </button>
-        <h2 className="text-lg font-semibold text-text-primary">
-          Direct Assessment — {data.templateTitle}
-        </h2>
+        <div className="text-right">
+          <h2 className="text-lg font-semibold text-text-primary">
+            Direct Assessment — {data.templateTitle}
+          </h2>
+          {scope === "managed" ? (
+            <p className="text-xs text-foreground/60">
+              Showing employees you manage as Manager 1 or Manager 2.
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {saveMessage ? (
