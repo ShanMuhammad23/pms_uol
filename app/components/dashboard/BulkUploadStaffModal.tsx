@@ -96,6 +96,9 @@ const SECTION_STYLE: Record<BulkUploadColumnGroup, string> = {
 const cellInputClassName =
   "h-8 w-full min-w-0 border-0 bg-transparent px-2 text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-primary/40 dark:text-slate-100 dark:focus:bg-slate-900";
 
+const sheetSelectClassName =
+  "[&_button]:h-7 [&_button]:rounded-md [&_button]:px-2 [&_button]:py-0 [&_button]:text-xs [&_button]:focus:ring-1";
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
@@ -1417,19 +1420,18 @@ function SheetCell({
 
   if (column.id === "empCategory") {
     return (
-      <select
+      <SheetSelect
+        id={`${row.rowKey}-${column.id}`}
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        options={EMPLOYEE_CATEGORIES.map((category) => ({
+          value: category,
+          label: CATEGORY_LABELS[category],
+        }))}
+        onChange={setValue}
         disabled={disabled}
-        className={cn(cellInputClassName, dirty && "bg-amber-50 dark:bg-amber-950/30")}
-      >
-        <option value="">—</option>
-        {EMPLOYEE_CATEGORIES.map((category) => (
-          <option key={category} value={category}>
-            {CATEGORY_LABELS[category]}
-          </option>
-        ))}
-      </select>
+        dirty={dirty}
+        emptyOptionLabel="—"
+      />
     );
   }
 
@@ -1437,33 +1439,34 @@ function SheetCell({
     const category = row.values.empCategory as EmployeeCategory;
     const options = CATEGORY_SUB_MAP[category] ?? [];
     return (
-      <select
+      <SheetSelect
+        id={`${row.rowKey}-${column.id}`}
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        options={options.map((sub) => ({
+          value: sub,
+          label: SUB_CATEGORY_LABELS[sub],
+        }))}
+        onChange={setValue}
         disabled={disabled}
-        className={cn(cellInputClassName, dirty && "bg-amber-50 dark:bg-amber-950/30")}
-      >
-        <option value="">—</option>
-        {options.map((sub) => (
-          <option key={sub} value={sub}>
-            {SUB_CATEGORY_LABELS[sub]}
-          </option>
-        ))}
-      </select>
+        dirty={dirty}
+        emptyOptionLabel="—"
+      />
     );
   }
 
   if (column.id === "accountStatus") {
     return (
-      <select
+      <SheetSelect
+        id={`${row.rowKey}-${column.id}`}
         value={value || "Active"}
-        onChange={(event) => setValue(event.target.value)}
+        options={[
+          { value: "Active", label: "Active" },
+          { value: "Inactive", label: "Inactive" },
+        ]}
+        onChange={setValue}
         disabled={disabled}
-        className={cn(cellInputClassName, dirty && "bg-amber-50 dark:bg-amber-950/30")}
-      >
-        <option value="Active">Active</option>
-        <option value="Inactive">Inactive</option>
-      </select>
+        dirty={dirty}
+      />
     );
   }
 
@@ -1508,33 +1511,34 @@ function SheetCell({
 
   if (column.id === "systemRole") {
     return (
-      <select
+      <SheetSelect
+        id={`${row.rowKey}-${column.id}`}
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        options={USER_ROLES.map((role) => ({
+          value: role,
+          label: USER_ROLE_LABELS[role],
+        }))}
+        onChange={setValue}
         disabled={disabled}
-        className={cn(cellInputClassName, dirty && "bg-amber-50 dark:bg-amber-950/30")}
-      >
-        <option value="">—</option>
-        {USER_ROLES.map((role) => (
-          <option key={role} value={role}>
-            {USER_ROLE_LABELS[role]}
-          </option>
-        ))}
-      </select>
+        dirty={dirty}
+        emptyOptionLabel="—"
+      />
     );
   }
 
   if (column.id === "assessmentEligibility") {
     return (
-      <select
+      <SheetSelect
+        id={`${row.rowKey}-${column.id}`}
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        options={[
+          { value: "true", label: "Eligible" },
+          { value: "false", label: "Not Eligible" },
+        ]}
+        onChange={setValue}
         disabled={disabled}
-        className={cn(cellInputClassName, dirty && "bg-amber-50 dark:bg-amber-950/30")}
-      >
-        <option value="true">Eligible</option>
-        <option value="false">Not Eligible</option>
-      </select>
+        dirty={dirty}
+      />
     );
   }
 
@@ -1548,20 +1552,50 @@ function SheetCell({
             ? formOptions
             : managerOptions;
     return (
-      <div className={cn("min-w-0 px-0.5 py-0.5", dirty && "bg-amber-50 dark:bg-amber-950/30")}>
-        <SearchableSelect
-          id={`${row.rowKey}-${column.id}`}
-          value={value}
-          options={options}
-          onChange={setValue}
-          disabled={disabled}
-          placeholder="—"
-          emptyOptionLabel="—"
-          className="[&_button]:h-7 [&_button]:rounded-md [&_button]:px-2 [&_button]:py-0 [&_button]:text-xs [&_button]:focus:ring-1"
-        />
-      </div>
+      <SheetSelect
+        id={`${row.rowKey}-${column.id}`}
+        value={value}
+        options={options}
+        onChange={setValue}
+        disabled={disabled}
+        dirty={dirty}
+        emptyOptionLabel="—"
+      />
     );
   }
 
   return null;
+}
+
+function SheetSelect({
+  id,
+  value,
+  options,
+  onChange,
+  disabled,
+  dirty,
+  emptyOptionLabel,
+}: {
+  id: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (next: string) => void;
+  disabled: boolean;
+  dirty: boolean;
+  emptyOptionLabel?: string;
+}) {
+  return (
+    <div className={cn("min-w-0 px-0.5 py-0.5", dirty && "bg-amber-50 dark:bg-amber-950/30")}>
+      <SearchableSelect
+        id={id}
+        value={value}
+        options={options}
+        onChange={onChange}
+        disabled={disabled}
+        placeholder="—"
+        emptyOptionLabel={emptyOptionLabel}
+        className={sheetSelectClassName}
+      />
+    </div>
+  );
 }
