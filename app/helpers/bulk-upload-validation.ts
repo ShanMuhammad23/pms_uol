@@ -4,6 +4,7 @@ import {
   resolveEntityIdFromOrgLevels,
 } from "@/app/helpers/bulk-upload-columns";
 import { isManagerEligibleRole } from "@/app/helpers/manager-eligibility";
+import { parseFlexibleDate } from "@/app/helpers/bulk-upload-excel";
 import type { BulkUploadColumnId } from "@/app/helpers/bulk-upload-columns";
 import type { EntityRecord } from "@/types/entities";
 import type { CreateUserInput, UserRecord } from "@/types/users";
@@ -90,14 +91,14 @@ export type BulkUploadCheckResult = {
 };
 
 function parseOptionalNumber(raw: string): number | null {
-  const trimmed = raw.trim();
+  const trimmed = raw.trim().replace(/,/g, "");
   if (!trimmed) return null;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 function isIntegerString(raw: string): boolean {
-  return /^-?\d+$/.test(raw.trim());
+  return /^-?\d+$/.test(raw.trim().replace(/,/g, "").replace(/\.0+$/, ""));
 }
 
 function effectiveValue(
@@ -158,8 +159,24 @@ export function collectBulkUploadSaveGroups(
     const fields: Record<string, unknown> = {};
     const isChanged = (id: BulkUploadColumnId) => changed(row, selectedColumnIds, id);
 
+    if (isChanged("employeeName")) {
+      const { firstName, lastName } = splitEmployeeName(row.values.employeeName);
+      fields.firstName = firstName;
+      fields.lastName = lastName;
+      changedCellCount += 1;
+    }
+    if (isChanged("email")) {
+      fields.email = row.values.email.trim() || null;
+      changedCellCount += 1;
+    }
     if (isChanged("designation")) {
       fields.designation = row.values.designation.trim() || null;
+      changedCellCount += 1;
+    }
+    if (isChanged("dateOfJoining")) {
+      fields.dateOfJoining =
+        parseFlexibleDate(row.values.dateOfJoining) ??
+        (row.values.dateOfJoining.trim() || null);
       changedCellCount += 1;
     }
     if (isChanged("roleCategory")) {
@@ -223,6 +240,18 @@ export function collectBulkUploadSaveGroups(
     }
     if (isChanged("qecScoreAdj")) {
       fields.qecScoreAdj = parseOptionalNumber(row.values.qecScoreAdj);
+      changedCellCount += 1;
+    }
+    if (isChanged("currentSalary")) {
+      fields.currentSalary = parseOptionalNumber(row.values.currentSalary);
+      changedCellCount += 1;
+    }
+    if (isChanged("previousSalary")) {
+      fields.previousSalary = parseOptionalNumber(row.values.previousSalary);
+      changedCellCount += 1;
+    }
+    if (isChanged("remarksCompensation")) {
+      fields.remarksCompensation = row.values.remarksCompensation.trim() || null;
       changedCellCount += 1;
     }
     if (isChanged("calibrationFactor")) {
@@ -320,7 +349,7 @@ function checkNumberField(
   options?: { integer?: boolean; min?: number; max?: number },
 ): BulkUploadIssue | null {
   if (!appliesToRow(row, selectedColumnIds, columnId)) return null;
-  const raw = row.values[columnId].trim();
+  const raw = row.values[columnId].trim().replace(/,/g, "").replace(/\.0+$/, "");
   if (!raw) return null;
   if (options?.integer && !isIntegerString(raw)) {
     return issue(row, `${label} must be a whole number.`, columnId);
@@ -388,7 +417,36 @@ export function checkValueConstraints(
         issues.push(issue(row, "A valid system role is required.", "systemRole"));
       }
       const doj = row.values.dateOfJoining.trim();
-      if (doj && Number.isNaN(Date.parse(doj))) {
+      if (doj && !parseFlexibleDate(doj) && Number.isNaN(Date.parse(doj))) {
+        issues.push(issue(row, "Date of joining must be a valid date.", "dateOfJoining"));
+      }
+    }
+
+    if (appliesToRow(row, selectedColumnIds, "employeeName") && !row.isNew) {
+      const { firstName, lastName } = splitEmployeeName(row.values.employeeName);
+      if (!firstName) {
+        issues.push(issue(row, "Name is required.", "employeeName"));
+      } else if (firstName.length > 50 || lastName.length > 50) {
+        issues.push(
+          issue(row, "First and last name must be 50 characters or fewer.", "employeeName"),
+        );
+      }
+    }
+
+    if (appliesToRow(row, selectedColumnIds, "email") && !row.isNew) {
+      const email = row.values.email.trim();
+      if (!email) {
+        issues.push(issue(row, "Email is required.", "email"));
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        issues.push(issue(row, "Enter a valid email address.", "email"));
+      } else if (email.length > 150) {
+        issues.push(issue(row, "Email must be 150 characters or fewer.", "email"));
+      }
+    }
+
+    if (appliesToRow(row, selectedColumnIds, "dateOfJoining") && !row.isNew) {
+      const doj = row.values.dateOfJoining.trim();
+      if (doj && !parseFlexibleDate(doj)) {
         issues.push(issue(row, "Date of joining must be a valid date.", "dateOfJoining"));
       }
     }
@@ -403,9 +461,11 @@ export function checkValueConstraints(
     if (yearIssue) issues.push(yearIssue);
 
     for (const [columnId, label] of [
-      ["creditHrsErpAdj", "CH Adj"],
-      ["pubOricScoreAdj", "ORIC Adj"],
-      ["qecScoreAdj", "QEC Adj"],
+      ["creditHrsErpAdj", "CH adjustment"],
+      ["pubOricScoreAdj", "ORIC adj"],
+      ["qecScoreAdj", "QEC adjust"],
+      ["currentSalary", "Current Salary"],
+      ["previousSalary", "Prev Salary"],
     ] as const) {
       const adjIssue = checkNumberField(row, selectedColumnIds, columnId, label);
       if (adjIssue) issues.push(adjIssue);
@@ -483,7 +543,9 @@ export function checkDuplicates(
   const issues: BulkUploadIssue[] = [];
   const usersByEmployeeId = new Map(users.map((user) => [user.employeeId, user]));
   const usersById = new Map(users.map((user) => [String(user.id), user]));
-  const existingEmails = new Set(users.map((user) => user.email.trim().toLowerCase()));
+  const usersByEmail = new Map(
+    users.map((user) => [user.email.trim().toLowerCase(), user] as const),
+  );
 
   const seenEmployeeIds = new Set<string>();
   const seenEmails = new Set<string>();
@@ -500,11 +562,16 @@ export function checkDuplicates(
       }
     }
     const email = row.values.email.trim().toLowerCase();
-    if (row.isNew && email) {
-      if (seenEmails.has(email) || existingEmails.has(email)) {
+    if (email && (row.isNew || appliesToRow(row, selectedColumnIds, "email"))) {
+      if (seenEmails.has(email)) {
         issues.push(issue(row, "This email already exists.", "email"));
+      } else {
+        seenEmails.add(email);
+        const owner = usersByEmail.get(email);
+        if (owner && owner.employeeId !== sap) {
+          issues.push(issue(row, "This email already exists.", "email"));
+        }
       }
-      seenEmails.add(email);
     }
   }
 

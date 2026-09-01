@@ -367,6 +367,10 @@ export async function updateEmployeeRoleCategory(
 export async function bulkUpdateEmployeeListingFields(
   employeeIds: string[],
   fields: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    dateOfJoining?: string | null;
     roleCategory?: string | null;
     designation?: string | null;
     entityId?: number | null;
@@ -379,6 +383,9 @@ export async function bulkUpdateEmployeeListingFields(
     creditHrsErpScoreAdj?: number | null;
     pubOricScoreAdj?: number | null;
     qecScoreAdj?: number | null;
+    currentSalary?: number | null;
+    previousSalary?: number | null;
+    remarksCompensation?: string | null;
     calibrationFactor?: number | null;
     manager1UserId?: number | null;
     manager2UserId?: number | null;

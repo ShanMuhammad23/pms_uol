@@ -85,6 +85,10 @@ export const PATCH = apiHandler(async (request: Request) => {
       );
     }
 
+    const firstName = parseOptionalTextField(body, "firstName");
+    const lastName = parseOptionalTextField(body, "lastName");
+    const email = parseOptionalTextField(body, "email");
+    const dateOfJoining = parseOptionalTextField(body, "dateOfJoining");
     const roleCategory = parseOptionalTextField(body, "roleCategory");
     const designation = parseOptionalTextField(body, "designation");
     const entityId = parseOptionalNumberField(body, "entityId");
@@ -97,6 +101,9 @@ export const PATCH = apiHandler(async (request: Request) => {
     const creditHrsErpScoreAdj = parseOptionalNumberField(body, "creditHrsErpScoreAdj");
     const pubOricScoreAdj = parseOptionalNumberField(body, "pubOricScoreAdj");
     const qecScoreAdj = parseOptionalNumberField(body, "qecScoreAdj");
+    const currentSalary = parseOptionalNumberField(body, "currentSalary");
+    const previousSalary = parseOptionalNumberField(body, "previousSalary");
+    const remarksCompensation = parseOptionalTextField(body, "remarksCompensation");
     const calibrationFactor = parseOptionalNumberField(body, "calibrationFactor");
     const manager1UserId = parseOptionalNumberField(body, "manager1UserId");
     const manager2UserId = parseOptionalNumberField(body, "manager2UserId");
@@ -133,6 +140,10 @@ export const PATCH = apiHandler(async (request: Request) => {
 
     const fields: Record<string, unknown> = {};
 
+    if (firstName.provided) fields.firstName = firstName.value;
+    if (lastName.provided) fields.lastName = lastName.value;
+    if (email.provided) fields.email = email.value;
+    if (dateOfJoining.provided) fields.dateOfJoining = dateOfJoining.value;
     if (roleCategory.provided) fields.roleCategory = roleCategory.value;
     if (designation.provided) fields.designation = designation.value;
     if (entityId.provided) fields.entityId = entityId.value;
@@ -145,6 +156,9 @@ export const PATCH = apiHandler(async (request: Request) => {
     if (creditHrsErpScoreAdj.provided) fields.creditHrsErpScoreAdj = creditHrsErpScoreAdj.value;
     if (pubOricScoreAdj.provided) fields.pubOricScoreAdj = pubOricScoreAdj.value;
     if (qecScoreAdj.provided) fields.qecScoreAdj = qecScoreAdj.value;
+    if (currentSalary.provided) fields.currentSalary = currentSalary.value;
+    if (previousSalary.provided) fields.previousSalary = previousSalary.value;
+    if (remarksCompensation.provided) fields.remarksCompensation = remarksCompensation.value;
     if (calibrationFactor.provided) fields.calibrationFactor = calibrationFactor.value;
     if (manager1UserId.provided) fields.manager1UserId = manager1UserId.value;
     if (manager2UserId.provided) fields.manager2UserId = manager2UserId.value;

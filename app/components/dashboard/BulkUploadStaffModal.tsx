@@ -1,15 +1,14 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, CheckCircle2, Loader2, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import {
   BULK_UPLOAD_COLUMN_GROUPS,
-  BULK_UPLOAD_COLUMNS,
-  CREATE_REQUIRED_COLUMN_IDS,
+  BULK_UPLOAD_SELECTABLE_COLUMNS,
   DEFAULT_BULK_UPLOAD_COLUMN_IDS,
   buildBulkUploadRowValues,
   bulkUploadGroupLabel,
@@ -32,6 +31,15 @@ import {
   type BulkUploadCreateDraft,
   type BulkUploadSaveGroup,
 } from "@/app/helpers/bulk-upload-validation";
+import {
+  normalizeMappedExcelValue,
+  parseExcelStaffSheet,
+  sapLookupKey,
+  suggestExcelColumnMapping,
+  type ExcelColumnMapping,
+  type ExcelSheetColumn,
+  type ParsedExcelStaffSheet,
+} from "@/app/helpers/bulk-upload-excel";
 import {
   invalidateStaffListingQueries,
 } from "@/app/helpers/dashboard-listing-cache";
@@ -57,7 +65,7 @@ import {
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
 
-type WizardStep = 1 | 2 | 3;
+const EMPTY_SUBMISSIONS: FormSubmissionListItem[] = [];
 
 type RowValues = Record<BulkUploadColumnId, string>;
 
@@ -77,12 +85,6 @@ interface BulkUploadStaffModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
-
-const STEPS: { id: WizardStep; label: string }[] = [
-  { id: 1, label: "Employees" },
-  { id: 2, label: "Columns" },
-  { id: 3, label: "Edit values" },
-];
 
 const SECTION_STYLE: Record<BulkUploadColumnGroup, string> = {
   basic:
@@ -113,8 +115,13 @@ export function BulkUploadStaffModal({
   onSuccess,
 }: BulkUploadStaffModalProps) {
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<WizardStep>(1);
-  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [excelSheet, setExcelSheet] = useState<ParsedExcelStaffSheet | null>(null);
+  const [columnMapping, setColumnMapping] = useState<ExcelColumnMapping>({});
+  const [importedSapIds, setImportedSapIds] = useState<string[]>([]);
+  const [importUnmatched, setImportUnmatched] = useState<string[]>([]);
+  const [importParsing, setImportParsing] = useState(false);
+  const [importDragOver, setImportDragOver] = useState(false);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -123,7 +130,6 @@ export function BulkUploadStaffModal({
   );
   const [sheetRows, setSheetRows] = useState<SheetRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [selectionSeeded, setSelectionSeeded] = useState(false);
   const [checkOpen, setCheckOpen] = useState(false);
   const [checkStep, setCheckStep] = useState<BulkUploadCheckStepId>("collect");
   const [checkFailedStep, setCheckFailedStep] = useState<BulkUploadCheckStepId | null>(
@@ -131,7 +137,6 @@ export function BulkUploadStaffModal({
   );
   const [checkResult, setCheckResult] = useState<BulkUploadCheckResult | null>(null);
   const checkRunId = useRef(0);
-  const newRowSeq = useRef(0);
 
   const { data: pageData, isLoading: employeesLoading } = useQuery({
     queryKey: ["bulk-upload-staff", filterParams, masterFilters],
@@ -163,30 +168,28 @@ export function BulkUploadStaffModal({
     enabled: open,
   });
 
-  const employees = pageData?.items ?? [];
+  const employees = pageData?.items ?? EMPTY_SUBMISSIONS;
 
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setStep(1);
-      setEmployeeSearch("");
+      setImportFileName(null);
+      setExcelSheet(null);
+      setColumnMapping({});
+      setImportedSapIds([]);
+      setImportUnmatched([]);
+      setImportParsing(false);
+      setImportDragOver(false);
       setSelectedEmployeeIds(new Set());
       setSelectedColumnIds(new Set(DEFAULT_BULK_UPLOAD_COLUMN_IDS));
       setSheetRows([]);
       setError(null);
-      setSelectionSeeded(false);
       setCheckOpen(false);
       setCheckFailedStep(null);
       setCheckResult(null);
       checkRunId.current += 1;
-      newRowSeq.current = 0;
     }
-  }
-
-  if (open && !selectionSeeded && employees.length > 0) {
-    setSelectedEmployeeIds(new Set(employees.map((row) => row.employeeId)));
-    setSelectionSeeded(true);
   }
 
   useEffect(() => {
@@ -260,53 +263,103 @@ export function BulkUploadStaffModal({
     [entities],
   );
 
-  const filteredEmployees = useMemo(() => {
-    const query = employeeSearch.trim().toLowerCase();
-    if (!query) return employees;
-    return employees.filter((row) => {
-      return (
-        row.employeeName.toLowerCase().includes(query) ||
-        row.employeeId.toLowerCase().includes(query)
-      );
-    });
-  }, [employees, employeeSearch]);
-
-  const hasNewRows = sheetRows.some((row) => row.isNew);
-  const selectedColumns = useMemo(() => {
-    const ids = new Set(selectedColumnIds);
-    if (hasNewRows) {
-      for (const id of CREATE_REQUIRED_COLUMN_IDS) ids.add(id);
-    }
-    return BULK_UPLOAD_COLUMNS.filter((column) => ids.has(column.id));
-  }, [selectedColumnIds, hasNewRows]);
-
-  const allFilteredSelected =
-    filteredEmployees.length > 0 &&
-    filteredEmployees.every((row) => selectedEmployeeIds.has(row.employeeId));
-  const someFilteredSelected =
-    !allFilteredSelected &&
-    filteredEmployees.some((row) => selectedEmployeeIds.has(row.employeeId));
-
-  const toggleEmployee = (employeeId: string) => {
-    setSelectedEmployeeIds((current) => {
-      const next = new Set(current);
-      if (next.has(employeeId)) next.delete(employeeId);
-      else next.add(employeeId);
-      return next;
-    });
-  };
-
-  const toggleSelectAllFiltered = () => {
-    setSelectedEmployeeIds((current) => {
-      const next = new Set(current);
-      if (allFilteredSelected) {
-        for (const row of filteredEmployees) next.delete(row.employeeId);
-      } else {
-        for (const row of filteredEmployees) next.add(row.employeeId);
+  const matchedPeople = useMemo(() => {
+    const listingById = new Map(
+      employees.map((row) => [row.employeeId, row] as const),
+    );
+    return [...selectedEmployeeIds].map((id) => {
+      const listing = listingById.get(id);
+      if (listing) {
+        return { employeeId: listing.employeeId, name: listing.employeeName };
       }
-      return next;
+      const user = usersByEmployeeId.get(id);
+      return {
+        employeeId: id,
+        name: user ? `${user.firstName} ${user.lastName}`.trim() : "—",
+      };
     });
+  }, [selectedEmployeeIds, employees, usersByEmployeeId]);
+
+  const applySapIds = useCallback(
+    (sapIds: string[]) => {
+      const bySap = new Map<string, FormSubmissionListItem>();
+      for (const row of employees) {
+        bySap.set(sapLookupKey(row.employeeId), row);
+      }
+      const byUserSap = new Map<string, UserRecord>();
+      for (const user of users ?? []) {
+        byUserSap.set(sapLookupKey(user.employeeId), user);
+      }
+
+      const nextIds = new Set<string>();
+      const unmatched: string[] = [];
+      for (const sap of sapIds) {
+        const key = sapLookupKey(sap);
+        const listing = bySap.get(key);
+        const user = byUserSap.get(key);
+        if (listing) {
+          nextIds.add(listing.employeeId);
+          continue;
+        }
+        if (user) {
+          nextIds.add(user.employeeId);
+          continue;
+        }
+        unmatched.push(sap);
+      }
+
+      setSelectedEmployeeIds(nextIds);
+      setImportUnmatched(unmatched);
+    },
+    [employees, users],
+  );
+
+  useEffect(() => {
+    if (importedSapIds.length === 0) {
+      return;
+    }
+    applySapIds(importedSapIds);
+  }, [importedSapIds, applySapIds]);
+
+  const handleExcelFile = async (file: File | undefined) => {
+    if (!file) {
+      return;
+    }
+    setError(null);
+    setImportParsing(true);
+    try {
+      const parsed = await parseExcelStaffSheet(file);
+      setImportFileName(file.name);
+      setExcelSheet(parsed);
+      setColumnMapping(suggestExcelColumnMapping(parsed.columns));
+      const sapIds = parsed.rows.map((row) => row.sap);
+      setImportedSapIds(sapIds);
+      applySapIds(sapIds);
+    } catch (parseError) {
+      setImportFileName(null);
+      setExcelSheet(null);
+      setColumnMapping({});
+      setImportedSapIds([]);
+      setSelectedEmployeeIds(new Set());
+      setImportUnmatched([]);
+      setError(
+        parseError instanceof Error
+          ? parseError.message
+          : "Could not read the Excel file.",
+      );
+    } finally {
+      setImportParsing(false);
+    }
   };
+
+  const hasImportedSheet = excelSheet != null && importFileName != null;
+  const selectedColumns = useMemo(
+    () =>
+      BULK_UPLOAD_SELECTABLE_COLUMNS.filter((column) =>
+        selectedColumnIds.has(column.id),
+      ),
+    [selectedColumnIds],
+  );
 
   const toggleColumn = (id: BulkUploadColumnId) => {
     setSelectedColumnIds((current) => {
@@ -318,7 +371,9 @@ export function BulkUploadStaffModal({
   };
 
   const selectAllColumns = () => {
-    setSelectedColumnIds(new Set(BULK_UPLOAD_COLUMNS.map((column) => column.id)));
+    setSelectedColumnIds(
+      new Set(BULK_UPLOAD_SELECTABLE_COLUMNS.map((column) => column.id)),
+    );
   };
 
   const clearAllColumns = () => {
@@ -326,9 +381,9 @@ export function BulkUploadStaffModal({
   };
 
   const toggleColumnGroup = (group: BulkUploadColumnGroup) => {
-    const groupIds = BULK_UPLOAD_COLUMNS.filter((column) => column.group === group).map(
-      (column) => column.id,
-    );
+    const groupIds = BULK_UPLOAD_SELECTABLE_COLUMNS.filter(
+      (column) => column.group === group,
+    ).map((column) => column.id);
     setSelectedColumnIds((current) => {
       const allSelected = groupIds.every((id) => current.has(id));
       const next = new Set(current);
@@ -340,95 +395,120 @@ export function BulkUploadStaffModal({
     });
   };
 
-  const buildSheet = () => {
-    const entityList = entities ?? [];
-    const selected = employees.filter((row) =>
-      selectedEmployeeIds.has(row.employeeId),
-    );
-    const previousExisting = new Map(
-      sheetRows.filter((row) => !row.isNew).map((row) => [row.rowKey, row]),
-    );
-    const previousNew = sheetRows.filter((row) => row.isNew);
-    const existingRows = selected.map((row) => {
-      const values = buildBulkUploadRowValues(
-        row,
-        usersByEmployeeId.get(row.employeeId),
-        entityList,
-      );
-      const previous = previousExisting.get(row.employeeId);
-      if (!previous) {
-        return {
-          rowKey: row.employeeId,
-          employeeId: row.employeeId,
-          employeeName: row.employeeName,
-          isNew: false,
-          values,
-          original: { ...values },
-        };
-      }
-      const merged = { ...values };
-      for (const column of selectedColumns) {
-        if (previous.values[column.id] !== previous.original[column.id]) {
-          merged[column.id] = previous.values[column.id];
+  const setExcelTargetMapping = (
+    excelIndex: number,
+    targetId: BulkUploadColumnId | "",
+  ) => {
+    setColumnMapping((current) => {
+      const next: ExcelColumnMapping = { ...current };
+      if (targetId) {
+        for (const [index, mapped] of Object.entries(next)) {
+          if (mapped === targetId) next[Number(index)] = "";
         }
       }
-      return {
-        rowKey: row.employeeId,
-        employeeId: row.employeeId,
-        employeeName: row.employeeName,
-        isNew: false,
-        values: merged,
-        original: values,
-      };
-    });
-    setSheetRows([...existingRows, ...previousNew]);
-  };
-
-  const addNewEmployeeRow = () => {
-    newRowSeq.current += 1;
-    const values = emptyBulkUploadRowValues();
-    setSheetRows((current) => [
-      ...current,
-      {
-        rowKey: `new-${newRowSeq.current}`,
-        employeeId: "",
-        employeeName: "",
-        isNew: true,
-        values,
-        original: { ...values },
-      },
-    ]);
-    setSelectedColumnIds((current) => {
-      const next = new Set(current);
-      for (const id of CREATE_REQUIRED_COLUMN_IDS) next.add(id);
+      next[excelIndex] = targetId;
       return next;
     });
   };
 
-  const removeNewEmployeeRow = (rowKey: string) => {
-    setSheetRows((current) => current.filter((row) => row.rowKey !== rowKey));
-  };
+  useEffect(() => {
+    setColumnMapping((current) => {
+      let changed = false;
+      const next: ExcelColumnMapping = { ...current };
+      for (const [index, targetId] of Object.entries(next)) {
+        if (targetId && !selectedColumnIds.has(targetId)) {
+          next[Number(index)] = "";
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [selectedColumnIds]);
 
-  const goNext = () => {
-    setError(null);
-    if (step === 1) {
-      setStep(2);
+  useEffect(() => {
+    if (!excelSheet || selectedEmployeeIds.size === 0) {
+      setSheetRows((current) => (current.length === 0 ? current : []));
       return;
     }
-    if (step === 2) {
-      if (selectedColumnIds.size === 0 && selectedEmployeeIds.size > 0) {
-        setError("Select at least one column.");
-        return;
+
+    const entityList = entities ?? [];
+    const excelBySap = new Map(
+      excelSheet.rows.map((row) => [sapLookupKey(row.sap), row] as const),
+    );
+    const selected = employees.filter((row) =>
+      selectedEmployeeIds.has(row.employeeId),
+    );
+    const listedIds = new Set(selected.map((row) => row.employeeId));
+
+    const applyMappedValues = (
+      employeeId: string,
+      employeeName: string,
+      sourceValues: RowValues,
+    ): SheetRow => {
+      const original = { ...sourceValues };
+      const values = { ...sourceValues };
+      const excelRow = excelBySap.get(sapLookupKey(employeeId));
+      let nextName = employeeName;
+      if (excelRow) {
+        for (const [index, targetId] of Object.entries(columnMapping)) {
+          if (!targetId || !selectedColumnIds.has(targetId)) continue;
+          const mapped = normalizeMappedExcelValue(
+            targetId,
+            excelRow.values[Number(index)] ?? "",
+          );
+          if (!mapped) continue;
+          values[targetId] = mapped;
+          if (targetId === "employeeName") nextName = mapped;
+        }
       }
-      if (selectedColumnIds.size === 0) {
-        setSelectedColumnIds(
-          new Set([...DEFAULT_BULK_UPLOAD_COLUMN_IDS, ...CREATE_REQUIRED_COLUMN_IDS]),
-        );
-      }
-      buildSheet();
-      setStep(3);
-    }
-  };
+      return {
+        rowKey: employeeId,
+        employeeId,
+        employeeName: nextName,
+        isNew: false,
+        values,
+        original,
+      };
+    };
+
+    const existingRows = selected.map((row) =>
+      applyMappedValues(
+        row.employeeId,
+        row.employeeName,
+        buildBulkUploadRowValues(
+          row,
+          usersByEmployeeId.get(row.employeeId),
+          entityList,
+        ),
+      ),
+    );
+    const extraRows = [...selectedEmployeeIds]
+      .filter((id) => !listedIds.has(id))
+      .map((id) => {
+        const user = usersByEmployeeId.get(id);
+        const values = emptyBulkUploadRowValues();
+        const name = user
+          ? `${user.firstName} ${user.lastName}`.trim()
+          : id;
+        values.employeeName = name;
+        if (user?.email) values.email = user.email;
+        if (user?.designation) values.designation = user.designation;
+        if (user?.dateOfJoining) {
+          values.dateOfJoining = user.dateOfJoining.slice(0, 10);
+        }
+        return applyMappedValues(id, name, values);
+      });
+
+    setSheetRows([...existingRows, ...extraRows]);
+  }, [
+    excelSheet,
+    columnMapping,
+    selectedColumnIds,
+    selectedEmployeeIds,
+    employees,
+    entities,
+    usersByEmployeeId,
+  ]);
 
   const updateCell = (
     rowKey: string,
@@ -460,14 +540,6 @@ export function BulkUploadStaffModal({
             columnId === "employeeName" ? nextValue : row.employeeName,
         };
       }),
-    );
-  };
-
-  const updateIdentity = (rowKey: string, employeeId: string) => {
-    setSheetRows((current) =>
-      current.map((row) =>
-        row.rowKey === rowKey ? { ...row, employeeId } : row,
-      ),
     );
   };
 
@@ -527,6 +599,15 @@ export function BulkUploadStaffModal({
   };
 
   const startSaveChecks = async () => {
+    if (!hasImportedSheet || selectedEmployeeIds.size === 0) {
+      setError("Upload an Excel file with a SAP column first.");
+      return;
+    }
+    if (selectedColumnIds.size === 0) {
+      setError("Select at least one column to update.");
+      return;
+    }
+
     const runId = ++checkRunId.current;
     const stillCurrent = () => checkRunId.current === runId;
 
@@ -637,36 +718,10 @@ export function BulkUploadStaffModal({
                 Bulk update & upload
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Update existing staff or add new employees on the same sheet.
+                Import Excel, map columns, preview the data, and save — all on this screen.
               </p>
             </div>
           </div>
-          <ol className="hidden items-center gap-2 md:flex">
-            {STEPS.map((item, index) => (
-              <li key={item.id} className="flex items-center gap-2">
-                {index > 0 ? (
-                  <span className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
-                ) : null}
-                <span
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-                    step === item.id
-                      ? "bg-slate-800 text-white dark:bg-amber-600"
-                      : step > item.id
-                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                        : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
-                  )}
-                >
-                  {step > item.id ? (
-                    <Check className="size-3" aria-hidden="true" />
-                  ) : (
-                    <span>{item.id}</span>
-                  )}
-                  {item.label}
-                </span>
-              </li>
-            ))}
-          </ol>
           <button
             type="button"
             onClick={onClose}
@@ -678,56 +733,58 @@ export function BulkUploadStaffModal({
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-          {step === 1 ? (
+          <div className="space-y-6">
             <EmployeeStep
-              employees={filteredEmployees}
-              totalCount={employees.length}
-              isLoading={employeesLoading}
-              search={employeeSearch}
-              onSearchChange={setEmployeeSearch}
-              selectedIds={selectedEmployeeIds}
-              allFilteredSelected={allFilteredSelected}
-              someFilteredSelected={someFilteredSelected}
-              onToggle={toggleEmployee}
-              onToggleAll={toggleSelectAllFiltered}
+              fileName={importFileName}
+              parsing={importParsing}
+              loadingStaff={employeesLoading}
+              dragOver={importDragOver}
+              matchedPeople={matchedPeople}
+              unmatchedSaps={importUnmatched}
+              compact={hasImportedSheet}
+              onDragOverChange={setImportDragOver}
+              onFile={handleExcelFile}
             />
-          ) : null}
-          {step === 2 ? (
-            <ColumnStep
-              selectedIds={selectedColumnIds}
-              onToggle={toggleColumn}
-              onSelectAll={selectAllColumns}
-              onClearAll={clearAllColumns}
-              onToggleGroup={toggleColumnGroup}
-            />
-          ) : null}
-          {step === 3 ? (
-            <SheetStep
-              rows={sheetRows}
-              columns={selectedColumns}
-              org1Options={org1Options}
-              org2OptionsFor={org2OptionsFor}
-              managerOptions={managerSelectOptions}
-              formOptions={formSelectOptions}
-              onChange={updateCell}
-              onIdentityChange={updateIdentity}
-              onAddRow={addNewEmployeeRow}
-              onRemoveRow={removeNewEmployeeRow}
-              disabled={saveMutation.isPending || checkOpen}
-            />
-          ) : null}
+            {hasImportedSheet ? (
+              <>
+                <ColumnStep
+                  selectedIds={selectedColumnIds}
+                  onToggle={toggleColumn}
+                  onSelectAll={selectAllColumns}
+                  onClearAll={clearAllColumns}
+                  onToggleGroup={toggleColumnGroup}
+                />
+                <MappingStep
+                  columns={excelSheet?.columns ?? []}
+                  mapping={columnMapping}
+                  targets={selectedColumns}
+                  onChange={setExcelTargetMapping}
+                />
+                <SheetStep
+                  rows={sheetRows}
+                  columns={selectedColumns}
+                  org1Options={org1Options}
+                  org2OptionsFor={org2OptionsFor}
+                  managerOptions={managerSelectOptions}
+                  formOptions={formSelectOptions}
+                  onChange={updateCell}
+                  disabled={saveMutation.isPending || checkOpen}
+                />
+              </>
+            ) : null}
+          </div>
         </div>
 
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-3 dark:border-slate-800">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {error ? (
               <span className="font-medium text-red-600 dark:text-red-400">{error}</span>
-            ) : step === 1 ? (
-              `${selectedEmployeeIds.size} of ${employees.length} existing employees selected`
-            ) : step === 2 ? (
-              `${selectedColumnIds.size} columns selected`
+            ) : hasImportedSheet ? (
+              `${matchedPeople.length} matched · ${importUnmatched.length} not found · ${selectedColumnIds.size} columns · ${
+                Object.values(columnMapping).filter(Boolean).length
+              } mapped`
             ) : (
-              `${sheetRows.filter((row) => !row.isNew).length} existing · ${sheetRows.filter((row) => row.isNew).length} new · ${selectedColumns.length} columns`
+              "Upload an Excel file to match staff and map columns"
             )}
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -738,38 +795,21 @@ export function BulkUploadStaffModal({
             >
               Cancel
             </button>
-            {step > 1 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setStep((current) => (current === 3 ? 2 : 1));
-                }}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
-              >
-                Back
-              </button>
-            ) : null}
-            {step < 3 ? (
-              <button
-                type="button"
-                onClick={goNext}
-                className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-amber-600 dark:hover:bg-amber-500"
-              >
-                Next
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  void startSaveChecks();
-                }}
-                disabled={saveMutation.isPending || checkOpen}
-                className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:bg-amber-600 dark:hover:bg-amber-500"
-              >
-                Save changes
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                void startSaveChecks();
+              }}
+              disabled={
+                !hasImportedSheet ||
+                sheetRows.length === 0 ||
+                saveMutation.isPending ||
+                checkOpen
+              }
+              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:bg-amber-600 dark:hover:bg-amber-500"
+            >
+              Save changes
+            </button>
           </div>
         </footer>
 
@@ -1020,116 +1060,133 @@ function SaveChecksOverlay({
 }
 
 function EmployeeStep({
-  employees,
-  totalCount,
-  isLoading,
-  search,
-  onSearchChange,
-  selectedIds,
-  allFilteredSelected,
-  someFilteredSelected,
-  onToggle,
-  onToggleAll,
+  fileName,
+  parsing,
+  loadingStaff,
+  dragOver,
+  matchedPeople,
+  unmatchedSaps,
+  compact = false,
+  onDragOverChange,
+  onFile,
 }: {
-  employees: FormSubmissionListItem[];
-  totalCount: number;
-  isLoading: boolean;
-  search: string;
-  onSearchChange: (next: string) => void;
-  selectedIds: Set<string>;
-  allFilteredSelected: boolean;
-  someFilteredSelected: boolean;
-  onToggle: (employeeId: string) => void;
-  onToggleAll: () => void;
+  fileName: string | null;
+  parsing: boolean;
+  loadingStaff: boolean;
+  dragOver: boolean;
+  matchedPeople: Array<{ employeeId: string; name: string }>;
+  unmatchedSaps: string[];
+  compact?: boolean;
+  onDragOverChange: (next: boolean) => void;
+  onFile: (file: File | undefined) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const busy = parsing || loadingStaff;
+
   return (
-    <div className=" space-y-3">
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        Select existing employees to update. You can add new employees on the spreadsheet in the next steps.
-      </p>
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+          1. Import Excel
+        </h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          A SAP / SAP ID / SAP Code column is required so we can match staff.
+        </p>
+      </div>
+
+      <label
+        onDragOver={(event) => {
+          event.preventDefault();
+          onDragOverChange(true);
+        }}
+        onDragLeave={() => onDragOverChange(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          onDragOverChange(false);
+          onFile(event.dataTransfer.files[0]);
+        }}
+        className={cn(
+          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed text-center transition-colors",
+          compact ? "px-6 py-5" : "px-6 py-10",
+          dragOver
+            ? "border-emerald-400 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40"
+            : "border-indigo-200 bg-indigo-50/70 hover:border-indigo-400 hover:bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-950/25 dark:hover:border-indigo-400",
+        )}
+      >
+        <span className="flex size-12 items-center justify-center rounded-full bg-indigo-600 text-white dark:bg-indigo-500">
+          {parsing ? (
+            <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+          ) : (
+            <FileSpreadsheet className="size-5" aria-hidden="true" />
+          )}
+        </span>
+        <span className="text-sm font-semibold text-indigo-950 dark:text-indigo-100">
+          {parsing
+            ? "Reading Excel file…"
+            : compact
+              ? "Replace Excel file"
+              : "Drop Excel file here or click to browse"}
+        </span>
+        <span className="text-xs text-indigo-700 dark:text-indigo-300">
+          {fileName ?? "Accepted: .xlsx, .xls"}
+        </span>
         <input
-          type="search"
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search by name or SAP"
-          className="h-9 w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-primary/40 dark:border-white/10 dark:bg-slate-900 dark:text-slate-100"
+          ref={inputRef}
+          type="file"
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          className="sr-only"
+          disabled={busy}
+          onChange={(event) => {
+            onFile(event.target.files?.[0]);
+            event.target.value = "";
+          }}
         />
-      </div>
-      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            <tr>
-              <th className="w-10 px-3 py-2">
-                <input
-                  type="checkbox"
-                  checked={allFilteredSelected}
-                  ref={(element) => {
-                    if (element) element.indeterminate = someFilteredSelected;
-                  }}
-                  onChange={onToggleAll}
-                  disabled={employees.length === 0}
-                  aria-label="Select all filtered employees"
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-2 focus:ring-primary/40"
-                />
-              </th>
-              <th className="px-3 py-2">SAP</th>
-              <th className="px-3 py-2">Employee</th>
-              <th className="px-3 py-2">Designation</th>
-              <th className="px-3 py-2">ORG Level 1</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500">
-                  Loading employees…
-                </td>
-              </tr>
-            ) : employees.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-500">
-                  No employees match the current master filters.
-                </td>
-              </tr>
+      </label>
+
+      {fileName && !parsing ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/30">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+              Matched staff ({matchedPeople.length})
+            </p>
+            {matchedPeople.length === 0 ? (
+              <p className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-300">
+                No staff matched the SAP IDs in this file.
+              </p>
             ) : (
-              employees.map((row) => (
-                <tr
-                  key={row.employeeId}
-                  className="border-t border-slate-100 dark:border-slate-800"
-                >
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(row.employeeId)}
-                      onChange={() => onToggle(row.employeeId)}
-                      aria-label={`Select ${row.employeeName}`}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-2 focus:ring-primary/40"
-                    />
-                  </td>
-                  <td className="px-3 py-2 font-medium tabular-nums text-slate-700 dark:text-slate-300">
-                    {row.employeeId}
-                  </td>
-                  <td className="px-3 py-2 text-slate-900 dark:text-slate-100">
-                    {row.employeeName}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                    {row.designation ?? "—"}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                    {row.orgLevel1Name ?? "—"}
-                  </td>
-                </tr>
-              ))
+              <p className="mt-1 line-clamp-3 text-xs text-emerald-900 dark:text-emerald-100">
+                {matchedPeople
+                  .slice(0, 8)
+                  .map((person) => `${person.name} (${person.employeeId})`)
+                  .join(" · ")}
+                {matchedPeople.length > 8
+                  ? ` · +${matchedPeople.length - 8} more`
+                  : ""}
+              </p>
             )}
-          </tbody>
-        </table>
-      </div>
-      <p className="text-xs text-slate-400">
-        Showing {employees.length} of {totalCount} employees in the current filter.
-      </p>
-    </div>
+          </div>
+          {unmatchedSaps.length > 0 ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-500/30 dark:bg-rose-950/30">
+              <p className="text-xs font-semibold uppercase tracking-wide text-rose-800 dark:text-rose-200">
+                Not found ({unmatchedSaps.length})
+              </p>
+              <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
+                {unmatchedSaps.join(", ")}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Not found
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Every SAP ID in the file matched a staff record.
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1147,11 +1204,17 @@ function ColumnStep({
   onToggleGroup: (group: BulkUploadColumnGroup) => void;
 }) {
   return (
-    <div>
+    <section>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-          Choose columns for the spreadsheet. SAP ID is always included.
-        </p>
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+            2. Columns to update
+          </h3>
+          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Choose which of our columns should receive mapped Excel data. SAP is
+            used only for matching.
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -1172,7 +1235,10 @@ function ColumnStep({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
         {BULK_UPLOAD_COLUMN_GROUPS.map((group) => {
-          const columns = BULK_UPLOAD_COLUMNS.filter((column) => column.group === group);
+          const columns = BULK_UPLOAD_SELECTABLE_COLUMNS.filter(
+            (column) => column.group === group,
+          );
+          if (columns.length === 0) return null;
           const allSelected = columns.every((column) => selectedIds.has(column.id));
           return (
             <section
@@ -1221,7 +1287,88 @@ function ColumnStep({
           );
         })}
       </div>
-    </div>
+    </section>
+  );
+}
+
+function MappingStep({
+  columns,
+  mapping,
+  targets,
+  onChange,
+}: {
+  columns: ExcelSheetColumn[];
+  mapping: ExcelColumnMapping;
+  targets: readonly BulkUploadColumnDef[];
+  onChange: (excelIndex: number, targetId: BulkUploadColumnId | "") => void;
+}) {
+  const mappedCount = Object.values(mapping).filter(Boolean).length;
+  const targetOptions = targets.map((column) => ({
+    value: column.id,
+    label: column.label,
+  }));
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+          3. Map Excel columns
+        </h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Match each Excel heading to one of our columns. Matching names are
+          mapped automatically. Preview updates as you change the mapping.
+        </p>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            <tr>
+              <th className="px-4 py-2">Excel column</th>
+              <th className="px-4 py-2">Maps to</th>
+            </tr>
+          </thead>
+          <tbody>
+            {columns.map((column) => (
+              <tr
+                key={column.index}
+                className="border-t border-slate-100 dark:border-slate-800"
+              >
+                <td className="px-4 py-2 text-slate-800 dark:text-slate-100">
+                  <span className="font-medium">{column.header}</span>
+                  {column.isSap ? (
+                    <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                      Matching
+                    </span>
+                  ) : null}
+                </td>
+                <td className="px-4 py-1.5">
+                  {column.isSap ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Used to match staff. Not imported as a field.
+                    </p>
+                  ) : (
+                    <SearchableSelect
+                      id={`excel-map-${column.index}`}
+                      value={mapping[column.index] ?? ""}
+                      options={targetOptions}
+                      onChange={(next) =>
+                        onChange(column.index, next as BulkUploadColumnId | "")
+                      }
+                      placeholder="Don't import"
+                      emptyOptionLabel="Don't import"
+                      className={sheetSelectClassName}
+                    />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {mappedCount} Excel column{mappedCount === 1 ? "" : "s"} mapped
+      </p>
+    </section>
   );
 }
 
@@ -1233,9 +1380,6 @@ function SheetStep({
   managerOptions,
   formOptions,
   onChange,
-  onIdentityChange,
-  onAddRow,
-  onRemoveRow,
   disabled,
 }: {
   rows: SheetRow[];
@@ -1245,18 +1389,23 @@ function SheetStep({
   managerOptions: { value: string; label: string }[];
   formOptions: { value: string; label: string }[];
   onChange: (rowKey: string, columnId: BulkUploadColumnId, next: string) => void;
-  onIdentityChange: (rowKey: string, employeeId: string) => void;
-  onAddRow: () => void;
-  onRemoveRow: (rowKey: string) => void;
   disabled: boolean;
 }) {
-  const sheetColumns = columns.filter((column) => column.id !== "employeeName");
-  const addColSpan = sheetColumns.length + 3;
+  const changedCount = rows.filter((row) =>
+    columns.some((column) => row.values[column.id] !== row.original[column.id]),
+  ).length;
+
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        New rows create employees. Existing rows only update selected columns.
-      </p>
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+          4. Preview
+        </h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Mapped Excel values appear highlighted. You can still edit cells before
+          saving.
+        </p>
+      </div>
       <div className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
         <table className="min-w-full border-collapse text-left text-sm">
           <thead>
@@ -1264,10 +1413,7 @@ function SheetStep({
               <th className="sticky left-0 z-20 whitespace-nowrap border-r border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold dark:bg-slate-900">
                 SAP
               </th>
-              <th className="whitespace-nowrap border-r border-slate-700 px-3 py-2 text-xs font-semibold">
-                Employee
-              </th>
-              {sheetColumns.map((column) => (
+              {columns.map((column) => (
                 <th
                   key={column.id}
                   className="whitespace-nowrap border-r border-slate-700 px-3 py-2 text-xs font-semibold"
@@ -1276,108 +1422,59 @@ function SheetStep({
                   {column.label}
                 </th>
               ))}
-              <th className="w-10 px-2 py-2 text-xs font-semibold"> </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
-              <tr
-                key={row.rowKey}
-                className={cn(
-                  row.isNew
-                    ? "bg-sky-50/80 dark:bg-sky-950/20"
-                    : index % 2 === 0
-                      ? "bg-white dark:bg-slate-950"
-                      : "bg-slate-50 dark:bg-slate-900/60",
-                )}
-              >
-                <td className="sticky left-0 z-10 border-r border-b border-slate-200 bg-inherit p-0 dark:border-slate-700">
-                  {row.isNew ? (
-                    <input
-                      value={row.employeeId}
-                      onChange={(event) =>
-                        onIdentityChange(row.rowKey, event.target.value)
-                      }
-                      disabled={disabled}
-                      placeholder="SAP"
-                      className={cn(cellInputClassName, "font-semibold tabular-nums")}
-                    />
-                  ) : (
-                    <div className="px-3 py-1 text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">
-                      {row.employeeId}
-                    </div>
-                  )}
-                </td>
-                <td className="border-r border-b border-slate-200 p-0 dark:border-slate-700">
-                  {row.isNew ? (
-                    <input
-                      value={row.employeeName}
-                      onChange={(event) =>
-                        onChange(row.rowKey, "employeeName", event.target.value)
-                      }
-                      disabled={disabled}
-                      placeholder="First Last"
-                      className={cellInputClassName}
-                    />
-                  ) : (
-                    <div className="px-3 py-1 text-xs text-slate-600 dark:text-slate-300">
-                      {row.employeeName}
-                    </div>
-                  )}
-                </td>
-                {sheetColumns.map((column) => (
-                  <td
-                    key={column.id}
-                    className="border-r border-b border-slate-200 p-0 dark:border-slate-700"
-                    style={{ minWidth: column.minWidth }}
-                  >
-                    <SheetCell
-                      column={column}
-                      row={row}
-                      org1Options={org1Options}
-                      org2Options={org2OptionsFor(row.values.orgLevel1)}
-                      managerOptions={managerOptions}
-                      formOptions={formOptions}
-                      onChange={onChange}
-                      disabled={disabled}
-                    />
-                  </td>
-                ))}
-                <td className="border-b border-slate-200 px-1 py-1 dark:border-slate-700">
-                  {row.isNew ? (
-                    <button
-                      type="button"
-                      onClick={() => onRemoveRow(row.rowKey)}
-                      disabled={disabled}
-                      className="inline-flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/40"
-                      aria-label="Remove new employee"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  ) : null}
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columns.length + 1}
+                  className="px-4 py-8 text-center text-sm text-slate-500"
+                >
+                  No matched staff to preview.
                 </td>
               </tr>
-            ))}
-            <tr>
-              <td
-                colSpan={addColSpan}
-                className="bg-white px-2 py-1.5 dark:bg-slate-950"
-              >
-                <button
-                  type="button"
-                  onClick={onAddRow}
-                  disabled={disabled}
-                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:text-slate-300 dark:hover:bg-white/5"
+            ) : (
+              rows.map((row, index) => (
+                <tr
+                  key={row.rowKey}
+                  className={
+                    index % 2 === 0
+                      ? "bg-white dark:bg-slate-950"
+                      : "bg-slate-50 dark:bg-slate-900/60"
+                  }
                 >
-                  <Plus className="size-3.5" aria-hidden="true" />
-                  Add employee
-                </button>
-              </td>
-            </tr>
+                  <td className="sticky left-0 z-10 border-r border-b border-slate-200 bg-inherit px-3 py-1 text-xs font-semibold tabular-nums text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                    {row.employeeId}
+                  </td>
+                  {columns.map((column) => (
+                    <td
+                      key={column.id}
+                      className="border-r border-b border-slate-200 p-0 dark:border-slate-700"
+                      style={{ minWidth: column.minWidth }}
+                    >
+                      <SheetCell
+                        column={column}
+                        row={row}
+                        org1Options={org1Options}
+                        org2Options={org2OptionsFor(row.values.orgLevel1)}
+                        managerOptions={managerOptions}
+                        formOptions={formOptions}
+                        onChange={onChange}
+                        disabled={disabled}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
-    </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {rows.length} staff in preview · {changedCount} with mapped changes
+      </p>
+    </section>
   );
 }
 

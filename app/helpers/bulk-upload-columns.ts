@@ -127,8 +127,8 @@ function col(
 }
 
 export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
-  col("employeeName", "Employee Name", "basic", "text", 180),
-  col("email", "Email", "basic", "text", 200),
+  col("employeeName", "Name", "basic", "text", 180, true),
+  col("email", "Email", "basic", "text", 200, true),
   col("formAssignment", "Form", "basic", "form", 180, true),
   col("formStatus", "Form status", "basic", "readonly", 110),
   col("templateTitle", "Form title", "basic", "readonly", 180),
@@ -136,7 +136,7 @@ export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
   col("roleCategory", "Role Category", "basic", "text", 140, true),
   col("orgLevel1", "ORG Level 1", "basic", "org1", 180, true),
   col("orgLevel2", "ORG Level 2", "basic", "org2", 180, true),
-  col("dateOfJoining", "DOJ", "basic", "date", 140),
+  col("dateOfJoining", "Date of Joining", "basic", "date", 150, true),
   col("systemRole", "System Role", "basic", "select", 140, true),
   col("manager1", "Manager 1", "basic", "manager", 200, true),
   col("manager2", "Manager 2", "basic", "manager", 200, true),
@@ -157,9 +157,9 @@ export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
   col("rawScore", "Raw score", "performance", "readonly", 100),
   col("scorePercent", "Score %", "performance", "readonly", 90),
   col("scoreO", "Score (O)", "performance", "readonly", 90),
-  col("creditHrsErpAdj", "CH Adj", "performance", "number", 90, true),
-  col("pubOricScoreAdj", "ORIC Adj", "performance", "number", 90, true),
-  col("qecScoreAdj", "QEC Adj", "performance", "number", 90, true),
+  col("creditHrsErpAdj", "CH adjustment", "performance", "number", 90, true),
+  col("pubOricScoreAdj", "ORIC adj", "performance", "number", 90, true),
+  col("qecScoreAdj", "QEC adjust", "performance", "number", 90, true),
   col("adjustedScore", "Adj Score (100)", "performance", "readonly", 110),
   col("ratingO", "Rating (O)", "performance", "readonly", 110),
   col("calibrationFactor", "Cal. Fr", "performance", "number", 90, true),
@@ -169,8 +169,8 @@ export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
   col("ratingN", "Rating (N)", "performance", "readonly", 130),
   col("quartile", "Quartile", "performance", "readonly", 110),
   col("remarksEvaluation", "Remarks Evaluation", "performance", "readonly", 200),
-  col("currentSalary", "Current Sal", "compensation", "readonly", 110),
-  col("previousSalary", "Prev Salary", "compensation", "readonly", 110),
+  col("currentSalary", "Current Salary", "compensation", "number", 120, true),
+  col("previousSalary", "Prev Salary", "compensation", "number", 120, true),
   col("salaryDiff", "Difference", "compensation", "readonly", 100),
   col("applicableSalaryForIncrement", "Applicable Sal", "compensation", "readonly", 120),
   col("applicableMatrix", "Applicable Matrix", "compensation", "readonly", 150),
@@ -179,7 +179,7 @@ export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
   col("incrementAdjusted", "Increment Adjustment", "compensation", "readonly", 150),
   col("revisedSalary", "Revised Salary", "compensation", "readonly", 120),
   col("revisedSalaryRo", "Revised Salary RO", "compensation", "readonly", 130),
-  col("remarksCompensation", "Remarks Compensation", "compensation", "readonly", 200),
+  col("remarksCompensation", "Salary remarks", "compensation", "textarea", 200, true),
   col("hodReviewComments", "HOD Remarks", "compensation", "readonly", 200),
 ];
 
@@ -189,11 +189,32 @@ export const BULK_UPLOAD_COLUMN_GROUPS: readonly BulkUploadColumnGroup[] = [
   "compensation",
 ];
 
-export const DEFAULT_BULK_UPLOAD_COLUMN_IDS: readonly BulkUploadColumnId[] = [
+/** Columns HR can select and map from Excel on the bulk-upload screen. */
+export const BULK_UPLOAD_SELECTABLE_COLUMN_IDS: readonly BulkUploadColumnId[] = [
+  "employeeName",
+  "email",
   "designation",
-  "orgLevel1",
-  "orgLevel2",
+  "dateOfJoining",
+  "qualification",
+  "qualificationSubject",
+  "qualificationYear",
+  "qualificationInstitute",
+  "qualificationCountry",
+  "creditHrsErpAdj",
+  "pubOricScoreAdj",
+  "qecScoreAdj",
+  "currentSalary",
+  "previousSalary",
+  "remarksCompensation",
 ];
+
+export const BULK_UPLOAD_SELECTABLE_COLUMNS: readonly BulkUploadColumnDef[] =
+  BULK_UPLOAD_COLUMNS.filter((column) =>
+    BULK_UPLOAD_SELECTABLE_COLUMN_IDS.includes(column.id),
+  );
+
+export const DEFAULT_BULK_UPLOAD_COLUMN_IDS: readonly BulkUploadColumnId[] =
+  BULK_UPLOAD_SELECTABLE_COLUMN_IDS;
 
 /** Shown and required when adding a new employee row. */
 export const CREATE_REQUIRED_COLUMN_IDS: readonly BulkUploadColumnId[] = [
@@ -255,6 +276,12 @@ function asText(value: string | number | boolean | null | undefined): string {
   if (value == null || value === "") return "";
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
+}
+
+function toIsoDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
 }
 
 function formatListingFormStatus(row: FormSubmissionListItem): string {
@@ -377,11 +404,8 @@ export function buildBulkUploadRowValues(
     roleCategory: row.roleCategory ?? "",
     orgLevel1: org.org1,
     orgLevel2: org.org2,
-    dateOfJoining: row.dateOfJoining
-      ? new Date(row.dateOfJoining).toLocaleDateString("en-GB")
-      : user?.dateOfJoining
-        ? new Date(user.dateOfJoining).toLocaleDateString("en-GB")
-        : "",
+    dateOfJoining:
+      toIsoDate(row.dateOfJoining) || toIsoDate(user?.dateOfJoining) || "",
     systemRole: user?.systemRole ?? "",
     manager1: row.manager1UserId != null ? String(row.manager1UserId) : "",
     manager2: row.manager2UserId != null ? String(row.manager2UserId) : "",

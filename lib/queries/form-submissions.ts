@@ -2193,6 +2193,10 @@ export async function updateEmployeeRoleCategory(
 export async function bulkUpdateEmployeeListingFields(
   employeeIds: string[],
   fields: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    dateOfJoining?: string | null;
     roleCategory?: string | null;
     designation?: string | null;
     entityId?: number | null;
@@ -2205,6 +2209,9 @@ export async function bulkUpdateEmployeeListingFields(
     creditHrsErpScoreAdj?: number | null;
     pubOricScoreAdj?: number | null;
     qecScoreAdj?: number | null;
+    currentSalary?: number | null;
+    previousSalary?: number | null;
+    remarksCompensation?: string | null;
     calibrationFactor?: number | null;
     manager1UserId?: number | null;
     manager2UserId?: number | null;
@@ -2214,23 +2221,7 @@ export async function bulkUpdateEmployeeListingFields(
 ): Promise<{
   updatedCount: number;
   employeeIds: string[];
-  roleCategory?: string | null;
-  designation?: string | null;
-  entityId?: number | null;
-  templateId?: number | null;
-  qualification?: string | null;
-  qualificationYear?: number | null;
-  qualificationSubject?: string | null;
-  qualificationInstitute?: string | null;
-  qualificationCountry?: string | null;
-  creditHrsErpScoreAdj?: number | null;
-  pubOricScoreAdj?: number | null;
-  qecScoreAdj?: number | null;
-  calibrationFactor?: number | null;
-  manager1UserId?: number | null;
-  manager2UserId?: number | null;
-  assessmentEligibility?: boolean;
-  systemRole?: string | null;
+  [key: string]: unknown;
 }> {
   const uniqueIds = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
 
@@ -2238,6 +2229,10 @@ export async function bulkUpdateEmployeeListingFields(
     throw new FormSubmissionError("At least one employeeId is required.", 400);
   }
 
+  const updatesFirstName = "firstName" in fields;
+  const updatesLastName = "lastName" in fields;
+  const updatesEmail = "email" in fields;
+  const updatesDateOfJoining = "dateOfJoining" in fields;
   const updatesRole = "roleCategory" in fields;
   const updatesDesignation = "designation" in fields;
   const updatesEntity = "entityId" in fields;
@@ -2250,6 +2245,9 @@ export async function bulkUpdateEmployeeListingFields(
   const updatesChAdj = "creditHrsErpScoreAdj" in fields;
   const updatesOricAdj = "pubOricScoreAdj" in fields;
   const updatesQecAdj = "qecScoreAdj" in fields;
+  const updatesCurrentSalary = "currentSalary" in fields;
+  const updatesPreviousSalary = "previousSalary" in fields;
+  const updatesRemarksCompensation = "remarksCompensation" in fields;
   const updatesCalFr = "calibrationFactor" in fields;
   const updatesManager1 = "manager1UserId" in fields;
   const updatesManager2 = "manager2UserId" in fields;
@@ -2257,6 +2255,10 @@ export async function bulkUpdateEmployeeListingFields(
   const updatesSystemRole = "systemRole" in fields;
 
   const hasAnyUpdate =
+    updatesFirstName ||
+    updatesLastName ||
+    updatesEmail ||
+    updatesDateOfJoining ||
     updatesRole ||
     updatesDesignation ||
     updatesEntity ||
@@ -2269,6 +2271,9 @@ export async function bulkUpdateEmployeeListingFields(
     updatesChAdj ||
     updatesOricAdj ||
     updatesQecAdj ||
+    updatesCurrentSalary ||
+    updatesPreviousSalary ||
+    updatesRemarksCompensation ||
     updatesCalFr ||
     updatesManager1 ||
     updatesManager2 ||
@@ -2290,7 +2295,10 @@ export async function bulkUpdateEmployeeListingFields(
     await assertManagerEligible(fields.manager2UserId, "Manager 2");
   }
 
-  if ((updatesRole || updatesDesignation) && !(await hasExcelSheetColumns())) {
+  if (
+    (updatesRole || updatesDesignation || updatesDateOfJoining) &&
+    !(await hasExcelSheetColumns())
+  ) {
     throw new FormSubmissionError(
       "Excel-sheet columns are not available. Run the excel-sheet columns migration.",
       503,
@@ -2309,6 +2317,30 @@ export async function bulkUpdateEmployeeListingFields(
   const userValues: unknown[] = [uniqueIds];
   let paramIdx = 1;
 
+  if (updatesFirstName) {
+    const firstName = fields.firstName?.trim() ?? "";
+    if (!firstName) {
+      throw new FormSubmissionError("Name is required.", 400);
+    }
+    userValues.push(firstName);
+    userSetClauses.push(`first_name = $${++paramIdx}`);
+  }
+  if (updatesLastName) {
+    userValues.push(fields.lastName?.trim() ?? "");
+    userSetClauses.push(`last_name = $${++paramIdx}`);
+  }
+  if (updatesEmail) {
+    const email = fields.email?.trim() ?? "";
+    if (!email) {
+      throw new FormSubmissionError("Email is required.", 400);
+    }
+    userValues.push(email);
+    userSetClauses.push(`email = $${++paramIdx}`);
+  }
+  if (updatesDateOfJoining) {
+    userValues.push(fields.dateOfJoining ?? null);
+    userSetClauses.push(`date_of_joining = $${++paramIdx}`);
+  }
   if (updatesRole) {
     userValues.push(fields.roleCategory ?? null);
     userSetClauses.push(`role_category = $${++paramIdx}`);
@@ -2341,14 +2373,26 @@ export async function bulkUpdateEmployeeListingFields(
   let updatedUserIds: string[] = [];
 
   if (userSetClauses.length > 0) {
-    const userResult = await db.query<{ employee_id: string }>(
-      `UPDATE users
-       SET ${userSetClauses.join(", ")}
-       WHERE employee_id = ANY($1::text[])
-       RETURNING employee_id`,
-      userValues,
-    );
-    updatedUserIds = userResult.rows.map((r) => r.employee_id);
+    try {
+      const userResult = await db.query<{ employee_id: string }>(
+        `UPDATE users
+         SET ${userSetClauses.join(", ")}
+         WHERE employee_id = ANY($1::text[])
+         RETURNING employee_id`,
+        userValues,
+      );
+      updatedUserIds = userResult.rows.map((r) => r.employee_id);
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code: string }).code === "23505"
+      ) {
+        throw new FormSubmissionError("This email already exists.", 409);
+      }
+      throw error;
+    }
   } else {
     // Still need to get the user IDs for downstream updates
     const idResult = await db.query<{ id: string; employee_id: string }>(
@@ -2487,11 +2531,17 @@ export async function bulkUpdateEmployeeListingFields(
     }
   }
 
-  // --- Update appraisals (score adjustments + calibration factor) ---
-  const updatesAnyScoreAdj =
-    updatesChAdj || updatesOricAdj || updatesQecAdj || updatesCalFr;
+  // --- Update appraisals (score adjustments, salary, remarks) ---
+  const updatesAnyAppraisal =
+    updatesChAdj ||
+    updatesOricAdj ||
+    updatesQecAdj ||
+    updatesCalFr ||
+    updatesCurrentSalary ||
+    updatesPreviousSalary ||
+    updatesRemarksCompensation;
 
-  if (updatesAnyScoreAdj) {
+  if (updatesAnyAppraisal) {
     const appraisalSetClauses: string[] = [];
     const appraisalValues: unknown[] = [];
     let appraisalParamIdx = 0;
@@ -2511,6 +2561,18 @@ export async function bulkUpdateEmployeeListingFields(
     if (updatesCalFr) {
       appraisalValues.push(fields.calibrationFactor ?? null);
       appraisalSetClauses.push(`calibration_factor = $${++appraisalParamIdx}`);
+    }
+    if (updatesCurrentSalary) {
+      appraisalValues.push(fields.currentSalary ?? null);
+      appraisalSetClauses.push(`current_salary = $${++appraisalParamIdx}`);
+    }
+    if (updatesPreviousSalary) {
+      appraisalValues.push(fields.previousSalary ?? null);
+      appraisalSetClauses.push(`previous_salary = $${++appraisalParamIdx}`);
+    }
+    if (updatesRemarksCompensation) {
+      appraisalValues.push(fields.remarksCompensation ?? null);
+      appraisalSetClauses.push(`remarks_compensation = $${++appraisalParamIdx}`);
     }
 
     // Get active cycle
