@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, Upload, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
 import { BulkUploadStaffModal } from "@/app/components/dashboard/BulkUploadStaffModal";
@@ -270,6 +270,52 @@ interface RenderCellContext {
   isTogglingEligibility?: boolean;
   /** Modules the current user can edit via additional-access (non-admin roles). */
   editableModules?: Set<string>;
+}
+
+function HodReviewCommentsCell({ value }: { value: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const [canToggle, setCanToggle] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!el) {
+      return;
+    }
+    if (expanded) {
+      setCanToggle(true);
+      return;
+    }
+    setCanToggle(el.scrollHeight > el.clientHeight + 1);
+  }, [value, expanded]);
+
+  if (!value.trim() || value === "—") {
+    return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
+  }
+
+  return (
+    <div className="min-w-0">
+      <p
+        ref={textRef}
+        className={cn(
+          "text-slate-700 dark:text-slate-300",
+          expanded ? "whitespace-pre-wrap break-words" : "line-clamp-2 break-words",
+        )}
+        title={expanded ? undefined : value}
+      >
+        {value}
+      </p>
+      {canToggle ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="mt-0.5 text-[11px] font-medium text-amber-700 hover:underline dark:text-amber-400"
+        >
+          {expanded ? "Less" : "More"}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function renderCell(
@@ -826,6 +872,10 @@ function renderCell(
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.initialScoreNumeric : undefined}
       />
     );
+  }
+
+  if (columnId === "hodReviewComments") {
+    return <HodReviewCommentsCell value={value} />;
   }
 
   return (

@@ -1240,7 +1240,7 @@ export default function SubmissionDetailView({
               </th>
               {selfAssessmentEnabled ? (
                 <>
-              <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+              <th className="min-w-[10.5rem] print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
                 Self Score
               </th>
               <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
@@ -1248,7 +1248,7 @@ export default function SubmissionDetailView({
               </th>
                 </>
               ) : null}
-              <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
+              <th className="min-w-[10.5rem] print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
                 Mgr 1 Score
               </th>
               <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
@@ -1256,7 +1256,7 @@ export default function SubmissionDetailView({
               </th>
               {hasManager2 && showManager2Data ? (
                 <>
-                  <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                  <th className="min-w-[10.5rem] print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
                     Mgr 2 Score
                   </th>
                   <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
@@ -1379,7 +1379,7 @@ export default function SubmissionDetailView({
                       </>
                     ) : null}
                     {/* Manager 1 Score — read-only for admin roles unless assigned as Manager 1 */}
-                    <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                    <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                       {scored ? (
                         (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
                           <ManagerScoreEditor
@@ -1430,7 +1430,7 @@ export default function SubmissionDetailView({
                     {/* Manager 2 Score + Remarks */}
                     {hasManager2 && showManager2Data ? (
                       <>
-                        <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                        <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                           {scored ? (
                             (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
                               <ManagerScoreEditor

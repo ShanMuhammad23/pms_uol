@@ -48,6 +48,7 @@ const DEFAULT_SR_WIDTH = 48;
 const DEFAULT_KPI_WIDTH = 320;
 const DEFAULT_MAX_WIDTH = 64;
 const DEFAULT_EMPLOYEE_WIDTH = 140;
+const RATING_EMPLOYEE_WIDTH = 200;
 const MIN_COL_WIDTH = 60;
 const MAX_COL_WIDTH = 500;
 
@@ -493,6 +494,9 @@ export default function DirectAssessmentSpreadsheet({
     (sum, q) => sum + q.totalMarks,
     0,
   );
+  const staffColumnWidth = data.ratingBased
+    ? RATING_EMPLOYEE_WIDTH
+    : DEFAULT_EMPLOYEE_WIDTH;
 
   return (
     <div className="space-y-3">
@@ -604,7 +608,7 @@ export default function DirectAssessmentSpreadsheet({
                   <ResizableHeader
                     key={emp.submissionId}
                     columnId={empColId}
-                    width={getColumnWidth(empColId, DEFAULT_EMPLOYEE_WIDTH)}
+                    width={getColumnWidth(empColId, staffColumnWidth)}
                     onResize={handleColumnResize}
                     className="border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider"
                   >
@@ -700,7 +704,7 @@ export default function DirectAssessmentSpreadsheet({
                         </p>
                       </td>
                       <td
-                        className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
+                        className="overflow-hidden whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                         style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                       >
                         {scored ? question!.totalMarks : "—"}
@@ -710,13 +714,13 @@ export default function DirectAssessmentSpreadsheet({
                         const empDrafts = drafts[emp.submissionId];
                         const draft = empDrafts?.[question!.id];
                         const empColId = `emp-${emp.submissionId}`;
-                        const empWidth = getColumnWidth(empColId, DEFAULT_EMPLOYEE_WIDTH);
+                        const empWidth = getColumnWidth(empColId, staffColumnWidth);
 
                         return (
                           <td
                             key={emp.submissionId}
                             className={cn(
-                              "border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40",
+                              "min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40",
                               !isEditable &&
                                 "bg-slate-50/50 dark:bg-slate-800/20",
                             )}
@@ -804,7 +808,7 @@ export default function DirectAssessmentSpreadsheet({
                     return sum + (Number.isNaN(val) ? 0 : val);
                   }, 0);
                   const empColId = `emp-${emp.submissionId}`;
-                  const empWidth = getColumnWidth(empColId, DEFAULT_EMPLOYEE_WIDTH);
+                  const empWidth = getColumnWidth(empColId, staffColumnWidth);
 
                   return (
                     <td
@@ -836,7 +840,7 @@ export default function DirectAssessmentSpreadsheet({
                 />
                 {filteredEmployees.map((emp) => {
                   const empColId = `emp-${emp.submissionId}`;
-                  const empWidth = getColumnWidth(empColId, DEFAULT_EMPLOYEE_WIDTH);
+                  const empWidth = getColumnWidth(empColId, staffColumnWidth);
                   const empRemarks = remarksDrafts[emp.submissionId] ?? {
                     manager1: "",
                     manager2: "",

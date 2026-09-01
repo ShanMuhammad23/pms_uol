@@ -348,7 +348,7 @@ export default function FormAssessmentPreview({
                 </th>
                 {showSelfColumns ? (
                   <>
-                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                    <th className="min-w-[10.5rem] whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
                       Self Score
                     </th>
                     <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
@@ -358,7 +358,7 @@ export default function FormAssessmentPreview({
                 ) : null}
                 {showManager1Columns ? (
                   <>
-                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                    <th className="min-w-[10.5rem] whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
                       Mgr 1 Score
                     </th>
                     <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
@@ -368,7 +368,7 @@ export default function FormAssessmentPreview({
                 ) : null}
                 {showManager2Columns ? (
                   <>
-                    <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
+                    <th className="min-w-[10.5rem] whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
                       Mgr 2 Score
                     </th>
                     <th className="whitespace-nowrap border-r border-white/10 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-50">
@@ -535,7 +535,7 @@ function QuestionPreviewRow({
 
       {showSelfColumns ? (
         <>
-          <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
+          <td className="min-w-[10.5rem] overflow-hidden border-r border-slate-100 px-2 py-2.5 text-center dark:border-slate-700/40">
             <PreviewScoreCell
               question={question}
               ratingBased={ratingBased}
@@ -555,7 +555,7 @@ function QuestionPreviewRow({
       {/* Manager 1 — hidden in Employee view (employees never see manager columns) */}
       {showManager1Columns ? (
         <>
-          <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
+          <td className="min-w-[10.5rem] overflow-hidden border-r border-slate-100 px-2 py-2.5 text-center dark:border-slate-700/40">
             <PreviewScoreCell
               question={question}
               ratingBased={ratingBased}
@@ -574,7 +574,7 @@ function QuestionPreviewRow({
 
       {showManager2Columns ? (
         <>
-          <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
+          <td className="min-w-[10.5rem] overflow-hidden border-r border-slate-100 px-2 py-2.5 text-center dark:border-slate-700/40">
             <PreviewScoreCell
               question={question}
               ratingBased={ratingBased}

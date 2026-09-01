@@ -699,7 +699,7 @@ export default function EmployeeFormFill({
                 <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
                   Weight
                 </th>
-                <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
+                <th className="min-w-[10.5rem] print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
                   Self Score
                 </th>
                 <th className="min-w-[220px] print-col-largest border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:border-slate-700/50 dark:text-slate-300">
@@ -790,7 +790,7 @@ export default function EmployeeFormFill({
                               <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
                                 {question!.totalMarks}
                               </td>
-                              <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+              <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                                 {scored && !isHodOnly ? (
                                   usesRatingScore(
                                     question!,

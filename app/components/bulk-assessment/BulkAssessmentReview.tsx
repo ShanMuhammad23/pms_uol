@@ -1366,7 +1366,7 @@ function WorkspaceView({
                   <th className="px-3 py-3">Employee</th>
                   <th className="px-3 py-3 text-right">Self Score</th>
                   <th className="px-3 py-3 min-w-[180px]">Self Remarks</th>
-                  <th className="px-3 py-3 text-right">Manager Score</th>
+                  <th className="min-w-[12rem] px-3 py-3 text-right">Manager Score</th>
                   <th className="px-3 py-3">Remarks</th>
                   <th className="px-3 py-3 min-w-[160px]">Attachments</th>
                 </tr>
@@ -1413,7 +1413,7 @@ function WorkspaceView({
                           <span className="text-xs text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-right">
+                      <td className="min-w-0 max-w-[14rem] overflow-hidden px-3 py-3 text-right">
                         {currentQuestion.ratingBased && currentQuestion.ratingScale ? (
                           <RatingScoreField
                             scale={currentQuestion.ratingScale}
