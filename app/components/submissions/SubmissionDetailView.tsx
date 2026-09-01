@@ -225,6 +225,8 @@ interface ScoreAdjustmentsPanelProps {
   canEditCalibrationFactor?: boolean;
   performanceLevelName: string | null;
   quartileName: string | null;
+  /** Normalized score is only shown after HR Alignment is completed. */
+  showNormalizedScore?: boolean;
 }
 
 function ScoreAdjustmentsPanel({
@@ -242,6 +244,7 @@ function ScoreAdjustmentsPanel({
   canEditCalibrationFactor = true,
   performanceLevelName,
   quartileName,
+  showNormalizedScore = false,
 }: ScoreAdjustmentsPanelProps) {
   const chAdj = creditHrsErpScoreAdj ?? 0;
   const oricAdj = pubOricScoreAdj ?? 0;
@@ -256,7 +259,7 @@ function ScoreAdjustmentsPanel({
 
   const normalizedScore = adjustedScore * calFr;
   const normalizedScorePct =
-    maxRawScore > 0
+    showNormalizedScore && maxRawScore > 0
       ? Number(((normalizedScore / maxRawScore) * 100).toFixed(2))
       : null;
 
@@ -340,14 +343,16 @@ function ScoreAdjustmentsPanel({
           </div>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Norm. Score (100)
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
-            {normalizedScorePct ?? "—"}
-          </p>
-        </div>
+        {showNormalizedScore ? (
+          <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Norm. Score (100)
+            </p>
+            <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+              {normalizedScorePct ?? "—"}
+            </p>
+          </div>
+        ) : null}
 
         <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -377,21 +382,12 @@ export default function SubmissionDetailView({
     session?.user?.id ? Number(session.user.id) : undefined,
     userRole,
   );
-  // Additional Access permissions extend the user's default role-based
-  // column visibility. A user with CREDIT_HOURS / ORIC_ADJUSTMENTS /
-  // QEC_ADJUSTMENTS additional access can view and edit those adjustment
-  // columns even if they are not an admin role (e.g., a Manager with
-  // additional access). These are additive — they never remove access.
   const canViewCreditHours = isAdminRole || canViewModule("CREDIT_HOURS");
   const canViewOric = isAdminRole || canViewModule("ORIC_ADJUSTMENTS");
   const canViewQec = isAdminRole || canViewModule("QEC_ADJUSTMENTS");
   const canEditCreditHours = isAdminRole || canEditModule("CREDIT_HOURS");
   const canEditOric = isAdminRole || canEditModule("ORIC_ADJUSTMENTS");
   const canEditQec = isAdminRole || canEditModule("QEC_ADJUSTMENTS");
-  // The Score Adjustments panel is visible to admin roles OR any user who
-  // has at least one additional-access adjustment permission (view or edit).
-  // This ensures additional access permissions are never ignored by the
-  // default role-based visibility logic.
   const canViewAnyAdjustment =
     isAdminRole || canViewCreditHours || canViewOric || canViewQec;
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -1494,10 +1490,6 @@ export default function SubmissionDetailView({
               totalMarks: data.maxRawScore,
               accentClass:
                 "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
-              remarks:
-                (data.additionalRemarksEnabled ?? false)
-                  ? manager1OverallRemarks
-                  : null,
               personLabel: formatNameWithSap(
                 data.manager1Name,
                 data.manager1EmployeeId,
@@ -1514,10 +1506,6 @@ export default function SubmissionDetailView({
                     totalMarks: data.maxRawScore,
                     accentClass:
                       "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
-                    remarks:
-                      (data.additionalRemarksEnabled ?? false)
-                        ? manager2OverallRemarks
-                        : null,
                     personLabel: formatNameWithSap(
                       data.manager2Name,
                       data.manager2EmployeeId,
@@ -1552,12 +1540,6 @@ export default function SubmissionDetailView({
           pubOricScoreAdj={data.pubOricScoreAdj}
           qecScoreAdj={data.qecScoreAdj}
           calibrationFactor={data.calibrationFactor}
-          // The panel's canEdit controls the `disabled` flag which, when
-          // true, renders ALL cells as "—". For admin roles this comes from
-          // the API (canEditScoreAdjustments). For non-admin users with
-          // additional access, we enable the panel when they have EDIT-level
-          // access on any adjustment module — the per-cell canEdit props
-          // (canEditCreditHours etc.) still gate individual columns.
           canEdit={
             isEligible &&
             (data.canEditScoreAdjustments ||
@@ -1571,6 +1553,11 @@ export default function SubmissionDetailView({
           canEditCalibrationFactor={isAdminRole}
           performanceLevelName={data.performanceLevelName}
           quartileName={data.quartileName}
+          showNormalizedScore={
+            data.status === "PENDING_BOARD_APPROVAL" ||
+            data.status === "APPROVED" ||
+            data.status === "COMPLETED"
+          }
         />
       ) : null}
 

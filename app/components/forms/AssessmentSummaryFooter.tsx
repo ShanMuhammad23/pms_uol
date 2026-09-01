@@ -8,8 +8,6 @@ export interface AssessmentSummaryEntry {
   awardedMarks: number;
   totalMarks: number;
   accentClass: string;
-  /** Optional remarks shown below the percentage circle. */
-  remarks?: string | null;
   /** Optional person line (name + SAP) shown under the assessment label. */
   personLabel?: string | null;
   /** When true, shows a large completed-review checkmark in the card. */
@@ -93,14 +91,6 @@ export default function AssessmentSummaryFooter({
                 {entry.completed ? (
                   <p className="text-xs font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
                     {percentage}%
-                  </p>
-                ) : null}
-                {entry.remarks && entry.remarks.trim() ? (
-                  <p
-                    className="max-w-[120px] text-center text-[10px] leading-tight text-slate-500 dark:text-slate-400"
-                    title={entry.remarks}
-                  >
-                    {entry.remarks.trim()}
                   </p>
                 ) : null}
               </div>

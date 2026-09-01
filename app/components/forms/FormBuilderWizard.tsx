@@ -3,7 +3,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useCallback, useRef, useEffect } from "react";
+import {
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  type KeyboardEvent,
+} from "react";
 import { Button } from "@/app/components/auth/Button";
 import FormEmployeeAssignment from "./FormEmployeeAssignment";
 import FormTemplateView from "./FormTemplateView";
@@ -65,6 +73,42 @@ interface QuestionLocation {
   sectionClientId: string | null;
   subsectionClientId: string | null;
   insertIndex?: number;
+}
+
+/** Textarea that grows with its content instead of scrolling inside a fixed height. */
+function AutoGrowTextarea({
+  value,
+  onChange,
+  onKeyDown,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      rows={1}
+      className={cn("overflow-hidden resize-none field-sizing-content", className)}
+    />
+  );
 }
 
 function draftToTemplateRecord(
@@ -1840,9 +1884,9 @@ function QuestionCard({
         
         <div className="flex-1 space-y-3">
           <div className="flex gap-2">
-            <textarea
+            <AutoGrowTextarea
               value={question.questionText}
-              onChange={(e) => onChange({ questionText: e.target.value })}
+              onChange={(value) => onChange({ questionText: value })}
               onKeyDown={(e) => {
                 // Enter inserts a new line; Shift+Enter also inserts a new line.
                 // No special handling needed — textarea handles newlines natively.
@@ -1853,9 +1897,8 @@ function QuestionCard({
                 }
               }}
               placeholder="Enter question text... (Press Enter for new line)"
-              rows={1}
               className={cn(
-                "flex-1 resize-y min-h-[2rem] bg-transparent text-sm outline-none whitespace-pre-wrap",
+                "min-h-8 flex-1 bg-transparent text-sm outline-none whitespace-pre-wrap",
                 textError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-sky-900 placeholder:text-sky-400 dark:text-sky-50 dark:placeholder:text-sky-500"
               )}
             />
