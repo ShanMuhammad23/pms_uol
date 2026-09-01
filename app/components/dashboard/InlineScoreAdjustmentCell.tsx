@@ -98,10 +98,12 @@ export function InlineScoreAdjustmentCell({
   }, [editing]);
 
   const saveMutation = useMutation({
-    mutationFn: (nextValue: number | null) =>
-      isCompensationField(field)
-        ? updateSubmissionCompensationWorksheet(submissionId, field, nextValue)
-        : updateSubmissionScoreAdjustments(submissionId, field, nextValue),
+    mutationFn: async (nextValue: number | null): Promise<{ id: number }> => {
+      if (isCompensationField(field)) {
+        return updateSubmissionCompensationWorksheet(submissionId, field, nextValue);
+      }
+      return updateSubmissionScoreAdjustments(submissionId, field, nextValue);
+    },
     onMutate: async (nextValue) => {
       setError(null);
       await cancelStaffListingQueries(queryClient);
@@ -124,9 +126,9 @@ export function InlineScoreAdjustmentCell({
       );
       setEditing(true);
     },
-    onSuccess: (result) => {
+    onSuccess: (_result, nextValue) => {
       patchStaffListingCaches(queryClient, (row) =>
-        row.id === result.id ? { ...row, [field]: result[field] } : row,
+        row.id === submissionId ? { ...row, [field]: nextValue } : row,
       );
       setEditing(false);
     },
