@@ -20,8 +20,10 @@ import {
   updateAppraisalOverallRemarks,
   updateAppraisalRemarks,
   updateAppraisalScoreAdjustments,
+  updateAppraisalCompensationWorksheet,
   type AppraisalRemarksField,
   type AppraisalScoreAdjustmentField,
+  type CompensationWorksheetField,
 } from "@/lib/queries/form-submissions";
 import { apiHandler } from "@/lib/api-handler";
 
@@ -267,6 +269,44 @@ export const PATCH = apiHandler(async (request: Request, context: RouteContext) 
       return NextResponse.json(updated);
     }
 
+    const COMPENSATION_FIELDS: CompensationWorksheetField[] = [
+      "incrementAdjusted",
+      "revisedSalaryRo",
+    ];
+    const compensationField = COMPENSATION_FIELDS.find((f) => f in body);
+
+    if (compensationField) {
+      if (!canReviewSubmissions(auth.user?.role)) {
+        return NextResponse.json(
+          { error: "Forbidden: admin role required to edit compensation fields." },
+          { status: 403 },
+        );
+      }
+
+      const rawValue = body[compensationField];
+      const numValue =
+        rawValue === null || rawValue === undefined || rawValue === ""
+          ? null
+          : typeof rawValue === "number"
+            ? rawValue
+            : Number(rawValue);
+
+      if (numValue !== null && !Number.isFinite(numValue)) {
+        return NextResponse.json(
+          { error: `${compensationField} must be a valid number or null.` },
+          { status: 400 },
+        );
+      }
+
+      const updated = await updateAppraisalCompensationWorksheet(
+        submissionId,
+        compensationField,
+        numValue,
+      );
+
+      return NextResponse.json(updated);
+    }
+
     // Handle overall remarks fields (Manager 1 / Manager 2)
     const OVERALL_REMARKS_FIELDS = [
       "manager1OverallRemarks",
@@ -308,7 +348,7 @@ export const PATCH = apiHandler(async (request: Request, context: RouteContext) 
       return NextResponse.json(
         {
           error:
-            "One of remarksEvaluation, remarksCompensation, manager1OverallRemarks, manager2OverallRemarks, creditHrsErpScoreAdj, pubOricScoreAdj, qecScoreAdj, calibrationFactor, or calibratedScoreNumeric is required.",
+            "One of remarksEvaluation, remarksCompensation, manager1OverallRemarks, manager2OverallRemarks, creditHrsErpScoreAdj, pubOricScoreAdj, qecScoreAdj, calibrationFactor, calibratedScoreNumeric, incrementAdjusted, or revisedSalaryRo is required.",
         },
         { status: 400 },
       );

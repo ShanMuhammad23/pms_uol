@@ -6,6 +6,13 @@ import {
 import { getSubmissionStatusLabel } from "@/app/helpers/dashboard-form-state";
 import { getReportingManagerScore } from "@/app/helpers/score-o";
 import {
+  getApplicableSalary,
+  getIncrementAdjusted,
+  getIncrementPerMatrix,
+  getRevisedSalary,
+  getRevisedSalaryRo,
+} from "@/app/helpers/compensation-worksheet";
+import {
   getAdjustedScore as sharedGetAdjustedScore,
   getNormalizedScorePercent as sharedGetNormalizedScorePercent,
 } from "@/lib/performance-rating";
@@ -535,7 +542,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     label: "Applicable Sal",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(row.applicableSalaryForIncrement),
+    getValue: (row) => formatNumber(getApplicableSalary(row)),
   },
   applicableMatrix: {
     id: "applicableMatrix",
@@ -553,31 +560,31 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   incrementPerMatrix: {
     id: "incrementPerMatrix",
-    label: "Increment Per Matrix",
+    label: "Incr. Per Matrix",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(row.incrementPerMatrix),
+    getValue: (row) => formatNumber(getIncrementPerMatrix(row)),
   },
   incrementAdjusted: {
     id: "incrementAdjusted",
     label: "Increment Adjustment",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(row.incrementAdjusted),
+    getValue: (row) => formatNumber(getIncrementAdjusted(row)),
   },
   revisedSalary: {
     id: "revisedSalary",
     label: "Revised Salary",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(row.revisedSalary),
+    getValue: (row) => formatNumber(getRevisedSalary(row)),
   },
   revisedSalaryRo: {
     id: "revisedSalaryRo",
     label: "Revised Salary (RO)",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(row.revisedSalaryRo),
+    getValue: (row) => formatNumber(getRevisedSalaryRo(row)),
   },
   remarksCompensation: {
     id: "remarksCompensation",

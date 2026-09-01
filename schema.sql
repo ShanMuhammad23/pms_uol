@@ -223,8 +223,8 @@ CREATE TABLE appraisals (
     applicable_salary_for_increment NUMERIC(14, 2),
     applicable_matrix VARCHAR(150),
     calculated_increment_percentage NUMERIC(5, 2), -- Applicable Incr %
-    increment_per_matrix NUMERIC(5, 2),
-    approved_increment_percentage   NUMERIC(5, 2), -- Increment Adjusted
+    increment_per_matrix NUMERIC(14, 2),
+    approved_increment_percentage   NUMERIC(14, 2), -- Increment Adjustment (rupee amount)
     revised_salary NUMERIC(14, 2),
     revised_salary_ro NUMERIC(14, 2),
     hod_review_comments TEXT,

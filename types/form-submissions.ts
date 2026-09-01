@@ -92,6 +92,7 @@ export interface FormSubmissionListItem {
   manager2OverallRemarks: string | null;
   currentSalary: number | null;
   previousSalary: number | null;
+  /** Current Salary × Applicable Duration. Derived. */
   applicableSalaryForIncrement: number | null;
   /** Title of the performance matrix assigned to the employee for the active FY. */
   assignedPerformanceMatrix: string | null;
@@ -102,9 +103,13 @@ export interface FormSubmissionListItem {
    * by matching Normalized Score against the assigned performance matrix.
    */
   applicableIncrementPercent: number | null;
+  /** Applicable Salary × (App. Incr % / 100). Derived rupee increment. */
   incrementPerMatrix: number | null;
+  /** Defaults to Increment Per Matrix; HR may override. */
   incrementAdjusted: number | null;
+  /** Current Salary + Increment Adjustment. Derived. */
   revisedSalary: number | null;
+  /** Defaults to Revised Salary; HR may override. */
   revisedSalaryRo: number | null;
   hodReviewComments: string | null;
   remarksCompensation: string | null;

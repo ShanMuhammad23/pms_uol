@@ -64,6 +64,10 @@ import {
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { ScoreAdjustmentField } from "@/lib/queries/form-submissions-client";
 import { canReviewSubmissions } from "@/lib/auth/submission-review-roles";
+import {
+  getIncrementAdjusted,
+  getRevisedSalaryRo,
+} from "@/app/helpers/compensation-worksheet";
 import { updateSubmissionScoreAdjustments, approveHrCalibration, setHrReviewRequired, updateAssessmentEligibility, fetchFormSubmissionsPage, returnSubmission as returnSubmissionClient, type ReturnLevel } from "@/lib/queries/form-submissions-client";
 import { useSession } from "next-auth/react";
 import { useAdditionalAccess } from "@/app/queries/use-additional-access";
@@ -780,6 +784,32 @@ function renderCell(
         field="remarksCompensation"
         value={submission.remarksCompensation}
         disabled={submission.id <= 0}
+      />
+    );
+  }
+
+  if (columnId === "incrementAdjusted") {
+    return (
+      <InlineScoreAdjustmentCell
+        submissionId={submission.id}
+        field="incrementAdjusted"
+        value={getIncrementAdjusted(submission)}
+        mode="money"
+        disabled={submission.id <= 0}
+        canEdit={ctx?.isHrRole === true}
+      />
+    );
+  }
+
+  if (columnId === "revisedSalaryRo") {
+    return (
+      <InlineScoreAdjustmentCell
+        submissionId={submission.id}
+        field="revisedSalaryRo"
+        value={getRevisedSalaryRo(submission)}
+        mode="money"
+        disabled={submission.id <= 0}
+        canEdit={ctx?.isHrRole === true}
       />
     );
   }

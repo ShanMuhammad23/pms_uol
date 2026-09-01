@@ -26,11 +26,16 @@ ALTER TABLE appraisals
     ADD COLUMN IF NOT EXISTS previous_salary NUMERIC(14, 2),
     ADD COLUMN IF NOT EXISTS applicable_salary_for_increment NUMERIC(14, 2),
     ADD COLUMN IF NOT EXISTS applicable_matrix VARCHAR(150),
-    ADD COLUMN IF NOT EXISTS increment_per_matrix NUMERIC(5, 2),
+    ADD COLUMN IF NOT EXISTS increment_per_matrix NUMERIC(14, 2),
     ADD COLUMN IF NOT EXISTS revised_salary NUMERIC(14, 2),
     ADD COLUMN IF NOT EXISTS revised_salary_ro NUMERIC(14, 2),
     ADD COLUMN IF NOT EXISTS hod_review_comments TEXT,
     ADD COLUMN IF NOT EXISTS remarks_compensation TEXT;
+
+-- Increment Adjustment is a rupee amount (Current Salary + this = Revised Salary).
+ALTER TABLE appraisals
+    ALTER COLUMN increment_per_matrix TYPE NUMERIC(14, 2),
+    ALTER COLUMN approved_increment_percentage TYPE NUMERIC(14, 2);
 
 -- Ensure calibrated score column exists for Rating (N) / Normalized Score fallback
 ALTER TABLE appraisals

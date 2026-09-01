@@ -7,6 +7,13 @@ import {
 import { getHrApprovalStatus } from "@/app/helpers/dashboard-table-columns";
 import { getReportingManagerScore } from "@/app/helpers/score-o";
 import {
+  getApplicableSalary,
+  getIncrementAdjusted,
+  getIncrementPerMatrix,
+  getRevisedSalary,
+  getRevisedSalaryRo,
+} from "@/app/helpers/compensation-worksheet";
+import {
   getAdjustedScorePercent,
   getNormalizedScorePercent,
 } from "@/lib/performance-rating";
@@ -420,13 +427,13 @@ export function buildBulkUploadRowValues(
     currentSalary: asText(row.currentSalary),
     previousSalary: asText(row.previousSalary),
     salaryDiff,
-    applicableSalaryForIncrement: asText(row.applicableSalaryForIncrement),
+    applicableSalaryForIncrement: asText(getApplicableSalary(row)),
     applicableMatrix: row.applicableMatrix ?? "",
     applicableIncrementPercent: asText(row.applicableIncrementPercent),
-    incrementPerMatrix: asText(row.incrementPerMatrix),
-    incrementAdjusted: asText(row.incrementAdjusted),
-    revisedSalary: asText(row.revisedSalary),
-    revisedSalaryRo: asText(row.revisedSalaryRo),
+    incrementPerMatrix: asText(getIncrementPerMatrix(row)),
+    incrementAdjusted: asText(getIncrementAdjusted(row)),
+    revisedSalary: asText(getRevisedSalary(row)),
+    revisedSalaryRo: asText(getRevisedSalaryRo(row)),
     remarksCompensation: row.remarksCompensation ?? "",
     hodReviewComments: row.hodReviewComments ?? "",
   };

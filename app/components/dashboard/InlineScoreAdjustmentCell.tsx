@@ -10,16 +10,18 @@ import {
 } from "@/app/helpers/dashboard-listing-cache";
 import {
   updateSubmissionScoreAdjustments,
+  updateSubmissionCompensationWorksheet,
   type ScoreAdjustmentField,
+  type CompensationWorksheetField,
 } from "@/lib/queries/form-submissions-client";
 import { cn } from "@/lib/utils";
 
 interface InlineScoreAdjustmentCellProps {
   submissionId: number;
-  field: ScoreAdjustmentField;
+  field: ScoreAdjustmentField | CompensationWorksheetField;
   value: number | null;
   disabled?: boolean;
-  mode?: "integer" | "decimal" | "score";
+  mode?: "integer" | "decimal" | "score" | "money";
   /** When provided, the cell buffers changes locally and calls this callback instead of auto-saving. */
   onBufferedChange?: (field: ScoreAdjustmentField, value: number | null) => void;
   /** Pending buffered value (from parent). When set, cell shows this instead of the saved value. */
@@ -28,14 +30,32 @@ interface InlineScoreAdjustmentCellProps {
   canEdit?: boolean;
 }
 
-const FIELD_LABELS: Record<ScoreAdjustmentField, string> = {
+const FIELD_LABELS: Record<ScoreAdjustmentField | CompensationWorksheetField, string> = {
   creditHrsErpScoreAdj: "CH Adj",
   pubOricScoreAdj: "ORIC Adj",
   qecScoreAdj: "QEC Adj",
   calibrationFactor: "Cal. Fr",
   calibratedScoreNumeric: "HR Calibration",
   initialScoreNumeric: "Score (O)",
+  incrementAdjusted: "Increment Adjustment",
+  revisedSalaryRo: "Revised Salary (RO)",
 };
+
+function isCompensationField(
+  field: ScoreAdjustmentField | CompensationWorksheetField,
+): field is CompensationWorksheetField {
+  return field === "incrementAdjusted" || field === "revisedSalaryRo";
+}
+
+function formatNumericDisplay(
+  value: number | null,
+  mode: "integer" | "decimal" | "score" | "money",
+): string {
+  if (value == null) return "—";
+  if (mode === "money") return value.toFixed(2);
+  if (mode === "decimal" || mode === "score") return value.toFixed(1);
+  return String(Math.round(value));
+}
 
 export function InlineScoreAdjustmentCell({
   submissionId,
@@ -47,25 +67,25 @@ export function InlineScoreAdjustmentCell({
   pendingValue,
   canEdit = true,
 }: InlineScoreAdjustmentCellProps) {
-  const isDecimal = mode === "decimal" || mode === "score";
+  const isMoney = mode === "money";
+  const isDecimal = mode === "decimal" || mode === "score" || isMoney;
   const hasRangeConstraint = mode === "decimal";
-  const isBuffered = onBufferedChange != null;
+  const isBuffered = onBufferedChange != null && !isCompensationField(field);
   const displayValue = isBuffered ? (pendingValue ?? value) : value;
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const committingRef = useRef(false);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(
-    displayValue != null ? String(isDecimal ? displayValue : Math.round(displayValue)) : isDecimal ? "1" : "",
-  );
-  const [error, setError] = useState<string | null>(null);
-  const fieldLabel = FIELD_LABELS[field];
-  const nextDraft =
-    displayValue != null
-      ? String(isDecimal ? displayValue : Math.round(displayValue))
-      : isDecimal
+  const draftFromValue = (next: number | null) =>
+    next != null
+      ? String(isMoney ? next.toFixed(2) : isDecimal ? next : Math.round(next))
+      : isDecimal && !isMoney
         ? "1"
         : "";
+  const [draft, setDraft] = useState(draftFromValue(displayValue));
+  const [error, setError] = useState<string | null>(null);
+  const fieldLabel = FIELD_LABELS[field];
+  const nextDraft = draftFromValue(displayValue);
   if (!editing && draft !== nextDraft) {
     setDraft(nextDraft);
   }
@@ -79,7 +99,9 @@ export function InlineScoreAdjustmentCell({
 
   const saveMutation = useMutation({
     mutationFn: (nextValue: number | null) =>
-      updateSubmissionScoreAdjustments(submissionId, field, nextValue),
+      isCompensationField(field)
+        ? updateSubmissionCompensationWorksheet(submissionId, field, nextValue)
+        : updateSubmissionScoreAdjustments(submissionId, field, nextValue),
     onMutate: async (nextValue) => {
       setError(null);
       await cancelStaffListingQueries(queryClient);
@@ -113,7 +135,7 @@ export function InlineScoreAdjustmentCell({
   const commit = () => {
     const trimmed = draft.trim();
     if (trimmed === "") {
-      if (isBuffered) {
+      if (isBuffered && !isCompensationField(field)) {
         onBufferedChange?.(field, null);
         setEditing(false);
         setError(null);
@@ -152,7 +174,7 @@ export function InlineScoreAdjustmentCell({
       return;
     }
 
-    if (isBuffered) {
+    if (isBuffered && !isCompensationField(field)) {
       onBufferedChange?.(field, parsed);
       setEditing(false);
       setError(null);
@@ -172,7 +194,7 @@ export function InlineScoreAdjustmentCell({
       return;
     }
 
-    setDraft(displayValue != null ? String(isDecimal ? displayValue : Math.round(displayValue)) : "");
+    setDraft(draftFromValue(displayValue));
     setError(null);
     setEditing(false);
   };
@@ -181,21 +203,22 @@ export function InlineScoreAdjustmentCell({
     return <span className="text-xs text-slate-400">—</span>;
   }
 
+  const displayText = formatNumericDisplay(displayValue, mode);
+
   if (!canEdit) {
-    const finalDisplayValue = isDecimal ? (displayValue ?? 1) : displayValue;
     return (
       <span
-        className="block w-full px-1.5 py-0.5 text-center text-sm tabular-nums text-slate-700 dark:text-slate-300"
-        title={finalDisplayValue != null ? String(finalDisplayValue) : undefined}
+        className="block w-full px-1.5 py-0.5 text-right text-sm tabular-nums text-slate-700 dark:text-slate-300"
+        title={displayValue != null ? String(displayValue) : undefined}
       >
-        {displayValue != null ? (isDecimal ? displayValue.toFixed(1) : Math.round(displayValue)) : "—"}
+        {displayText}
       </span>
     );
   }
 
   if (editing) {
     return (
-      <div className="min-w-[80px]">
+      <div className={isMoney ? "min-w-[96px]" : "min-w-[80px]"}>
         <input
           ref={inputRef}
           type="number"
@@ -221,7 +244,8 @@ export function InlineScoreAdjustmentCell({
             }
           }}
           className={cn(
-            "w-16 rounded border border-slate-400 bg-white px-2 py-1 text-right text-sm tabular-nums text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-slate-300/60 dark:border-slate-500 dark:bg-slate-950 dark:text-white",
+            "rounded border border-slate-400 bg-white px-2 py-1 text-right text-sm tabular-nums text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-slate-300/60 dark:border-slate-500 dark:bg-slate-950 dark:text-white",
+            isMoney ? "w-24" : "w-16",
             saveMutation.isPending && "opacity-70",
           )}
           aria-label={`Edit ${fieldLabel}`}
@@ -236,20 +260,18 @@ export function InlineScoreAdjustmentCell({
     );
   }
 
-  const finalDisplayValue = isDecimal ? (displayValue ?? 1) : displayValue;
-
   return (
     <button
       type="button"
       onClick={() => setEditing(true)}
       className={cn(
-        "block w-full rounded px-1.5 py-0.5 text-center text-sm tabular-nums text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white",
-        finalDisplayValue == null && "text-slate-400 italic dark:text-slate-500",
+        "block w-full rounded px-1.5 py-0.5 text-right text-sm tabular-nums text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white",
+        displayValue == null && "text-slate-400 italic dark:text-slate-500",
         isBuffered && pendingValue != null && pendingValue !== value && "ring-2 ring-orange-400/60",
       )}
-      title={finalDisplayValue != null ? `${finalDisplayValue} (click to edit)` : `Click to set ${fieldLabel}`}
+      title={displayValue != null ? `${displayValue} (click to edit)` : `Click to set ${fieldLabel}`}
     >
-      {displayValue != null ? (isDecimal ? displayValue.toFixed(1) : Math.round(displayValue)) : "—"}
+      {displayText}
     </button>
   );
 }

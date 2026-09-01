@@ -123,6 +123,32 @@ export async function updateSubmissionScoreAdjustments(
   }>(response);
 }
 
+export type CompensationWorksheetField =
+  | "incrementAdjusted"
+  | "revisedSalaryRo";
+
+export async function updateSubmissionCompensationWorksheet(
+  id: number,
+  field: CompensationWorksheetField,
+  value: number | null,
+): Promise<{
+  id: number;
+  incrementAdjusted: number | null;
+  revisedSalaryRo: number | null;
+}> {
+  const response = await fetch(`/api/submissions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ [field]: value }),
+  });
+
+  return parseResponse<{
+    id: number;
+    incrementAdjusted: number | null;
+    revisedSalaryRo: number | null;
+  }>(response);
+}
+
 export async function approveManagerReview(
   id: number,
 ): Promise<{ managerLevel: number; status: FormSubmissionDetail["status"] }> {

@@ -18,6 +18,7 @@ import { getFormTemplateById } from "@/lib/queries/forms";
 import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { deleteFormAttachmentFile } from "@/lib/uploads/form-attachments";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
+import { applyCompensationWorksheet } from "@/app/helpers/compensation-worksheet";
 import type {
   EmployeeFormAnswerAttachment,
   EmployeeFormAnswerRecord,
@@ -754,12 +755,12 @@ export async function listFormSubmissions(
       incrementPctLookup,
     );
 
-    return {
+    return applyCompensationWorksheet({
       ...item,
       // Prefer live calculation from assigned matrices over any stored value.
       applicableIncrementPercent:
         liveIncrementPercent ?? item.applicableIncrementPercent,
-    };
+    });
   });
 }
 
@@ -1924,6 +1925,71 @@ export async function updateAppraisalScoreAdjustments(
     calibrationFactor: toNumber(result.rows[0].calibration_factor),
     calibratedScoreNumeric: toNumber(result.rows[0].calibrated_score_numeric),
     initialScoreNumeric: toNumber(result.rows[0].initial_score_numeric),
+  };
+}
+
+export type CompensationWorksheetField =
+  | "incrementAdjusted"
+  | "revisedSalaryRo";
+
+let compensationColumnsWidened: Promise<void> | null = null;
+
+async function ensureCompensationAmountColumns(): Promise<void> {
+  if (!compensationColumnsWidened) {
+    compensationColumnsWidened = db
+      .query(
+        `ALTER TABLE appraisals
+           ALTER COLUMN increment_per_matrix TYPE NUMERIC(14, 2),
+           ALTER COLUMN approved_increment_percentage TYPE NUMERIC(14, 2)`,
+      )
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        compensationColumnsWidened = null;
+        throw error;
+      });
+  }
+  await compensationColumnsWidened;
+}
+
+export async function updateAppraisalCompensationWorksheet(
+  appraisalId: number,
+  field: CompensationWorksheetField,
+  value: number | null,
+): Promise<{
+  id: number;
+  incrementAdjusted: number | null;
+  revisedSalaryRo: number | null;
+}> {
+  await ensureCompensationAmountColumns();
+
+  const column =
+    field === "incrementAdjusted"
+      ? "approved_increment_percentage"
+      : "revised_salary_ro";
+
+  const result = await db.query<{
+    id: string;
+    approved_increment_percentage: string | null;
+    revised_salary_ro: string | null;
+  }>(
+    `UPDATE appraisals
+     SET ${column} = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+     RETURNING id,
+       approved_increment_percentage::text,
+       revised_salary_ro::text`,
+    [appraisalId, value],
+  );
+
+  if (!result.rows[0]) {
+    throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  return {
+    id: Number(result.rows[0].id),
+    incrementAdjusted: toNumber(result.rows[0].approved_increment_percentage),
+    revisedSalaryRo: toNumber(result.rows[0].revised_salary_ro),
   };
 }
 
