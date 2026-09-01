@@ -515,7 +515,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   previousSalary: {
     id: "previousSalary",
-    label: "Prev Salary",
+    label: "Salary(Cycle Start)",
     align: "right",
     numeric: true,
     getValue: (row) => formatNumber(row.previousSalary),
@@ -539,13 +539,13 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   applicableMatrix: {
     id: "applicableMatrix",
-    label: "Applicable Matrix",
+    label: "Salary Matrix",
     getValue: (row) =>
       row.applicableMatrix?.trim() ? row.applicableMatrix.trim() : "✖",
   },
   applicableIncrementPercent: {
     id: "applicableIncrementPercent",
-    label: "Increment %",
+    label: "App. Incr %",
     align: "right",
     width: 90,
     numeric: true,
@@ -581,7 +581,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   remarksCompensation: {
     id: "remarksCompensation",
-    label: "Remarks Compensation",
+    label: "Salary Remarks",
     width: 220,
     wrap: true,
     getValue: (row) => formatNullable(row.remarksCompensation),
@@ -601,10 +601,7 @@ export const DASHBOARD_TABLE_COLUMNS: DashboardTableColumnDef[] =
     section.columnIds.map((id) => COLUMN_BY_ID[id]),
   );
 
-/**
- * Staff listing columns available to HEAD role (display + API payload).
- * Order matches the Head dashboard listing contract.
- */
+
 export const HEAD_DASHBOARD_TABLE_COLUMN_IDS = [
   "sapCode",
   "employeeName",

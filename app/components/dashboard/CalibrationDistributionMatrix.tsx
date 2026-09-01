@@ -109,7 +109,7 @@ export function CalibrationDistributionMatrix({
             <thead className="border-b border-slate-300 text-left text-sm font-semibold text-slate-900 dark:border-neutral-600 dark:text-slate-50">
               <tr className="divide-x divide-slate-300 dark:divide-neutral-600">
                 <th className="bg-primary px-2 py-2 text-left font-semibold text-white dark:text-slate-300 sm:px-3 sm:py-2.5">
-                  <span className="block break-words leading-tight">
+                  <span className="block wrap-break-words leading-tight">
                     Performance Level
                   </span>
                 </th>
@@ -118,13 +118,13 @@ export function CalibrationDistributionMatrix({
                     key={`${column.label}-${column.index}`}
                     className="bg-primary px-1 py-2 text-center font-semibold text-white dark:text-slate-300 sm:px-2 sm:py-2.5"
                   >
-                    <span className="block break-words leading-tight">
+                    <span className="block wrap-break-words leading-tight">
                       {column.label}
                     </span>
                   </th>
                 ))}
                 <th className="bg-primary px-1 py-2 text-center font-semibold text-white dark:text-slate-300 sm:px-2 sm:py-2.5">
-                  <span className="block break-words leading-tight">Total</span>
+                  <span className="block wrap-break-words leading-tight">Total</span>
                 </th>
               </tr>
             </thead>
@@ -154,7 +154,7 @@ export function CalibrationDistributionMatrix({
                     >
                       {cell.count === null ? (
                         <span className="text-slate-300 dark:text-slate-600">
-                          —
+                          
                         </span>
                       ) : (
                         <div className="min-w-0 space-y-0.5">
@@ -162,11 +162,11 @@ export function CalibrationDistributionMatrix({
                             className={cn(
                               "inline-flex max-w-full items-center justify-center rounded-md text-base font-bold tabular-nums sm:text-lg dark:text-slate-200",
                               cell.count > 0
-                                ? "text-white dark:bg-amber-950/40 dark:text-amber-300"
+                                ? "text-white  text-bold dark:bg-amber-950/40 dark:text-amber-300"
                                 : "text-slate-400 dark:text-slate-600",
                             )}
                           >
-                            {cell.count === 0 ? "—" : cell.count}
+                            {cell.count === 0 ? "" : cell.count}
                           </span>
                           {cell.sublabel ? (
                             <p className="break-words text-[10px] leading-tight text-white dark:text-slate-500">
@@ -178,7 +178,7 @@ export function CalibrationDistributionMatrix({
                     </td>
                   ))}
                   <td className="bg-primary px-1 py-2 text-center text-sm font-bold tabular-nums text-white sm:px-2 sm:py-2.5 sm:text-base">
-                    {row.rowTotal === 0 ? "—" : row.rowTotal}
+                    {row.rowTotal === 0 ? "" : row.rowTotal}
                   </td>
                 </tr>
               ))}

@@ -56,10 +56,6 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     }
     if (extra.length === 0) return base;
     return [...base, ...extra];
-    // canView is excluded from deps because it is a new function reference on
-    // every render. It closes over `permissions`, so depending on `permissions`
-    // is sufficient to recompute when access actually changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHead, permissions]);
 
   const [statsVisible, setStatsVisible] = useState(true);
