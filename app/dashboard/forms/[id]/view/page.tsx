@@ -72,6 +72,7 @@ export default async function ViewFormPage({
           {isPrintMode ? (
             <PrintDocumentHeader
               title={template.title}
+              description={template.description}
               metaItems={[
                 { label: "Category", value: template.targetCategory ?? "Unassigned" },
                 { label: "Appraisal Cycle", value: `FY ${template.fiscalYear}` },

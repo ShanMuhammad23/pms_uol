@@ -9,6 +9,7 @@ export interface PrintDocumentMetaItem {
 
 interface PrintDocumentHeaderProps {
   title: string;
+  description?: string | null;
   systemName?: string;
   logoSrc?: string;
   metaItems?: PrintDocumentMetaItem[];
@@ -16,6 +17,7 @@ interface PrintDocumentHeaderProps {
 
 export default function PrintDocumentHeader({
   title,
+  description,
   systemName = "Performance Management System — University of Lahore",
   logoSrc = "/logo.png",
   metaItems = [],
@@ -44,6 +46,9 @@ export default function PrintDocumentHeader({
         <div className="print-doc-title-block">
           <p className="print-doc-system-name">{systemName}</p>
           <p className="print-doc-title">{title}</p>
+          {description?.trim() ? (
+            <p className="print-doc-description">{description.trim()}</p>
+          ) : null}
         </div>
       </div>
       <div className="print-doc-meta">

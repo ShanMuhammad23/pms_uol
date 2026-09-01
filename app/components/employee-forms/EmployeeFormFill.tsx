@@ -5,6 +5,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Paperclip, Trash2, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
+import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
+import {
+  getQuestionRatingScale,
+  usesRatingScore,
+} from "@/app/helpers/form-rating-scoring";
 import {
   deleteEmployeeFormAttachment,
   fetchEmployeeForm,
@@ -30,6 +35,7 @@ import {
   formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
+import { FormDescription } from "@/app/components/forms/FormDescription";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
 import ReturnHistoryBanner from "@/app/components/forms/ReturnHistoryBanner";
@@ -75,6 +81,7 @@ type AnswerState = Record<
   number,
   {
     pointsEarned: string;
+    ratingValue: string;
     remarks: string;
     attachments: EmployeeFormAnswerAttachment[];
   }
@@ -85,6 +92,7 @@ function buildInitialAnswers(
   existingAnswers: Array<{
     questionId: number;
     pointsEarned: number;
+    ratingValue?: number | null;
     remarks: string | null;
     attachments: EmployeeFormAnswerAttachment[];
   }>,
@@ -94,6 +102,7 @@ function buildInitialAnswers(
   for (const question of questions) {
     map[question.id] = {
       pointsEarned: "",
+      ratingValue: "",
       remarks: "",
       attachments: [],
     };
@@ -102,6 +111,8 @@ function buildInitialAnswers(
   for (const answer of existingAnswers) {
     map[answer.questionId] = {
       pointsEarned: String(answer.pointsEarned ?? ""),
+      ratingValue:
+        answer.ratingValue == null ? "" : String(answer.ratingValue),
       remarks: answer.remarks ?? "",
       attachments: answer.attachments ?? [],
     };
@@ -116,11 +127,15 @@ function toPayload(answers: AnswerState): EmployeeFormAnswerInput[] {
       questionId: Number(questionId),
       pointsEarned:
         value.pointsEarned !== "" ? Number(value.pointsEarned) : undefined,
+      ratingValue:
+        value.ratingValue !== "" ? Number(value.ratingValue) : undefined,
       remarks: (value.remarks ?? "").trim() || null,
     }))
     .filter(
       (answer) =>
-        answer.pointsEarned !== undefined || Boolean(answer.remarks),
+        answer.pointsEarned !== undefined ||
+        answer.ratingValue !== undefined ||
+        Boolean(answer.remarks),
     );
 }
 
@@ -301,12 +316,13 @@ export default function EmployeeFormFill({
   };
   const updateAnswer = (
     questionId: number,
-    field: "pointsEarned" | "remarks",
+    field: "pointsEarned" | "ratingValue" | "remarks",
     value: string,
   ) => {
     setAnswers((current) => {
       const existing = current[questionId] ?? {
         pointsEarned: "",
+        ratingValue: "",
         remarks: "",
         attachments: [],
       };
@@ -340,7 +356,14 @@ export default function EmployeeFormFill({
       }
 
       const answer = answers[question.id];
-      const hasScore = Boolean(answer && answer.pointsEarned !== "");
+      const ratingQuestion = usesRatingScore(
+        question,
+        data.template.ratingBased,
+        data.template.ratingScales,
+      );
+      const hasScore = ratingQuestion
+        ? Boolean(answer && answer.ratingValue !== "")
+        : Boolean(answer && answer.pointsEarned !== "");
 
       // Optional questions can be left blank
       if (!question.isRequired && !hasScore) {
@@ -348,12 +371,29 @@ export default function EmployeeFormFill({
       }
 
       if (!hasScore) {
-        return `Enter a score for question ${question.questionText.slice(0, 60)}...`;
+        return ratingQuestion
+          ? `Select a rating for "${question.questionText.slice(0, 60)}..."`
+          : `Enter a score for question ${question.questionText.slice(0, 60)}...`;
       }
 
-      const score = Number(answer!.pointsEarned);
-      if (Number.isNaN(score) || score < 0 || score > question.totalMarks) {
-        return `Score must be between 0 and ${question.totalMarks} for "${question.questionText.slice(0, 60)}..."`;
+      if (ratingQuestion) {
+        const scale = getQuestionRatingScale(
+          question,
+          data.template.ratingScales,
+        );
+        const rating = Number(answer!.ratingValue);
+        if (
+          !scale ||
+          Number.isNaN(rating) ||
+          !scale.options.some((option) => Number(option.ratingValue) === rating)
+        ) {
+          return `Select a valid rating for "${question.questionText.slice(0, 60)}..."`;
+        }
+      } else {
+        const score = Number(answer!.pointsEarned);
+        if (Number.isNaN(score) || score < 0 || score > question.totalMarks) {
+          return `Score must be between 0 and ${question.totalMarks} for "${question.questionText.slice(0, 60)}..."`;
+        }
       }
 
       // Remarks are required when the employee filled in a score — whether
@@ -526,6 +566,7 @@ export default function EmployeeFormFill({
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       <PrintDocumentHeader
         title={template.title}
+        description={template.description}
         metaItems={[
           { label: "Employee", value: data.employeeName ?? "N/A" },
           { label: "SAP ID", value: data.employeeId ?? "N/A" },
@@ -587,9 +628,7 @@ export default function EmployeeFormFill({
           <h2 className="text-xl font-semibold text-text-primary">
             {template.title}
           </h2>
-          {template.description ? (
-            <p className="mt-1 text-sm text-foreground/70">{template.description}</p>
-          ) : null}
+          <FormDescription description={template.description} className="mt-2" />
         </div>
         <PrintButton
           className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
@@ -753,6 +792,41 @@ export default function EmployeeFormFill({
                               </td>
                               <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                                 {scored && !isHodOnly ? (
+                                  usesRatingScore(
+                                    question!,
+                                    data.template.ratingBased,
+                                    data.template.ratingScales,
+                                  ) ? (
+                                    <RatingScoreField
+                                      scale={
+                                        getQuestionRatingScale(
+                                          question!,
+                                          data.template.ratingScales,
+                                        )!
+                                      }
+                                      weight={question!.totalMarks}
+                                      ratingValue={answer.ratingValue}
+                                      disabled={isReadOnly}
+                                      onRatingChange={(nextRating, nextPoints) =>
+                                        setAnswers((current) => {
+                                          const existing = current[question!.id] ?? {
+                                            pointsEarned: "",
+                                            ratingValue: "",
+                                            remarks: "",
+                                            attachments: [],
+                                          };
+                                          return {
+                                            ...current,
+                                            [question!.id]: {
+                                              ...existing,
+                                              ratingValue: nextRating,
+                                              pointsEarned: nextPoints,
+                                            },
+                                          };
+                                        })
+                                      }
+                                    />
+                                  ) : (
                                   <input
                                     type="number"
                                     min={0}
@@ -777,6 +851,7 @@ export default function EmployeeFormFill({
                                     className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums text-teal-700 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
                                     placeholder={`0–${question!.totalMarks}`}
                                   />
+                                  )
                                 ) : scored && isHodOnly ? (
                                   <span className="text-xs text-slate-400" title="To be filled by HOD">N/A</span>
                                 ) : (
@@ -785,7 +860,9 @@ export default function EmployeeFormFill({
                               </td>
                               <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                                 {(() => {
-                                  const hasScore = answer.pointsEarned !== "";
+                                  const hasScore =
+                                    answer.pointsEarned !== "" ||
+                                    answer.ratingValue !== "";
                                   const remarksRequired = !isHodOnly && (question!.isRequired || hasScore);
                                   return (
                                     <textarea

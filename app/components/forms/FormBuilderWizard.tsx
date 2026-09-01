@@ -15,6 +15,7 @@ import {
 import { Button } from "@/app/components/auth/Button";
 import FormEmployeeAssignment from "./FormEmployeeAssignment";
 import FormTemplateView from "./FormTemplateView";
+import { FormRatingScalesEditor } from "./FormRatingScalesEditor";
 import {
   createFormTemplate,
   FormTemplateRequestError,
@@ -28,6 +29,8 @@ import type {
   FormSubsectionRecord,
   FormTemplateInput,
   FormTemplateRecord,
+  FormRatingScaleInput,
+  FormRatingScaleRecord,
   QuestionInput,
   QuestionOptionRecord,
   QuestionRecord,
@@ -36,6 +39,7 @@ import {
   countAllQuestions,
   createClientId,
   createEmptyQuestion,
+  createEmptyRatingScale,
   createEmptySubsection,
   FIELD_TYPES,
   FIELD_TYPE_LABELS,
@@ -50,6 +54,7 @@ import {
   questionNeedsOptions,
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
+import { deriveRatingScaleMaxValue } from "@/app/helpers/form-rating-scoring";
 import {
   LayoutTemplate,
   Users,
@@ -66,6 +71,7 @@ import {
   FileText,
   Layers,
   HelpCircle,
+  PanelRight,
   X
 } from "lucide-react";
 
@@ -117,11 +123,29 @@ function draftToTemplateRecord(
   description: string,
   selfAssessmentEnabled: boolean,
   additionalRemarksEnabled: boolean,
+  ratingBased: boolean,
+  ratingScales: FormRatingScaleInput[],
   sections: FormSectionInput[],
   questions: QuestionInput[],
 ): FormTemplateRecord {
   let idCounter = 1;
   const nextId = () => idCounter++;
+
+  const mappedScales: FormRatingScaleRecord[] = ratingScales.map((scale) => ({
+    id: scale.id ?? nextId(),
+    name: scale.name,
+    maxValue: deriveRatingScaleMaxValue(scale.options, scale.maxValue),
+    sortOrder: scale.sortOrder,
+    options: scale.options.map((option) => ({
+      id: option.id ?? nextId(),
+      optionLabel: option.optionLabel,
+      ratingValue: option.ratingValue,
+      sortOrder: option.sortOrder,
+    })),
+  }));
+  const scaleIdByClientId = new Map(
+    ratingScales.map((scale, index) => [scale.clientId, mappedScales[index].id]),
+  );
 
   const mapQuestion = (q: QuestionInput): QuestionRecord => ({
     id: q.id ?? nextId(),
@@ -132,6 +156,10 @@ function draftToTemplateRecord(
     selfAssessmentEnabled: q.selfAssessmentEnabled,
     hodAssessmentEnabled: q.hodAssessmentEnabled,
     totalMarks: q.totalMarks,
+    ratingScaleId:
+      q.ratingScaleClientId
+        ? (scaleIdByClientId.get(q.ratingScaleClientId) ?? q.ratingScaleId ?? null)
+        : (q.ratingScaleId ?? null),
     options: q.options.map((o): QuestionOptionRecord => ({
       id: o.id ?? nextId(),
       optionLabel: o.optionLabel,
@@ -185,6 +213,8 @@ function draftToTemplateRecord(
     targetSubCategory: null,
     selfAssessmentEnabled,
     additionalRemarksEnabled,
+    ratingBased,
+    ratingScales: mappedScales,
     sections: recordSections,
     questions: recordQuestions,
     incrementMatrices: [],
@@ -207,6 +237,37 @@ interface FormBuilderWizardProps {
 }
 
 function mapRecordToState(record: FormTemplateRecord) {
+  const mappedScales: FormRatingScaleInput[] = (record.ratingScales ?? []).map(
+    (scale) => ({
+      id: scale.id,
+      clientId: createClientId(),
+      name: scale.name,
+      maxValue: deriveRatingScaleMaxValue(scale.options, scale.maxValue),
+      sortOrder: scale.sortOrder,
+      options: scale.options.map((option) => ({
+        id: option.id,
+        clientId: createClientId(),
+        optionLabel: option.optionLabel,
+        ratingValue: option.ratingValue,
+        sortOrder: option.sortOrder,
+      })),
+    }),
+  );
+  const scaleClientIdById = new Map(
+    mappedScales
+      .filter((scale) => scale.id != null)
+      .map((scale) => [scale.id as number, scale.clientId]),
+  );
+  const mapQ = (question: QuestionRecord): QuestionInput => {
+    const input = mapQuestionRecordToInput(question);
+    return {
+      ...input,
+      ratingScaleClientId: question.ratingScaleId
+        ? (scaleClientIdById.get(question.ratingScaleId) ?? "")
+        : "",
+    };
+  };
+
   const mappedSections = record.sections.map((section) => {
     const sectionClientId = createClientId();
     const mappedSubsections = section.subsections.map((subsection) => ({
@@ -214,9 +275,9 @@ function mapRecordToState(record: FormTemplateRecord) {
       id: subsection.id,
       title: subsection.title,
       sortOrder: subsection.sortOrder,
-      questions: subsection.questions.map(mapQuestionRecordToInput),
+      questions: subsection.questions.map(mapQ),
     }));
-    const mappedSectionQuestions = section.questions.map(mapQuestionRecordToInput);
+    const mappedSectionQuestions = section.questions.map(mapQ);
 
     // Build clientId-based layout from the record's id-based layout.
     const subClientIdById = new Map(
@@ -249,7 +310,7 @@ function mapRecordToState(record: FormTemplateRecord) {
       layout: sectionLayout,
     };
   });
-  const mappedQuestions = record.questions.map(mapQuestionRecordToInput);
+  const mappedQuestions = record.questions.map(mapQ);
   const normalized = normalizeRootFormStructure(mappedSections, mappedQuestions);
 
   return {
@@ -259,8 +320,29 @@ function mapRecordToState(record: FormTemplateRecord) {
     cycleId: record.cycleId,
     selfAssessmentEnabled: record.selfAssessmentEnabled,
     additionalRemarksEnabled: record.additionalRemarksEnabled,
+    ratingBased: record.ratingBased,
+    ratingScales: mappedScales,
     sections: normalized.sections,
     questions: normalized.questions,
+  };
+}
+
+function applyDefaultRatingScale(
+  question: QuestionInput,
+  ratingBased: boolean,
+  ratingScales: FormRatingScaleInput[],
+): QuestionInput {
+  if (!ratingBased || question.noMarks || question.ratingScaleClientId) {
+    return question;
+  }
+  const scale = ratingScales[0];
+  if (!scale) {
+    return question;
+  }
+  return {
+    ...question,
+    ratingScaleClientId: scale.clientId,
+    ratingScaleId: scale.id ?? null,
   };
 }
 
@@ -268,6 +350,7 @@ function validateQuestionFields(
   question: QuestionInput,
   errorPrefix: string,
   nextErrors: Record<string, string>,
+  ratingBased = false,
 ) {
   if (!question.questionText.trim()) {
     nextErrors[errorPrefix] = "Question text is required.";
@@ -290,6 +373,15 @@ function validateQuestionFields(
   ) {
     nextErrors[`${errorPrefix}-marks`] =
       "Total marks is required and must be greater than 0.";
+  }
+
+  if (
+    ratingBased &&
+    !question.noMarks &&
+    Number(question.totalMarks) > 0 &&
+    !question.ratingScaleClientId
+  ) {
+    nextErrors[`${errorPrefix}-scale`] = "Select a rating dropdown.";
   }
 
   if (["RADIO", "SELECT"].includes(question.inputType)) {
@@ -319,14 +411,16 @@ interface ModernFormDesignStepProps {
   description: string;
   selfAssessmentEnabled: boolean;
   additionalRemarksEnabled: boolean;
+  ratingBased: boolean;
+  scoringMode: "absolute" | "rating" | null;
+  ratingScales: FormRatingScaleInput[];
   sections: FormSectionInput[];
   questions: QuestionInput[];
   errors: Record<string, string>;
-  onTitleChange: (title: string) => void;
-  onCodeChange: (code: string) => void;
   onDescriptionChange: (description: string) => void;
-  onSelfAssessmentEnabledChange: (enabled: boolean) => void;
   onAdditionalRemarksEnabledChange: (enabled: boolean) => void;
+  onScoringModeChange: (mode: "absolute" | "rating") => void;
+  onRatingScalesChange: (scales: FormRatingScaleInput[]) => void;
   onStructureChange: (sections: FormSectionInput[], questions: QuestionInput[]) => void;
 }
 
@@ -336,21 +430,30 @@ function ModernFormDesignStep({
   description,
   selfAssessmentEnabled,
   additionalRemarksEnabled,
+  ratingBased,
+  scoringMode,
+  ratingScales,
   sections,
   questions,
   errors,
-  onTitleChange,
-  onCodeChange,
   onDescriptionChange,
   onAdditionalRemarksEnabledChange,
+  onScoringModeChange,
+  onRatingScalesChange,
   onStructureChange,
 }: ModernFormDesignStepProps) {
   const [activePanel, setActivePanel] = useState<"builder" | "preview">("builder");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(scoringMode == null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (errors.ratingScales || errors.formType) {
+      setSettingsOpen(true);
+    }
+  }, [errors.ratingScales, errors.formType]);
 
   // Auto-expand sections that have errors
   const sectionsWithErrors = useMemo(() => {
@@ -445,12 +548,16 @@ function ModernFormDesignStep({
   }, [sections, questions, commitStructure]);
 
   const addStandaloneQuestion = useCallback(() => {
-    const newQuestion = createEmptyQuestion(getNextRootSortOrder(sections, questions));
+    const newQuestion = applyDefaultRatingScale(
+      createEmptyQuestion(getNextRootSortOrder(sections, questions)),
+      ratingBased,
+      ratingScales,
+    );
     commitStructure(sections, [...questions, newQuestion]);
     setTimeout(() => {
       scrollContainerRef.current?.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior: "smooth" });
     }, 50);
-  }, [sections, questions, commitStructure]);
+  }, [sections, questions, commitStructure, ratingBased, ratingScales]);
 
   const updateSection = (clientId: string, updates: Partial<FormSectionInput>) => {
     commitStructure(
@@ -468,7 +575,11 @@ function ModernFormDesignStep({
       sections.map(s => {
         if (s.clientId === sectionClientId) {
           const nextSortOrder = s.questions.length === 0 ? 0 : Math.max(...s.questions.map(q => q.sortOrder)) + 1;
-          const newQ = createEmptyQuestion(nextSortOrder);
+          const newQ = applyDefaultRatingScale(
+            createEmptyQuestion(nextSortOrder),
+            ratingBased,
+            ratingScales,
+          );
           return {
             ...s,
             questions: [...s.questions, newQ],
@@ -587,7 +698,11 @@ function ModernFormDesignStep({
                   ...sub,
                   questions: [
                     ...sub.questions,
-                    createEmptyQuestion(nextSortOrder),
+                    applyDefaultRatingScale(
+                      createEmptyQuestion(nextSortOrder),
+                      ratingBased,
+                      ratingScales,
+                    ),
                   ],
                 };
               }
@@ -851,166 +966,153 @@ function ModernFormDesignStep({
     [sections, questions],
   );
   const previewTemplate = useMemo(
-    () => draftToTemplateRecord(title, code, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions),
-    [title, code, description, selfAssessmentEnabled, additionalRemarksEnabled, sections, questions],
+    () => draftToTemplateRecord(title, code, description, selfAssessmentEnabled, additionalRemarksEnabled, ratingBased, ratingScales, sections, questions),
+    [title, code, description, selfAssessmentEnabled, additionalRemarksEnabled, ratingBased, ratingScales, sections, questions],
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-      {/* Top: Form Settings Panel */}
-      <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/50">
+    <div className="relative flex h-full min-h-0 overflow-hidden">
+      {settingsOpen ? (
+        <>
         <button
           type="button"
-          onClick={() => setSettingsOpen((prev) => !prev)}
-          aria-expanded={settingsOpen}
-          aria-controls="form-settings-content"
-          className="flex w-full items-center justify-between border-b border-slate-200 px-4 py-2.5 transition-colors hover:bg-slate-100/60 dark:border-slate-800 dark:hover:bg-slate-800/40"
+          className="absolute inset-0 z-10 bg-slate-900/25 lg:hidden"
+          aria-label="Close settings"
+          onClick={() => setSettingsOpen(false)}
+        />
+        <aside
+          id="form-settings-content"
+          className="absolute inset-y-0 left-0 z-20 flex w-[min(100%,20.5rem)] shrink-0 flex-col overflow-y-auto border-r border-indigo-100 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900 lg:relative lg:z-0 lg:shadow-none"
         >
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            <Settings2 className="h-4 w-4" />
-            Form Settings
-            {!settingsOpen && title ? (
-              <span className="ml-2 truncate text-xs font-normal text-slate-400 dark:text-slate-500">
-                {title}
-              </span>
-            ) : null}
-          </h3>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 text-slate-400 transition-transform duration-200",
-              settingsOpen && "rotate-180",
-            )}
-          />
-        </button>
-
-        {settingsOpen ? (
-        <>
-        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Title Field */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Form Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => onTitleChange(e.target.value)}
-              placeholder="Enter form title..."
-              className={cn(
-                "w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900",
-                errors.title
-                  ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 dark:border-red-800"
-                  : "border-slate-200 focus:border-primary focus:ring-primary/20 dark:border-slate-700"
-              )}
-            />
-            {errors.title && (
-              <p className="flex items-center gap-1 text-xs text-red-500">
-                <AlertCircle className="h-3 w-3" /> {errors.title}
-              </p>
-            )}
+          <div className="flex items-center justify-between border-b border-indigo-100 px-3 py-2.5 dark:border-slate-800">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <Settings2 className="h-4 w-4 text-indigo-500" />
+              Form settings
+            </h3>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(false)}
+              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              aria-label="Close settings"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
+          <div className="flex flex-col gap-4 p-3">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Description
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => onDescriptionChange(e.target.value)}
+                placeholder="Optional description..."
+                rows={3}
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-950"
+              />
+            </div>
 
-          {/* Code Field */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Form Code
-            </label>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => onCodeChange(e.target.value)}
-              placeholder="e.g. FAC-2026"
-              maxLength={50}
-              className={cn(
-                "w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900",
-                errors.code
-                  ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 dark:border-red-800"
-                  : "border-slate-200 focus:border-primary focus:ring-primary/20 dark:border-slate-700"
-              )}
-            />
-            {errors.code && (
-              <p className="flex items-center gap-1 text-xs text-red-500">
-                <AlertCircle className="h-3 w-3" /> {errors.code}
-              </p>
-            )}
-          </div>
-
-          {/* Description Field */}
-          <div className="space-y-1.5 sm:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => onDescriptionChange(e.target.value)}
-              placeholder="Optional description..."
-              rows={2}
-              className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900"
-            />
-          </div>  
-
-          {/* Additional Remarks toggle */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Additional Remarks
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-snug text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60">
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-snug text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-indigo-500/40">
               <input
                 type="checkbox"
                 checked={additionalRemarksEnabled}
                 onChange={(e) => onAdditionalRemarksEnabledChange(e.target.checked)}
-                className="size-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30 dark:border-slate-600 dark:text-amber-500"
+                className="mt-0.5 size-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30 dark:border-slate-600"
               />
               <span>
-                Enable overall assessment remarks for reporting managers (Manager 1 &amp; Manager 2). Employees never see this section.
+                <span className="block font-semibold text-slate-800 dark:text-slate-100">
+                  Additional remarks
+                </span>
+                Overall remarks for Manager 1 &amp; Manager 2. Employees never see this.
               </span>
             </label>
-          </div>
-        </div>
 
-        {/* Stats + Quick Actions Bar */}
-        <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-2.5 dark:border-slate-800">
-          <div className="flex items-center gap-4 rounded-md border border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Questions: <span className="font-bold text-primary">{totalQuestions}</span>
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Sections: <span className="font-semibold text-slate-700 dark:text-slate-300">{sections.length}</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={addSection}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
+            <fieldset
+              className={cn(
+                "space-y-2 rounded-lg border px-3 py-2.5",
+                errors.formType
+                  ? "border-red-300 bg-red-50/60 dark:border-red-700 dark:bg-red-950/20"
+                  : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950",
+              )}
             >
-              <Plus className="h-3.5 w-3.5" />
-              Add Section
-            </button>
-            <button
-              onClick={addStandaloneQuestion}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-              Add Question
-            </button>
+              <legend className="px-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Form type <span className="text-red-500">*</span>
+              </legend>
+              <p className="text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                Choose how this form is scored. Required before saving.
+              </p>
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs leading-snug transition-colors",
+                  scoringMode === "absolute"
+                    ? "border-indigo-300 bg-indigo-50 text-slate-700 dark:border-indigo-500/50 dark:bg-indigo-950/40 dark:text-slate-200"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-500/40",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="form-scoring-type"
+                  checked={scoringMode === "absolute"}
+                  onChange={() => onScoringModeChange("absolute")}
+                  className="mt-0.5 size-3.5 border-slate-300 text-indigo-600 focus:ring-indigo-500/30 dark:border-slate-600"
+                />
+                <span>
+                  <span className="block font-semibold text-slate-800 dark:text-slate-100">
+                    Absolute score
+                  </span>
+                  Enter marks directly, up to the question weight. Rating based is off.
+                </span>
+              </label>
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs leading-snug transition-colors",
+                  scoringMode === "rating"
+                    ? "border-violet-300 bg-violet-50 text-slate-700 dark:border-violet-500/50 dark:bg-violet-950/40 dark:text-slate-200"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-violet-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-violet-500/40",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="form-scoring-type"
+                  checked={scoringMode === "rating"}
+                  onChange={() => onScoringModeChange("rating")}
+                  className="mt-0.5 size-3.5 border-slate-300 text-violet-600 focus:ring-violet-500/30 dark:border-slate-600"
+                />
+                <span>
+                  <span className="block font-semibold text-slate-800 dark:text-slate-100">
+                    Rating based
+                  </span>
+                  Score from a rating dropdown (rating ÷ max × question marks).
+                </span>
+              </label>
+              {errors.formType ? (
+                <p className="text-xs text-red-500">{errors.formType}</p>
+              ) : null}
+            </fieldset>
+
+            {scoringMode === "rating" ? (
+              <FormRatingScalesEditor
+                scales={ratingScales}
+                onChange={onRatingScalesChange}
+                error={errors.ratingScales}
+              />
+            ) : null}
           </div>
-        </div>
+        </aside>
         </>
-        ) : null}
-      </div>
+      ) : null}
 
-      {/* Main Content Area - Full Width */}
-      <div className="flex min-h-0 flex-1 flex-col bg-slate-50/50 dark:bg-slate-950/50">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white/80 px-6 py-3 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
-          <div className="flex items-center gap-4">
-            <div className="flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-indigo-100 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex rounded-lg bg-indigo-50 p-0.5 dark:bg-slate-800">
               <button
+                type="button"
                 onClick={() => setActivePanel("builder")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all",
                   activePanel === "builder"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                    ? "bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-slate-100"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 )}
               >
@@ -1018,11 +1120,12 @@ function ModernFormDesignStep({
                 Builder
               </button>
               <button
+                type="button"
                 onClick={() => setActivePanel("preview")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all",
                   activePanel === "preview"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                    ? "bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-slate-100"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 )}
               >
@@ -1030,33 +1133,88 @@ function ModernFormDesignStep({
                 Preview
               </button>
             </div>
-            {hasErrors && (
-              <div className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600 dark:bg-red-900/20 dark:text-red-400">
+            <span className="hidden text-xs text-slate-500 sm:inline dark:text-slate-400">
+              <span className="font-semibold text-indigo-600 dark:text-indigo-300">{totalQuestions}</span> questions
+              <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-200">{sections.length}</span> sections
+            </span>
+            {hasErrors ? (
+              <div className="flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 dark:bg-red-900/20 dark:text-red-400">
                 <AlertCircle className="h-3.5 w-3.5" />
-                {Object.keys(errors).length} validation issues
+                {Object.keys(errors).length}
               </div>
-            )}
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {activePanel === "builder" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={addSection}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-indigo-500"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Section
+                </button>
+                <button
+                  type="button"
+                  onClick={addStandaloneQuestion}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-50 dark:border-indigo-500/40 dark:bg-slate-900 dark:text-indigo-300"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                  Question
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((prev) => !prev)}
+              aria-expanded={settingsOpen}
+              aria-controls="form-settings-content"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                scoringMode == null
+                  ? "border-red-300 bg-red-50 text-red-700 dark:border-red-500/50 dark:bg-red-950/40 dark:text-red-200"
+                  : settingsOpen
+                    ? "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-950/40 dark:text-indigo-200"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
+              )}
+            >
+              <PanelRight className="h-3.5 w-3.5" />
+              Settings
+              {scoringMode === "rating" ? (
+                <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/50 dark:text-violet-200">
+                  Rating
+                </span>
+              ) : scoringMode === "absolute" ? (
+                <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200">
+                  Absolute
+                </span>
+              ) : (
+                <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/50 dark:text-red-200">
+                  Type *
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Scrollable Content */}
-        <div 
+        <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto p-6"
+          className="min-h-0 flex-1 overflow-y-auto bg-indigo-50 px-4 py-4 [background-image:radial-gradient(circle_at_1px_1px,rgb(99_102_241_/_0.16)_1px,transparent_0)] [background-size:18px_18px] sm:px-6 dark:bg-slate-950 dark:[background-image:radial-gradient(circle_at_1px_1px,rgb(165_180_252_/_0.12)_1px,transparent_0)]"
         >
           {activePanel === "builder" ? (
-            <div className=" space-y-4">
-              {/* Empty State */}
+            <div className=" space-y-3">
               {sections.length === 0 && questions.length === 0 && (
-                <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-16 text-center dark:border-slate-800">
-                  <div className="mb-4 rounded-full bg-slate-100 p-4 dark:bg-slate-800">
-                    <FileText className="h-8 w-8 text-slate-400" />
+                <div className="flex min-h-[min(28rem,calc(100dvh-11rem))] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-indigo-200 bg-white/80 py-16 text-center shadow-sm dark:border-indigo-500/30 dark:bg-slate-900/70">
+                  <div className="mb-4 rounded-full bg-indigo-100 p-4 dark:bg-indigo-900/40">
+                    <FileText className="h-8 w-8 text-indigo-500" />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                     Start building your form
                   </h3>
                   <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-                    Add sections to group related questions together, or add standalone questions directly.
+                    Add sections to group related questions, or add a standalone question. Title and code live in the top bar.
                   </p>
                   <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                     <Button fullWidth={false} onClick={addSection} className="px-5">
@@ -1077,7 +1235,7 @@ function ModernFormDesignStep({
               )}
 
               {rootLayout.length > 0 && (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {rootLayout.map((item, rootIdx) => {
                     if (item.kind === "section") {
                       const sectionIndex = sections.findIndex(
@@ -1111,6 +1269,8 @@ function ModernFormDesignStep({
                           onMoveQuestion={moveQuestion}
                           onUpdateQuestion={updateQuestion}
                           formSelfAssessmentEnabled={selfAssessmentEnabled}
+                          ratingBased={ratingBased}
+                          ratingScales={ratingScales}
                         />
                       );
                     }
@@ -1143,6 +1303,8 @@ function ModernFormDesignStep({
                         }}
                         onDropSection={(dragSectionClientId, insertIndex) => moveSection(dragSectionClientId, insertIndex)}
                         formSelfAssessmentEnabled={selfAssessmentEnabled}
+                        ratingBased={ratingBased}
+                        ratingScales={ratingScales}
                       />
                     );
                   })}
@@ -1185,33 +1347,10 @@ function ModernFormDesignStep({
               )}
             </div>
           ) : (
-            <FormTemplateView template={previewTemplate} />
+            <div className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <FormTemplateView template={previewTemplate} />
+            </div>
           )}
-        </div>
-
-        {/* Bottom Sticky Bar */}
-        <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white/90 px-6 py-3 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/90">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {totalQuestions} question{totalQuestions !== 1 ? "s" : ""} total
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={addSection}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Section
-            </button>
-            <button
-              type="button"
-              onClick={addStandaloneQuestion}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Question
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -1235,6 +1374,8 @@ function SubsectionCard({
   onMoveQuestion,
   onDropSubsection,
   formSelfAssessmentEnabled = true,
+  ratingBased = false,
+  ratingScales = [],
 }: {
   subsection: FormSubsectionInput;
   subsectionIndex: number;
@@ -1250,6 +1391,8 @@ function SubsectionCard({
   onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
   onDropSubsection: (dragSubsectionClientId: string, sourceSectionClientId: string, insertLayoutIndex: number) => void;
   formSelfAssessmentEnabled?: boolean;
+  ratingBased?: boolean;
+  ratingScales?: FormRatingScaleInput[];
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [dragOverPos, setDragOverPos] = useState<"before" | "after" | null>(null);
@@ -1291,10 +1434,10 @@ function SubsectionCard({
         } catch { /* ignore */ }
       }}
       className={cn(
-        "relative rounded-md border p-3 transition-all",
+        "relative rounded-md border border-l-[3px] p-3 transition-all",
         titleError
-          ? "border-red-300 bg-red-50/50 dark:border-red-600/50 dark:bg-red-950/30"
-          : "border-teal-200/70 bg-teal-50/30 shadow-sm hover:border-teal-300 dark:border-teal-500/30 dark:bg-teal-950/20",
+          ? "border-red-300 border-l-red-500 bg-red-50/50 dark:border-red-600/50 dark:bg-red-950/30"
+          : "border-slate-200 border-l-teal-500 bg-white shadow-sm hover:border-teal-300 dark:border-slate-700 dark:border-l-teal-400 dark:bg-slate-900",
         dragOverPos === "before" && "rounded-t-none border-t-2 border-t-primary",
         dragOverPos === "after" && "rounded-b-none border-b-2 border-b-primary"
       )}
@@ -1409,6 +1552,8 @@ function SubsectionCard({
             }}
             compact
             formSelfAssessmentEnabled={formSelfAssessmentEnabled}
+            ratingBased={ratingBased}
+            ratingScales={ratingScales}
           />
         ))}
 
@@ -1441,6 +1586,8 @@ function SectionCard({
   onMoveQuestion,
   onUpdateQuestion,
   formSelfAssessmentEnabled = true,
+  ratingBased = false,
+  ratingScales = [],
 }: {
   section: FormSectionInput;
   index: number;
@@ -1461,6 +1608,8 @@ function SectionCard({
   onMoveQuestion: (questionClientId: string, source: QuestionLocation, target: QuestionLocation) => void;
   onUpdateQuestion: (qId: string, updates: Partial<QuestionInput>) => void;
   formSelfAssessmentEnabled?: boolean;
+  ratingBased?: boolean;
+  ratingScales?: FormRatingScaleInput[];
 }) {
   const [sectionDragOver, setSectionDragOver] = useState(false);
   const [headerDragPos, setHeaderDragPos] = useState<"before" | "after" | null>(null);
@@ -1470,10 +1619,10 @@ function SectionCard({
 
   return (
     <div className={cn(
-      "group relative rounded-md border transition-all shadow-sm",
+      "group relative rounded-md border border-l-[3px] shadow-sm transition-all",
       hasAnyError
-        ? "border-red-400 bg-red-50 shadow-red-200/40 dark:border-red-600/50 dark:bg-red-950/30 dark:shadow-red-900/20"
-        : "border-indigo-200 bg-indigo-50/80 shadow-indigo-100/60 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/40 dark:border-indigo-500/30 dark:bg-indigo-950/40 dark:shadow-indigo-900/10 dark:hover:border-indigo-400/40"
+        ? "border-red-400 border-l-red-500 bg-red-50 dark:border-red-600/50 dark:bg-red-950/30"
+        : "border-slate-200 border-l-indigo-500 bg-white hover:border-indigo-300 hover:shadow-md dark:border-slate-700 dark:border-l-indigo-400 dark:bg-slate-900 dark:hover:border-indigo-400/50"
     )}>
       {headerDragPos === "before" && (
         <div className="pointer-events-none absolute -top-0.5 left-2 right-2 h-0.5 rounded-full bg-primary z-20" />
@@ -1484,7 +1633,7 @@ function SectionCard({
       {/* Section Header */}
       <div
         className={cn(
-          "relative flex items-center gap-3 p-4 cursor-pointer rounded-t-xl",
+          "relative flex cursor-pointer items-center gap-3 rounded-t-md bg-indigo-50/90 p-3 dark:bg-indigo-950/40",
           headerDragPos === "before" && "rounded-t-none border-t-2 border-t-primary",
           headerDragPos === "after" && "rounded-b-none border-b-2 border-b-primary"
         )}
@@ -1614,7 +1763,7 @@ function SectionCard({
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-t border-indigo-100 bg-white/60 p-4 dark:border-indigo-500/20 dark:bg-slate-900/40">
+        <div className="border-t border-indigo-100 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
           {hasTitleError && (
             <p className="mb-3 flex items-center gap-1 text-xs text-red-500">
               <AlertCircle className="h-3 w-3" /> {hasTitleError}
@@ -1702,6 +1851,8 @@ function SectionCard({
                         onDropSubsection(dragSubsectionClientId, sourceSectionClientId, insertLayoutIndex)
                       }
                       formSelfAssessmentEnabled={formSelfAssessmentEnabled}
+                      ratingBased={ratingBased}
+                      ratingScales={ratingScales}
                     />
                   );
                 }
@@ -1733,6 +1884,8 @@ function SectionCard({
                     }
                     compact
                     formSelfAssessmentEnabled={formSelfAssessmentEnabled}
+                    ratingBased={ratingBased}
+                    ratingScales={ratingScales}
                   />
                 );
               });
@@ -1775,6 +1928,8 @@ function QuestionCard({
   onDropSubsection,
   onDropSection,
   formSelfAssessmentEnabled = true,
+  ratingBased = false,
+  ratingScales = [],
 }: {
   question: QuestionInput;
   index: number;
@@ -1790,11 +1945,14 @@ function QuestionCard({
   onDropSection?: (dragSectionClientId: string, insertIndex: number) => void;
   compact?: boolean;
   formSelfAssessmentEnabled?: boolean;
+  ratingBased?: boolean;
+  ratingScales?: FormRatingScaleInput[];
 }) {
   const textError = errors[errorPrefix];
   const typeError = errors[`${errorPrefix}-type`];
   const marksError = errors[`${errorPrefix}-marks`];
-  const hasError = textError || typeError || marksError;
+  const scaleError = errors[`${errorPrefix}-scale`];
+  const hasError = textError || typeError || marksError || scaleError;
   const showOptions = questionNeedsOptions(question.inputType);
   const [dragOverPos, setDragOverPos] = useState<"before" | "after" | null>(null);
   const dropLayoutIndex = layoutIndex ?? index;
@@ -1850,10 +2008,10 @@ function QuestionCard({
         } catch { /* ignore */ }
       }}
       className={cn(
-      "group relative rounded-lg border p-3 transition-all shadow-sm",
+      "group relative rounded-lg border border-l-[3px] p-3 shadow-sm transition-all",
       hasError
-        ? "border-red-300 bg-red-50/60 dark:border-red-700/50 dark:bg-red-950/20"
-        : "border-sky-200 bg-sky-50/50 hover:border-sky-300 hover:shadow-md hover:shadow-sky-100/40 dark:border-sky-500/25 dark:bg-sky-950/30 dark:hover:border-sky-400/35",
+        ? "border-red-300 border-l-red-500 bg-red-50/80 dark:border-red-700/50 dark:bg-red-950/20"
+        : "border-slate-200 border-l-sky-500 bg-white hover:border-sky-300 hover:shadow-md dark:border-slate-700 dark:border-l-sky-400 dark:bg-slate-900 dark:hover:border-sky-500/50",
       dragOverPos === "before" && "rounded-t-none border-t-2 border-t-primary",
       dragOverPos === "after" && "rounded-b-none border-b-2 border-b-primary",
     )}>
@@ -1899,7 +2057,7 @@ function QuestionCard({
               placeholder="Enter question text... (Press Enter for new line)"
               className={cn(
                 "min-h-8 flex-1 bg-transparent text-sm outline-none whitespace-pre-wrap",
-                textError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-sky-900 placeholder:text-sky-400 dark:text-sky-50 dark:placeholder:text-sky-500"
+                textError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-slate-800 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500"
               )}
             />
             {!question.noMarks && (
@@ -1984,6 +2142,37 @@ function QuestionCard({
                 />
                 No Marks
               </label>
+              {ratingBased && !question.noMarks ? (
+                <div className="w-52">
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                    Rating dropdown
+                  </label>
+                  <select
+                    value={question.ratingScaleClientId ?? ""}
+                    onChange={(e) => {
+                      const clientId = e.target.value;
+                      const scale = ratingScales.find((item) => item.clientId === clientId);
+                      onChange({
+                        ratingScaleClientId: clientId,
+                        ratingScaleId: scale?.id ?? null,
+                      });
+                    }}
+                    className={cn(
+                      "h-8 w-full rounded border px-2 text-xs outline-none bg-white/70 dark:bg-slate-900/50",
+                      scaleError
+                        ? "border-red-400 dark:border-red-700"
+                        : "border-sky-200 dark:border-sky-600/40",
+                    )}
+                  >
+                    <option value="">Select dropdown</option>
+                    {ratingScales.map((scale) => (
+                      <option key={scale.clientId} value={scale.clientId}>
+                        {scale.name || "Untitled dropdown"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
             </div>
           </div>
           
@@ -2000,6 +2189,11 @@ function QuestionCard({
           {marksError && (
             <p className="flex items-center gap-1 text-xs text-red-500">
               <AlertCircle className="h-3 w-3" /> {marksError}
+            </p>
+          )}
+          {scaleError && (
+            <p className="flex items-center gap-1 text-xs text-red-500">
+              <AlertCircle className="h-3 w-3" /> {scaleError}
             </p>
           )}
 
@@ -2096,6 +2290,20 @@ export default function FormBuilderWizard({
   const [description, setDescription] = useState(initialState?.description ?? "");
   const [selfAssessmentEnabled, setSelfAssessmentEnabled] = useState(initialState?.selfAssessmentEnabled ?? true);
   const [additionalRemarksEnabled, setAdditionalRemarksEnabled] = useState(initialState?.additionalRemarksEnabled ?? false);
+  const [scoringMode, setScoringMode] = useState<"absolute" | "rating" | null>(
+    initialState ? (initialState.ratingBased ? "rating" : "absolute") : null,
+  );
+  const ratingBased = scoringMode === "rating";
+  const [ratingScales, setRatingScales] = useState<FormRatingScaleInput[]>(
+    initialState?.ratingScales.map((scale) => ({
+      ...scale,
+      id: copyMode ? undefined : scale.id,
+      options: scale.options.map((option) => ({
+        ...option,
+        id: copyMode ? undefined : option.id,
+      })),
+    })) ?? [],
+  );
   const [sections, setSections] = useState<FormSectionInput[]>(
     initialState?.sections.map((section) => ({
       ...section,
@@ -2106,6 +2314,7 @@ export default function FormBuilderWizard({
         questions: sub.questions.map((q) => ({
           ...q,
           id: copyMode ? undefined : q.id,
+          ratingScaleId: copyMode ? null : q.ratingScaleId,
           options: q.options.map((o) => ({
             ...o,
             id: copyMode ? undefined : o.id,
@@ -2115,6 +2324,7 @@ export default function FormBuilderWizard({
       questions: section.questions.map((q) => ({
         ...q,
         id: copyMode ? undefined : q.id,
+        ratingScaleId: copyMode ? null : q.ratingScaleId,
         options: q.options.map((o) => ({
           ...o,
           id: copyMode ? undefined : o.id,
@@ -2126,6 +2336,7 @@ export default function FormBuilderWizard({
     initialState?.questions.map((q) => ({
       ...q,
       id: copyMode ? undefined : q.id,
+      ratingScaleId: copyMode ? null : q.ratingScaleId,
       options: q.options.map((o) => ({
         ...o,
         id: copyMode ? undefined : o.id,
@@ -2151,6 +2362,13 @@ export default function FormBuilderWizard({
       description: description.trim(),
       selfAssessmentEnabled,
       additionalRemarksEnabled,
+      ratingBased,
+      ratingScales: ratingBased
+        ? ratingScales.map((scale) => ({
+            ...scale,
+            maxValue: deriveRatingScaleMaxValue(scale.options, scale.maxValue),
+          }))
+        : [],
       sections: normalized.sections,
       questions: normalized.questions,
       ...(cycleId ? { cycleId } : {}),
@@ -2161,6 +2379,8 @@ export default function FormBuilderWizard({
     description,
     selfAssessmentEnabled,
     additionalRemarksEnabled,
+    ratingBased,
+    ratingScales,
     sections,
     questions,
     cycleId,
@@ -2202,6 +2422,10 @@ export default function FormBuilderWizard({
       nextErrors.code = "Form code is required.";
     }
 
+    if (scoringMode == null) {
+      nextErrors.formType = "Select a form type: Absolute score or Rating based.";
+    }
+
     if (countAllQuestions(sections, questions) === 0) {
       nextErrors.questions = "At least one question is required.";
     }
@@ -2221,6 +2445,7 @@ export default function FormBuilderWizard({
             question,
             `section-${sectionIndex}-sub-${subsectionIndex}-question-${questionIndex}`,
             nextErrors,
+            ratingBased,
           );
         });
       });
@@ -2230,13 +2455,33 @@ export default function FormBuilderWizard({
           question,
           `section-${sectionIndex}-question-${questionIndex}`,
           nextErrors,
+          ratingBased,
         );
       });
     });
 
     questions.forEach((question, index) => {
-      validateQuestionFields(question, `question-${index}`, nextErrors);
+      validateQuestionFields(question, `question-${index}`, nextErrors, ratingBased);
     });
+
+    if (ratingBased) {
+      if (ratingScales.length === 0) {
+        nextErrors.ratingScales = "Add at least one rating dropdown.";
+      }
+      ratingScales.forEach((scale, scaleIndex) => {
+        if (!scale.name.trim()) {
+          nextErrors.ratingScales = `Rating dropdown ${scaleIndex + 1} needs a name.`;
+        }
+        if (scale.options.length < 2) {
+          nextErrors.ratingScales = `Rating dropdown ${scaleIndex + 1} needs at least two options.`;
+        }
+        scale.options.forEach((option, optionIndex) => {
+          if (!option.optionLabel.trim()) {
+            nextErrors.ratingScales = `Rating dropdown ${scaleIndex + 1}, option ${optionIndex + 1}: label is required.`;
+          }
+        });
+      });
+    }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -2281,61 +2526,100 @@ export default function FormBuilderWizard({
   const currentStepData = STEPS[step];
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-slate-50 dark:bg-slate-950">
-      {/* Top Navigation Bar */}
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex min-w-0 items-center gap-4">
-          <button
-            onClick={() => router.push("/dashboard/forms")}
-            className="shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-bold text-slate-900 dark:text-slate-100">
-              {templateId ? "Edit Form" : "Create Form"}
+    <div className="relative flex h-full min-h-0 flex-col bg-white dark:bg-slate-950">
+      <header className="flex shrink-0 items-center gap-2 border-b border-indigo-100 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900 sm:gap-3 sm:px-4">
+        <button
+          type="button"
+          onClick={() => router.push("/dashboard/forms")}
+          className="shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          aria-label="Back to forms"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+
+        {step === 0 ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Form title"
+                className={cn(
+                  "h-9 w-full rounded-lg border bg-slate-50 px-3 text-sm font-semibold outline-none transition-all placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-2 dark:bg-slate-950",
+                  errors.title
+                    ? "border-red-300 text-red-800 focus:border-red-500 focus:ring-red-500/20 dark:border-red-800"
+                    : "border-slate-200 text-slate-900 focus:border-indigo-400 focus:ring-indigo-500/15 dark:border-slate-700 dark:text-slate-100",
+                )}
+              />
+              {errors.title ? (
+                <p className="mt-0.5 truncate text-[11px] text-red-500">{errors.title}</p>
+              ) : null}
+            </div>
+            <div className="w-28 shrink-0 sm:w-36">
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Code"
+                maxLength={50}
+                className={cn(
+                  "h-9 w-full rounded-lg border bg-slate-50 px-2.5 text-sm outline-none transition-all placeholder:text-slate-400 focus:bg-white focus:ring-2 dark:bg-slate-950",
+                  errors.code
+                    ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 dark:border-red-800"
+                    : "border-slate-200 focus:border-indigo-400 focus:ring-indigo-500/15 dark:border-slate-700 dark:text-slate-100",
+                )}
+              />
+              {errors.code ? (
+                <p className="mt-0.5 truncate text-[11px] text-red-500">{errors.code}</p>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-base font-bold text-slate-900 dark:text-slate-100">
+              {title || (templateId ? "Edit Form" : "Create Form")}
             </h1>
             <p className="truncate text-xs text-slate-500 dark:text-slate-400">
               {currentStepData.description}
             </p>
           </div>
-        </div>
+        )}
 
-        {/* Step Indicator */}
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-1 md:flex">
           {STEPS.map((s, idx) => {
             const Icon = s.icon;
             const isActive = idx === step;
             const isCompleted = idx < step;
-            
+
             return (
               <div key={s.id} className="flex items-center">
-                <div className={cn(
-                  "flex items-center gap-2 rounded-full px-4 py-2 transition-all",
-                  isActive 
-                    ? "bg-primary/10 text-primary ring-1 ring-primary/20"
-                    : isCompleted
-                      ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-                      : "text-slate-400"
-                )}>
-                  {isCompleted ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    <Icon className="h-4 w-4" />
+                <div
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
+                    isActive
+                      ? "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-200 dark:ring-indigo-500/30"
+                      : isCompleted
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
+                        : "text-slate-400",
                   )}
-                  <span className="text-sm font-medium">{s.label}</span>
+                >
+                  {isCompleted ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Icon className="h-3.5 w-3.5" />
+                  )}
+                  <span>{s.label}</span>
                 </div>
                 {idx < STEPS.length - 1 && (
-                  <ChevronRight className="mx-2 h-4 w-4 text-slate-300 dark:text-slate-700" />
+                  <ChevronRight className="mx-1 h-3.5 w-3.5 text-slate-300 dark:text-slate-700" />
                 )}
               </div>
             );
           })}
         </div>
 
-        {/* Actions */}
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2">
           {step > 0 && (
             <Button
               type="button"
@@ -2343,12 +2627,12 @@ export default function FormBuilderWizard({
               fullWidth={false}
               onClick={goBack}
               disabled={saveMutation.isPending}
-              className="h-9 px-4"
+              className="h-9 px-3"
             >
               Back
             </Button>
           )}
-          
+
           {step < STEPS.length - 1 ? (
             <Button type="button" fullWidth={false} onClick={goNext} isLoading={saveMutation.isPending} className="h-9 px-4">
               Continue
@@ -2366,10 +2650,10 @@ export default function FormBuilderWizard({
             </Button>
           )}
         </div>
-      </div>
+      </header>
 
       {templateId && appraisalCount > 0 ? (
-        <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="flex shrink-0 items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             This form has active appraisals — removing questions is restricted.
@@ -2378,8 +2662,7 @@ export default function FormBuilderWizard({
         </div>
       ) : null}
 
-      {/* Main Content */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {step === 0 ? (
           <ModernFormDesignStep
             title={title}
@@ -2387,14 +2670,41 @@ export default function FormBuilderWizard({
             description={description}
             selfAssessmentEnabled={selfAssessmentEnabled}
             additionalRemarksEnabled={additionalRemarksEnabled}
+            ratingBased={ratingBased}
+            scoringMode={scoringMode}
+            ratingScales={ratingScales}
             sections={sections}
             questions={questions}
             errors={errors}
-            onTitleChange={setTitle}
-            onCodeChange={setCode}
             onDescriptionChange={setDescription}
-            onSelfAssessmentEnabledChange={setSelfAssessmentEnabled}
             onAdditionalRemarksEnabledChange={setAdditionalRemarksEnabled}
+            onScoringModeChange={(mode) => {
+              setScoringMode(mode);
+              if (mode === "absolute") {
+                return;
+              }
+              const nextScales =
+                ratingScales.length === 0
+                  ? [createEmptyRatingScale(0)]
+                  : ratingScales;
+              if (ratingScales.length === 0) {
+                setRatingScales(nextScales);
+              }
+              const assignScale = (question: QuestionInput) =>
+                applyDefaultRatingScale(question, true, nextScales);
+              setQuestions((current) => current.map(assignScale));
+              setSections((current) =>
+                current.map((section) => ({
+                  ...section,
+                  questions: section.questions.map(assignScale),
+                  subsections: section.subsections.map((subsection) => ({
+                    ...subsection,
+                    questions: subsection.questions.map(assignScale),
+                  })),
+                })),
+              );
+            }}
+            onRatingScalesChange={setRatingScales}
             onStructureChange={handleStructureChange}
           />
         ) : (

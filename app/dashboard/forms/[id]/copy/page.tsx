@@ -31,7 +31,7 @@ export default async function CopyFormPage({ params }: CopyFormPageProps) {
     const appraisalCycles = await listAppraisalCycles();
 
     return (
-      <div className="-m-6 h-screen overflow-hidden">
+      <div className="-m-4 flex h-[100dvh] flex-col overflow-hidden">
         <FormBuilderWizard
           initialData={template}
           appraisalCycles={appraisalCycles}

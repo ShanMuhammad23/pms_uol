@@ -20,8 +20,14 @@ import {
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
+  getQuestionRatingScale,
+  usesRatingScore,
+} from "@/app/helpers/form-rating-scoring";
+import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
+import {
   APPRAISAL_STATUS_LABELS,
   type AppraisalStatus,
+  type FormRatingScaleRecord,
   type QuestionRecord,
 } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
@@ -32,6 +38,7 @@ import {
   formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
+import { FormDescription } from "@/app/components/forms/FormDescription";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import OverallRemarksSection, {
   OverallRemarksPrintSection,
@@ -63,8 +70,75 @@ interface SubmissionDetailViewProps {
 
 type ManagerDraft = {
   pointsEarned: string;
+  ratingValue: string;
   remarks: string;
 };
+
+function emptyManagerDraft(): ManagerDraft {
+  return { pointsEarned: "", ratingValue: "", remarks: "" };
+}
+
+function cloneManagerDraft(draft: ManagerDraft): ManagerDraft {
+  return {
+    pointsEarned: draft.pointsEarned,
+    ratingValue: draft.ratingValue,
+    remarks: draft.remarks,
+  };
+}
+
+function ratingValueFromDraft(draft: ManagerDraft | undefined): number | null {
+  if (!draft?.ratingValue) {
+    return null;
+  }
+  const parsed = Number(draft.ratingValue);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function ManagerScoreEditor({
+  question,
+  ratingBased,
+  ratingScales,
+  draft,
+  onChange,
+  inputClassName,
+}: {
+  question: QuestionRecord;
+  ratingBased: boolean;
+  ratingScales: FormRatingScaleRecord[];
+  draft: ManagerDraft;
+  onChange: (patch: Partial<ManagerDraft>) => void;
+  inputClassName: string;
+}) {
+  const scale = getQuestionRatingScale(question, ratingScales);
+  if (usesRatingScore(question, ratingBased, ratingScales) && scale) {
+    return (
+      <RatingScoreField
+        scale={scale}
+        weight={question.totalMarks}
+        ratingValue={draft.ratingValue}
+        onRatingChange={(ratingValue, pointsEarned) =>
+          onChange({ ratingValue, pointsEarned })
+        }
+      />
+    );
+  }
+
+  return (
+    <input
+      type="number"
+      min={0}
+      max={question.totalMarks}
+      step="0.5"
+      value={draft.pointsEarned}
+      onChange={(event) =>
+        onChange({
+          pointsEarned: clampScore(event.target.value, question.totalMarks),
+        })
+      }
+      className={inputClassName}
+    />
+  );
+}
 
 function clampScore(value: string, maxMarks: number): string {
   if (value === "") return "";
@@ -177,10 +251,13 @@ function buildManagerDraftMap(
       managerLevel === 2 ? (manager1 ?? employee) : employee;
     const points =
       manager?.pointsEarned ?? fallbackSource?.pointsEarned ?? undefined;
+    const ratingValue =
+      manager?.ratingValue ?? fallbackSource?.ratingValue ?? undefined;
     const remarks = manager?.remarks ?? fallbackSource?.remarks ?? "";
 
     drafts.set(question.id, {
       pointsEarned: points === undefined ? "" : String(points),
+      ratingValue: ratingValue === undefined ? "" : String(ratingValue),
       remarks: remarks ?? "",
     });
   }
@@ -428,7 +505,7 @@ export default function SubmissionDetailView({
         new Map(
           [...drafts.entries()].map(([k, v]) => [
             k,
-            { pointsEarned: v.pointsEarned, remarks: v.remarks },
+            cloneManagerDraft(v),
           ]),
         ),
       );
@@ -454,6 +531,7 @@ export default function SubmissionDetailView({
             questionId: question.id,
             pointsEarned:
               draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+            ratingValue: ratingValueFromDraft(draft),
             remarks: draft?.remarks?.trim() || null,
           };
         });
@@ -509,6 +587,7 @@ export default function SubmissionDetailView({
               questionId: question.id,
               pointsEarned:
                 draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+              ratingValue: ratingValueFromDraft(draft),
               remarks: draft?.remarks?.trim() || null,
             };
           });
@@ -551,6 +630,7 @@ export default function SubmissionDetailView({
             questionId: question.id,
             pointsEarned:
               draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+            ratingValue: ratingValueFromDraft(draft),
             remarks: draft?.remarks?.trim() || null,
           };
         });
@@ -570,7 +650,7 @@ export default function SubmissionDetailView({
         new Map(
           [...managerDrafts.entries()].map(([k, v]) => [
             k,
-            { pointsEarned: v.pointsEarned, remarks: v.remarks },
+            { pointsEarned: v.pointsEarned, ratingValue: v.ratingValue, remarks: v.remarks },
           ]),
         ),
       );
@@ -591,6 +671,7 @@ export default function SubmissionDetailView({
               questionId: question.id,
               pointsEarned:
                 draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+              ratingValue: ratingValueFromDraft(draft),
               remarks: draft?.remarks?.trim() || null,
             };
           });
@@ -720,6 +801,7 @@ export default function SubmissionDetailView({
       const initial = initialDraftsSnapshot.get(key);
       if (!initial) return true;
       if (initial.pointsEarned !== draft.pointsEarned) return true;
+      if (initial.ratingValue !== draft.ratingValue) return true;
       if (initial.remarks !== draft.remarks) return true;
     }
     // Check overall remarks for unsaved changes
@@ -739,7 +821,7 @@ export default function SubmissionDetailView({
       new Map(
         [...initialDraftsSnapshot.entries()].map(([k, v]) => [
           k,
-          { pointsEarned: v.pointsEarned, remarks: v.remarks },
+          { pointsEarned: v.pointsEarned, ratingValue: v.ratingValue, remarks: v.remarks },
         ]),
       ),
     );
@@ -836,7 +918,7 @@ export default function SubmissionDetailView({
   ) => {
     setManagerDrafts((current) => {
       const next = new Map(current);
-      const existing = next.get(questionId) ?? { pointsEarned: "", remarks: "" };
+      const existing = next.get(questionId) ?? emptyManagerDraft();
       next.set(questionId, { ...existing, ...patch });
       return next;
     });
@@ -847,6 +929,7 @@ export default function SubmissionDetailView({
     <div className="min-w-0 max-w-full overflow-x-hidden rounded-md border border-slate-300 bg-white shadow-md shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-900/30">
       <PrintDocumentHeader
         title="Assessment Submission"
+        description={data.templateDescription}
         metaItems={[
           { label: "Employee", value: data.employeeName },
           { label: "SAP ID", value: data.employeeId ?? "—" },
@@ -898,6 +981,7 @@ export default function SubmissionDetailView({
                   {data.templateTitle}
                 </p>
               ) : null}
+              <FormDescription description={data.templateDescription} className="mt-2 no-print" />
             </div>
           </div>
           <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1202,10 +1286,7 @@ export default function SubmissionDetailView({
                 const scored = isScoredQuestion(question!);
                 const questionSelfAssessmentEnabled =
                   selfAssessmentEnabled && question!.selfAssessmentEnabled;
-                const managerDraft = managerDrafts.get(question!.id) ?? {
-                  pointsEarned: "",
-                  remarks: "",
-                };
+                const managerDraft = managerDrafts.get(question!.id) ?? emptyManagerDraft();
                 const mgr1Answer = manager1AnswerMap.get(question!.id);
                 const mgr2Answer = manager2AnswerMap.get(question!.id);
                 const mgr1Display = managerColumnAnswer(
@@ -1301,21 +1382,15 @@ export default function SubmissionDetailView({
                     <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                       {scored ? (
                         (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
-                          <input
-                            type="number"
-                            min={0}
-                            max={question!.totalMarks}
-                            step="0.5"
-                            value={managerDraft.pointsEarned}
-                            onChange={(event) =>
-                              updateManagerDraft(question!.id, {
-                                pointsEarned: clampScore(
-                                  event.target.value,
-                                  question!.totalMarks,
-                                ),
-                              })
+                          <ManagerScoreEditor
+                            question={question!}
+                            ratingBased={data.ratingBased}
+                            ratingScales={data.ratingScales ?? []}
+                            draft={managerDraft}
+                            onChange={(patch) =>
+                              updateManagerDraft(question!.id, patch)
                             }
-                            className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
+                            inputClassName="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
                           />
                         ) : (
                           <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
@@ -1358,21 +1433,15 @@ export default function SubmissionDetailView({
                         <td className="whitespace-nowrap border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                           {scored ? (
                             (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
-                              <input
-                                type="number"
-                                min={0}
-                                max={question!.totalMarks}
-                                step="0.5"
-                                value={managerDraft.pointsEarned}
-                                onChange={(event) =>
-                                  updateManagerDraft(question!.id, {
-                                    pointsEarned: clampScore(
-                                      event.target.value,
-                                      question!.totalMarks,
-                                    ),
-                                  })
+                              <ManagerScoreEditor
+                                question={question!}
+                                ratingBased={data.ratingBased}
+                                ratingScales={data.ratingScales ?? []}
+                                draft={managerDraft}
+                                onChange={(patch) =>
+                                  updateManagerDraft(question!.id, patch)
                                 }
-                                className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-indigo-300"
+                                inputClassName="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-indigo-300"
                               />
                             ) : (
                               <span className="font-bold tabular-nums text-indigo-700 dark:text-indigo-300">

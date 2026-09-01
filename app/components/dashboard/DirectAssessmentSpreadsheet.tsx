@@ -11,7 +11,13 @@ import {
 } from "@/lib/queries/direct-assessment-client";
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
+import {
+  getQuestionRatingScale,
+  usesRatingScore,
+} from "@/app/helpers/form-rating-scoring";
+import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
+import { FormDescription } from "@/app/components/forms/FormDescription";
 import { cn } from "@/lib/utils";
 import {
   buildFormTableRows,
@@ -47,8 +53,30 @@ const MAX_COL_WIDTH = 500;
 
 type ScoreDraft = {
   pointsEarned: string;
+  ratingValue: string;
   remarks: string;
 };
+
+function ratingValueFromDraft(draft: ScoreDraft | undefined): number | null {
+  if (!draft?.ratingValue) {
+    return null;
+  }
+  const parsed = Number(draft.ratingValue);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function draftToSaveAnswer(
+  question: { id: number },
+  draft: ScoreDraft | undefined,
+) {
+  return {
+    questionId: question.id,
+    pointsEarned:
+      draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+    ratingValue: ratingValueFromDraft(draft),
+    remarks: draft?.remarks?.trim() || null,
+  };
+}
 
 type RemarksDraft = {
   manager1: string;
@@ -99,10 +127,12 @@ function buildInitialDrafts(
       const fallback =
         (emp.managerLevel ?? 1) === 2 ? mgr1 : null;
       const points = my?.pointsEarned ?? fallback?.pointsEarned ?? 0;
+      const ratingValue = my?.ratingValue ?? fallback?.ratingValue ?? null;
       const remarks = my?.remarks ?? fallback?.remarks ?? "";
 
       drafts[question.id] = {
         pointsEarned: String(points),
+        ratingValue: ratingValue == null ? "" : String(ratingValue),
         remarks: remarks ?? "",
       };
     }
@@ -243,12 +273,7 @@ export default function DirectAssessmentSpreadsheet({
         .filter(isScoredQuestion)
         .map((q) => {
           const draft = empDrafts[q.id];
-          return {
-            questionId: q.id,
-            pointsEarned:
-              draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
-            remarks: draft?.remarks?.trim() || null,
-          };
+          return draftToSaveAnswer(q, draft);
         });
 
       const overallRemarks = overallRemarksForSubmission(
@@ -278,14 +303,7 @@ export default function DirectAssessmentSpreadsheet({
           .filter(isScoredQuestion)
           .map((q) => {
             const draft = empDrafts[q.id];
-            return {
-              questionId: q.id,
-              pointsEarned:
-                draft?.pointsEarned === ""
-                  ? 0
-                  : Number(draft?.pointsEarned ?? 0),
-              remarks: draft?.remarks?.trim() || null,
-            };
+            return draftToSaveAnswer(q, draft);
           });
         const overallRemarks = overallRemarksForSubmission(
           data,
@@ -317,6 +335,7 @@ export default function DirectAssessmentSpreadsheet({
       const empDrafts = next[submissionId] ?? {};
       const existing = empDrafts[questionId] ?? {
         pointsEarned: "",
+        ratingValue: "",
         remarks: "",
       };
       next[submissionId] = {
@@ -360,12 +379,7 @@ export default function DirectAssessmentSpreadsheet({
         .filter(isScoredQuestion)
         .map((q) => {
           const draft = empDrafts[q.id];
-          return {
-            questionId: q.id,
-            pointsEarned:
-              draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
-            remarks: draft?.remarks?.trim() || null,
-          };
+          return draftToSaveAnswer(q, draft);
         });
       const overallRemarks = overallRemarksForSubmission(
         data,
@@ -501,6 +515,7 @@ export default function DirectAssessmentSpreadsheet({
           ) : null}
         </div>
       </div>
+      <FormDescription description={data.templateDescription} />
 
       {saveMessage ? (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
@@ -709,6 +724,28 @@ export default function DirectAssessmentSpreadsheet({
                           >
                           {scored ? (
                             isEditable ? (
+                              usesRatingScore(
+                                question!,
+                                data.ratingBased,
+                                data.ratingScales,
+                              ) ? (
+                                <RatingScoreField
+                                  scale={
+                                    getQuestionRatingScale(
+                                      question!,
+                                      data.ratingScales,
+                                    )!
+                                  }
+                                  weight={question!.totalMarks}
+                                  ratingValue={draft?.ratingValue ?? ""}
+                                  onRatingChange={(ratingValue, pointsEarned) =>
+                                    updateDraft(emp.submissionId, question!.id, {
+                                      ratingValue,
+                                      pointsEarned,
+                                    })
+                                  }
+                                />
+                              ) : (
                               <input
                                 type="number"
                                 min={0}
@@ -725,6 +762,7 @@ export default function DirectAssessmentSpreadsheet({
                                 }
                                 className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
                               />
+                              )
                             ) : (
                               <span className="font-bold tabular-nums text-slate-600 dark:text-slate-400">
                                 {draft?.pointsEarned ?? 0}

@@ -94,6 +94,10 @@ CREATE TABLE form_templates (
     -- overall assessment remarks. Employees never see or edit this section.
     additional_remarks_enabled BOOLEAN NOT NULL DEFAULT FALSE,
 
+    -- When TRUE, scored questions use a rating dropdown; points =
+    -- (selected rating / scale max) × question weight (total_marks).
+    rating_based BOOLEAN NOT NULL DEFAULT FALSE,
+
     created_by BIGINT REFERENCES users(id),
     updated_by BIGINT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -125,8 +129,31 @@ CREATE TABLE form_questions (
     self_assessment_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     hod_assessment_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     total_marks INT NOT NULL DEFAULT 0 CHECK (total_marks >= 0),
+    rating_scale_id BIGINT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Reusable rating dropdowns for rating-based forms (typically 1–5).
+CREATE TABLE form_rating_scales (
+    id BIGSERIAL PRIMARY KEY,
+    template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+    name VARCHAR(150) NOT NULL,
+    max_value NUMERIC(8, 2) NOT NULL DEFAULT 5 CHECK (max_value > 0),
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE form_rating_scale_options (
+    id BIGSERIAL PRIMARY KEY,
+    scale_id BIGINT NOT NULL REFERENCES form_rating_scales(id) ON DELETE CASCADE,
+    option_label VARCHAR(255) NOT NULL,
+    rating_value NUMERIC(8, 2) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0
+);
+
+ALTER TABLE form_questions
+    ADD CONSTRAINT form_questions_rating_scale_id_fkey
+    FOREIGN KEY (rating_scale_id) REFERENCES form_rating_scales(id) ON DELETE SET NULL;
 
 -- Point Weightage Matrix Options (For Radio, Checkbox, Select selections)
 CREATE TABLE question_options (
@@ -276,7 +303,9 @@ CREATE TABLE appraisal_answers (
     selected_option_id BIGINT REFERENCES question_options(id) ON DELETE SET NULL,
     
     -- Captured point weight at execution snapshot (protects historical records if point tables change later)
-    points_earned INT NOT NULL DEFAULT 0, 
+    points_earned NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    -- Raw rating selected on rating-based questions (e.g. 1–5)
+    rating_value NUMERIC(8, 2), 
     
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_answer_per_question UNIQUE (appraisal_id, question_id, filled_by_id)

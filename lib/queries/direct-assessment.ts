@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getDbClient } from "@/lib/db-context";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import { flattenAllQuestions } from "@/types/forms";
-import type { QuestionRecord, FormSectionRecord } from "@/types/forms";
+import type { QuestionRecord, FormSectionRecord, FormRatingScaleRecord } from "@/types/forms";
 import type {
   EmployeeFormAnswerAttachment,
   EmployeeFormAnswerRecord,
@@ -38,9 +38,12 @@ export interface DirectAssessmentOverallRemarks {
 export interface DirectAssessmentData {
   templateId: number;
   templateTitle: string;
+  templateDescription: string | null;
   selfAssessmentEnabled: boolean;
   /** Whether the form template has additional_remarks_enabled = TRUE. */
   additionalRemarksEnabled: boolean;
+  ratingBased: boolean;
+  ratingScales: FormRatingScaleRecord[];
   questions: QuestionRecord[];
   sections: FormSectionRecord[];
   rootQuestions: QuestionRecord[];
@@ -248,6 +251,7 @@ export async function getDirectAssessmentData(
       selectedOptionId: number | null;
       pointsEarned: number;
       remarks: string | null;
+      ratingValue: number | null;
     }>
   >();
 
@@ -260,9 +264,11 @@ export async function getDirectAssessmentData(
       selected_option_id: string | null;
       points_earned: string;
       remarks: string | null;
+      rating_value: string | null;
     }>(
       `SELECT appraisal_id::text, question_id::text, filled_by_id::text,
-              text_response, selected_option_id::text, points_earned::text, remarks
+              text_response, selected_option_id::text, points_earned::text, remarks,
+              rating_value::text
        FROM appraisal_answers
        WHERE appraisal_id = ANY($1::bigint[])
          AND filled_by_id = ANY($2::bigint[])`,
@@ -279,6 +285,10 @@ export async function getDirectAssessmentData(
           : null,
         pointsEarned: Number(row.points_earned),
         remarks: row.remarks ?? null,
+        ratingValue:
+          row.rating_value == null || row.rating_value === ""
+            ? null
+            : Number(row.rating_value),
       });
       answersByTriple.set(key, list);
     }
@@ -414,8 +424,11 @@ export async function getDirectAssessmentData(
   return {
     templateId,
     templateTitle: template.title,
+    templateDescription: template.description ?? null,
     selfAssessmentEnabled: template.selfAssessmentEnabled,
     additionalRemarksEnabled: template.additionalRemarksEnabled,
+    ratingBased: template.ratingBased,
+    ratingScales: template.ratingScales ?? [],
     questions,
     sections: template.sections,
     rootQuestions: template.questions,

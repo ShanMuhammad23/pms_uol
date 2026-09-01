@@ -10,6 +10,7 @@ import { DashboardSectionToggles } from "@/app/components/dashboard/DashboardSec
 import { DashboardSubmissionsTable } from "@/app/components/dashboard/DashboardSubmissionsTable";
 import { DashboardWorkflowStatsRow } from "@/app/components/dashboard/DashboardWorkflowStatsRow";
 import DirectAssessmentTab from "@/app/components/dashboard/DirectAssessmentTab";
+import { GenerateOrgReportButton } from "@/app/components/dashboard/GenerateOrgReportButton";
 import { HeadDashboardOverview } from "@/app/components/dashboard/HeadDashboardOverview";
 import { useDashboardPage } from "@/app/queries/dashboard";
 import {
@@ -115,6 +116,8 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
 
   return (
     <div className="relative min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
+      <div className="flex justify-between items-center">
+      <h2 className="text-2xl font-bold ">UOL- Performance Management System</h2>
       {canAccessDirectAssessment ? (
         <div className="mb-2 flex items-center justify-between gap-1 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-1">
@@ -149,6 +152,12 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
           />
         </div>
       ) : null}
+      <div className="mb-2 flex items-center justify-between gap-2 mr-2">
+        <GenerateOrgReportButton />
+      </div>
+      </div>
+      
+   
 
       {activeTab === "direct-assessment" && canAccessDirectAssessment ? (
         <div className="mx-auto w-full max-w-full min-w-0">

@@ -40,6 +40,7 @@ export interface EmployeeFormAnswerRecord {
   textResponse: string | null;
   selectedOptionId: number | null;
   pointsEarned: number;
+  ratingValue?: number | null;
   remarks: string | null;
   attachments: EmployeeFormAnswerAttachment[];
 }
@@ -73,6 +74,7 @@ export interface EmployeeFormAnswerInput {
   textResponse?: string | null;
   selectedOptionId?: number | null;
   pointsEarned?: number;
+  ratingValue?: number | null;
   remarks?: string | null;
 }
 
@@ -84,6 +86,7 @@ export interface SaveEmployeeFormInput {
 export interface ManagerReviewAnswerInput {
   questionId: number;
   pointsEarned?: number;
+  ratingValue?: number | null;
   remarks?: string | null;
 }
 

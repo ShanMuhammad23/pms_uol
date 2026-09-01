@@ -18,6 +18,7 @@ import { getFormTemplateById } from "@/lib/queries/forms";
 import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { deleteFormAttachmentFile } from "@/lib/uploads/form-attachments";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
+import { getQuestionRatingScale, resolveAnswerScore } from "@/app/helpers/form-rating-scoring";
 import { applyCompensationWorksheet } from "@/app/helpers/compensation-worksheet";
 import type {
   EmployeeFormAnswerAttachment,
@@ -31,7 +32,7 @@ import type {
   ReturnLevel,
 } from "@/types/form-submissions";
 export type { ReturnHistoryEntry, ReturnLevel };
-import type { AppraisalStatus, PerformanceRating, QuestionRecord } from "@/types/forms";
+import type { AppraisalStatus, FormRatingScaleRecord, PerformanceRating, QuestionRecord } from "@/types/forms";
 import { flattenAllQuestions } from "@/types/forms";
 import {
   resolveManagerApprovalAdvance,
@@ -184,9 +185,11 @@ async function getAnswersForSubmission(
     text_response: string | null;
     selected_option_id: string | null;
     points_earned: string;
+    rating_value: string | null;
     remarks: string | null;
   }>(
-    `SELECT question_id, text_response, selected_option_id, points_earned, remarks
+    `SELECT question_id, text_response, selected_option_id, points_earned,
+            rating_value::text, remarks
      FROM appraisal_answers
      WHERE appraisal_id = $1
        AND filled_by_id = $2`,
@@ -212,6 +215,10 @@ async function getAnswersForSubmission(
         ? Number(row.selected_option_id)
         : null,
       pointsEarned: Number(row.points_earned),
+      ratingValue:
+        row.rating_value == null || row.rating_value === ""
+          ? null
+          : Number(row.rating_value),
       remarks: row.remarks ?? null,
       attachments: attachmentsByQuestion.get(questionId) ?? [],
     };
@@ -918,14 +925,17 @@ export interface BulkReviewQuestionRow {
   employeeName: string;
   /** Self-assessment score for this question (null when self-assessment disabled). */
   selfScore: number | null;
+  selfRating: number | null;
   /** Self-assessment remarks for this question (used as draft fallback). */
   selfRemarks: string | null;
   /** Current manager's saved score for this question. */
   managerScore: number | null;
+  managerRating: number | null;
   /** Current manager's saved remarks for this question. */
   managerRemarks: string | null;
   /** Manager 1's saved score (used as fallback for Manager 2 drafts). */
   manager1Score: number | null;
+  manager1Rating: number | null;
   /** Manager 1's saved remarks (used as fallback for Manager 2 drafts). */
   manager1Remarks: string | null;
   /** Attachments uploaded by the employee for this question. */
@@ -938,6 +948,8 @@ export interface BulkReviewQuestionData {
   totalMarks: number;
   isRequired: boolean;
   sectionTitle: string | null;
+  ratingBased: boolean;
+  ratingScale: FormRatingScaleRecord | null;
   rows: BulkReviewQuestionRow[];
 }
 
@@ -951,6 +963,8 @@ export async function getBulkReviewQuestionData(
   reviewerUserId: number,
 ): Promise<{
   questions: BulkReviewQuestionData[];
+  templateTitle: string | null;
+  templateDescription: string | null;
   submissions: Array<{
     id: number;
     employeeId: string;
@@ -960,7 +974,7 @@ export async function getBulkReviewQuestionData(
   }>;
 }> {
   if (submissionIds.length === 0) {
-    return { questions: [], submissions: [] };
+    return { questions: [], submissions: [], templateTitle: null, templateDescription: null };
   }
 
   // Fetch all submissions and filter to the ones the reviewer can access.
@@ -974,19 +988,19 @@ export async function getBulkReviewQuestionData(
   );
 
   if (selected.length === 0) {
-    return { questions: [], submissions: [] };
+    return { questions: [], submissions: [], templateTitle: null, templateDescription: null };
   }
 
   // All selected submissions should share the same template (same cycle).
   // Use the first one's template.
   const templateId = selected[0].templateId;
   if (!templateId) {
-    return { questions: [], submissions: [] };
+    return { questions: [], submissions: [], templateTitle: null, templateDescription: null };
   }
 
   const template = await getFormTemplateById(templateId);
   if (!template) {
-    return { questions: [], submissions: [] };
+    return { questions: [], submissions: [], templateTitle: null, templateDescription: null };
   }
 
   const allQuestions = flattenAllQuestions(template);
@@ -1104,7 +1118,7 @@ export async function getBulkReviewQuestionData(
 
   const answersMap = new Map<
     string,
-    { points_earned: number; remarks: string | null }
+    { points_earned: number; rating_value: number | null; remarks: string | null }
   >();
 
   if (selectedIds.length > 0 && questionIds.length > 0 && reviewerIds.size > 0) {
@@ -1113,10 +1127,11 @@ export async function getBulkReviewQuestionData(
       question_id: string;
       filled_by_id: string;
       points_earned: string;
+      rating_value: string | null;
       remarks: string | null;
     }>(
       `SELECT appraisal_id::text, question_id::text, filled_by_id::text,
-              points_earned::text, remarks
+              points_earned::text, rating_value::text, remarks
        FROM appraisal_answers
        WHERE appraisal_id = ANY($1::bigint[])
          AND question_id = ANY($2::bigint[])
@@ -1127,6 +1142,10 @@ export async function getBulkReviewQuestionData(
       const key = `${row.appraisal_id}:${row.question_id}:${row.filled_by_id}`;
       answersMap.set(key, {
         points_earned: Number(row.points_earned),
+        rating_value:
+          row.rating_value == null || row.rating_value === ""
+            ? null
+            : Number(row.rating_value),
         remarks: row.remarks,
       });
     }
@@ -1136,7 +1155,7 @@ export async function getBulkReviewQuestionData(
     appraisalId: number,
     questionId: number,
     filledById: number,
-  ): { points_earned: number; remarks: string | null } | null => {
+  ): { points_earned: number; rating_value: number | null; remarks: string | null } | null => {
     const key = `${appraisalId}:${questionId}:${filledById}`;
     return answersMap.get(key) ?? null;
   };
@@ -1150,16 +1169,19 @@ export async function getBulkReviewQuestionData(
       // Self-assessment answers
       const selfAns = getAnswer(meta.id, q.id, meta.employeeUserId);
       const selfScore = selfAns?.points_earned ?? null;
+      const selfRating = selfAns?.rating_value ?? null;
       const selfRemarks = selfAns?.remarks ?? null;
 
       // Reviewer (manager) answers
       const mgrAns = getAnswer(meta.id, q.id, reviewerUserId);
       const managerScore = mgrAns?.points_earned ?? null;
+      const managerRating = mgrAns?.rating_value ?? null;
       const managerRemarks = mgrAns?.remarks ?? null;
 
       // Manager 1 answers - used as fallback for Manager 2 drafts, mirroring
       // the individual assessment flow's buildManagerDraftMap logic.
       let manager1Score: number | null = null;
+      let manager1Rating: number | null = null;
       let manager1Remarks: string | null = null;
       if (
         meta.managerLevel === 2 &&
@@ -1168,6 +1190,7 @@ export async function getBulkReviewQuestionData(
       ) {
         const m1Ans = getAnswer(meta.id, q.id, meta.manager1UserId);
         manager1Score = m1Ans?.points_earned ?? null;
+        manager1Rating = m1Ans?.rating_value ?? null;
         manager1Remarks = m1Ans?.remarks ?? null;
       }
 
@@ -1178,12 +1201,17 @@ export async function getBulkReviewQuestionData(
         selfScore: s_selfScoreEnabled(selected, meta.id)
           ? selfScore
           : null,
+        selfRating: s_selfScoreEnabled(selected, meta.id)
+          ? selfRating
+          : null,
         selfRemarks: s_selfScoreEnabled(selected, meta.id)
           ? selfRemarks
           : null,
         managerScore,
+        managerRating,
         managerRemarks,
         manager1Score,
+        manager1Rating,
         manager1Remarks,
         attachments:
           attachmentsBySubmission.get(meta.id)?.get(q.id) ?? [],
@@ -1196,12 +1224,16 @@ export async function getBulkReviewQuestionData(
       totalMarks: q.totalMarks,
       isRequired: q.isRequired,
       sectionTitle: sectionTitleByQuestionId.get(q.id) ?? null,
+      ratingBased: template.ratingBased,
+      ratingScale: getQuestionRatingScale(q, template.ratingScales),
       rows,
     });
   }
 
   return {
     questions: questionsData,
+    templateTitle: template.title,
+    templateDescription: template.description ?? null,
     submissions: submissionMeta.map((m) => ({
       id: m.id,
       employeeId: m.employeeId,
@@ -1233,9 +1265,14 @@ export async function saveBulkReviewQuestionScores(
   entries: Array<{
     submissionId: number;
     pointsEarned: number;
+    ratingValue?: number | null;
     remarks?: string | null;
   }>,
   templateQuestions: QuestionRecord[],
+  ratingContext: {
+    ratingBased: boolean;
+    ratingScales: FormRatingScaleRecord[];
+  } = { ratingBased: false, ratingScales: [] },
 ): Promise<{ savedCount: number }> {
   const question = templateQuestions.find((q) => q.id === questionId);
   if (!question || !isScoredQuestion(question)) {
@@ -1245,23 +1282,25 @@ export async function saveBulkReviewQuestionScores(
     );
   }
 
-  // Validate all entries first.
   const validEntries: Array<{
     submissionId: number;
     pointsEarned: number;
+    ratingValue: number | null;
     remarks: string | null;
   }> = [];
 
   for (const entry of entries) {
-    const pointsEarned = Number(entry.pointsEarned ?? 0);
-    if (
-      Number.isNaN(pointsEarned) ||
-      pointsEarned < 0 ||
-      pointsEarned > Number(question.totalMarks)
-    ) {
-      throw new FormSubmissionError(
-        `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
-      );
+    const resolved = resolveAnswerScore(
+      question,
+      ratingContext,
+      {
+        pointsEarned: entry.pointsEarned,
+        ratingValue: entry.ratingValue,
+      },
+      question.questionText,
+    );
+    if (!resolved.ok) {
+      throw new FormSubmissionError(resolved.error);
     }
 
     const remarks =
@@ -1269,13 +1308,18 @@ export async function saveBulkReviewQuestionScores(
         ? entry.remarks.trim() || null
         : null;
 
-    validEntries.push({ submissionId: entry.submissionId, pointsEarned, remarks });
+    validEntries.push({
+      submissionId: entry.submissionId,
+      pointsEarned: resolved.pointsEarned,
+      ratingValue: resolved.ratingValue,
+      remarks,
+    });
   }
 
-  // BATCH: Use a single multi-row INSERT with UNNEST instead of looping.
   if (validEntries.length > 0) {
     const submissionIds = validEntries.map((e) => e.submissionId);
     const pointsArray = validEntries.map((e) => e.pointsEarned);
+    const ratingArray = validEntries.map((e) => e.ratingValue);
     const remarksArray = validEntries.map((e) => e.remarks);
 
     await getDbClient().query(
@@ -1286,15 +1330,17 @@ export async function saveBulkReviewQuestionScores(
          text_response,
          selected_option_id,
          points_earned,
+         rating_value,
          remarks
        )
-       SELECT unnest($1::bigint[]), $2, $3, NULL, NULL, unnest($4::numeric[]), unnest($5::text[])
+       SELECT unnest($1::bigint[]), $2, $3, NULL, NULL, unnest($4::numeric[]), unnest($5::numeric[]), unnest($6::text[])
        ON CONFLICT (appraisal_id, question_id, filled_by_id)
        DO UPDATE SET
          points_earned = EXCLUDED.points_earned,
+         rating_value = EXCLUDED.rating_value,
          remarks = EXCLUDED.remarks,
          updated_at = CURRENT_TIMESTAMP`,
-      [submissionIds, questionId, reviewerUserId, pointsArray, remarksArray],
+      [submissionIds, questionId, reviewerUserId, pointsArray, ratingArray, remarksArray],
     );
   }
 
@@ -1389,6 +1435,7 @@ async function seedManagerAnswersFromSource(
 
   const questionIds = sourceAnswers.map((a) => a.questionId);
   const pointsArray = sourceAnswers.map((a) => a.pointsEarned);
+  const ratingArray = sourceAnswers.map((a) => a.ratingValue ?? null);
   const remarksArray = sourceAnswers.map((a) => a.remarks);
 
   await getDbClient().query(
@@ -1399,11 +1446,12 @@ async function seedManagerAnswersFromSource(
        text_response,
        selected_option_id,
        points_earned,
+       rating_value,
        remarks
      )
-     SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::text[])
+     SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::numeric[]), unnest($6::text[])
      ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
-    [appraisalId, questionIds, targetUserId, pointsArray, remarksArray],
+    [appraisalId, questionIds, targetUserId, pointsArray, ratingArray, remarksArray],
   );
 }
 
@@ -1415,14 +1463,20 @@ export async function saveManagerReviewAnswers(
   options?: {
     managerLevel?: number;
     overallRemarks?: string | null;
+    ratingBased?: boolean;
+    ratingScales?: FormRatingScaleRecord[];
   },
 ): Promise<EmployeeFormAnswerRecord[]> {
   const questionById = new Map(templateQuestions.map((q) => [q.id, q]));
+  const ratingContext = {
+    ratingBased: Boolean(options?.ratingBased),
+    ratingScales: options?.ratingScales ?? [],
+  };
 
-  // Validate and collect all valid answers.
   const validAnswers: Array<{
     questionId: number;
     pointsEarned: number;
+    ratingValue: number | null;
     remarks: string | null;
   }> = [];
 
@@ -1432,15 +1486,17 @@ export async function saveManagerReviewAnswers(
       continue;
     }
 
-    const pointsEarned = Number(answer.pointsEarned ?? 0);
-    if (
-      Number.isNaN(pointsEarned) ||
-      pointsEarned < 0 ||
-      pointsEarned > Number(question.totalMarks)
-    ) {
-      throw new FormSubmissionError(
-        `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
-      );
+    const resolved = resolveAnswerScore(
+      question,
+      ratingContext,
+      {
+        pointsEarned: answer.pointsEarned,
+        ratingValue: answer.ratingValue,
+      },
+      question.questionText,
+    );
+    if (!resolved.ok) {
+      throw new FormSubmissionError(resolved.error);
     }
 
     const remarks =
@@ -1448,13 +1504,18 @@ export async function saveManagerReviewAnswers(
         ? answer.remarks.trim() || null
         : null;
 
-    validAnswers.push({ questionId: answer.questionId, pointsEarned, remarks });
+    validAnswers.push({
+      questionId: answer.questionId,
+      pointsEarned: resolved.pointsEarned,
+      ratingValue: resolved.ratingValue,
+      remarks,
+    });
   }
 
-  // BATCH: Single multi-row INSERT with UNNEST instead of looping.
   if (validAnswers.length > 0) {
     const questionIds = validAnswers.map((a) => a.questionId);
     const pointsArray = validAnswers.map((a) => a.pointsEarned);
+    const ratingArray = validAnswers.map((a) => a.ratingValue);
     const remarksArray = validAnswers.map((a) => a.remarks);
 
     await getDbClient().query(
@@ -1465,15 +1526,17 @@ export async function saveManagerReviewAnswers(
          text_response,
          selected_option_id,
          points_earned,
+         rating_value,
          remarks
        )
-       SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::text[])
+       SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::numeric[]), unnest($6::text[])
        ON CONFLICT (appraisal_id, question_id, filled_by_id)
        DO UPDATE SET
          points_earned = EXCLUDED.points_earned,
+         rating_value = EXCLUDED.rating_value,
          remarks = EXCLUDED.remarks,
          updated_at = CURRENT_TIMESTAMP`,
-      [appraisalId, questionIds, reviewerUserId, pointsArray, remarksArray],
+      [appraisalId, questionIds, reviewerUserId, pointsArray, ratingArray, remarksArray],
     );
   }
 
@@ -1735,6 +1798,8 @@ export async function getFormSubmissionById(
   let rootQuestions: FormSubmissionDetail["rootQuestions"] = [];
   let templateDescription: string | null = null;
   let additionalRemarksEnabled = false;
+  let ratingBased = false;
+  let ratingScales: FormRatingScaleRecord[] = [];
 
   if (summary.templateId) {
     const template = await getFormTemplateById(summary.templateId);
@@ -1744,6 +1809,8 @@ export async function getFormSubmissionById(
       questions = flattenAllQuestions(template);
       templateDescription = template.description;
       additionalRemarksEnabled = template.additionalRemarksEnabled;
+      ratingBased = template.ratingBased;
+      ratingScales = template.ratingScales;
     }
   }
 
@@ -1825,6 +1892,8 @@ export async function getFormSubmissionById(
     assessmentEligibility: summary.assessmentEligibility,
     ineligibilityReason: summary.ineligibilityReason ?? null,
     additionalRemarksEnabled,
+    ratingBased,
+    ratingScales,
     manager1OverallRemarks: summary.manager1OverallRemarks,
     manager2OverallRemarks: summary.manager2OverallRemarks,
     isReturned: summary.isReturned ?? false,

@@ -13,7 +13,13 @@ import {
   type FormTableRow,
 } from "@/app/helpers/form-table-rows";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
+import {
+  getQuestionRatingScale,
+  usesRatingScore,
+} from "@/app/helpers/form-rating-scoring";
+import { FormDescription } from "@/app/components/forms/FormDescription";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
+import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
 import { cn } from "@/lib/utils";
 import OverallRemarksSection from "./OverallRemarksSection";
 import AssessmentSummaryFooter, {
@@ -114,6 +120,57 @@ function ScoreCell({
       {value}
       <span className="text-xs font-normal text-slate-400"> / {max}</span>
     </span>
+  );
+}
+
+function PreviewScoreCell({
+  question,
+  ratingBased,
+  ratingScales,
+  value,
+  isHodOnly,
+  scored,
+  accent,
+}: {
+  question: QuestionRecord;
+  ratingBased: boolean;
+  ratingScales: FormTemplateRecord["ratingScales"];
+  value: number | null;
+  isHodOnly: boolean;
+  scored: boolean;
+  accent: "self" | "manager1" | "manager2";
+}) {
+  const scale = getQuestionRatingScale(question, ratingScales);
+  if (usesRatingScore(question, ratingBased, ratingScales) && scale) {
+    if (!scored) {
+      return <span className="tabular-nums text-slate-400">—</span>;
+    }
+    if (isHodOnly && accent === "self") {
+      return (
+        <span className="text-xs text-slate-400" title="To be filled by HOD">
+          N/A
+        </span>
+      );
+    }
+    return (
+      <RatingScoreField
+        scale={scale}
+        weight={question.totalMarks}
+        ratingValue=""
+        disabled
+        onRatingChange={() => {}}
+      />
+    );
+  }
+
+  return (
+    <ScoreCell
+      value={value}
+      max={question.totalMarks}
+      isHodOnly={isHodOnly}
+      scored={scored}
+      accent={accent}
+    />
   );
 }
 
@@ -267,9 +324,7 @@ export default function FormAssessmentPreview({
           <h2 className="text-xl font-semibold break-words text-text-primary">
             {template.title}
           </h2>
-          {template.description ? (
-            <p className="mt-1 text-sm text-foreground/70">{template.description}</p>
-          ) : null}
+          <FormDescription description={template.description} className="mt-2" />
           <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
             Preview · {isEmployeeView ? "Employee View" : viewAs === "manager1" ? "Manager 1 View" : "Manager 2 View"}
           </p>
@@ -379,6 +434,8 @@ export default function FormAssessmentPreview({
                           showManager1Columns={showManager1Columns}
                           showManager2Columns={showManager2Columns}
                           selfAssessmentEnabled={selfAssessmentEnabled}
+                          ratingBased={template.ratingBased}
+                          ratingScales={template.ratingScales}
                           employeeAnswer={answerFor(employeeAnswers, question!.id)}
                           manager1Answer={answerFor(manager1Answers, question!.id)}
                           manager2Answer={answerFor(manager2Answers, question!.id)}
@@ -419,6 +476,8 @@ interface QuestionPreviewRowProps {
   showManager1Columns: boolean;
   showManager2Columns: boolean;
   selfAssessmentEnabled: boolean;
+  ratingBased: boolean;
+  ratingScales: FormTemplateRecord["ratingScales"];
   employeeAnswer?: MockAnswer;
   manager1Answer?: MockAnswer;
   manager2Answer?: MockAnswer;
@@ -431,6 +490,8 @@ function QuestionPreviewRow({
   showManager1Columns,
   showManager2Columns,
   selfAssessmentEnabled,
+  ratingBased,
+  ratingScales,
   employeeAnswer,
   manager1Answer,
   manager2Answer,
@@ -475,9 +536,11 @@ function QuestionPreviewRow({
       {showSelfColumns ? (
         <>
           <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
-            <ScoreCell
+            <PreviewScoreCell
+              question={question}
+              ratingBased={ratingBased}
+              ratingScales={ratingScales}
               value={employeeAnswer?.pointsEarned ?? null}
-              max={question.totalMarks}
               isHodOnly={isHodOnly}
               scored={scored}
               accent="self"
@@ -493,9 +556,11 @@ function QuestionPreviewRow({
       {showManager1Columns ? (
         <>
           <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
-            <ScoreCell
+            <PreviewScoreCell
+              question={question}
+              ratingBased={ratingBased}
+              ratingScales={ratingScales}
               value={manager1Answer?.pointsEarned ?? null}
-              max={question.totalMarks}
               isHodOnly={!question.hodAssessmentEnabled}
               scored={scored}
               accent="manager1"
@@ -510,9 +575,11 @@ function QuestionPreviewRow({
       {showManager2Columns ? (
         <>
           <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
-            <ScoreCell
+            <PreviewScoreCell
+              question={question}
+              ratingBased={ratingBased}
+              ratingScales={ratingScales}
               value={manager2Answer?.pointsEarned ?? null}
-              max={question.totalMarks}
               isHodOnly={!question.hodAssessmentEnabled}
               scored={scored}
               accent="manager2"

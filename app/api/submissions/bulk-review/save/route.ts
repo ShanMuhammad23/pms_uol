@@ -20,6 +20,7 @@ interface SaveRequestBody {
   entries?: Array<{
     submissionId: number;
     pointsEarned: number;
+    ratingValue?: number | null;
     remarks?: string | null;
   }>;
 }
@@ -95,6 +96,10 @@ export const PUT = apiHandler(async (request: Request) => {
       Number(body.questionId),
       body.entries,
       templateQuestions,
+      {
+        ratingBased: template.ratingBased,
+        ratingScales: template.ratingScales,
+      },
     );
 
     return NextResponse.json(result);

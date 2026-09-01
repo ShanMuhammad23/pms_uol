@@ -126,6 +126,38 @@ export interface QuestionOptionInput {
   sortOrder: number;
 }
 
+export interface RatingScaleOptionInput {
+  id?: number;
+  clientId: string;
+  optionLabel: string;
+  ratingValue: number;
+  sortOrder: number;
+}
+
+export interface FormRatingScaleInput {
+  id?: number;
+  clientId: string;
+  name: string;
+  maxValue: number;
+  sortOrder: number;
+  options: RatingScaleOptionInput[];
+}
+
+export interface RatingScaleOptionRecord {
+  id: number;
+  optionLabel: string;
+  ratingValue: number;
+  sortOrder: number;
+}
+
+export interface FormRatingScaleRecord {
+  id: number;
+  name: string;
+  maxValue: number;
+  sortOrder: number;
+  options: RatingScaleOptionRecord[];
+}
+
 export interface QuestionInput {
   id?: number;
   clientId: string;
@@ -139,6 +171,8 @@ export interface QuestionInput {
   totalMarks: number;
   options: QuestionOptionInput[];
   sectionId?: number;
+  ratingScaleId?: number | null;
+  ratingScaleClientId?: string;
 }
 
 export function questionNeedsOptions(inputType: FieldType): boolean {
@@ -241,6 +275,8 @@ export interface FormTemplateInput {
   targetSubCategory?: SubCategory;
   selfAssessmentEnabled: boolean;
   additionalRemarksEnabled?: boolean;
+  ratingBased?: boolean;
+  ratingScales?: FormRatingScaleInput[];
   sections: FormSectionInput[];
   questions: QuestionInput[];
   incrementMatrices?: IncrementMatrixInput[];
@@ -264,6 +300,7 @@ export interface QuestionRecord {
   totalMarks: number;
   sectionId?: number;
   options: QuestionOptionRecord[];
+  ratingScaleId?: number | null;
 }
 
 export interface FormTemplateListItem {
@@ -277,6 +314,7 @@ export interface FormTemplateListItem {
   targetSubCategory: SubCategory | null;
   selfAssessmentEnabled: boolean;
   additionalRemarksEnabled: boolean;
+  ratingBased: boolean;
   questionCount: number;
   appraisalCount: number;
   assignedEmployeeCount: number;
@@ -301,6 +339,8 @@ export interface FormTemplateRecord {
   targetSubCategory: SubCategory | null;
   selfAssessmentEnabled: boolean;
   additionalRemarksEnabled: boolean;
+  ratingBased: boolean;
+  ratingScales: FormRatingScaleRecord[];
   sections: FormSectionRecord[];
   questions: QuestionRecord[];
   incrementMatrices: IncrementMatrixInput[];
@@ -378,6 +418,29 @@ export function createEmptyQuestion(sortOrder: number): QuestionInput {
     noMarks: false,
     totalMarks: 0,
     options: [],
+    ratingScaleId: null,
+    ratingScaleClientId: "",
+  };
+}
+
+export function createEmptyRatingScale(
+  sortOrder: number,
+  maxValue = 5,
+): FormRatingScaleInput {
+  return {
+    clientId: createClientId(),
+    name: `${maxValue}-point rating`,
+    maxValue,
+    sortOrder,
+    options: Array.from({ length: maxValue }, (_, index) => {
+      const value = index + 1;
+      return {
+        clientId: createClientId(),
+        optionLabel: "",
+        ratingValue: value,
+        sortOrder: index,
+      };
+    }),
   };
 }
 
@@ -704,6 +767,8 @@ export function mapQuestionRecordToInput(
     noMarks: question.totalMarks === 0,
     totalMarks: question.totalMarks,
     sectionId: question.sectionId,
+    ratingScaleId: question.ratingScaleId ?? null,
+    ratingScaleClientId: "",
     options: question.options.map((option) => ({
       id: option.id,
       optionLabel: option.optionLabel,

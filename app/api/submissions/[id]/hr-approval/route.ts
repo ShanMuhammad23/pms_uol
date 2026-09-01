@@ -88,6 +88,10 @@ export const PUT = apiHandler(async (request: Request, context: RouteContext) =>
       reviewerUserId,
       body.answers,
       detail.questions,
+      {
+        ratingBased: detail.ratingBased,
+        ratingScales: detail.ratingScales,
+      },
     );
 
     return NextResponse.json({ managerAnswers });

@@ -33,14 +33,19 @@ export interface BulkReviewQuestionRow {
   employeeId: string;
   employeeName: string;
   selfScore: number | null;
+  selfRating?: number | null;
   selfRemarks: string | null;
   managerScore: number | null;
+  managerRating?: number | null;
   managerRemarks: string | null;
   manager1Score: number | null;
+  manager1Rating?: number | null;
   manager1Remarks: string | null;
   /** Attachments uploaded by the employee for this question. */
   attachments: EmployeeFormAnswerAttachment[];
 }
+
+import type { FormRatingScaleRecord } from "@/types/forms";
 
 export interface BulkReviewQuestionData {
   questionId: number;
@@ -48,11 +53,15 @@ export interface BulkReviewQuestionData {
   totalMarks: number;
   isRequired: boolean;
   sectionTitle: string | null;
+  ratingBased?: boolean;
+  ratingScale?: FormRatingScaleRecord | null;
   rows: BulkReviewQuestionRow[];
 }
 
 export interface BulkReviewQuestionDataResponse {
   questions: BulkReviewQuestionData[];
+  templateTitle?: string | null;
+  templateDescription?: string | null;
   submissions: Array<{
     id: number;
     employeeId: string;
@@ -65,6 +74,7 @@ export interface BulkReviewQuestionDataResponse {
 export interface SaveBulkReviewEntry {
   submissionId: number;
   pointsEarned: number;
+  ratingValue?: number | null;
   remarks?: string | null;
 }
 

@@ -1,4 +1,4 @@
-import type { QuestionRecord, FormSectionRecord } from "@/types/forms";
+import type { QuestionRecord, FormSectionRecord, FormRatingScaleRecord } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -34,9 +34,12 @@ export interface DirectAssessmentOverallRemarks {
 export interface DirectAssessmentData {
   templateId: number;
   templateTitle: string;
+  templateDescription: string | null;
   selfAssessmentEnabled: boolean;
   /** Whether the form template has additional_remarks_enabled = TRUE. */
   additionalRemarksEnabled: boolean;
+  ratingBased: boolean;
+  ratingScales: FormRatingScaleRecord[];
   questions: QuestionRecord[];
   sections: FormSectionRecord[];
   rootQuestions: QuestionRecord[];
@@ -79,6 +82,7 @@ export async function saveDirectAssessmentScores(
   answers: Array<{
     questionId: number;
     pointsEarned?: number;
+    ratingValue?: number | null;
     remarks?: string | null;
   }>,
   overallRemarks?: string | null,

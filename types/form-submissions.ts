@@ -1,6 +1,7 @@
 import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 import type {
+  FormRatingScaleRecord,
   FormSectionRecord,
   QuestionRecord,
 } from "@/types/forms";
@@ -179,6 +180,8 @@ export interface FormSubmissionDetail {
   sections: FormSectionRecord[];
   rootQuestions: QuestionRecord[];
   questions: QuestionRecord[];
+  ratingBased: boolean;
+  ratingScales: FormRatingScaleRecord[];
   answers: EmployeeFormAnswerRecord[];
   managerAnswers: EmployeeFormAnswerRecord[];
   manager1Answers: EmployeeFormAnswerRecord[];

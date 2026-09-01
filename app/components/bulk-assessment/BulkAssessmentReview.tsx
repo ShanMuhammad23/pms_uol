@@ -30,6 +30,8 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { useIsClient } from "@/app/hooks/use-is-client";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
+import { FormDescription } from "@/app/components/forms/FormDescription";
+import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
 
@@ -41,6 +43,16 @@ interface BulkAssessmentReviewProps {
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
+
+type BulkDraft = {
+  pointsEarned: string;
+  ratingValue: string;
+  remarks: string;
+};
+
+function emptyBulkDraft(): BulkDraft {
+  return { pointsEarned: "", ratingValue: "", remarks: "" };
+}
 
 function clampScore(value: string, maxMarks: number): string {
   if (value === "") return "";
@@ -90,9 +102,7 @@ export default function BulkAssessmentReview({
 
   // --- Question navigation ---
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
-  const [drafts, setDrafts] = useState<
-    Map<number, { pointsEarned: string; remarks: string }>
-  >(new Map());
+  const [drafts, setDrafts] = useState<Map<number, BulkDraft>>(new Map());
   const [modifiedRows, setModifiedRows] = useState<Set<number>>(new Set());
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const [finishResult, setFinishResult] = useState<{
@@ -284,21 +294,27 @@ export default function BulkAssessmentReview({
       setDrafts(new Map());
       setModifiedRows(new Set());
     } else {
-      const next = new Map<number, { pointsEarned: string; remarks: string }>();
+      const next = new Map<number, BulkDraft>();
       for (const row of currentQuestion.rows) {
         const managerLevel = managerLevelBySubmissionId.get(row.submissionId) ?? 1;
         const fallbackScore =
           managerLevel === 2
             ? (row.manager1Score ?? row.selfScore)
             : row.selfScore;
+        const fallbackRating =
+          managerLevel === 2
+            ? (row.manager1Rating ?? row.selfRating)
+            : row.selfRating;
         const fallbackRemarks =
           managerLevel === 2
             ? (row.manager1Remarks ?? row.selfRemarks)
             : row.selfRemarks;
         const points = row.managerScore ?? fallbackScore;
+        const rating = row.managerRating ?? fallbackRating;
         const remarks = row.managerRemarks ?? fallbackRemarks;
         next.set(row.submissionId, {
           pointsEarned: points == null ? "" : String(points),
+          ratingValue: rating == null ? "" : String(rating),
           remarks: remarks ?? "",
         });
       }
@@ -308,14 +324,11 @@ export default function BulkAssessmentReview({
   }
 
   const updateDraft = useCallback(
-    (submissionId: number, field: "pointsEarned" | "remarks", value: string) => {
+    (submissionId: number, patch: Partial<BulkDraft>) => {
       setDrafts((prev) => {
         const next = new Map(prev);
-        const existing = next.get(submissionId) ?? {
-          pointsEarned: "",
-          remarks: "",
-        };
-        next.set(submissionId, { ...existing, [field]: value });
+        const existing = next.get(submissionId) ?? emptyBulkDraft();
+        next.set(submissionId, { ...existing, ...patch });
         return next;
       });
       setModifiedRows((prev) => {
@@ -335,9 +348,13 @@ export default function BulkAssessmentReview({
       for (const [submissionId, draft] of drafts) {
         const points = Number(draft.pointsEarned);
         if (Number.isNaN(points)) continue;
+        const ratingValue =
+          draft.ratingValue === "" ? null : Number(draft.ratingValue);
         entries.push({
           submissionId,
           pointsEarned: points,
+          ratingValue:
+            ratingValue != null && !Number.isNaN(ratingValue) ? ratingValue : null,
           remarks: draft.remarks.trim() || null,
         });
       }
@@ -423,7 +440,18 @@ export default function BulkAssessmentReview({
     const missing = new Set<number>();
     for (const row of currentQuestion.rows) {
       const draft = drafts.get(row.submissionId);
-      if (!draft || draft.pointsEarned === "" || Number.isNaN(Number(draft.pointsEarned))) {
+      const ratingQuestion = Boolean(
+        currentQuestion.ratingBased && currentQuestion.ratingScale,
+      );
+      if (ratingQuestion) {
+        if (!draft || draft.ratingValue === "") {
+          missing.add(row.submissionId);
+        }
+      } else if (
+        !draft ||
+        draft.pointsEarned === "" ||
+        Number.isNaN(Number(draft.pointsEarned))
+      ) {
         missing.add(row.submissionId);
       }
     }
@@ -438,6 +466,7 @@ export default function BulkAssessmentReview({
     return (
       <WorkspaceView
         questions={questions}
+        templateDescription={questionData?.templateDescription}
         currentQuestionIdx={currentQuestionIdx}
         currentQuestion={currentQuestion}
         drafts={drafts}
@@ -1171,9 +1200,10 @@ function BulkHeaderFilter(props: BulkHeaderFilterProps | BulkHeaderFilterMultiPr
 
 interface WorkspaceViewProps {
   questions: BulkReviewQuestionData[];
+  templateDescription?: string | null;
   currentQuestionIdx: number;
   currentQuestion: BulkReviewQuestionData | null;
-  drafts: Map<number, { pointsEarned: string; remarks: string }>;
+  drafts: Map<number, BulkDraft>;
   modifiedRows: Set<number>;
   missingScores: Set<number>;
   progressPercent: number;
@@ -1189,11 +1219,7 @@ interface WorkspaceViewProps {
     skipped: Array<{ id: number; reason: string }>;
   } | null;
   selectedCount: number;
-  onUpdateDraft: (
-    submissionId: number,
-    field: "pointsEarned" | "remarks",
-    value: string,
-  ) => void;
+  onUpdateDraft: (submissionId: number, patch: Partial<BulkDraft>) => void;
   onPrev: () => void;
   onNext: () => void;
   onFinish: () => void;
@@ -1205,6 +1231,7 @@ interface WorkspaceViewProps {
 
 function WorkspaceView({
   questions,
+  templateDescription,
   currentQuestionIdx,
   currentQuestion,
   drafts,
@@ -1270,6 +1297,8 @@ function WorkspaceView({
           </div>
         </div>
       </div>
+
+      <FormDescription description={templateDescription} className="mb-4" />
 
       {/* Question navigation bar */}
       {totalQuestions > 0 ? (
@@ -1385,6 +1414,22 @@ function WorkspaceView({
                         )}
                       </td>
                       <td className="px-3 py-3 text-right">
+                        {currentQuestion.ratingBased && currentQuestion.ratingScale ? (
+                          <RatingScoreField
+                            scale={currentQuestion.ratingScale}
+                            weight={currentQuestion.totalMarks}
+                            ratingValue={draft?.ratingValue ?? ""}
+                            onRatingChange={(ratingValue, pointsEarned) =>
+                              onUpdateDraft(row.submissionId, {
+                                ratingValue,
+                                pointsEarned,
+                              })
+                            }
+                            className={cn(
+                              isMissing && "[&_select]:border-red-400",
+                            )}
+                          />
+                        ) : (
                         <input
                           type="number"
                           min={0}
@@ -1392,11 +1437,12 @@ function WorkspaceView({
                           step="0.5"
                           value={draft?.pointsEarned ?? ""}
                           onChange={(e) =>
-                            onUpdateDraft(
-                              row.submissionId,
-                              "pointsEarned",
-                              clampScore(e.target.value, currentQuestion.totalMarks),
-                            )
+                            onUpdateDraft(row.submissionId, {
+                              pointsEarned: clampScore(
+                                e.target.value,
+                                currentQuestion.totalMarks,
+                              ),
+                            })
                           }
                           className={cn(
                             "h-8 w-20 rounded border bg-white px-2 text-right text-sm font-bold tabular-nums outline-none focus:ring-2 dark:bg-slate-800",
@@ -1406,17 +1452,16 @@ function WorkspaceView({
                           )}
                           placeholder="0"
                         />
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <input
                           type="text"
                           value={draft?.remarks ?? ""}
                           onChange={(e) =>
-                            onUpdateDraft(
-                              row.submissionId,
-                              "remarks",
-                              e.target.value,
-                            )
+                            onUpdateDraft(row.submissionId, {
+                              remarks: e.target.value,
+                            })
                           }
                           className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                           placeholder="Optional remarks"

@@ -166,6 +166,7 @@ export async function saveManagerReview(
   answers: Array<{
     questionId: number;
     pointsEarned?: number;
+    ratingValue?: number | null;
     remarks?: string | null;
   }>,
   overallRemarks?: string | null,
@@ -285,6 +286,7 @@ export async function saveHrReview(
   answers: Array<{
     questionId: number;
     pointsEarned?: number;
+    ratingValue?: number | null;
     remarks?: string | null;
   }>,
 ): Promise<{ managerAnswers: FormSubmissionDetail["managerAnswers"] }> {

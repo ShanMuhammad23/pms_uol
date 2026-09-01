@@ -33,6 +33,10 @@ import type {
   QuestionRecord,
 } from "@/types/forms";
 import { APPRAISAL_STATUSES, flattenAllQuestions } from "@/types/forms";
+import {
+  resolveAnswerScore,
+  usesRatingScore,
+} from "@/app/helpers/form-rating-scoring";
 
 function getTemplateQuestions(template: FormTemplateRecord): QuestionRecord[] {
   return flattenAllQuestions(template);
@@ -273,9 +277,11 @@ async function getAnswersForAppraisal(
     text_response: string | null;
     selected_option_id: string | null;
     points_earned: string;
+    rating_value: string | null;
     remarks: string | null;
   }>(
-    `SELECT question_id, text_response, selected_option_id, points_earned, remarks
+    `SELECT question_id, text_response, selected_option_id, points_earned,
+            rating_value::text, remarks
      FROM appraisal_answers
      WHERE appraisal_id = $1
        AND filled_by_id = $2`,
@@ -303,6 +309,10 @@ async function getAnswersForAppraisal(
         ? Number(row.selected_option_id)
         : null,
       pointsEarned: Number(row.points_earned),
+      ratingValue:
+        row.rating_value == null || row.rating_value === ""
+          ? null
+          : Number(row.rating_value),
       remarks: row.remarks,
       attachments: attachmentsByQuestion.get(questionId) ?? [],
     };
@@ -488,26 +498,52 @@ function validateAnswers(
     }
 
     if (isScored) {
-      // Optional scored questions may be skipped (or have remarks only)
-      if (answer.pointsEarned === undefined || answer.pointsEarned === null) {
+      const ratingQuestion = usesRatingScore(
+        question,
+        template.ratingBased,
+        template.ratingScales,
+      );
+      const hasRating =
+        answer.ratingValue !== undefined && answer.ratingValue !== null;
+      const hasPoints =
+        answer.pointsEarned !== undefined && answer.pointsEarned !== null;
+
+      if (!hasPoints && !hasRating) {
         if (question.isRequired) {
           throw new EmployeeFormError(
-            `Enter a score for "${question.questionText.slice(0, 80)}".`,
+            ratingQuestion
+              ? `Select a rating for "${question.questionText.slice(0, 80)}".`
+              : `Enter a score for "${question.questionText.slice(0, 80)}".`,
           );
         }
         continue;
       }
 
-      const value = Number(answer.pointsEarned);
-      if (Number.isNaN(value)) {
-        throw new EmployeeFormError(
-          `Enter a valid score for "${question.questionText.slice(0, 80)}".`,
+      if (ratingQuestion) {
+        const resolved = resolveAnswerScore(
+          question,
+          template,
+          {
+            pointsEarned: answer.pointsEarned,
+            ratingValue: answer.ratingValue,
+          },
+          question.questionText,
         );
-      }
-      if (value < 0 || value > Number(question.totalMarks)) {
-        throw new EmployeeFormError(
-          `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
-        );
+        if (!resolved.ok) {
+          throw new EmployeeFormError(resolved.error);
+        }
+      } else {
+        const value = Number(answer.pointsEarned);
+        if (Number.isNaN(value)) {
+          throw new EmployeeFormError(
+            `Enter a valid score for "${question.questionText.slice(0, 80)}".`,
+          );
+        }
+        if (value < 0 || value > Number(question.totalMarks)) {
+          throw new EmployeeFormError(
+            `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
+          );
+        }
       }
     } else if (question.inputType === "NUMBER") {
       const value = answer.pointsEarned ?? Number(answer.textResponse);
@@ -543,6 +579,7 @@ function normalizeAnswer(
   textResponse: string | null;
   selectedOptionId: number | null;
   pointsEarned: number;
+  ratingValue: number | null;
   remarks: string | null;
 } {
   const question = getTemplateQuestions(template).find(
@@ -554,6 +591,29 @@ function normalizeAnswer(
   }
 
   const remarks = answer.remarks?.trim() || null;
+
+  if (usesRatingScore(question, template.ratingBased, template.ratingScales)) {
+    const resolved = resolveAnswerScore(
+      question,
+      template,
+      {
+        pointsEarned: answer.pointsEarned,
+        ratingValue: answer.ratingValue,
+      },
+      question.questionText,
+    );
+    if (!resolved.ok) {
+      throw new EmployeeFormError(resolved.error);
+    }
+    return {
+      textResponse: null,
+      selectedOptionId: null,
+      pointsEarned: resolved.pointsEarned,
+      ratingValue: resolved.ratingValue,
+      remarks,
+    };
+  }
+
   const scoredPoints = isScoredQuestion(question)
     ? Number(answer.pointsEarned ?? 0)
     : 0;
@@ -564,6 +624,7 @@ function normalizeAnswer(
       textResponse: null,
       selectedOptionId: null,
       pointsEarned,
+      ratingValue: null,
       remarks,
     };
   }
@@ -577,6 +638,7 @@ function normalizeAnswer(
       textResponse: null,
       selectedOptionId: answer.selectedOptionId ?? null,
       pointsEarned: option?.pointsAssigned ?? scoredPoints,
+      ratingValue: null,
       remarks,
     };
   }
@@ -585,6 +647,7 @@ function normalizeAnswer(
     textResponse: answer.textResponse?.trim() || null,
     selectedOptionId: null,
     pointsEarned: scoredPoints,
+    ratingValue: null,
     remarks,
   };
 }
@@ -764,13 +827,15 @@ export async function saveEmployeeForm(
            text_response,
            selected_option_id,
            points_earned,
+           rating_value,
            remarks
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (appraisal_id, question_id, filled_by_id)
          DO UPDATE SET
            text_response = EXCLUDED.text_response,
            selected_option_id = EXCLUDED.selected_option_id,
            points_earned = EXCLUDED.points_earned,
+           rating_value = EXCLUDED.rating_value,
            remarks = EXCLUDED.remarks,
            updated_at = CURRENT_TIMESTAMP`,
         [
@@ -780,6 +845,7 @@ export async function saveEmployeeForm(
           normalized.textResponse,
           normalized.selectedOptionId,
           normalized.pointsEarned,
+          normalized.ratingValue,
           normalized.remarks,
         ],
       );

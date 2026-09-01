@@ -117,6 +117,8 @@ export const PUT = apiHandler(async (request: Request, context: RouteContext) =>
       {
         managerLevel: summary.managerLevel ?? 1,
         overallRemarks: body.overallRemarks,
+        ratingBased: detail.ratingBased,
+        ratingScales: detail.ratingScales,
       },
     );
 

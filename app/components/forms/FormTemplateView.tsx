@@ -15,6 +15,7 @@ import {
   formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
+import { FormDescription } from "@/app/components/forms/FormDescription";
 
 interface FormTemplateViewProps {
   template: FormTemplateRecord;
@@ -32,11 +33,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
           <h2 className="text-xl font-semibold break-words text-text-primary">
             {template.title}
           </h2>
-          {template.description ? (
-            <p className="mt-1 text-sm text-foreground/70">
-              {template.description}
-            </p>
-          ) : null}
+          <FormDescription description={template.description} className="mt-2" />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-900/30 dark:text-indigo-100">
@@ -70,6 +67,14 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                 Additional Remarks
               </span>
               <span className="font-medium text-text-primary">Enabled</span>
+            </span>
+          ) : null}
+          {template.ratingBased ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs text-violet-800 dark:border-violet-500/30 dark:bg-violet-900/30 dark:text-violet-100">
+              <span className="text-violet-600 dark:text-violet-300">
+                Scoring
+              </span>
+              <span className="font-medium text-text-primary">Rating based</span>
             </span>
           ) : null}
           {headerActions}

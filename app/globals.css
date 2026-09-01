@@ -251,6 +251,17 @@ html {
     margin-top: 4px;
   }
 
+  .print-doc-header .print-doc-description {
+    font-size: 10px;
+    font-weight: 400;
+    color: #334155;
+    margin-top: 6px;
+    line-height: 1.45;
+    max-width: 36rem;
+    margin-left: auto;
+    white-space: pre-wrap;
+  }
+
   .print-doc-meta {
     display: flex;
     flex-wrap: wrap;

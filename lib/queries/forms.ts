@@ -13,11 +13,14 @@ import type {
   FormTemplateInput,
   FormTemplateListItem,
   FormTemplateRecord,
+  FormRatingScaleInput,
+  FormRatingScaleRecord,
   QuestionInput,
   QuestionOptionInput,
   SubCategory,
 } from "@/types/forms";
 import { buildSectionLayoutOrder } from "@/types/forms";
+import { deriveRatingScaleMaxValue } from "@/app/helpers/form-rating-scoring";
 
 interface FormTemplateListRow {
   id: string;
@@ -30,6 +33,7 @@ interface FormTemplateListRow {
   target_sub_category: SubCategory | null;
   self_assessment_enabled: boolean;
   additional_remarks_enabled: boolean;
+  rating_based: boolean;
   question_count: string;
   appraisal_count: string;
   assigned_employee_count: string;
@@ -52,6 +56,7 @@ interface FormTemplateRow {
   target_sub_category: SubCategory | null;
   self_assessment_enabled: boolean;
   additional_remarks_enabled: boolean;
+  rating_based: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -73,6 +78,7 @@ interface QuestionRow {
   self_assessment_enabled: boolean;
   hod_assessment_enabled: boolean;
   total_marks: number;
+  rating_scale_id: string | null;
 }
 
 interface OptionRow {
@@ -97,6 +103,250 @@ export class FormTemplateError extends Error {
 const APPRAISAL_ANSWER_BLOCK_MESSAGE =
   "This form has appraisal answers linked to questions that would be removed. Delete or archive those answers first, or only edit question text/options in place.";
 
+let ratingBasedSchemaReady = false;
+
+async function ensureRatingBasedSchema(client: PoolClient): Promise<void> {
+  if (ratingBasedSchemaReady) {
+    return;
+  }
+
+  await client.query(`
+    ALTER TABLE form_templates
+      ADD COLUMN IF NOT EXISTS rating_based BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS form_rating_scales (
+      id BIGSERIAL PRIMARY KEY,
+      template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+      name VARCHAR(150) NOT NULL,
+      max_value NUMERIC(8, 2) NOT NULL DEFAULT 5 CHECK (max_value > 0),
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS form_rating_scale_options (
+      id BIGSERIAL PRIMARY KEY,
+      scale_id BIGINT NOT NULL REFERENCES form_rating_scales(id) ON DELETE CASCADE,
+      option_label VARCHAR(255) NOT NULL,
+      rating_value NUMERIC(8, 2) NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0
+    )
+  `);
+  await client.query(`
+    ALTER TABLE form_questions
+      ADD COLUMN IF NOT EXISTS rating_scale_id BIGINT REFERENCES form_rating_scales(id) ON DELETE SET NULL
+  `);
+  await client.query(`
+    ALTER TABLE appraisal_answers
+      ADD COLUMN IF NOT EXISTS rating_value NUMERIC(8, 2)
+  `);
+  await client.query(`
+    ALTER TABLE appraisal_answers
+      ALTER COLUMN points_earned TYPE NUMERIC(12, 2)
+      USING points_earned::numeric
+  `);
+  ratingBasedSchemaReady = true;
+}
+
+function resolveRatingScaleId(
+  question: QuestionInput,
+  scaleIdByClientId: Map<string, number>,
+): number | null {
+  if (question.ratingScaleClientId) {
+    return scaleIdByClientId.get(question.ratingScaleClientId) ?? null;
+  }
+  if (question.ratingScaleId != null) {
+    return question.ratingScaleId;
+  }
+  return null;
+}
+
+function applyResolvedRatingScaleIds(
+  input: FormTemplateInput,
+  scaleIdByClientId: Map<string, number>,
+  ratingBased: boolean,
+): FormTemplateInput {
+  const mapQuestion = (question: QuestionInput): QuestionInput => ({
+    ...question,
+    ratingScaleId: ratingBased
+      ? resolveRatingScaleId(question, scaleIdByClientId)
+      : null,
+  });
+
+  return {
+    ...input,
+    questions: input.questions.map(mapQuestion),
+    sections: input.sections.map((section) => ({
+      ...section,
+      questions: section.questions.map(mapQuestion),
+      subsections: section.subsections.map((subsection) => ({
+        ...subsection,
+        questions: subsection.questions.map(mapQuestion),
+      })),
+    })),
+  };
+}
+
+async function syncRatingScaleOptions(
+  scaleId: number,
+  options: FormRatingScaleInput["options"],
+  client: PoolClient,
+): Promise<void> {
+  const existing = await client.query<{ id: string }>(
+    `SELECT id FROM form_rating_scale_options WHERE scale_id = $1`,
+    [scaleId],
+  );
+  const existingIds = new Set(existing.rows.map((row) => Number(row.id)));
+  const keptIds = new Set<number>();
+
+  for (const [index, option] of options.entries()) {
+    if (option.id != null && existingIds.has(option.id)) {
+      await client.query(
+        `UPDATE form_rating_scale_options
+         SET option_label = $1, rating_value = $2, sort_order = $3
+         WHERE id = $4 AND scale_id = $5`,
+        [
+          option.optionLabel,
+          option.ratingValue,
+          option.sortOrder ?? index,
+          option.id,
+          scaleId,
+        ],
+      );
+      keptIds.add(option.id);
+      continue;
+    }
+
+    const inserted = await client.query<{ id: string }>(
+      `INSERT INTO form_rating_scale_options (scale_id, option_label, rating_value, sort_order)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [scaleId, option.optionLabel, option.ratingValue, option.sortOrder ?? index],
+    );
+    keptIds.add(Number(inserted.rows[0].id));
+  }
+
+  for (const existingId of existingIds) {
+    if (!keptIds.has(existingId)) {
+      await client.query(
+        `DELETE FROM form_rating_scale_options WHERE id = $1 AND scale_id = $2`,
+        [existingId, scaleId],
+      );
+    }
+  }
+}
+
+async function syncRatingScales(
+  templateId: number,
+  scales: FormRatingScaleInput[],
+  client: PoolClient,
+): Promise<Map<string, number>> {
+  const existing = await client.query<{ id: string }>(
+    `SELECT id FROM form_rating_scales WHERE template_id = $1`,
+    [templateId],
+  );
+  const existingIds = new Set(existing.rows.map((row) => Number(row.id)));
+  const keptIds = new Set<number>();
+  const scaleIdByClientId = new Map<string, number>();
+
+  for (const [index, scale] of scales.entries()) {
+    const maxValue = deriveRatingScaleMaxValue(scale.options, scale.maxValue);
+    let scaleId: number;
+    if (scale.id != null && existingIds.has(scale.id)) {
+      await client.query(
+        `UPDATE form_rating_scales
+         SET name = $1, max_value = $2, sort_order = $3
+         WHERE id = $4 AND template_id = $5`,
+        [scale.name, maxValue, scale.sortOrder ?? index, scale.id, templateId],
+      );
+      scaleId = scale.id;
+    } else {
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO form_rating_scales (template_id, name, max_value, sort_order)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [templateId, scale.name, maxValue, scale.sortOrder ?? index],
+      );
+      scaleId = Number(inserted.rows[0].id);
+    }
+
+    keptIds.add(scaleId);
+    scaleIdByClientId.set(scale.clientId, scaleId);
+    await syncRatingScaleOptions(scaleId, scale.options, client);
+  }
+
+  for (const existingId of existingIds) {
+    if (!keptIds.has(existingId)) {
+      await client.query(
+        `DELETE FROM form_rating_scales WHERE id = $1 AND template_id = $2`,
+        [existingId, templateId],
+      );
+    }
+  }
+
+  return scaleIdByClientId;
+}
+
+async function getRatingScalesForTemplate(
+  templateId: number,
+  client?: PoolClient,
+): Promise<FormRatingScaleRecord[]> {
+  const executor = client ?? getDbClient();
+  const scalesResult = await executor.query<{
+    id: string;
+    name: string;
+    max_value: string;
+    sort_order: number;
+  }>(
+    `SELECT id, name, max_value::text, sort_order
+     FROM form_rating_scales
+     WHERE template_id = $1
+     ORDER BY sort_order ASC, id ASC`,
+    [templateId],
+  );
+
+  if (scalesResult.rows.length === 0) {
+    return [];
+  }
+
+  const scaleIds = scalesResult.rows.map((row) => Number(row.id));
+  const optionsResult = await executor.query<{
+    id: string;
+    scale_id: string;
+    option_label: string;
+    rating_value: string;
+    sort_order: number;
+  }>(
+    `SELECT id, scale_id, option_label, rating_value::text, sort_order
+     FROM form_rating_scale_options
+     WHERE scale_id = ANY($1::bigint[])
+     ORDER BY sort_order ASC, id ASC`,
+    [scaleIds],
+  );
+
+  const optionsByScaleId = new Map<number, FormRatingScaleRecord["options"]>();
+  for (const option of optionsResult.rows) {
+    const scaleId = Number(option.scale_id);
+    const list = optionsByScaleId.get(scaleId) ?? [];
+    list.push({
+      id: Number(option.id),
+      optionLabel: option.option_label,
+      ratingValue: Number(option.rating_value),
+      sortOrder: option.sort_order,
+    });
+    optionsByScaleId.set(scaleId, list);
+  }
+
+  return scalesResult.rows.map((row) => ({
+    id: Number(row.id),
+    name: row.name,
+    maxValue: Number(row.max_value),
+    sortOrder: row.sort_order,
+    options: optionsByScaleId.get(Number(row.id)) ?? [],
+  }));
+}
+
 function mapFormTemplateListItem(row: FormTemplateListRow): FormTemplateListItem {
   const firstName = row.updated_by_first_name?.trim() ?? "";
   const lastName = row.updated_by_last_name?.trim() ?? "";
@@ -114,6 +364,7 @@ function mapFormTemplateListItem(row: FormTemplateListRow): FormTemplateListItem
     targetSubCategory: row.target_sub_category,
     selfAssessmentEnabled: row.self_assessment_enabled,
     additionalRemarksEnabled: row.additional_remarks_enabled,
+    ratingBased: row.rating_based,
     questionCount: Number(row.question_count),
     appraisalCount: Number(row.appraisal_count),
     assignedEmployeeCount: Number(row.assigned_employee_count),
@@ -231,8 +482,9 @@ async function insertQuestionWithOptions(
        sort_order,
        self_assessment_enabled,
        hod_assessment_enabled,
-       total_marks
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       total_marks,
+       rating_scale_id
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING id`,
     [
       templateId,
@@ -244,6 +496,7 @@ async function insertQuestionWithOptions(
       question.selfAssessmentEnabled,
       question.hodAssessmentEnabled,
       question.totalMarks,
+      question.ratingScaleId ?? null,
     ],
   );
 
@@ -328,8 +581,9 @@ async function syncQuestion(
            sort_order = $5,
            self_assessment_enabled = $6,
            hod_assessment_enabled = $7,
-           total_marks = $8
-       WHERE id = $9 AND template_id = $10`,
+           total_marks = $8,
+           rating_scale_id = $9
+       WHERE id = $10 AND template_id = $11`,
       [
         sectionId,
         question.questionText,
@@ -339,6 +593,7 @@ async function syncQuestion(
         question.selfAssessmentEnabled,
         question.hodAssessmentEnabled,
         question.totalMarks,
+        question.ratingScaleId ?? null,
         question.id,
         templateId,
       ],
@@ -615,6 +870,9 @@ function mapQuestionRow(
     hodAssessmentEnabled: question.hod_assessment_enabled,
     totalMarks: Number(question.total_marks),
     sectionId: question.section_id ? Number(question.section_id) : undefined,
+    ratingScaleId: question.rating_scale_id
+      ? Number(question.rating_scale_id)
+      : null,
     options: optionsByQuestionId.get(Number(question.id)) ?? [],
   };
 }
@@ -683,7 +941,8 @@ async function getFormStructureForTemplate(
        sort_order,
        self_assessment_enabled,
        hod_assessment_enabled,
-       total_marks
+       total_marks,
+       rating_scale_id
      FROM form_questions
      WHERE template_id = $1
      ORDER BY sort_order ASC`,
@@ -803,6 +1062,7 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        ft.target_sub_category,
        ft.self_assessment_enabled,
        ft.additional_remarks_enabled,
+       ft.rating_based,
        COALESCE(qc.question_count, '0') AS question_count,
        COALESCE(apc.appraisal_count, '0') AS appraisal_count,
        COALESCE(efa.assigned_employee_count, '0') AS assigned_employee_count,
@@ -873,6 +1133,7 @@ export async function listDirectAssessmentTemplates(scope: {
          ft.target_sub_category,
          ft.self_assessment_enabled,
          ft.additional_remarks_enabled,
+       ft.rating_based,
          COALESCE(qc.question_count, '0') AS question_count,
          COALESCE(apc.appraisal_count, '0') AS appraisal_count,
          COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
@@ -951,6 +1212,7 @@ export async function listDirectAssessmentTemplates(scope: {
        ft.target_sub_category,
        ft.self_assessment_enabled,
        ft.additional_remarks_enabled,
+       ft.rating_based,
        COALESCE(qc.question_count, '0') AS question_count,
        COALESCE(apc.appraisal_count, '0') AS appraisal_count,
        COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
@@ -1010,6 +1272,7 @@ export async function getFormTemplateById(
        ft.target_sub_category,
        ft.self_assessment_enabled,
        ft.additional_remarks_enabled,
+       ft.rating_based,
        ft.created_at::text,
        ft.updated_at::text
      FROM form_templates ft
@@ -1037,6 +1300,8 @@ export async function getFormTemplateById(
     targetSubCategory: row.target_sub_category,
     selfAssessmentEnabled: row.self_assessment_enabled,
     additionalRemarksEnabled: row.additional_remarks_enabled,
+    ratingBased: row.rating_based,
+    ratingScales: await getRatingScalesForTemplate(Number(row.id)),
     sections: structure.sections,
     questions: structure.questions,
     incrementMatrices: await getIncrementMatricesByCycleId(row.cycle_id),
@@ -1051,6 +1316,7 @@ export async function createFormTemplate(
 ): Promise<FormTemplateRecord> {
   return withTransaction(async () => {
     const client = getDbClient() as PoolClient;
+    await ensureRatingBasedSchema(client);
 
     const cycleId = await resolveCycleId(input.cycleId);
 
@@ -1064,9 +1330,10 @@ export async function createFormTemplate(
          target_sub_category,
          self_assessment_enabled,
          additional_remarks_enabled,
+         rating_based,
          created_by,
          updated_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
        RETURNING id`,
       [
         input.title,
@@ -1077,13 +1344,25 @@ export async function createFormTemplate(
         input.targetSubCategory ?? null,
         input.selfAssessmentEnabled,
         input.additionalRemarksEnabled ?? false,
+        input.ratingBased ?? false,
         createdById ?? null,
       ],
     );
 
     const templateId = Number(templateResult.rows[0].id);
+    const ratingBased = Boolean(input.ratingBased);
+    const scaleIdByClientId = await syncRatingScales(
+      templateId,
+      ratingBased ? (input.ratingScales ?? []) : [],
+      client,
+    );
+    const structuredInput = applyResolvedRatingScaleIds(
+      input,
+      scaleIdByClientId,
+      ratingBased,
+    );
 
-    await insertSectionsAndQuestions(templateId, input, client);
+    await insertSectionsAndQuestions(templateId, structuredInput, client);
 
     if (input.incrementMatrices && input.incrementMatrices.length > 0) {
       await upsertIncrementMatrices(cycleId, input.incrementMatrices, client);
@@ -1105,6 +1384,7 @@ export async function updateFormTemplate(
 ): Promise<FormTemplateRecord> {
   return withTransaction(async () => {
     const client = getDbClient() as PoolClient;
+    await ensureRatingBasedSchema(client);
 
     const existing = await client.query<{ id: string; cycle_id: number }>(
       `SELECT id, cycle_id FROM form_templates WHERE id = $1`,
@@ -1137,9 +1417,10 @@ export async function updateFormTemplate(
            target_sub_category = $6,
            self_assessment_enabled = $7,
            additional_remarks_enabled = $8,
-           updated_by = COALESCE($9, updated_by),
+           rating_based = $9,
+           updated_by = COALESCE($10, updated_by),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $10`,
+       WHERE id = $11`,
       [
         input.title,
         input.code.trim(),
@@ -1149,12 +1430,25 @@ export async function updateFormTemplate(
         input.targetSubCategory ?? null,
         input.selfAssessmentEnabled,
         input.additionalRemarksEnabled ?? false,
+        input.ratingBased ?? false,
         updatedById ?? null,
         id,
       ],
     );
 
-    await syncFormStructure(id, input, client);
+    const ratingBased = Boolean(input.ratingBased);
+    const scaleIdByClientId = await syncRatingScales(
+      id,
+      ratingBased ? (input.ratingScales ?? []) : [],
+      client,
+    );
+    const structuredInput = applyResolvedRatingScaleIds(
+      input,
+      scaleIdByClientId,
+      ratingBased,
+    );
+
+    await syncFormStructure(id, structuredInput, client);
 
     if (input.incrementMatrices && input.incrementMatrices.length > 0) {
       await upsertIncrementMatrices(cycleId, input.incrementMatrices, client);
