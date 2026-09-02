@@ -1,7 +1,17 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  FileSpreadsheet,
+  Loader2,
+  ShieldAlert,
+  Upload,
+  UserPlus,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
@@ -86,20 +96,26 @@ interface BulkUploadStaffModalProps {
   onSuccess: () => void;
 }
 
-const SECTION_STYLE: Record<BulkUploadColumnGroup, string> = {
-  basic:
-    "bg-slate-100 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700/50",
-  performance:
-    "bg-emerald-100 border-emerald-200 dark:bg-emerald-900/40 dark:border-emerald-700/50",
-  compensation:
-    "bg-amber-100 border-amber-200 dark:bg-amber-900/40 dark:border-amber-700/50",
-};
-
 const cellInputClassName =
   "h-8 w-full min-w-0 border-0 bg-transparent px-2 text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-primary/40 dark:text-slate-100 dark:focus:bg-slate-900";
 
 const sheetSelectClassName =
   "[&_button]:h-7 [&_button]:rounded-md [&_button]:px-2 [&_button]:py-0 [&_button]:text-xs [&_button]:focus:ring-1";
+
+const COLUMN_GROUP_ROW: Record<BulkUploadColumnGroup, string> = {
+  basic:
+    "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/35",
+  performance:
+    "border-teal-200 bg-teal-50 dark:border-teal-900 dark:bg-teal-950/35",
+  compensation:
+    "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/35",
+};
+
+const COLUMN_GROUP_LABEL: Record<BulkUploadColumnGroup, string> = {
+  basic: "text-sky-800 dark:text-sky-200",
+  performance: "text-teal-800 dark:text-teal-200",
+  compensation: "text-amber-800 dark:text-amber-200",
+};
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -705,61 +721,57 @@ export function BulkUploadStaffModal({
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-100 flex flex-col bg-white dark:bg-slate-950"
       >
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-slate-800 text-white dark:bg-amber-600">
-              <Upload className="size-4" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <h2
-                id="bulk-upload-staff-modal-title"
-                className="text-sm font-semibold text-slate-900 dark:text-white"
-              >
-                Bulk update & upload
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Import Excel, map columns, preview the data, and save — all on this screen.
-              </p>
-            </div>
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-primary px-4 py-2 text-white dark:border-slate-800">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Upload className="size-4 shrink-0" aria-hidden="true" />
+            <h2
+              id="bulk-upload-staff-modal-title"
+              className="text-sm font-semibold"
+            >
+              Bulk update &amp; upload
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:hover:bg-white/10"
+            className="inline-flex size-7 items-center justify-center rounded text-white hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
             aria-label="Close bulk upload"
           >
             <X className="size-4" />
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-          <div className="space-y-6">
-            <EmployeeStep
-              fileName={importFileName}
-              parsing={importParsing}
-              loadingStaff={employeesLoading}
-              dragOver={importDragOver}
-              matchedPeople={matchedPeople}
-              unmatchedSaps={importUnmatched}
-              compact={hasImportedSheet}
-              onDragOverChange={setImportDragOver}
-              onFile={handleExcelFile}
-            />
+        <div className="min-h-0 flex-1 overflow-auto p-3">
+          <div className="space-y-3">
+            <section className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+              <EmployeeStep
+                fileName={importFileName}
+                parsing={importParsing}
+                loadingStaff={employeesLoading}
+                dragOver={importDragOver}
+                matchedPeople={matchedPeople}
+                unmatchedSaps={importUnmatched}
+                onDragOverChange={setImportDragOver}
+                onFile={handleExcelFile}
+              />
+            </section>
             {hasImportedSheet ? (
               <>
-                <ColumnStep
-                  selectedIds={selectedColumnIds}
-                  onToggle={toggleColumn}
-                  onSelectAll={selectAllColumns}
-                  onClearAll={clearAllColumns}
-                  onToggleGroup={toggleColumnGroup}
-                />
-                <MappingStep
-                  columns={excelSheet?.columns ?? []}
-                  mapping={columnMapping}
-                  targets={selectedColumns}
-                  onChange={setExcelTargetMapping}
-                />
+                <div className="grid items-start gap-3 lg:grid-cols-2">
+                  <ColumnStep
+                    selectedIds={selectedColumnIds}
+                    onToggle={toggleColumn}
+                    onSelectAll={selectAllColumns}
+                    onClearAll={clearAllColumns}
+                    onToggleGroup={toggleColumnGroup}
+                  />
+                  <MappingStep
+                    columns={excelSheet?.columns ?? []}
+                    mapping={columnMapping}
+                    targets={selectedColumns}
+                    onChange={setExcelTargetMapping}
+                  />
+                </div>
                 <SheetStep
                   rows={sheetRows}
                   columns={selectedColumns}
@@ -775,7 +787,7 @@ export function BulkUploadStaffModal({
           </div>
         </div>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-2 dark:border-slate-800">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {error ? (
               <span className="font-medium text-red-600 dark:text-red-400">{error}</span>
@@ -879,23 +891,49 @@ function SaveChecksOverlay({
           aria-labelledby="bulk-upload-save-checks-title"
         >
           <motion.div
-            className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900"
+            className="w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900"
             initial={{ opacity: 0, scale: 0.96, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 8 }}
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-white/10">
-              <h3
-                id="bulk-upload-save-checks-title"
-                className="text-sm font-semibold text-slate-900 dark:text-white"
-              >
-                Review changes
-              </h3>
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-white/10 dark:bg-slate-800/60">
+              <div className="flex items-center gap-2.5">
+                {hasFailed ? (
+                  <span className="flex size-8 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-300">
+                    <ShieldAlert className="size-4" aria-hidden="true" />
+                  </span>
+                ) : readyToSave ? (
+                  <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300">
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                  </span>
+                ) : (
+                  <span className="flex size-8 items-center justify-center rounded-full bg-sky-100 text-sky-600 dark:bg-sky-950/50 dark:text-sky-300">
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  </span>
+                )}
+                <div>
+                  <h3
+                    id="bulk-upload-save-checks-title"
+                    className="text-sm font-semibold text-slate-900 dark:text-white"
+                  >
+                    Review changes
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {saving
+                      ? "Writing updates to staff records"
+                      : hasFailed
+                        ? "Fix the issues below, then try again"
+                        : readyToSave
+                          ? "All checks passed"
+                          : current.title}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={onClose}
                 disabled={saving}
-                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-white"
+                className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-600 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-white"
                 aria-label="Close review"
               >
                 <X className="h-4 w-4" />
@@ -917,29 +955,29 @@ function SaveChecksOverlay({
                     <li key={item.id} className="min-w-0 text-center">
                       <div
                         className={cn(
-                          "mx-auto flex size-6 items-center justify-center rounded-full text-[11px] font-semibold",
+                          "mx-auto flex size-8 items-center justify-center rounded-full text-xs font-semibold shadow-sm",
                           isFailed
-                            ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300"
+                            ? "bg-red-100 text-red-700 ring-2 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900"
                             : isComplete
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900"
                               : isCurrent
-                                ? "bg-slate-800 text-white dark:bg-amber-600"
+                                ? "bg-slate-800 text-white ring-2 ring-slate-300 dark:bg-amber-600 dark:ring-amber-400/40"
                                 : "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500",
                         )}
                       >
                         {isFailed ? (
-                          <AlertTriangle className="size-3.5" aria-hidden="true" />
+                          <AlertTriangle className="size-4" aria-hidden="true" />
                         ) : isComplete ? (
-                          <Check className="size-3.5" aria-hidden="true" />
+                          <Check className="size-4" aria-hidden="true" />
                         ) : isCurrent ? (
-                          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                         ) : (
                           index + 1
                         )}
                       </div>
                       <p
                         className={cn(
-                          "mt-1 truncate text-[10px] font-medium",
+                          "mt-1.5 truncate text-[10px] font-semibold uppercase tracking-wide",
                           isFailed
                             ? "text-red-600 dark:text-red-400"
                             : isCurrent || isComplete
@@ -964,20 +1002,44 @@ function SaveChecksOverlay({
                     style={{ width: `${saving ? 100 : progressPercent}%` }}
                   />
                 </div>
-                <p className="mt-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-                  {saving
-                    ? "Saving changes…"
-                    : hasFailed
-                      ? `${current.title} failed`
-                      : readyToSave
-                        ? "Checks passed. Confirm to save."
-                        : current.description}
-                </p>
               </div>
+
+              {saving ? (
+                <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+                  <Loader2
+                    className="mt-0.5 size-4 shrink-0 animate-spin text-amber-600 dark:text-amber-400"
+                    aria-hidden="true"
+                  />
+                  <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                    Saving changes…
+                  </p>
+                </div>
+              ) : hasFailed ? (
+                <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900 dark:bg-red-950/30">
+                  <AlertTriangle
+                    className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400"
+                    aria-hidden="true"
+                  />
+                  <p className="text-xs font-medium text-red-800 dark:text-red-200">
+                    {current.title} failed. Resolve the issues below before saving.
+                  </p>
+                </div>
+              ) : readyToSave ? null : (
+                <div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 dark:border-sky-900 dark:bg-sky-950/30">
+                  <Loader2
+                    className="mt-0.5 size-4 shrink-0 animate-spin text-sky-600 dark:text-sky-400"
+                    aria-hidden="true"
+                  />
+                  <p className="text-xs font-medium text-sky-800 dark:text-sky-200">
+                    {current.description}
+                  </p>
+                </div>
+              )}
 
               {result && !result.ok ? (
                 <div className="max-h-48 overflow-auto rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
-                  <p className="text-xs font-semibold text-red-700 dark:text-red-300">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-300">
+                    <AlertTriangle className="size-3.5" aria-hidden="true" />
                     {result.issues.length} issue{result.issues.length === 1 ? "" : "s"} found
                   </p>
                   <ul className="mt-2 space-y-1.5">
@@ -1001,10 +1063,15 @@ function SaveChecksOverlay({
               ) : null}
 
               {readyToSave ? (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
+                  <div className="flex items-start gap-2.5">
+                    {result.createdCount > 0 ? (
+                      <UserPlus className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    )}
                     <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                      <span className="font-semibold">Checks passed. </span>
                       {result.createdCount > 0 ? (
                         <>
                           Create {result.createdCount} new employee
@@ -1028,16 +1095,22 @@ function SaveChecksOverlay({
               ) : null}
 
               {saveError && saving === false && result?.ok ? (
-                <p className="text-xs font-medium text-red-600 dark:text-red-400">{saveError}</p>
+                <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900 dark:bg-red-950/30">
+                  <AlertTriangle
+                    className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400"
+                    aria-hidden="true"
+                  />
+                  <p className="text-xs font-medium text-red-700 dark:text-red-300">{saveError}</p>
+                </div>
               ) : null}
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-white/10">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3 dark:border-white/10 dark:bg-slate-800/40">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={saving}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-transparent dark:text-slate-300 dark:hover:bg-white/10"
               >
                 {hasFailed ? "Close" : "Cancel"}
               </button>
@@ -1046,8 +1119,13 @@ function SaveChecksOverlay({
                   type="button"
                   onClick={onConfirm}
                   disabled={!readyToSave || saving}
-                  className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60 dark:bg-amber-600 dark:hover:bg-amber-500"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                 >
+                  {saving ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Check className="size-3.5" aria-hidden="true" />
+                  )}
                   {saving ? "Saving..." : "Confirm save"}
                 </button>
               ) : null}
@@ -1066,7 +1144,6 @@ function EmployeeStep({
   dragOver,
   matchedPeople,
   unmatchedSaps,
-  compact = false,
   onDragOverChange,
   onFile,
 }: {
@@ -1076,7 +1153,6 @@ function EmployeeStep({
   dragOver: boolean;
   matchedPeople: Array<{ employeeId: string; name: string }>;
   unmatchedSaps: string[];
-  compact?: boolean;
   onDragOverChange: (next: boolean) => void;
   onFile: (file: File | undefined) => void;
 }) {
@@ -1084,16 +1160,7 @@ function EmployeeStep({
   const busy = parsing || loadingStaff;
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-          1. Import Excel
-        </h3>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          A SAP / SAP ID / SAP Code column is required so we can match staff.
-        </p>
-      </div>
-
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       <label
         onDragOver={(event) => {
           event.preventDefault();
@@ -1106,29 +1173,27 @@ function EmployeeStep({
           onFile(event.dataTransfer.files[0]);
         }}
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed text-center transition-colors",
-          compact ? "px-6 py-5" : "px-6 py-10",
-          dragOver
-            ? "border-emerald-400 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40"
-            : "border-indigo-200 bg-indigo-50/70 hover:border-indigo-400 hover:bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-950/25 dark:hover:border-indigo-400",
+          "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded px-1 py-0.5",
+          dragOver && "bg-slate-100 dark:bg-slate-800",
         )}
       >
-        <span className="flex size-12 items-center justify-center rounded-full bg-indigo-600 text-white dark:bg-indigo-500">
-          {parsing ? (
-            <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-          ) : (
-            <FileSpreadsheet className="size-5" aria-hidden="true" />
-          )}
+        {parsing ? (
+          <Loader2 className="size-4 shrink-0 animate-spin text-slate-500" aria-hidden="true" />
+        ) : (
+          <FileSpreadsheet className="size-4 shrink-0 text-slate-500" aria-hidden="true" />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+            {parsing ? "Reading Excel file…" : fileName ?? "Upload Excel file"}
+          </span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400">
+            {fileName
+              ? "Click or drop a file to replace"
+              : "Requires a SAP column · .xlsx, .xls"}
+          </span>
         </span>
-        <span className="text-sm font-semibold text-indigo-950 dark:text-indigo-100">
-          {parsing
-            ? "Reading Excel file…"
-            : compact
-              ? "Replace Excel file"
-              : "Drop Excel file here or click to browse"}
-        </span>
-        <span className="text-xs text-indigo-700 dark:text-indigo-300">
-          {fileName ?? "Accepted: .xlsx, .xls"}
+        <span className="shrink-0 text-xs font-medium text-slate-600 underline-offset-2 hover:underline dark:text-slate-300">
+          Browse
         </span>
         <input
           ref={inputRef}
@@ -1144,49 +1209,18 @@ function EmployeeStep({
       </label>
 
       {fileName && !parsing ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-              Matched staff ({matchedPeople.length})
-            </p>
-            {matchedPeople.length === 0 ? (
-              <p className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-300">
-                No staff matched the SAP IDs in this file.
-              </p>
-            ) : (
-              <p className="mt-1 line-clamp-3 text-xs text-emerald-900 dark:text-emerald-100">
-                {matchedPeople
-                  .slice(0, 8)
-                  .map((person) => `${person.name} (${person.employeeId})`)
-                  .join(" · ")}
-                {matchedPeople.length > 8
-                  ? ` · +${matchedPeople.length - 8} more`
-                  : ""}
-              </p>
-            )}
-          </div>
-          {unmatchedSaps.length > 0 ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-500/30 dark:bg-rose-950/30">
-              <p className="text-xs font-semibold uppercase tracking-wide text-rose-800 dark:text-rose-200">
-                Not found ({unmatchedSaps.length})
-              </p>
-              <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
-                {unmatchedSaps.join(", ")}
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Not found
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Every SAP ID in the file matched a staff record.
-              </p>
-            </div>
-          )}
-        </div>
+        <p className="text-xs text-slate-600 dark:text-slate-300">
+          <span className="font-semibold tabular-nums">{matchedPeople.length}</span> matched
+          <span className="mx-2 text-slate-300 dark:text-slate-600">·</span>
+          <span className="font-semibold tabular-nums">{unmatchedSaps.length}</span> not found
+          {unmatchedSaps.length > 0
+            ? ` (${unmatchedSaps.slice(0, 8).join(", ")}${
+                unmatchedSaps.length > 8 ? "…" : ""
+              })`
+            : ""}
+        </p>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -1204,36 +1238,30 @@ function ColumnStep({
   onToggleGroup: (group: BulkUploadColumnGroup) => void;
 }) {
   return (
-    <section>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-            2. Columns to update
-          </h3>
-          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Choose which of our columns should receive mapped Excel data. SAP is
-            used only for matching.
-          </p>
-        </div>
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Columns to update
+        </h3>
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onSelectAll}
             className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
           >
-            Select all
+            All
           </button>
           <button
             type="button"
             onClick={onClearAll}
             className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
           >
-            Clear
+            None
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
+      <div className="flex flex-1 flex-col">
         {BULK_UPLOAD_COLUMN_GROUPS.map((group) => {
           const columns = BULK_UPLOAD_SELECTABLE_COLUMNS.filter(
             (column) => column.group === group,
@@ -1241,14 +1269,22 @@ function ColumnStep({
           if (columns.length === 0) return null;
           const allSelected = columns.every((column) => selectedIds.has(column.id));
           return (
-            <section
+            <div
               key={group}
-              className={cn("min-w-0 rounded-lg border p-3", SECTION_STYLE[group])}
+              className={cn(
+                "border-b px-3 py-2 last:border-b-0",
+                COLUMN_GROUP_ROW[group],
+              )}
             >
-              <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2 dark:border-white/10">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-primary">
+              <div className="mb-1 flex items-center gap-2">
+                <h4
+                  className={cn(
+                    "text-[11px] font-semibold uppercase tracking-wide",
+                    COLUMN_GROUP_LABEL[group],
+                  )}
+                >
                   {bulkUploadGroupLabel(group)}
-                </h3>
+                </h4>
                 <button
                   type="button"
                   onClick={() => onToggleGroup(group)}
@@ -1257,18 +1293,13 @@ function ColumnStep({
                   {allSelected ? "Clear" : "Select"}
                 </button>
               </div>
-              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {columns.map((column) => {
                   const checked = selectedIds.has(column.id);
                   return (
                     <label
                       key={column.id}
-                      className={cn(
-                        "flex min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs",
-                        checked
-                          ? "border-slate-300 bg-white dark:border-white/15 dark:bg-slate-950/50"
-                          : "border-slate-200/70 bg-white/80 dark:border-white/10 dark:bg-slate-950/40",
-                      )}
+                      className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-800 dark:text-slate-200"
                     >
                       <input
                         type="checkbox"
@@ -1276,14 +1307,12 @@ function ColumnStep({
                         onChange={() => onToggle(column.id)}
                         className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-primary focus:ring-1 focus:ring-primary/40"
                       />
-                      <span className="min-w-0 truncate" title={column.label}>
-                        {column.label}
-                      </span>
+                      {column.label}
                     </label>
                   );
                 })}
               </div>
-            </section>
+            </div>
           );
         })}
       </div>
@@ -1309,42 +1338,45 @@ function MappingStep({
   }));
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-          3. Map Excel columns
+    <section className="flex h-56 flex-col overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Map Excel columns
         </h3>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Match each Excel heading to one of our columns. Matching names are
-          mapped automatically. Preview updates as you change the mapping.
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {mappedCount} mapped
         </p>
       </div>
-      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             <tr>
-              <th className="px-4 py-2">Excel column</th>
-              <th className="px-4 py-2">Maps to</th>
+              <th className="border-b border-slate-200 px-3 py-1.5 font-medium dark:border-slate-700">
+                Excel
+              </th>
+              <th className="border-b border-slate-200 px-3 py-1.5 font-medium dark:border-slate-700">
+                Maps to
+              </th>
             </tr>
           </thead>
           <tbody>
             {columns.map((column) => (
               <tr
                 key={column.index}
-                className="border-t border-slate-100 dark:border-slate-800"
+                className="border-b border-slate-200 last:border-b-0 dark:border-slate-700"
               >
-                <td className="px-4 py-2 text-slate-800 dark:text-slate-100">
+                <td className="px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100">
                   <span className="font-medium">{column.header}</span>
                   {column.isSap ? (
-                    <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                      Matching
+                    <span className="ml-1.5 text-[10px] font-medium uppercase text-slate-400">
+                      Match
                     </span>
                   ) : null}
                 </td>
-                <td className="px-4 py-1.5">
+                <td className="px-3 py-1.5">
                   {column.isSap ? (
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Used to match staff. Not imported as a field.
+                      Used to match staff
                     </p>
                   ) : (
                     <SearchableSelect
@@ -1365,9 +1397,6 @@ function MappingStep({
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        {mappedCount} Excel column{mappedCount === 1 ? "" : "s"} mapped
-      </p>
     </section>
   );
 }
@@ -1396,17 +1425,16 @@ function SheetStep({
   ).length;
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-          4. Preview
+    <section className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Preview
         </h3>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Mapped Excel values appear highlighted. You can still edit cells before
-          saving.
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {rows.length} staff · {changedCount} with changes
         </p>
       </div>
-      <div className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+      <div className="overflow-auto">
         <table className="min-w-full border-collapse text-left text-sm">
           <thead>
             <tr className="bg-slate-800 text-white dark:bg-slate-900">
@@ -1471,9 +1499,6 @@ function SheetStep({
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        {rows.length} staff in preview · {changedCount} with mapped changes
-      </p>
     </section>
   );
 }
