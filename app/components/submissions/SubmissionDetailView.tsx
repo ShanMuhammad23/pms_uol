@@ -252,7 +252,7 @@ function SubmissionInfoTile({
   return (
     <div
       className={cn(
-        "min-w-0 rounded-lg border px-3.5 py-3",
+        "flex min-h-15 min-w-0 flex-col items-center justify-center rounded-lg border px-3 py-2 text-center",
         accent
           ? "border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40"
           : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900",
@@ -260,7 +260,7 @@ function SubmissionInfoTile({
     >
       <dt
         className={cn(
-          "flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide",
+          "flex items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide",
           accent
             ? "text-indigo-600 dark:text-indigo-300"
             : "text-slate-500 dark:text-slate-400",
@@ -271,7 +271,7 @@ function SubmissionInfoTile({
       </dt>
       <dd
         className={cn(
-          "mt-1.5 wrap-break-word text-sm font-semibold",
+          "mt-1 w-full truncate text-sm font-semibold leading-tight",
           accent
             ? "text-indigo-800 dark:text-indigo-200"
             : "text-slate-900 dark:text-slate-100",
@@ -940,8 +940,28 @@ export default function SubmissionDetailView({
 
   if (isLoading) {
     return (
-      <div className="rounded-md border border-slate-300/80 p-6 text-sm text-foreground/70 dark:border-white/15">
-        Loading submission...
+      <div className="min-w-0 overflow-hidden rounded-md border border-slate-300 bg-white shadow-md shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-900/30">
+        <div className="border-b border-slate-200/50 bg-slate-200 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/40">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="flex min-w-0 items-center gap-3 md:w-52 md:shrink-0">
+              <div className="size-11 shrink-0 rounded-full bg-slate-300/80 dark:bg-slate-700" />
+              <div className="min-w-0 space-y-2">
+                <div className="h-5 w-32 rounded bg-slate-300/80 dark:bg-slate-700" />
+                <div className="h-3 w-28 rounded bg-slate-300/60 dark:bg-slate-700/80" />
+              </div>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }, (_, index) => (
+                <div
+                  key={index}
+                  className="min-h-15 rounded-lg border border-slate-300/70 bg-white/70 dark:border-slate-700 dark:bg-slate-900/50"
+                />
+              ))}
+            </div>
+            <div className="hidden h-8 w-24 shrink-0 rounded-lg bg-slate-300/70 md:block dark:bg-slate-700" />
+          </div>
+        </div>
+        <div className="p-6 text-sm text-foreground/70">Loading submission...</div>
       </div>
     );
   }
@@ -1089,28 +1109,28 @@ export default function SubmissionDetailView({
           },
         ]}
       />
-      <div className="border-b border-slate-200/50 bg-slate-200 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/40">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3.5">
+      <div className="border-b border-slate-200/50 bg-slate-200 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/40">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex min-w-0 w-full items-center gap-3 md:w-52 md:shrink-0">
             <div
               className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
               aria-hidden="true"
             >
               {getInitials(data.employeeName)}
             </div>
-            <div className="min-w-0 space-y-2">
-              <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">
                 {data.employeeName}
               </h2>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="mt-0.5 flex flex-wrap items-center gap-1">
                 {data.employeeId ? (
-                  <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                  <span className="rounded-md border border-slate-200 bg-white px-1.5 py-px text-[11px] font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
                     SAP {data.employeeId}
                   </span>
                 ) : null}
                 <span
                   className={cn(
-                    "rounded-md px-2 py-0.5 text-xs font-semibold",
+                    "rounded-md px-1.5 py-px text-[11px] font-semibold",
                     statusStyles[data.status],
                   )}
                 >
@@ -1118,41 +1138,40 @@ export default function SubmissionDetailView({
                 </span>
               </div>
               {data.templateTitle ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
                   {data.templateTitle}
                 </p>
               ) : null}
-              <FormDescription description={data.templateDescription} className="mt-2 no-print" />
             </div>
           </div>
-          <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <SubmissionInfoTile
-            icon={Gauge}
-            label="Score"
-            value={`${formatScoreValue(displayedFormScore)}/${data.maxRawScore} (${displayedFormPercent}%)`}
-            accent
-          />
-          <SubmissionInfoTile
-            icon={Building2}
-            label="ORG Level 1"
-            value={displayOrgValue(data.orgLevel1Name)}
-          />
-          <SubmissionInfoTile
-            icon={Network}
-            label="ORG Level 2"
-            value={displayOrgValue(data.orgLevel2Name)}
-          />
-          <SubmissionInfoTile
-            icon={CalendarDays}
-            label="Submitted"
-            value={
-              data.submittedAt
-                ? new Date(data.submittedAt).toLocaleString()
-                : "—"
-            }
-          />
-        </dl>
-          <div className="no-print flex flex-wrap items-center gap-2 h-full">
+          <dl className="grid min-w-0 w-full flex-1 grid-cols-2 gap-2 lg:grid-cols-4">
+            <SubmissionInfoTile
+              icon={Gauge}
+              label="Score"
+              value={`${formatScoreValue(displayedFormScore)}/${data.maxRawScore} (${displayedFormPercent}%)`}
+              accent
+            />
+            <SubmissionInfoTile
+              icon={Building2}
+              label="ORG Level 1"
+              value={displayOrgValue(data.orgLevel1Name)}
+            />
+            <SubmissionInfoTile
+              icon={Network}
+              label="ORG Level 2"
+              value={displayOrgValue(data.orgLevel2Name)}
+            />
+            <SubmissionInfoTile
+              icon={CalendarDays}
+              label="Submitted"
+              value={
+                data.submittedAt
+                  ? new Date(data.submittedAt).toLocaleString()
+                  : "—"
+              }
+            />
+          </dl>
+          <div className="no-print flex w-full shrink-0 flex-wrap items-center gap-2 md:w-auto md:justify-end">
             {/* Reset Form — admin only */}
             {isAdminRole && rows.length > 0 ? (
               <button
@@ -1243,7 +1262,11 @@ export default function SubmissionDetailView({
           </div>
         </div>
 
-  
+        <FormDescription
+          description={data.templateDescription}
+          compact
+          className="mt-3 no-print"
+        />
       </div>
 
       {!isEligible ? (
@@ -1260,10 +1283,6 @@ export default function SubmissionDetailView({
           view="manager"
         />
       ) : null}
-
-      
-
-     
 
       {/* HR review hint — buttons are in the header. */}
       {editingHr && hasUnsavedChanges ? (

@@ -48,6 +48,7 @@ import {
   type UserRecord,
   type UserRole,
 } from "@/types/users";
+import Image from "next/image";
 
 type MessageTone = "success" | "error";
 
@@ -888,8 +889,8 @@ export default function UsersManager() {
       {activeTab === "add" ? renderFormCard() : null}
 
       {activeTab === "list" && overviewLoading ? (
-        <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
-          <Users className="mx-auto size-8 text-foreground/50" />
+        <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15 flex flex-col items-center justify-center">
+          <Image src='/Signature load.svg' alt='Loading' width={260} height={120} />
           <p className="mt-3 text-sm font-medium text-text-primary">
             Loading users…
           </p>
@@ -907,7 +908,7 @@ export default function UsersManager() {
       !error &&
       users.length === 0 ? (
         <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
-          <Users className="mx-auto size-8 text-foreground/50" />
+          <Image src='/Signature load.svg' alt='Loading' width={260} height={120} />
           <p className="mt-3 text-sm font-medium text-text-primary">
             No users yet
           </p>
