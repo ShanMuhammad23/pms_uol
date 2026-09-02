@@ -62,6 +62,8 @@ interface DashboardFilterBarProps {
    */
   hasGlobalActiveFilters?: boolean;
   onGlobalClearAllFilters?: () => void;
+  /** Tighter spacing when the bar is embedded in a dialog. */
+  embedded?: boolean;
 }
 
 export function DashboardFilterBar({
@@ -92,6 +94,7 @@ export function DashboardFilterBar({
   onClearAllFilters,
   hasGlobalActiveFilters,
   onGlobalClearAllFilters,
+  embedded = false,
 }: DashboardFilterBarProps) {
   const [filtersVisible, setFiltersVisible] = useState(true);
 
@@ -110,10 +113,10 @@ export function DashboardFilterBar({
   return (
     <motion.div
       variants={itemVariants}
-      initial="hidden"
+      initial={embedded ? false : "hidden"}
       animate="visible"
-      transition={{ delay: 0.55 }}
-      className="mb-6 space-y-4"
+      transition={{ delay: embedded ? 0 : 0.55 }}
+      className={cn(embedded ? "space-y-3" : "mb-6 space-y-4")}
     >
       {onGlobalClearAllFilters ? (
         <div className="flex justify-end">

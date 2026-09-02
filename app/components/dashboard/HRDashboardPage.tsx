@@ -153,7 +153,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
         </div>
       ) : null}
       <div className="mb-2 flex items-center justify-between gap-2 mr-2">
-        <GenerateOrgReportButton />
+        <GenerateOrgReportButton initialFilters={filterParams} />
       </div>
       </div>
       

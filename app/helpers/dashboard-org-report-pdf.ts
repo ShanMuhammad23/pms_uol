@@ -1,12 +1,12 @@
 import type { jsPDF } from "jspdf";
 import { canonicalPerformanceLevelName } from "@/app/helpers/dashboard-helpers";
 import {
-  orgLevelLabel,
   orgReportFileName,
   type OrgReportCompletion,
+  type OrgReportStaffRow,
+  type OrgReportStatus,
 } from "@/app/helpers/dashboard-org-report";
 import type { RatingQuartileMatrixData } from "@/app/helpers/dashboard-types";
-import type { EntityRecord } from "@/types/entities";
 
 type Rgb = [number, number, number];
 
@@ -40,11 +40,19 @@ const FALLBACK_LEVEL_RGB: Rgb[] = [
 ];
 
 export type OrgCalibrationReportInput = {
-  entity: EntityRecord;
+  orgTitle: string;
+  filterSummary: string;
   generatedAt: Date;
+  includeSalary: boolean;
   completion: OrgReportCompletion;
   calibrationData: Array<{ rating: string; quota: number; actual: number }>;
   ratingQuartileMatrix: RatingQuartileMatrixData;
+  staffRows: OrgReportStaffRow[];
+};
+
+export type BuiltOrgCalibrationReport = {
+  blob: Blob;
+  fileName: string;
 };
 
 function rgbForLevel(rating: string, index: number): Rgb {
@@ -64,14 +72,40 @@ function setText(pdf: jsPDF, color: Rgb) {
   pdf.setTextColor(color[0], color[1], color[2]);
 }
 
-function formatGeneratedAt(date: Date): string {
-  return date.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+function drawPmsWatermark(pdf: jsPDF, pageWidth: number, pageHeight: number) {
+  pdf.saveGraphicsState();
+  pdf.setGState(pdf.GState({ opacity: 0.08 }));
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(120);
+  setText(pdf, NAVY);
+  pdf.text("PMS", pageWidth / 2, pageHeight / 2 + 12, {
+    align: "center",
+    angle: 32,
   });
+  pdf.restoreGraphicsState();
+}
+
+function stampPmsWatermarkOnAllPages(pdf: jsPDF) {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const pageCount = pdf.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    pdf.setPage(page);
+    drawPmsWatermark(pdf, pageWidth, pageHeight);
+  }
+}
+
+function formatPrintDate(date: Date): string {
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function formatSalary(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  return value.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
 function niceMax(value: number): number {
@@ -122,30 +156,105 @@ function drawPanel(
   pdf.roundedRect(x, y, width, height, 2, 2, "FD");
 }
 
-function drawHeader(pdf: jsPDF, pageWidth: number, entity: EntityRecord) {
+function drawStatusChip(
+  pdf: jsPDF,
+  pageWidth: number,
+  y: number,
+  status: OrgReportStatus,
+) {
+  const isComplete = status === "Completed";
+  const statusColor = isComplete ? COMPLETED : IN_PROGRESS;
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8);
+  const chipW = pdf.getTextWidth(status) + 8;
+  const chipX = pageWidth - 12 - chipW;
+  const chipY = y - 4.4;
+  setFill(pdf, statusColor);
+  pdf.roundedRect(chipX, chipY, chipW, 6.5, 1.2, 1.2, "F");
+  setText(pdf, WHITE);
+  pdf.text(status, chipX + chipW / 2, chipY + 4.4, { align: "center" });
+  return chipX;
+}
+
+/** Cover header. Returns the Y position below the title block. */
+function drawCoverHeader(
+  pdf: jsPDF,
+  pageWidth: number,
+  orgTitle: string,
+  filterSummary: string,
+  generatedAt: Date,
+  status: OrgReportStatus,
+): number {
   setFill(pdf, NAVY);
-  pdf.rect(0, 0, pageWidth, 22, "F");
+  pdf.rect(0, 0, pageWidth, 14, "F");
 
   setText(pdf, WHITE);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(14);
-  pdf.text("Performance Calibration Report", 12, 9);
-
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8.5);
   pdf.text(
     "University of Lahore  ·  Performance Management System",
     12,
-    15.5,
+    8.5,
   );
 
-  const level = orgLevelLabel(entity.categoryCode);
+  let y = 22;
+  setText(pdf, MUTED);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(8);
-  pdf.text(level, pageWidth - 12, 9, { align: "right" });
+  pdf.text("PERFORMANCE REPORT", 12, y);
+
+  y += 8;
+  setText(pdf, NAVY);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(18);
+  const orgLines = pdf.splitTextToSize(orgTitle, pageWidth - 24);
+  pdf.text(orgLines, 12, y);
+  y += orgLines.length * 7.2;
+
+  if (filterSummary) {
+    y += 2;
+    setText(pdf, MUTED);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7.5);
+    const summaryLines = pdf.splitTextToSize(filterSummary, pageWidth - 24);
+    pdf.text(summaryLines, 12, y);
+    y += summaryLines.length * 3.6 + 2;
+  }
+
+  y += 6;
+  setText(pdf, MUTED);
   pdf.setFont("helvetica", "normal");
-  const orgLines = pdf.splitTextToSize(entity.name, 90).slice(0, 2);
-  pdf.text(orgLines, pageWidth - 12, 14.5, { align: "right" });
+  pdf.setFontSize(8.5);
+  pdf.text(`Print date  ${formatPrintDate(generatedAt)}`, 12, y);
+
+  const chipX = drawStatusChip(pdf, pageWidth, y, status);
+  setText(pdf, MUTED);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  pdf.text("Performance Status", chipX - 2.5, y, { align: "right" });
+
+  return y + 6;
+}
+
+function drawListingPageHeader(
+  pdf: jsPDF,
+  pageWidth: number,
+  orgTitle: string,
+  generatedAt: Date,
+  status: OrgReportStatus,
+) {
+  setFill(pdf, NAVY);
+  pdf.rect(0, 0, pageWidth, 14, "F");
+  setText(pdf, WHITE);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(11);
+  pdf.text("Performance Report  ·  Staff Listing", 12, 6.5);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  const orgLine = pdf.splitTextToSize(orgTitle, pageWidth - 90)[0];
+  pdf.text(orgLine, 12, 11.2);
+  pdf.text(formatPrintDate(generatedAt), pageWidth - 12, 6.5, { align: "right" });
+  pdf.text(status, pageWidth - 12, 11.2, { align: "right" });
 }
 
 function drawKpiCard(
@@ -291,6 +400,108 @@ function drawRatingCurve(
   });
 }
 
+/** Draw wrapped text as a vertically and horizontally centered block inside a cell. */
+function drawCenteredCellText(
+  pdf: jsPDF,
+  text: string,
+  cellX: number,
+  cellY: number,
+  cellW: number,
+  cellH: number,
+  fontSize: number,
+  maxLines = 3,
+) {
+  const padding = 1.8;
+  const trimmed = text.trim();
+  if (!trimmed) return;
+
+  pdf.setFontSize(fontSize);
+  const lines = (pdf.splitTextToSize(trimmed, Math.max(4, cellW - padding * 2)) as string[])
+    .slice(0, maxLines);
+  if (lines.length === 0) return;
+
+  const lineH = fontSize * 0.42;
+  const blockH = lines.length * lineH;
+  let cursorY = cellY + (cellH - blockH) / 2 + lineH * 0.72;
+  const centerX = cellX + cellW / 2;
+
+  lines.forEach((line) => {
+    pdf.text(line, centerX, cursorY, { align: "center" });
+    cursorY += lineH;
+  });
+}
+
+function drawStackedCellLines(
+  pdf: jsPDF,
+  lines: Array<{ text: string; fontSize: number; style: "bold" | "normal" }>,
+  cellX: number,
+  cellY: number,
+  cellW: number,
+  cellH: number,
+) {
+  const prepared: Array<{ text: string; fontSize: number; style: "bold" | "normal"; lineH: number }> = [];
+  const padding = 1.6;
+
+  lines.forEach((line) => {
+    pdf.setFont("helvetica", line.style);
+    pdf.setFontSize(line.fontSize);
+    const wrapped = (
+      pdf.splitTextToSize(line.text, Math.max(4, cellW - padding * 2)) as string[]
+    ).slice(0, 2);
+    wrapped.forEach((text) => {
+      if (!text.trim()) return;
+      prepared.push({
+        text,
+        fontSize: line.fontSize,
+        style: line.style,
+        lineH: line.fontSize * 0.42,
+      });
+    });
+  });
+
+  if (prepared.length === 0) return;
+
+  const blockH = prepared.reduce((sum, line) => sum + line.lineH, 0);
+  let cursorY = cellY + (cellH - blockH) / 2;
+  const centerX = cellX + cellW / 2;
+
+  prepared.forEach((line) => {
+    pdf.setFont("helvetica", line.style);
+    pdf.setFontSize(line.fontSize);
+    pdf.text(line.text, centerX, cursorY + line.lineH * 0.72, { align: "center" });
+    cursorY += line.lineH;
+  });
+}
+
+function drawTableGrid(
+  pdf: jsPDF,
+  tableX: number,
+  tableY: number,
+  colWidths: number[],
+  rowHeights: number[],
+  lineColor: Rgb,
+  lineWidth: number,
+) {
+  const tableW = colWidths.reduce((sum, width) => sum + width, 0);
+  const tableH = rowHeights.reduce((sum, height) => sum + height, 0);
+
+  setDraw(pdf, lineColor);
+  pdf.setLineWidth(lineWidth);
+  pdf.rect(tableX, tableY, tableW, tableH);
+
+  let lineX = tableX;
+  for (let index = 0; index < colWidths.length - 1; index += 1) {
+    lineX += colWidths[index];
+    pdf.line(lineX, tableY, lineX, tableY + tableH);
+  }
+
+  let lineY = tableY;
+  for (let index = 0; index < rowHeights.length - 1; index += 1) {
+    lineY += rowHeights[index];
+    pdf.line(tableX, lineY, tableX + tableW, lineY);
+  }
+}
+
 function drawDistributionMatrix(
   pdf: jsPDF,
   x: number,
@@ -324,81 +535,275 @@ function drawDistributionMatrix(
   }
 
   const tableX = x + 5;
-  const tableY = y + 16;
+  const tableY = y + 17;
   const tableW = width - 10;
-  const tableH = height - 22;
-  const colCount = columns.length + 2;
-  const levelColW = Math.min(38, tableW * 0.28);
-  const dataColW = (tableW - levelColW) / (colCount - 1);
-  const rowH = Math.min(14, tableH / (rows.length + 1));
-  const headerH = rowH;
+  const tableH = height - 24;
+  const dataColCount = columns.length + 1;
+  const levelColW = Math.min(46, Math.max(32, tableW * 0.3));
+  const dataColW = (tableW - levelColW) / dataColCount;
+  const colWidths = [
+    levelColW,
+    ...columns.map(() => dataColW),
+    dataColW,
+  ];
+  const headerH = Math.max(9, Math.min(12, tableH * 0.14));
+  const rowH = (tableH - headerH) / rows.length;
+  const rowHeights = [headerH, ...rows.map(() => rowH)];
+  const usedTableH = headerH + rows.length * rowH;
+
+  const headerLabels = [
+    "Performance Level",
+    ...columns.map((col) => col.label),
+    "Total",
+  ];
 
   setFill(pdf, NAVY);
   pdf.rect(tableX, tableY, tableW, headerH, "F");
   setText(pdf, WHITE);
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(7);
-
-  const headerLabels = ["Performance Level", ...columns.map((col) => col.label), "Total"];
+  let headerX = tableX;
   headerLabels.forEach((label, index) => {
-    const cellX = tableX + (index === 0 ? 0 : levelColW + (index - 1) * dataColW);
-    const cellW = index === 0 ? levelColW : dataColW;
-    const wrapped = pdf.splitTextToSize(label, cellW - 2);
-    pdf.text(wrapped, cellX + cellW / 2, tableY + 4.2, { align: "center" });
+    drawCenteredCellText(
+      pdf,
+      label,
+      headerX,
+      tableY,
+      colWidths[index],
+      headerH,
+      index === 0 ? 7 : 6.5,
+      2,
+    );
+    headerX += colWidths[index];
   });
 
   rows.forEach((row, rowIndex) => {
     const rowY = tableY + headerH + rowIndex * rowH;
     const fill = rgbForLevel(row.rating, rowIndex);
+    let cellX = tableX;
+
     setFill(pdf, fill);
-    pdf.rect(tableX, rowY, tableW, rowH, "F");
-
-    setDraw(pdf, WHITE);
-    pdf.setLineWidth(0.15);
-    pdf.line(tableX, rowY, tableX + tableW, rowY);
-
+    pdf.rect(cellX, rowY, levelColW, rowH, "F");
     setText(pdf, WHITE);
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7.5);
-    const nameLines = pdf.splitTextToSize(row.rating, levelColW - 3);
-    pdf.text(nameLines, tableX + 2, rowY + rowH / 2 + 0.8, { baseline: "middle" });
+    drawCenteredCellText(pdf, row.rating, cellX, rowY, levelColW, rowH, 7.5, 3);
+    cellX += levelColW;
 
-    row.quartiles.forEach((cell, colIndex) => {
-      const cellX = tableX + levelColW + colIndex * dataColW;
+    row.quartiles.forEach((cell) => {
+      setFill(pdf, fill);
+      pdf.rect(cellX, rowY, dataColW, rowH, "F");
+      setText(pdf, WHITE);
       const countLabel =
         cell.count == null || cell.count === 0 ? "" : String(cell.count);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(9);
-      pdf.text(countLabel, cellX + dataColW / 2, rowY + (cell.sublabel ? rowH / 2 - 1.2 : rowH / 2 + 0.8), {
-        align: "center",
-        baseline: "middle",
-      });
-      if (cell.sublabel && countLabel) {
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(5.5);
-        const sub = pdf.splitTextToSize(cell.sublabel, dataColW - 2);
-        pdf.text(sub, cellX + dataColW / 2, rowY + rowH - 2.4, { align: "center" });
+      const sublabel = cell.sublabel?.trim() ?? "";
+      if (countLabel && sublabel) {
+        drawStackedCellLines(
+          pdf,
+          [
+            { text: countLabel, fontSize: 10, style: "bold" },
+            { text: sublabel, fontSize: 5.5, style: "normal" },
+          ],
+          cellX,
+          rowY,
+          dataColW,
+          rowH,
+        );
+      } else if (countLabel) {
+        pdf.setFont("helvetica", "bold");
+        drawCenteredCellText(pdf, countLabel, cellX, rowY, dataColW, rowH, 10, 1);
       }
+      cellX += dataColW;
     });
 
     setFill(pdf, NAVY);
-    pdf.rect(tableX + levelColW + columns.length * dataColW, rowY, dataColW, rowH, "F");
+    pdf.rect(cellX, rowY, dataColW, rowH, "F");
     setText(pdf, WHITE);
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(9);
     const totalLabel = row.rowTotal === 0 ? "" : String(row.rowTotal);
-    pdf.text(
-      totalLabel,
-      tableX + levelColW + columns.length * dataColW + dataColW / 2,
-      rowY + rowH / 2 + 0.8,
-      { align: "center", baseline: "middle" },
-    );
+    if (totalLabel) {
+      drawCenteredCellText(pdf, totalLabel, cellX, rowY, dataColW, rowH, 10, 1);
+    }
+  });
+
+  drawTableGrid(pdf, tableX, tableY, colWidths, rowHeights, WHITE, 0.35);
+  setDraw(pdf, NAVY);
+  pdf.setLineWidth(0.45);
+  pdf.rect(tableX, tableY, tableW, usedTableH);
+}
+
+type StaffColumn = {
+  key: keyof OrgReportStaffRow | "revisedSalaryLabel";
+  label: string;
+  width: number;
+  align: "left" | "center" | "right";
+};
+
+function staffColumns(includeSalary: boolean): StaffColumn[] {
+  if (includeSalary) {
+    return [
+      { key: "sapCode", label: "SAP Code", width: 28, align: "left" },
+      { key: "name", label: "Name", width: 52, align: "left" },
+      { key: "designation", label: "Designation", width: 50, align: "left" },
+      { key: "rating", label: "Rating", width: 36, align: "center" },
+      { key: "quartile", label: "Quartile", width: 32, align: "center" },
+      { key: "revisedSalaryLabel", label: "Revised Salary", width: 36, align: "right" },
+      { key: "status", label: "Status", width: 32, align: "center" },
+    ];
+  }
+
+  return [
+    { key: "sapCode", label: "SAP Code", width: 32, align: "left" },
+    { key: "name", label: "Name", width: 62, align: "left" },
+    { key: "designation", label: "Designation", width: 58, align: "left" },
+    { key: "rating", label: "Rating", width: 42, align: "center" },
+    { key: "quartile", label: "Quartile", width: 38, align: "center" },
+    { key: "status", label: "Status", width: 36, align: "center" },
+  ];
+}
+
+function cellValue(row: OrgReportStaffRow, column: StaffColumn): string {
+  if (column.key === "revisedSalaryLabel") {
+    return formatSalary(row.revisedSalary);
+  }
+  return String(row[column.key] ?? "—");
+}
+
+function drawStaffTableHeader(
+  pdf: jsPDF,
+  columns: StaffColumn[],
+  tableX: number,
+  tableY: number,
+  tableW: number,
+  headerH: number,
+) {
+  setFill(pdf, NAVY);
+  pdf.rect(tableX, tableY, tableW, headerH, "F");
+  setText(pdf, WHITE);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(7.5);
+
+  let x = tableX;
+  columns.forEach((column) => {
+    const textX =
+      column.align === "center"
+        ? x + column.width / 2
+        : column.align === "right"
+          ? x + column.width - 2
+          : x + 2;
+    pdf.text(column.label, textX, tableY + headerH / 2 + 1, {
+      align: column.align,
+      baseline: "middle",
+    });
+    x += column.width;
   });
 }
 
-export async function downloadOrgCalibrationReport(
+function drawStaffListingPages(
+  pdf: jsPDF,
   input: OrgCalibrationReportInput,
-): Promise<void> {
+  pageWidth: number,
+  pageHeight: number,
+) {
+  const columns = staffColumns(input.includeSalary);
+  const tableW = columns.reduce((sum, column) => sum + column.width, 0);
+  const tableX = (pageWidth - tableW) / 2;
+  const headerH = 8;
+  const rowH = 7;
+  const topY = 18;
+  const bottomY = pageHeight - 8;
+  const rowsPerPage = Math.max(1, Math.floor((bottomY - topY - headerH) / rowH));
+  const rows = input.staffRows;
+  const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+    pdf.addPage();
+    drawListingPageHeader(
+      pdf,
+      pageWidth,
+      input.orgTitle,
+      input.generatedAt,
+      input.completion.status,
+    );
+
+    const tableY = topY;
+    drawStaffTableHeader(pdf, columns, tableX, tableY, tableW, headerH);
+
+    const pageRows = rows.slice(
+      pageIndex * rowsPerPage,
+      (pageIndex + 1) * rowsPerPage,
+    );
+
+    if (pageRows.length === 0) {
+      setText(pdf, MUTED);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.text(
+        "No staff match the selected filters.",
+        pageWidth / 2,
+        tableY + headerH + 16,
+        { align: "center" },
+      );
+    }
+
+    pageRows.forEach((row, rowIndex) => {
+      const rowY = tableY + headerH + rowIndex * rowH;
+      if (rowIndex % 2 === 0) {
+        setFill(pdf, [248, 250, 252]);
+        pdf.rect(tableX, rowY, tableW, rowH, "F");
+      }
+
+      setDraw(pdf, LINE);
+      pdf.setLineWidth(0.15);
+      pdf.line(tableX, rowY + rowH, tableX + tableW, rowY + rowH);
+
+      let x = tableX;
+      columns.forEach((column) => {
+        const raw = cellValue(row, column);
+        const wrapped = pdf.splitTextToSize(raw, column.width - 3);
+        const display = Array.isArray(wrapped) ? wrapped[0] : wrapped;
+        const isStatus = column.key === "status";
+        if (isStatus) {
+          setText(pdf, row.status === "Completed" ? COMPLETED : IN_PROGRESS);
+          pdf.setFont("helvetica", "bold");
+        } else {
+          setText(pdf, INK);
+          pdf.setFont("helvetica", "normal");
+        }
+        pdf.setFontSize(7);
+        const textX =
+          column.align === "center"
+            ? x + column.width / 2
+            : column.align === "right"
+              ? x + column.width - 2
+              : x + 2;
+        pdf.text(display, textX, rowY + rowH / 2 + 0.6, {
+          align: column.align,
+          baseline: "middle",
+        });
+        x += column.width;
+      });
+    });
+
+    setDraw(pdf, LINE);
+    pdf.setLineWidth(0.25);
+    pdf.rect(tableX, tableY, tableW, headerH + pageRows.length * rowH);
+
+    const listingPage = pageIndex + 2;
+    const totalPages = pageCount + 1;
+    setText(pdf, SLATE);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(6.5);
+    pdf.text(
+      `Page ${listingPage} of ${totalPages}  ·  ${rows.length.toLocaleString("en-US")} staff`,
+      pageWidth / 2,
+      pageHeight - 4,
+      { align: "center" },
+    );
+  }
+}
+
+export async function buildOrgCalibrationReport(
+  input: OrgCalibrationReportInput,
+): Promise<BuiltOrgCalibrationReport> {
   const { default: jsPDF } = await import("jspdf");
   const pdf = new jsPDF({
     orientation: "landscape",
@@ -408,41 +813,31 @@ export async function downloadOrgCalibrationReport(
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const { entity, generatedAt, completion, calibrationData, ratingQuartileMatrix } =
-    input;
+  const {
+    orgTitle,
+    filterSummary,
+    generatedAt,
+    completion,
+    calibrationData,
+    ratingQuartileMatrix,
+  } = input;
 
   pdf.setProperties({
-    title: `Calibration Report — ${entity.name}`,
-    subject: "Performance Rating Curve and Distribution Matrix",
+    title: `Performance Report — ${orgTitle}`,
+    subject: "Performance Report with rating curve, distribution matrix, and staff listing",
     author: "University of Lahore PMS",
   });
 
-  drawHeader(pdf, pageWidth, entity);
+  const afterHeaderY = drawCoverHeader(
+    pdf,
+    pageWidth,
+    orgTitle,
+    filterSummary,
+    generatedAt,
+    completion.status,
+  );
 
-  const metaY = 26;
-  setText(pdf, MUTED);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(8);
-  pdf.text(`Generated: ${formatGeneratedAt(generatedAt)}`, 12, metaY);
-
-  const isComplete = completion.status === "Completed";
-  const statusColor = isComplete ? COMPLETED : IN_PROGRESS;
-  const statusLabel = isComplete ? "Completed" : "In-progress";
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(8);
-  const chipW = pdf.getTextWidth(statusLabel) + 8;
-  const chipX = pageWidth - 12 - chipW;
-  const chipY = metaY - 4.4;
-  setFill(pdf, statusColor);
-  pdf.roundedRect(chipX, chipY, chipW, 6.5, 1.2, 1.2, "F");
-  setText(pdf, WHITE);
-  pdf.text(statusLabel, chipX + chipW / 2, chipY + 4.4, { align: "center" });
-  setText(pdf, MUTED);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(8);
-  pdf.text("HR Alignment", chipX - 2.5, metaY, { align: "right" });
-
-  const kpiY = 31;
+  const kpiY = afterHeaderY;
   const kpiGap = 3;
   const kpiW = (pageWidth - 24 - kpiGap * 3) / 4;
   drawKpiCard(pdf, 12, kpiY, kpiW, "Staff in listing", String(completion.totalStaff));
@@ -471,8 +866,8 @@ export async function downloadOrgCalibrationReport(
     String(completion.pendingCount),
   );
 
-  const chartsY = 51;
-  const chartsH = pageHeight - chartsY - 12;
+  const chartsY = kpiY + 20;
+  const chartsH = pageHeight - chartsY - 10;
   const gap = 6;
   const chartW = (pageWidth - 24 - gap) / 2;
   drawRatingCurve(pdf, 12, chartsY, chartW, chartsH, calibrationData);
@@ -489,10 +884,37 @@ export async function downloadOrgCalibrationReport(
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(6.5);
   pdf.text(
-    "Status is Completed when every eligible employee in this organization has reached HR Alignment (Board Approval or later). Ineligible / N/A staff are excluded.",
+    "Performance Status is Completed when every eligible employee has reached HR Alignment (Board Approval or later). Ineligible / N/A staff are excluded from that status.",
     12,
     pageHeight - 4.5,
   );
+  pdf.text("Page 1", pageWidth - 12, pageHeight - 4.5, { align: "right" });
 
-  pdf.save(orgReportFileName(entity.name, generatedAt));
+  drawStaffListingPages(pdf, input, pageWidth, pageHeight);
+  stampPmsWatermarkOnAllPages(pdf);
+
+  const fileName = orgReportFileName(orgTitle, generatedAt);
+  const blob = pdf.output("blob");
+  return { blob, fileName };
+}
+
+export async function downloadOrgCalibrationReport(
+  input: OrgCalibrationReportInput,
+): Promise<void> {
+  const { blob, fileName } = await buildOrgCalibrationReport(input);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export function downloadReportBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }

@@ -26,6 +26,12 @@ import { ViewAsDropdown } from "@/app/components/layout/ViewAsDropdown";
 import { SignOutConfirmModal } from "@/app/components/layout/SignOutConfirmModal";
 import { useSidebar } from "@/app/components/layout/sidebar-context";
 import { isEmployeeRole } from "@/lib/auth/home-path";
+import formIcon from '@/public/icons8-form-80.png';
+import usersIcon from '@/public/icons8-users-64.png';
+import matricesIcon from '@/public/icons8-matrix-60.png';
+import levelsIcon from '@/public/icons8-organization-64.png';
+import reportsIcon from '@/public/icons8-process-48.png';
+import securityIcon from '@/public/icons8-security-shield-64.png';
 import {
   canAccessDashboardSubmissions,
   isAdminRole,
@@ -33,26 +39,27 @@ import {
 import { cn } from "@/lib/utils";
 import { useAdditionalAccess } from "@/app/queries/use-additional-access";
 import { type AdditionalAccessModule } from "@/types/additional-access";
+import Image from "next/image";
 
 const ADMIN_LINKS = [
   {
     href: "/dashboard/forms",
     label: "Forms",
-    icon: FileText,
+    icon: formIcon,
     match: (pathname: string) => pathname.startsWith("/dashboard/forms"),
     module: "FORMS" as AdditionalAccessModule | undefined,
   },
   {
     href: "/dashboard/users",
     label: "Users",
-    icon: Users,
+    icon: usersIcon,
     match: (pathname: string) => pathname.startsWith("/dashboard/users"),
     module: "USERS" as AdditionalAccessModule | undefined,
   },
   {
     href: "/dashboard/matrices-and-cycles",
     label: "Matrices and Cycles",
-    icon: Grid3X3,
+    icon: matricesIcon,
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/matrices-and-cycles"),
     module: "MATRICES_AND_CYCLES" as AdditionalAccessModule | undefined,
@@ -60,7 +67,7 @@ const ADMIN_LINKS = [
   {
     href: "/dashboard/entity-categories",
     label: "Organization Levels",
-    icon: Building2,
+    icon: levelsIcon,
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/entity-categories"),
     module: "ORGANIZATION_LEVELS" as AdditionalAccessModule | undefined,
@@ -68,7 +75,7 @@ const ADMIN_LINKS = [
   {
     href: "/dashboard/reports",
     label: "Process Status Summary",
-    icon: FileBarChart,
+    icon: reportsIcon,
     match: (pathname: string) => pathname.startsWith("/dashboard/reports"),
     module: undefined as AdditionalAccessModule | undefined,
   },
@@ -78,7 +85,7 @@ const SUPER_ADMIN_ONLY_LINKS = [
   {
     href: "/dashboard/security-events",
     label: "Security Events",
-    icon: Shield,
+    icon: securityIcon,
     match: (pathname: string) =>
       pathname.startsWith("/dashboard/security-events"),
   },
@@ -199,7 +206,7 @@ const Sidebar = () => {
                   title="My Forms"
                   className={navLinkClass(isMyForms)}
                 >
-                  <ClipboardList className="size-4 shrink-0" />
+                  <Image src={formIcon} alt="My Forms" width={24} height={24} />
                   {!collapsed ? "My Forms" : null}
                 </Link>
               </li>
@@ -225,7 +232,7 @@ const Sidebar = () => {
                             title={link.label}
                             className={navLinkClass(active)}
                           >
-                            <Icon className="size-4 shrink-0" />
+                            <Image src={Icon} alt={link.label} width={24} height={24} />
                           </Link>
                         );
                       })}
@@ -267,7 +274,7 @@ const Sidebar = () => {
                                     "pl-4",
                                   )}
                                 >
-                                  <Icon className="size-4 shrink-0" />
+                                  <Image src={Icon} alt={link.label} width={24} height={24} />
                                   {link.label}
                                 </Link>
                               </li>
@@ -301,7 +308,7 @@ const Sidebar = () => {
                   title="My Forms"
                   className={navLinkClass(isMyForms)}
                 >
-                  <ClipboardList className="size-4 shrink-0" />
+                  <Image src={formIcon} alt="My Forms" width={24} height={24} />
                   {!collapsed ? "My Forms" : null}
                 </Link>
               </li>
@@ -314,7 +321,7 @@ const Sidebar = () => {
                     title="Bulk Assessment Review"
                     className={navLinkClass(isBulkReview)}
                   >
-                    <TableProperties className="size-4 shrink-0" />
+                    <Image src={reportsIcon} alt="Bulk Assessment Review" width={24} height={24} />
                     {!collapsed ? "Bulk Assessment Review" : null}
                   </Link>
                 </li>
@@ -328,7 +335,7 @@ const Sidebar = () => {
                         className="flex justify-center py-2 text-secondary"
                         title="Administration"
                       >
-                        <Settings2 className="size-4" />
+                        <Image src={securityIcon} alt="Security Events" width={24} height={24} />
                       </div>
                       {adminLinks.map((link) => {
                         const Icon = link.icon;
@@ -341,7 +348,7 @@ const Sidebar = () => {
                             title={link.label}
                             className={navLinkClass(active)}
                           >
-                            <Icon className="size-4 shrink-0" />
+                            <Image src={Icon} alt={link.label} width={24} height={24} />
                           </Link>
                         );
                       })}
@@ -357,7 +364,7 @@ const Sidebar = () => {
                           isAdminRouteActive && "text-primary",
                         )}
                       >
-                        <Settings2 className="size-4 shrink-0" />
+                        <Image src={securityIcon} alt="Security Events" width={24} height={24} />
                         <span className="flex-1">Administration</span>
                         <ChevronDown
                           className={cn(
@@ -383,7 +390,7 @@ const Sidebar = () => {
                                     "pl-4",
                                   )}
                                 >
-                                  <Icon className="size-4 shrink-0" />
+                                  <Image src={Icon} alt={link.label} width={24} height={24} />
                                   {link.label}
                                 </Link>
                               </li>

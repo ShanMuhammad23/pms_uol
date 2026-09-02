@@ -1,3 +1,6 @@
+import { getRevisedSalary } from "@/app/helpers/compensation-worksheet";
+import { ENTITY_FILTER_LEVELS } from "@/app/helpers/dashboard-entity-filters";
+import { FORM_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
 import { EMPTY_MASTER_FILTER_STATE } from "@/app/helpers/dashboard-master-filters";
 import {
   isHrAlignmentAligned,
@@ -16,7 +19,7 @@ export const ORG_LEVEL_LABELS: Record<string, string> = {
   C3: "ORG Level 3",
 };
 
-export type OrgReportStatus = "Completed" | "In-progress";
+export type OrgReportStatus = "Completed" | "In progress";
 
 export type OrgReportCompletion = {
   status: OrgReportStatus;
@@ -26,58 +29,115 @@ export type OrgReportCompletion = {
   pendingCount: number;
 };
 
+export type OrgReportStaffRow = {
+  sapCode: string;
+  name: string;
+  designation: string;
+  rating: string;
+  quartile: string;
+  revisedSalary: number | null;
+  status: OrgReportStatus;
+};
+
 export function orgLevelLabel(categoryCode: string): string {
   return ORG_LEVEL_LABELS[categoryCode] ?? categoryCode;
 }
 
-export function formatOrgEntityOptionLabel(entity: EntityRecord): string {
-  const level = orgLevelLabel(entity.categoryCode);
-  const parent = entity.parentName?.trim();
-  const count =
-    entity.staffCount > 0
-      ? ` (${entity.staffCount.toLocaleString("en-US")})`
-      : "";
-  if (parent) {
-    return `${level} — ${entity.name} · ${parent}${count}`;
-  }
-  return `${level} — ${entity.name}${count}`;
+export function cloneDashboardFilterParams(
+  filters?: DashboardFilterParams | null,
+): DashboardFilterParams {
+  const source = filters ?? emptyDashboardFilterParams();
+  return {
+    searchQuery: source.searchQuery,
+    category0EntityIds: source.category0EntityIds
+      ? [...source.category0EntityIds]
+      : null,
+    category1EntityIds: source.category1EntityIds
+      ? [...source.category1EntityIds]
+      : null,
+    category2EntityIds: source.category2EntityIds
+      ? [...source.category2EntityIds]
+      : null,
+    roleCategories: source.roleCategories ? [...source.roleCategories] : null,
+    designations: source.designations ? [...source.designations] : null,
+    formStates: source.formStates ? [...source.formStates] : null,
+    cardFilter: source.cardFilter,
+  };
 }
 
-export function sortOrgEntitiesForPicker(
+function namesForEntityIds(
+  ids: number[] | null,
   entities: EntityRecord[],
-): EntityRecord[] {
-  const rank = (code: string) => {
-    const parsed = Number(String(code).replace(/^C/i, ""));
-    return Number.isFinite(parsed) ? parsed : 99;
-  };
+): string[] {
+  if (!ids || ids.length === 0) return [];
+  const byId = new Map(entities.map((entity) => [entity.id, entity.name]));
+  return ids
+    .map((id) => byId.get(id)?.trim())
+    .filter((name): name is string => Boolean(name));
+}
 
-  return [...entities].sort((left, right) => {
-    const byLevel = rank(left.categoryCode) - rank(right.categoryCode);
-    if (byLevel !== 0) return byLevel;
-    return left.name.localeCompare(right.name, undefined, {
-      numeric: true,
-      sensitivity: "base",
-    });
-  });
+function joinNames(names: string[], limit = 3): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0];
+  if (names.length <= limit) return names.join(", ");
+  return `${names.slice(0, limit).join(", ")} + ${names.length - limit} more`;
 }
 
 /**
- * Maps a selected org node onto the same entity filters used by the staff listing.
- * Any category slot works for subtree matching; we pick the slot that matches
- * the node's level so C0/C1/C2 filters stay consistent with the dashboard.
+ * Big heading for the report: the most specific org selection, or UOL when
+ * the report is unscoped.
  */
-export function dashboardFiltersForOrgEntity(
-  entity: EntityRecord,
-): DashboardFilterParams {
-  const filters = emptyDashboardFilterParams();
-  if (entity.categoryCode === "C0") {
-    filters.category0EntityIds = [entity.id];
-  } else if (entity.categoryCode === "C1") {
-    filters.category1EntityIds = [entity.id];
-  } else {
-    filters.category2EntityIds = [entity.id];
+export function resolveReportOrgTitle(
+  filters: DashboardFilterParams,
+  entities: EntityRecord[],
+): string {
+  const level2 = namesForEntityIds(filters.category2EntityIds, entities);
+  if (level2.length > 0) return joinNames(level2);
+
+  const level1 = namesForEntityIds(filters.category1EntityIds, entities);
+  if (level1.length > 0) return joinNames(level1);
+
+  const level0 = namesForEntityIds(filters.category0EntityIds, entities);
+  if (level0.length > 0) return joinNames(level0);
+
+  return "University of Lahore";
+}
+
+export function formatReportFilterSummary(
+  filters: DashboardFilterParams,
+  entities: EntityRecord[],
+): string {
+  const parts: string[] = [];
+  const levelNames = [
+    namesForEntityIds(filters.category0EntityIds, entities),
+    namesForEntityIds(filters.category1EntityIds, entities),
+    namesForEntityIds(filters.category2EntityIds, entities),
+  ];
+
+  ENTITY_FILTER_LEVELS.forEach((level, index) => {
+    const names = levelNames[index];
+    if (names.length > 0) {
+      parts.push(`${level.label}: ${joinNames(names)}`);
+    }
+  });
+
+  if (filters.roleCategories && filters.roleCategories.length > 0) {
+    parts.push(`Role Category: ${joinNames(filters.roleCategories)}`);
   }
-  return filters;
+  if (filters.designations && filters.designations.length > 0) {
+    parts.push(`Designation: ${joinNames(filters.designations)}`);
+  }
+  if (filters.formStates && filters.formStates.length > 0) {
+    parts.push(
+      `Form Status: ${joinNames(
+        filters.formStates.map(
+          (state) => FORM_STATE_CONFIG[state]?.label ?? state,
+        ),
+      )}`,
+    );
+  }
+
+  return parts.join("  ·  ");
 }
 
 /**
@@ -92,7 +152,7 @@ export function resolveOrgReportCompletion(
   const alignedCount = eligible.filter(isHrAlignmentAligned).length;
   const pendingCount = eligible.length - alignedCount;
   const status: OrgReportStatus =
-    eligible.length > 0 && pendingCount === 0 ? "Completed" : "In-progress";
+    eligible.length > 0 && pendingCount === 0 ? "Completed" : "In progress";
 
   return {
     status,
@@ -103,12 +163,32 @@ export function resolveOrgReportCompletion(
   };
 }
 
+export function buildOrgReportStaffRows(
+  submissions: FormSubmissionListItem[],
+): OrgReportStaffRow[] {
+  return [...submissions]
+    .sort((left, right) =>
+      left.employeeName.localeCompare(right.employeeName, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    )
+    .map((row) => ({
+      sapCode: row.employeeId?.trim() || "—",
+      name: row.employeeName?.trim() || "—",
+      designation: row.designation?.trim() || "—",
+      rating: row.performanceLevelName?.trim() || "—",
+      quartile: row.quartileName?.trim() || "—",
+      revisedSalary: getRevisedSalary(row),
+      status: isHrAlignmentAligned(row) ? "Completed" : "In progress",
+    }));
+}
+
 const ORG_REPORT_PAGE_SIZE = 100000;
 
 export async function fetchOrgReportSubmissions(
-  entity: EntityRecord,
+  filters: DashboardFilterParams,
 ): Promise<FormSubmissionListItem[]> {
-  const filters = dashboardFiltersForOrgEntity(entity);
   const first = await fetchFormSubmissionsPage({
     page: 1,
     pageSize: ORG_REPORT_PAGE_SIZE,
@@ -142,5 +222,5 @@ export function orgReportFileName(orgName: string, generatedAt: Date): string {
       .replace(/^-+|-+$/g, "")
       .slice(0, 60) || "org";
   const date = generatedAt.toISOString().slice(0, 10);
-  return `calibration-report-${slug}-${date}.pdf`;
+  return `performance-report-${slug}-${date}.pdf`;
 }
