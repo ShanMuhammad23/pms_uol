@@ -18,7 +18,7 @@ import { getFormTemplateById } from "@/lib/queries/forms";
 import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { deleteFormAttachmentFile } from "@/lib/uploads/form-attachments";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
-import { getQuestionRatingScale, resolveAnswerScore } from "@/app/helpers/form-rating-scoring";
+import { getQuestionRatingScale, hydrateAnswerPoints, resolveAnswerScore, resolveDisplayedAnswerPoints, resolveDisplayedRatingValue, usesRatingScore } from "@/app/helpers/form-rating-scoring";
 import { applyCompensationWorksheet } from "@/app/helpers/compensation-worksheet";
 import type {
   EmployeeFormAnswerAttachment,
@@ -1168,14 +1168,34 @@ export async function getBulkReviewQuestionData(
     for (const meta of submissionMeta) {
       // Self-assessment answers
       const selfAns = getAnswer(meta.id, q.id, meta.employeeUserId);
-      const selfScore = selfAns?.points_earned ?? null;
       const selfRating = selfAns?.rating_value ?? null;
+      const selfScore = selfAns
+        ? resolveDisplayedAnswerPoints(
+            q,
+            template.ratingBased,
+            template.ratingScales,
+            {
+              pointsEarned: selfAns.points_earned,
+              ratingValue: selfAns.rating_value,
+            },
+          )
+        : null;
       const selfRemarks = selfAns?.remarks ?? null;
 
       // Reviewer (manager) answers
       const mgrAns = getAnswer(meta.id, q.id, reviewerUserId);
-      const managerScore = mgrAns?.points_earned ?? null;
       const managerRating = mgrAns?.rating_value ?? null;
+      const managerScore = mgrAns
+        ? resolveDisplayedAnswerPoints(
+            q,
+            template.ratingBased,
+            template.ratingScales,
+            {
+              pointsEarned: mgrAns.points_earned,
+              ratingValue: mgrAns.rating_value,
+            },
+          )
+        : null;
       const managerRemarks = mgrAns?.remarks ?? null;
 
       // Manager 1 answers - used as fallback for Manager 2 drafts, mirroring
@@ -1189,8 +1209,18 @@ export async function getBulkReviewQuestionData(
         meta.manager1UserId !== reviewerUserId
       ) {
         const m1Ans = getAnswer(meta.id, q.id, meta.manager1UserId);
-        manager1Score = m1Ans?.points_earned ?? null;
         manager1Rating = m1Ans?.rating_value ?? null;
+        manager1Score = m1Ans
+          ? resolveDisplayedAnswerPoints(
+              q,
+              template.ratingBased,
+              template.ratingScales,
+              {
+                pointsEarned: m1Ans.points_earned,
+                ratingValue: m1Ans.rating_value,
+              },
+            )
+          : null;
         manager1Remarks = m1Ans?.remarks ?? null;
       }
 
@@ -1307,6 +1337,14 @@ export async function saveBulkReviewQuestionScores(
       typeof entry.remarks === "string"
         ? entry.remarks.trim() || null
         : null;
+
+    if (
+      resolved.ratingValue == null &&
+      !(resolved.pointsEarned > 0) &&
+      !remarks
+    ) {
+      continue;
+    }
 
     validEntries.push({
       submissionId: entry.submissionId,
@@ -1504,6 +1542,16 @@ export async function saveManagerReviewAnswers(
         ? answer.remarks.trim() || null
         : null;
 
+    // Never persist an empty score row — writing 0/null overwrites
+    // ratings the manager already saved (e.g. after a draft reset).
+    if (
+      resolved.ratingValue == null &&
+      !(resolved.pointsEarned > 0) &&
+      !remarks
+    ) {
+      continue;
+    }
+
     validAnswers.push({
       questionId: answer.questionId,
       pointsEarned: resolved.pointsEarned,
@@ -1565,6 +1613,51 @@ export async function saveManagerReviewAnswers(
   return getAnswersForSubmission(appraisalId, reviewerUserId);
 }
 
+async function assertRequiredManagerRatingsComplete(
+  appraisalId: number,
+  filledById: number,
+  templateId: number,
+): Promise<void> {
+  const template = await getFormTemplateById(templateId);
+  if (!template) {
+    return;
+  }
+  const answers = await getAnswersForSubmission(appraisalId, filledById);
+  const byQuestion = new Map(answers.map((answer) => [answer.questionId, answer]));
+
+  for (const question of flattenAllQuestions(template)) {
+    if (!isScoredQuestion(question) || !question.isRequired) {
+      continue;
+    }
+    const answer = byQuestion.get(question.id);
+    if (usesRatingScore(question, template.ratingBased, template.ratingScales)) {
+      const rating = resolveDisplayedRatingValue(
+        question,
+        template.ratingBased,
+        template.ratingScales,
+        answer,
+      );
+      if (rating == null) {
+        throw new FormSubmissionError(
+          `Select a rating for "${question.questionText.slice(0, 80)}".`,
+        );
+      }
+      continue;
+    }
+    const points = resolveDisplayedAnswerPoints(
+      question,
+      template.ratingBased,
+      template.ratingScales,
+      answer,
+    );
+    if (!(points > 0)) {
+      throw new FormSubmissionError(
+        `Enter a score for "${question.questionText.slice(0, 80)}".`,
+      );
+    }
+  }
+}
+
 export async function approveManagerReview(appraisalId: number): Promise<{
   managerLevel: number;
   status: AppraisalStatus;
@@ -1572,11 +1665,13 @@ export async function approveManagerReview(appraisalId: number): Promise<{
   const current = await db.query<{
     status: AppraisalStatus;
     manager_level: number;
+    template_id: string | null;
     manager_1_user_id: string | null;
     manager_2_user_id: string | null;
   }>(
     `SELECT ap.status,
             ap.manager_level,
+            ap.template_id::text,
             u.head_id::text AS manager_1_user_id,
             u.manager_2_id::text AS manager_2_user_id
      FROM appraisals ap
@@ -1594,6 +1689,20 @@ export async function approveManagerReview(appraisalId: number): Promise<{
     throw new FormSubmissionError(
       "Manager review is not open for this submission.",
       409,
+    );
+  }
+
+  const managerLevel = row.manager_level ?? 1;
+  const filledById =
+    managerLevel === 2
+      ? (row.manager_2_user_id ? Number(row.manager_2_user_id) : null)
+      : (row.manager_1_user_id ? Number(row.manager_1_user_id) : null);
+  const templateId = row.template_id ? Number(row.template_id) : null;
+  if (filledById != null && templateId != null) {
+    await assertRequiredManagerRatingsComplete(
+      appraisalId,
+      filledById,
+      templateId,
     );
   }
 
@@ -1872,10 +1981,25 @@ export async function getFormSubmissionById(
     sections,
     rootQuestions,
     questions,
-    answers,
-    managerAnswers,
-    manager1Answers,
-    manager2Answers,
+    answers: hydrateAnswerPoints(answers, questions, ratingBased, ratingScales),
+    managerAnswers: hydrateAnswerPoints(
+      managerAnswers,
+      questions,
+      ratingBased,
+      ratingScales,
+    ),
+    manager1Answers: hydrateAnswerPoints(
+      manager1Answers,
+      questions,
+      ratingBased,
+      ratingScales,
+    ),
+    manager2Answers: hydrateAnswerPoints(
+      manager2Answers,
+      questions,
+      ratingBased,
+      ratingScales,
+    ),
     canEditManagerReview: Boolean(options?.canEditManagerReview),
     canEditHrReview: Boolean(options?.canEditHrReview),
     isAssignedManagerForCurrentLevel: Boolean(

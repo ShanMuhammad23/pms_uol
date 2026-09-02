@@ -1,5 +1,6 @@
 "use client";
 
+import { formatScoreValue } from "@/app/helpers/form-rating-scoring";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,10 +63,10 @@ export default function AssessmentSummaryFooter({
                 ) : null}
                 {showMarks ? (
                   <p className="mt-1 text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
-                    {entry.awardedMarks}
+                    {formatScoreValue(entry.awardedMarks)}
                     <span className="text-sm font-medium text-slate-400 dark:text-slate-500">
                       {" "}
-                      / {entry.totalMarks}
+                      / {formatScoreValue(entry.totalMarks)}
                     </span>
                   </p>
                 ) : null}

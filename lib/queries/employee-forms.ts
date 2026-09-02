@@ -36,6 +36,7 @@ import { APPRAISAL_STATUSES, flattenAllQuestions } from "@/types/forms";
 import {
   resolveAnswerScore,
   usesRatingScore,
+  hydrateAnswerPoints,
 } from "@/app/helpers/form-rating-scoring";
 
 function getTemplateQuestions(template: FormTemplateRecord): QuestionRecord[] {
@@ -699,19 +700,23 @@ export async function getEmployeeFormDetail(
   const selfAssessmentEnabled = matchedAssignment?.selfAssessmentEnabled ?? template.selfAssessmentEnabled;
 
   const appraisal = await getAppraisalForUserTemplate(userId, templateId);
-  const answers = appraisal
+  const loadedAnswers = appraisal
     ? await getAnswersForAppraisal(Number(appraisal.id), userId)
     : [];
+  const answers = hydrateAnswerPoints(
+    loadedAnswers,
+    getTemplateQuestions(template),
+    template.ratingBased,
+    template.ratingScales,
+  );
 
-  const normalizedAnswers = answers.map((answer) => {
-    const normalized = normalizeAnswer(template, answer);
-    return {
+  const rawScore = calculateRawScore(
+    template,
+    answers.map((answer) => ({
       questionId: answer.questionId,
-      pointsEarned: normalized.pointsEarned,
-    };
-  });
-
-  const rawScore = calculateRawScore(template, normalizedAnswers);
+      pointsEarned: answer.pointsEarned,
+    })),
+  );
   const maxRawScore = calculateMaxRawScore(template);
 
   const eligibilityCtx = await getUserAssessmentEligibilityContext(userId);
@@ -755,9 +760,7 @@ export async function getEmployeeFormDetail(
     status: resolveFormStatus(appraisal, answers.length),
     submittedAt: appraisal?.submitted_at ?? null,
     answers,
-    rawScore: appraisal?.submitted_at
-      ? Number(appraisal.system_raw_score)
-      : rawScore,
+    rawScore,
     maxRawScore,
     selfAssessmentEnabled,
     assessmentEligibility: eligibility.assessmentEligibility,

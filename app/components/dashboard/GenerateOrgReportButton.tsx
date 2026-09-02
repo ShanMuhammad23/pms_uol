@@ -615,11 +615,7 @@ function GenerateOrgReportModal({
               <div className="mt-4 min-h-80 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950">
                 {isGenerating ? (
                   <div className="flex h-80 flex-col items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
-                    <div role="status" className="relative animate-spin w-4 h-4 rounded-full bg-red-500 mb-6">
-                      <div className="absolute left-[-1.5rem] w-4 h-4 bg-slate-900 rounded-full dark:bg-slate-50"></div>
-                      <div className="absolute right-[-1.5rem] w-4 h-4 bg-slate-900 rounded-full dark:bg-slate-50"></div>
-                      <span className="sr-only">Loading…</span>
-                    </div>
+                    <Image src='/Ai-powered marketing tools abstract.svg' alt='Loading' width={260} height={120} />
                     <p className="text-xs font-medium">Building report preview…</p>
                   </div>
                 ) : previewUrl ? (
@@ -630,7 +626,7 @@ function GenerateOrgReportModal({
                   />
                 ) : (
                   <div className="flex h-80 flex-col items-center justify-center gap-1 px-6 text-center">
-                    <Image src='/icons8-preview-64.png' alt='Preview' width={64} height={64} />
+                    <Image src='/Business Grow Lottie Animation.svg' alt='Preview' width={120} height={64} />
                     <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
                       Preview the report before downloading
                     </p>

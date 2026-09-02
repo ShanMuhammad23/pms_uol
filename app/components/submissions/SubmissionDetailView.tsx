@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ElementType,
 } from "react";
@@ -20,10 +21,17 @@ import {
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
+  formatScoreValue,
   getQuestionRatingScale,
+  parseDraftScoreAnswer,
+  resolveDisplayedAnswerPoints,
+  resolveDisplayedRatingValue,
   usesRatingScore,
 } from "@/app/helpers/form-rating-scoring";
-import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
+import {
+  AnswerScoreReadout,
+  RatingScoreField,
+} from "@/app/components/forms/RatingScoreField";
 import {
   APPRAISAL_STATUS_LABELS,
   type AppraisalStatus,
@@ -78,6 +86,34 @@ function emptyManagerDraft(): ManagerDraft {
   return { pointsEarned: "", ratingValue: "", remarks: "" };
 }
 
+function managerDraftHasInput(draft: ManagerDraft): boolean {
+  return (
+    draft.ratingValue !== "" ||
+    (draft.pointsEarned !== "" && Number(draft.pointsEarned) > 0) ||
+    Boolean(draft.remarks.trim())
+  );
+}
+
+function mergeManagerDraftMaps(
+  current: Map<number, ManagerDraft>,
+  incoming: Map<number, ManagerDraft>,
+): Map<number, ManagerDraft> {
+  if (current.size === 0) {
+    return incoming;
+  }
+  const next = new Map(incoming);
+  for (const [questionId, draft] of current) {
+    if (!managerDraftHasInput(draft)) {
+      continue;
+    }
+    const saved = next.get(questionId);
+    if (!saved || !managerDraftHasInput(saved)) {
+      next.set(questionId, draft);
+    }
+  }
+  return next;
+}
+
 function cloneManagerDraft(draft: ManagerDraft): ManagerDraft {
   return {
     pointsEarned: draft.pointsEarned,
@@ -94,6 +130,32 @@ function ratingValueFromDraft(draft: ManagerDraft | undefined): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function answersFromManagerDrafts(
+  questions: QuestionRecord[],
+  drafts: Map<number, ManagerDraft>,
+) {
+  return questions.filter(isScoredQuestion).map((question) => {
+    const draft = drafts.get(question.id);
+    return {
+      questionId: question.id,
+      pointsEarned:
+        draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+      ratingValue: ratingValueFromDraft(draft),
+      remarks: draft?.remarks?.trim() || null,
+    };
+  });
+}
+
+function savedManagerAnswersPatch(
+  managerLevel: number | null | undefined,
+  managerAnswers: EmployeeFormAnswerRecord[],
+) {
+  if ((managerLevel ?? 1) === 2) {
+    return { managerAnswers, manager2Answers: managerAnswers };
+  }
+  return { managerAnswers, manager1Answers: managerAnswers };
+}
+
 function ManagerScoreEditor({
   question,
   ratingBased,
@@ -101,6 +163,7 @@ function ManagerScoreEditor({
   draft,
   onChange,
   inputClassName,
+  tone = "violet",
 }: {
   question: QuestionRecord;
   ratingBased: boolean;
@@ -108,6 +171,7 @@ function ManagerScoreEditor({
   draft: ManagerDraft;
   onChange: (patch: Partial<ManagerDraft>) => void;
   inputClassName: string;
+  tone?: "violet" | "indigo";
 }) {
   const scale = getQuestionRatingScale(question, ratingScales);
   if (usesRatingScore(question, ratingBased, ratingScales) && scale) {
@@ -116,6 +180,7 @@ function ManagerScoreEditor({
         scale={scale}
         weight={question.totalMarks}
         ratingValue={draft.ratingValue}
+        tone={tone}
         onRatingChange={(ratingValue, pointsEarned) =>
           onChange({ ratingValue, pointsEarned })
         }
@@ -225,6 +290,8 @@ function buildManagerDraftMap(
   employeeAnswers: EmployeeFormAnswerRecord[],
   manager1Answers?: EmployeeFormAnswerRecord[],
   managerLevel?: number,
+  ratingBased = false,
+  ratingScales: FormRatingScaleRecord[] = [],
 ): Map<number, ManagerDraft> {
   const employeeMap = new Map(
     employeeAnswers.map((answer) => [answer.questionId, answer]),
@@ -248,16 +315,29 @@ function buildManagerDraftMap(
     // they disagree with: Manager 1 ← self-assessment; Manager 2 ← Manager 1,
     // then self-assessment. HOD-only questions have no employee answer.
     const fallbackSource =
-      managerLevel === 2 ? (manager1 ?? employee) : employee;
-    const points =
-      manager?.pointsEarned ?? fallbackSource?.pointsEarned ?? undefined;
-    const ratingValue =
-      manager?.ratingValue ?? fallbackSource?.ratingValue ?? undefined;
+      managerLevel === 2 ? (manager1 ?? employee) : (employee ?? manager1);
+    const source = manager ?? fallbackSource;
     const remarks = manager?.remarks ?? fallbackSource?.remarks ?? "";
+    const displayedRating = source
+      ? resolveDisplayedRatingValue(
+          question,
+          ratingBased,
+          ratingScales,
+          source,
+        )
+      : null;
+    const computedPoints = source
+      ? resolveDisplayedAnswerPoints(
+          question,
+          ratingBased,
+          ratingScales,
+          source,
+        )
+      : undefined;
 
     drafts.set(question.id, {
-      pointsEarned: points === undefined ? "" : String(points),
-      ratingValue: ratingValue === undefined ? "" : String(ratingValue),
+      pointsEarned: computedPoints === undefined ? "" : String(computedPoints),
+      ratingValue: displayedRating == null ? "" : String(displayedRating),
       remarks: remarks ?? "",
     });
   }
@@ -484,6 +564,13 @@ export default function SubmissionDetailView({
     manager2: string;
   }>({ manager1: "", manager2: "" });
 
+  const managerDraftsRef = useRef(managerDrafts);
+  managerDraftsRef.current = managerDrafts;
+  const manager1OverallRemarksRef = useRef(manager1OverallRemarks);
+  manager1OverallRemarksRef.current = manager1OverallRemarks;
+  const manager2OverallRemarksRef = useRef(manager2OverallRemarks);
+  manager2OverallRemarksRef.current = manager2OverallRemarks;
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["form-submission", submissionId],
     queryFn: () => fetchFormSubmission(submissionId),
@@ -493,17 +580,19 @@ export default function SubmissionDetailView({
   if (data !== prevSubmissionData) {
     setPrevSubmissionData(data);
     if (data) {
-      const drafts = buildManagerDraftMap(
+      const incoming = buildManagerDraftMap(
         data.questions,
         data.managerAnswers,
         data.answers,
         data.manager1Answers,
         data.managerLevel ?? undefined,
+        data.ratingBased,
+        data.ratingScales ?? [],
       );
-      setManagerDrafts(drafts);
+      setManagerDrafts((current) => mergeManagerDraftMaps(current, incoming));
       setInitialDraftsSnapshot(
         new Map(
-          [...drafts.entries()].map(([k, v]) => [
+          [...incoming.entries()].map(([k, v]) => [
             k,
             cloneManagerDraft(v),
           ]),
@@ -523,21 +612,15 @@ export default function SubmissionDetailView({
         throw new Error("Submission not loaded.");
       }
 
-      const answers = data.questions
-        .filter(isScoredQuestion)
-        .map((question) => {
-          const draft = managerDrafts.get(question.id);
-          return {
-            questionId: question.id,
-            pointsEarned:
-              draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
-            ratingValue: ratingValueFromDraft(draft),
-            remarks: draft?.remarks?.trim() || null,
-          };
-        });
+      const answers = answersFromManagerDrafts(
+        data.questions,
+        managerDraftsRef.current,
+      );
 
       const overallRemarks =
-        currentManagerLevel === 2 ? manager2OverallRemarks : manager1OverallRemarks;
+        (data.managerLevel ?? 1) === 2
+          ? manager2OverallRemarksRef.current
+          : manager1OverallRemarksRef.current;
 
       return saveManagerReview(submissionId, answers, overallRemarks);
     },
@@ -545,9 +628,13 @@ export default function SubmissionDetailView({
       setSaveMessage("Manager review saved.");
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
+        const managerLevel =
+          "managerLevel" in current
+            ? Number((current as { managerLevel?: number }).managerLevel ?? 1)
+            : 1;
         return {
           ...current,
-          managerAnswers: result.managerAnswers,
+          ...savedManagerAnswersPatch(managerLevel, result.managerAnswers),
           ...(result.manager1OverallRemarks !== undefined
             ? { manager1OverallRemarks: result.manager1OverallRemarks }
             : {}),
@@ -578,21 +665,18 @@ export default function SubmissionDetailView({
 
   const approveMutation = useMutation({
     mutationFn: async () => {
-      if (data?.canEditManagerReview) {
-        const answers = data.questions
-          .filter(isScoredQuestion)
-          .map((question) => {
-            const draft = managerDrafts.get(question.id);
-            return {
-              questionId: question.id,
-              pointsEarned:
-                draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
-              ratingValue: ratingValueFromDraft(draft),
-              remarks: draft?.remarks?.trim() || null,
-            };
-          });
+      if (!data) {
+        throw new Error("Submission not loaded.");
+      }
+      if (data.canEditManagerReview) {
+        const answers = answersFromManagerDrafts(
+          data.questions,
+          managerDraftsRef.current,
+        );
         const overallRemarks =
-          currentManagerLevel === 2 ? manager2OverallRemarks : manager1OverallRemarks;
+          (data.managerLevel ?? 1) === 2
+            ? manager2OverallRemarksRef.current
+            : manager1OverallRemarksRef.current;
         await saveManagerReview(submissionId, answers, overallRemarks);
       }
 
@@ -609,6 +693,9 @@ export default function SubmissionDetailView({
           canEditManagerReview: false,
         };
       });
+      queryClient.invalidateQueries({
+        queryKey: ["form-submission", submissionId],
+      });
       invalidateStaffListingQueries(queryClient);
     },
     onError: (mutationError: Error) => {
@@ -622,18 +709,10 @@ export default function SubmissionDetailView({
         throw new Error("Submission not loaded.");
       }
 
-      const answers = data.questions
-        .filter(isScoredQuestion)
-        .map((question) => {
-          const draft = managerDrafts.get(question.id);
-          return {
-            questionId: question.id,
-            pointsEarned:
-              draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
-            ratingValue: ratingValueFromDraft(draft),
-            remarks: draft?.remarks?.trim() || null,
-          };
-        });
+      const answers = answersFromManagerDrafts(
+        data.questions,
+        managerDraftsRef.current,
+      );
 
       return saveHrReview(submissionId, answers);
     },
@@ -641,9 +720,13 @@ export default function SubmissionDetailView({
       setSaveMessage("HR review saved.");
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
+        const managerLevel =
+          "managerLevel" in current
+            ? Number((current as { managerLevel?: number }).managerLevel ?? 1)
+            : 1;
         return {
           ...current,
-          managerAnswers: result.managerAnswers,
+          ...savedManagerAnswersPatch(managerLevel, result.managerAnswers),
         };
       });
       setInitialDraftsSnapshot(
@@ -663,18 +746,10 @@ export default function SubmissionDetailView({
   const hrApproveMutation = useMutation({
     mutationFn: async () => {
       if (data?.canEditHrReview) {
-        const answers = data.questions
-          .filter(isScoredQuestion)
-          .map((question) => {
-            const draft = managerDrafts.get(question.id);
-            return {
-              questionId: question.id,
-              pointsEarned:
-                draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
-              ratingValue: ratingValueFromDraft(draft),
-              remarks: draft?.remarks?.trim() || null,
-            };
-          });
+        const answers = answersFromManagerDrafts(
+          data.questions,
+          managerDraftsRef.current,
+        );
         await saveHrReview(submissionId, answers);
       }
 
@@ -693,6 +768,9 @@ export default function SubmissionDetailView({
           status: result.status,
           canEditHrReview: false,
         };
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["form-submission", submissionId],
       });
       invalidateStaffListingQueries(queryClient);
     },
@@ -735,6 +813,17 @@ export default function SubmissionDetailView({
   const answerMap = useMemo(
     () => new Map(data?.answers.map((answer) => [answer.questionId, answer])),
     [data?.answers],
+  );
+
+  const managerAnswerMap = useMemo(
+    () =>
+      new Map(
+        (data?.managerAnswers ?? []).map((answer) => [
+          answer.questionId,
+          answer,
+        ]),
+      ),
+    [data?.managerAnswers],
   );
 
   const manager1AnswerMap = useMemo(
@@ -882,17 +971,39 @@ export default function SubmissionDetailView({
       "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   };
 
-  const selfTotal = data.answers.reduce((sum, a) => sum + a.pointsEarned, 0);
+  const selfTotal = data.questions.reduce((sum, question) => {
+    if (!isScoredQuestion(question)) return sum;
+    if (selfAssessmentEnabled && !question.selfAssessmentEnabled) return sum;
+    if (!selfAssessmentEnabled) return sum;
+    return (
+      sum +
+      resolveDisplayedAnswerPoints(
+        question,
+        data.ratingBased,
+        data.ratingScales,
+        answerMap.get(question.id),
+      )
+    );
+  }, 0);
   const manager1Total = data.questions.reduce((sum, question) => {
     if (!isScoredQuestion(question)) return sum;
     const resolved = managerColumnAnswer(
       question,
       selfAssessmentEnabled,
-      manager1AnswerMap.get(question.id),
+      manager1AnswerMap.get(question.id) ??
+        managerAnswerMap.get(question.id),
       undefined,
       answerMap.get(question.id),
     );
-    return sum + (resolved?.pointsEarned ?? 0);
+    return (
+      sum +
+      resolveDisplayedAnswerPoints(
+        question,
+        data.ratingBased,
+        data.ratingScales,
+        resolved,
+      )
+    );
   }, 0);
   const manager2Total = hasManager2
     ? data.questions.reduce((sum, question) => {
@@ -904,13 +1015,43 @@ export default function SubmissionDetailView({
           manager1AnswerMap.get(question.id),
           answerMap.get(question.id),
         );
-        return sum + (resolved?.pointsEarned ?? 0);
+        return (
+          sum +
+          resolveDisplayedAnswerPoints(
+            question,
+            data.ratingBased,
+            data.ratingScales,
+            resolved,
+          )
+        );
       }, 0)
     : null;
-  const managerDraftTotal = [...managerDrafts.values()].reduce((sum, draft) => {
-    const value = Number(draft.pointsEarned);
-    return sum + (Number.isNaN(value) ? 0 : value);
+  const managerDraftTotal = data.questions.reduce((sum, question) => {
+    if (!isScoredQuestion(question)) return sum;
+    return (
+      sum +
+      resolveDisplayedAnswerPoints(
+        question,
+        data.ratingBased,
+        data.ratingScales,
+        parseDraftScoreAnswer(managerDrafts.get(question.id)),
+      )
+    );
   }, 0);
+
+  const displayedFormScore = editingManager2
+    ? managerDraftTotal
+    : editingManager1
+      ? managerDraftTotal
+      : hasManager2 && showManager2Data
+        ? (manager2Total ?? manager1Total)
+        : manager1Total > 0
+          ? manager1Total
+          : selfTotal;
+  const displayedFormPercent =
+    data.maxRawScore > 0
+      ? Math.round((displayedFormScore / data.maxRawScore) * 1000) / 10
+      : 0;
 
   const updateManagerDraft = (
     questionId: number,
@@ -937,7 +1078,7 @@ export default function SubmissionDetailView({
           { label: "ORG Level 2", value: displayOrgValue(data.orgLevel2Name) },
           { label: "Form", value: data.templateTitle },
           { label: "Status", value: APPRAISAL_STATUS_LABELS[data.status] },
-          { label: "Score", value: `${data.rawScore}/${data.maxRawScore} (${data.scorePercent}%)` },
+          { label: "Score", value: `${formatScoreValue(displayedFormScore)}/${data.maxRawScore} (${displayedFormPercent}%)` },
           {
             label: "Manager 1",
             value: formatNameWithSap(data.manager1Name, data.manager1EmployeeId),
@@ -988,7 +1129,7 @@ export default function SubmissionDetailView({
           <SubmissionInfoTile
             icon={Gauge}
             label="Score"
-            value={`${data.rawScore}/${data.maxRawScore} (${data.scorePercent}%)`}
+            value={`${formatScoreValue(displayedFormScore)}/${data.maxRawScore} (${displayedFormPercent}%)`}
             accent
           />
           <SubmissionInfoTile
@@ -1287,7 +1428,9 @@ export default function SubmissionDetailView({
                 const questionSelfAssessmentEnabled =
                   selfAssessmentEnabled && question!.selfAssessmentEnabled;
                 const managerDraft = managerDrafts.get(question!.id) ?? emptyManagerDraft();
-                const mgr1Answer = manager1AnswerMap.get(question!.id);
+                const mgr1Answer =
+                  manager1AnswerMap.get(question!.id) ??
+                  managerAnswerMap.get(question!.id);
                 const mgr2Answer = manager2AnswerMap.get(question!.id);
                 const mgr1Display = managerColumnAnswer(
                   question!,
@@ -1350,10 +1493,16 @@ export default function SubmissionDetailView({
                     </td>
                     {selfAssessmentEnabled ? (
                       <>
-                    <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-bold text-teal-700 dark:border-slate-700/40 dark:text-teal-300">
+                    <td className="min-w-0 overflow-hidden border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-bold text-teal-700 dark:border-slate-700/40 dark:text-teal-300">
                       {scored ? (
                         questionSelfAssessmentEnabled ? (
-                          answer?.pointsEarned ?? 0
+                          <AnswerScoreReadout
+                            question={question!}
+                            ratingBased={data.ratingBased}
+                            ratingScales={data.ratingScales ?? []}
+                            answer={answer}
+                            tone="teal"
+                          />
                         ) : (
                           <span className="text-slate-400" title="To be filled by Manager">N/A</span>
                         )
@@ -1387,15 +1536,20 @@ export default function SubmissionDetailView({
                             ratingBased={data.ratingBased}
                             ratingScales={data.ratingScales ?? []}
                             draft={managerDraft}
+                            tone="violet"
                             onChange={(patch) =>
                               updateManagerDraft(question!.id, patch)
                             }
                             inputClassName="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
                           />
                         ) : (
-                          <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
-                            {mgr1Display?.pointsEarned ?? 0}
-                          </span>
+                          <AnswerScoreReadout
+                            question={question!}
+                            ratingBased={data.ratingBased}
+                            ratingScales={data.ratingScales ?? []}
+                            answer={mgr1Display}
+                            tone="violet"
+                          />
                         )
                       ) : (
                         <span className="text-slate-400">—</span>
@@ -1438,15 +1592,20 @@ export default function SubmissionDetailView({
                                 ratingBased={data.ratingBased}
                                 ratingScales={data.ratingScales ?? []}
                                 draft={managerDraft}
+                                tone="indigo"
                                 onChange={(patch) =>
                                   updateManagerDraft(question!.id, patch)
                                 }
                                 inputClassName="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-indigo-300"
                               />
                             ) : (
-                              <span className="font-bold tabular-nums text-indigo-700 dark:text-indigo-300">
-                                {mgr2Display?.pointsEarned ?? 0}
-                              </span>
+                              <AnswerScoreReadout
+                                question={question!}
+                                ratingBased={data.ratingBased}
+                                ratingScales={data.ratingScales ?? []}
+                                answer={mgr2Display}
+                                tone="indigo"
+                              />
                             )
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -1514,19 +1673,19 @@ export default function SubmissionDetailView({
                 {selfAssessmentEnabled ? (
                   <>
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-teal-300">
-                  {selfTotal}
+                  {formatScoreValue(selfTotal)}
                 </td>
                 <td className="border-r border-slate-700 px-3 py-2.5" />
                   </>
                 ) : null}
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-violet-300">
-                  {editingManager1 ? managerDraftTotal : manager1Total}
+                  {formatScoreValue(editingManager1 ? managerDraftTotal : manager1Total)}
                 </td>
                 <td className="border-r border-slate-700 px-3 py-2.5" />
                 {hasManager2 && showManager2Data ? (
                   <>
                     <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-indigo-300">
-                      {editingManager2 ? managerDraftTotal : (manager2Total ?? 0)}
+                      {formatScoreValue(editingManager2 ? managerDraftTotal : (manager2Total ?? 0))}
                     </td>
                     <td className="border-r border-slate-700 px-3 py-2.5" />
                   </>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useMemo, useCallback } from "react";
+import { Fragment, useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchDirectAssessmentData,
@@ -12,10 +12,16 @@ import {
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
+  formatScoreValue,
   getQuestionRatingScale,
+  parseDraftScoreAnswer,
+  resolveDisplayedAnswerPoints,
   usesRatingScore,
 } from "@/app/helpers/form-rating-scoring";
-import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
+import {
+  AnswerScoreReadout,
+  RatingScoreField,
+} from "@/app/components/forms/RatingScoreField";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import { FormDescription } from "@/app/components/forms/FormDescription";
 import { cn } from "@/lib/utils";
@@ -127,12 +133,20 @@ function buildInitialDrafts(
       // For Manager 2, fall back to Manager 1's answers
       const fallback =
         (emp.managerLevel ?? 1) === 2 ? mgr1 : null;
-      const points = my?.pointsEarned ?? fallback?.pointsEarned ?? 0;
+      const source = my ?? fallback;
       const ratingValue = my?.ratingValue ?? fallback?.ratingValue ?? null;
       const remarks = my?.remarks ?? fallback?.remarks ?? "";
+      const computedPoints = source
+        ? resolveDisplayedAnswerPoints(
+            question,
+            data.ratingBased,
+            data.ratingScales,
+            source,
+          )
+        : 0;
 
       drafts[question.id] = {
-        pointsEarned: String(points),
+        pointsEarned: source ? String(computedPoints) : "",
         ratingValue: ratingValue == null ? "" : String(ratingValue),
         remarks: remarks ?? "",
       };
@@ -179,6 +193,44 @@ function overallRemarksForSubmission(
   return value.trim() || null;
 }
 
+function scoreDraftHasInput(draft: ScoreDraft | undefined): boolean {
+  if (!draft) return false;
+  return (
+    draft.ratingValue !== "" ||
+    (draft.pointsEarned !== "" && Number(draft.pointsEarned) > 0) ||
+    Boolean(draft.remarks.trim())
+  );
+}
+
+function mergeDirectAssessmentDrafts(
+  current: Record<number, Record<number, ScoreDraft>>,
+  incoming: Record<number, Record<number, ScoreDraft>>,
+): Record<number, Record<number, ScoreDraft>> {
+  if (Object.keys(current).length === 0) {
+    return incoming;
+  }
+  const next: Record<number, Record<number, ScoreDraft>> = {};
+  for (const [submissionKey, questions] of Object.entries(incoming)) {
+    const submissionId = Number(submissionKey);
+    const currentEmp = current[submissionId] ?? {};
+    const merged: Record<number, ScoreDraft> = { ...questions };
+    for (const [questionKey, draft] of Object.entries(currentEmp)) {
+      const questionId = Number(questionKey);
+      if (scoreDraftHasInput(draft) && !scoreDraftHasInput(merged[questionId])) {
+        merged[questionId] = draft;
+      }
+    }
+    next[submissionId] = merged;
+  }
+  for (const [submissionKey, questions] of Object.entries(current)) {
+    const submissionId = Number(submissionKey);
+    if (next[submissionId] == null) {
+      next[submissionId] = questions;
+    }
+  }
+  return next;
+}
+
 export default function DirectAssessmentSpreadsheet({
   templateId,
   onBack,
@@ -189,9 +241,13 @@ export default function DirectAssessmentSpreadsheet({
   const [drafts, setDrafts] = useState<
     Record<number, Record<number, ScoreDraft>>
   >({});
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
   const [remarksDrafts, setRemarksDrafts] = useState<
     Record<number, RemarksDraft>
   >({});
+  const remarksDraftsRef = useRef(remarksDrafts);
+  remarksDraftsRef.current = remarksDrafts;
   // Modal state for the compact Additional Remarks flow. Only one modal is
   // open at a time; remarksSubmissionId identifies the active employee.
   const [remarksModalOpen, setRemarksModalOpen] = useState(false);
@@ -251,8 +307,27 @@ export default function DirectAssessmentSpreadsheet({
   );
 
   const initializeDrafts = useCallback((d: DirectAssessmentData) => {
-    setDrafts(buildInitialDrafts(d));
-    setRemarksDrafts(buildInitialRemarksDrafts(d));
+    setDrafts((current) => mergeDirectAssessmentDrafts(current, buildInitialDrafts(d)));
+    setRemarksDrafts((current) => {
+      const incoming = buildInitialRemarksDrafts(d);
+      if (Object.keys(current).length === 0) {
+        return incoming;
+      }
+      const next = { ...incoming };
+      for (const [key, draft] of Object.entries(current)) {
+        const id = Number(key);
+        const saved = next[id];
+        const hasLocal =
+          Boolean(draft.manager1.trim()) || Boolean(draft.manager2.trim());
+        const savedEmpty =
+          !saved ||
+          (!saved.manager1.trim() && !saved.manager2.trim());
+        if (hasLocal && savedEmpty) {
+          next[id] = draft;
+        }
+      }
+      return next;
+    });
   }, []);
 
   const [prevAssessmentData, setPrevAssessmentData] = useState(data);
@@ -267,7 +342,7 @@ export default function DirectAssessmentSpreadsheet({
 
   const saveMutation = useMutation({
     mutationFn: async (submissionId: number) => {
-      const empDrafts = drafts[submissionId];
+      const empDrafts = draftsRef.current[submissionId];
       if (!empDrafts || !data) throw new Error("No drafts to save.");
 
       const answers = data.questions
@@ -279,7 +354,7 @@ export default function DirectAssessmentSpreadsheet({
 
       const overallRemarks = overallRemarksForSubmission(
         data,
-        remarksDrafts,
+        remarksDraftsRef.current,
         submissionId,
       );
 
@@ -298,21 +373,25 @@ export default function DirectAssessmentSpreadsheet({
 
   const approveMutation = useMutation({
     mutationFn: async (submissionId: number) => {
-      const empDrafts = drafts[submissionId];
-      if (empDrafts && data) {
-        const answers = data.questions
-          .filter(isScoredQuestion)
-          .map((q) => {
-            const draft = empDrafts[q.id];
-            return draftToSaveAnswer(q, draft);
-          });
-        const overallRemarks = overallRemarksForSubmission(
-          data,
-          remarksDrafts,
-          submissionId,
-        );
-        await saveDirectAssessmentScores(submissionId, answers, overallRemarks);
+      if (!data) {
+        throw new Error("Assessment data is not loaded.");
       }
+      const empDrafts = draftsRef.current[submissionId];
+      if (!empDrafts) {
+        throw new Error("Select ratings before approving this assessment.");
+      }
+      const answers = data.questions
+        .filter(isScoredQuestion)
+        .map((q) => {
+          const draft = empDrafts[q.id];
+          return draftToSaveAnswer(q, draft);
+        });
+      const overallRemarks = overallRemarksForSubmission(
+        data,
+        remarksDraftsRef.current,
+        submissionId,
+      );
+      await saveDirectAssessmentScores(submissionId, answers, overallRemarks);
       return approveDirectAssessment(submissionId);
     },
     onSuccess: (_result, submissionId) => {
@@ -369,13 +448,13 @@ export default function DirectAssessmentSpreadsheet({
     setRemarksSaving(true);
     try {
       const nextDrafts: Record<number, RemarksDraft> = {
-        ...remarksDrafts,
+        ...remarksDraftsRef.current,
         [submissionId]: {
           manager1: value.manager1,
           manager2: value.manager2,
         },
       };
-      const empDrafts = drafts[submissionId] ?? {};
+      const empDrafts = draftsRef.current[submissionId] ?? {};
       const answers = data.questions
         .filter(isScoredQuestion)
         .map((q) => {
@@ -768,9 +847,13 @@ export default function DirectAssessmentSpreadsheet({
                               />
                               )
                             ) : (
-                              <span className="font-bold tabular-nums text-slate-600 dark:text-slate-400">
-                                {draft?.pointsEarned ?? 0}
-                              </span>
+                              <AnswerScoreReadout
+                                question={question!}
+                                ratingBased={data.ratingBased}
+                                ratingScales={data.ratingScales ?? []}
+                                answer={parseDraftScoreAnswer(draft)}
+                                tone="slate"
+                              />
                             )
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -804,8 +887,15 @@ export default function DirectAssessmentSpreadsheet({
                   const isEditable = emp.canEdit;
                   const empDrafts = drafts[emp.submissionId];
                   const total = scoredQuestions.reduce((sum, q) => {
-                    const val = Number(empDrafts?.[q.id]?.pointsEarned ?? 0);
-                    return sum + (Number.isNaN(val) ? 0 : val);
+                    return (
+                      sum +
+                      resolveDisplayedAnswerPoints(
+                        q,
+                        data.ratingBased,
+                        data.ratingScales,
+                        parseDraftScoreAnswer(empDrafts?.[q.id]),
+                      )
+                    );
                   }, 0);
                   const empColId = `emp-${emp.submissionId}`;
                   const empWidth = getColumnWidth(empColId, staffColumnWidth);
@@ -821,7 +911,7 @@ export default function DirectAssessmentSpreadsheet({
                           isEditable ? "text-violet-300" : "text-slate-400"
                         }
                       >
-                        {total}
+                        {formatScoreValue(total)}
                       </span>
                     </td>
                   );

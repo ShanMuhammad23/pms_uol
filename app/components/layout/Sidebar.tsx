@@ -6,20 +6,12 @@ import { useSession } from "next-auth/react";
 import { useState } from "react";
 import { signOutAndRedirect } from "@/lib/queries/auth-client";
 import {
-  Building2,
   ChevronDown,
-  ClipboardList,
-  FileBarChart,
-  FileText,
-  Grid3X3,
-  LayoutDashboard,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
   Settings2,
-  Shield,
-  TableProperties,
-  Users,
+
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { ViewAsDropdown } from "@/app/components/layout/ViewAsDropdown";
@@ -32,6 +24,7 @@ import matricesIcon from '@/public/icons8-matrix-60.png';
 import levelsIcon from '@/public/icons8-organization-64.png';
 import reportsIcon from '@/public/icons8-process-48.png';
 import securityIcon from '@/public/icons8-security-shield-64.png';
+import dashboardIcon from '@/public/icons8-dashboard-50.png';
 import {
   canAccessDashboardSubmissions,
   isAdminRole,
@@ -296,7 +289,7 @@ const Sidebar = () => {
                   title="Dashboard"
                   className={navLinkClass(isDashboard)}
                 >
-                  <LayoutDashboard className="size-4 shrink-0" />
+                  <Image src={dashboardIcon} alt="Dashboard" width={24} height={24} />
                   {!collapsed ? "Dashboard" : null}
                 </Link>
               </li>

@@ -9,6 +9,7 @@ import type {
   EmployeeFormAnswerAttachment,
   EmployeeFormAnswerRecord,
 } from "@/types/employee-forms";
+import { hydrateAnswerPoints } from "@/app/helpers/form-rating-scoring";
 import {
   resolveEntitySubtreeIds,
 } from "@/lib/queries/entity-scope";
@@ -341,10 +342,16 @@ export async function getDirectAssessmentData(
   ): EmployeeFormAnswerRecord[] => {
     const key = `${submissionId}:${filledById}`;
     const list = answersByTriple.get(key) ?? [];
-    return list.map((a) => ({
-      ...a,
-      attachments: attachmentsByQuestionKey.get(`${submissionId}:${a.questionId}`) ?? [],
-    }));
+    return hydrateAnswerPoints(
+      list.map((a) => ({
+        ...a,
+        attachments:
+          attachmentsByQuestionKey.get(`${submissionId}:${a.questionId}`) ?? [],
+      })),
+      questions,
+      template.ratingBased,
+      template.ratingScales,
+    );
   };
 
   for (const emp of employees) {

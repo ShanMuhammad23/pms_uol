@@ -7,7 +7,10 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
 import {
+  formatScoreValue,
   getQuestionRatingScale,
+  parseDraftScoreAnswer,
+  resolveDisplayedAnswerPoints,
   usesRatingScore,
 } from "@/app/helpers/form-rating-scoring";
 import {
@@ -270,17 +273,19 @@ export default function EmployeeFormFill({
           question.selfAssessmentEnabled,
       )
       .reduce((sum, question) => {
-        const answer = answers[question.id];
-        if (!answer || answer.pointsEarned === "") {
-          return sum;
-        }
-
-        const score = Number(answer.pointsEarned);
-        return sum + (Number.isNaN(score) ? 0 : score);
+        return (
+          sum +
+          resolveDisplayedAnswerPoints(
+            question,
+            data.template.ratingBased,
+            data.template.ratingScales,
+            parseDraftScoreAnswer(answers[question.id]),
+          )
+        );
       }, 0);
   }, [answers, data]);
 
-  const displayedRawScore = isReadOnly ? (data?.rawScore ?? 0) : liveRawScore;
+  const displayedRawScore = liveRawScore;
 
   const saveMutation = useMutation({
     mutationFn: (submit: boolean) =>
@@ -571,7 +576,7 @@ export default function EmployeeFormFill({
           { label: "Employee", value: data.employeeName ?? "N/A" },
           { label: "SAP ID", value: data.employeeId ?? "N/A" },
           { label: "Status", value: statusLabel },
-          { label: "Score", value: `${displayedRawScore} / ${maxRawScore}` },
+          { label: "Score", value: `${formatScoreValue(displayedRawScore)} / ${maxRawScore}` },
           { label: "Manager 1", value: data.headName ?? "N/A" },
           { label: "Manager 2", value: data.manager2Name ?? "N/A" },
         ]}
@@ -664,7 +669,7 @@ export default function EmployeeFormFill({
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Score</p>
           <p className="mt-1 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
-            {displayedRawScore} / {maxRawScore}
+            {formatScoreValue(displayedRawScore)} / {maxRawScore}
           </p>
         </div>
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
@@ -989,7 +994,7 @@ export default function EmployeeFormFill({
                     {maxRawScore}
                   </td>
                   <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-teal-300 dark:border-slate-700/50 dark:text-teal-400">
-                    {displayedRawScore}
+                    {formatScoreValue(displayedRawScore)}
                   </td>
                   <td colSpan={2} />
                 </tr>
@@ -1040,7 +1045,7 @@ export default function EmployeeFormFill({
             : data && !data.selfAssessmentEnabled
               ? "Self-assessment is not enabled for this form. It will be reviewed directly by your reporting head."
               : data?.status === "SUBMITTED"
-                ? `Submitted${data.submittedAt ? ` on ${new Date(data.submittedAt).toLocaleString()}` : ""} · read-only · score ${data.rawScore}/${data.maxRawScore}`
+                ? `Submitted${data.submittedAt ? ` on ${new Date(data.submittedAt).toLocaleString()}` : ""} · read-only · score ${formatScoreValue(displayedRawScore)}/${maxRawScore}`
                 : "Read-only"}
         </p>
       )}
@@ -1111,7 +1116,7 @@ export default function EmployeeFormFill({
                   Current score
                 </p>
                 <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-                  {displayedRawScore}
+                  {formatScoreValue(displayedRawScore)}
                   <span className="text-base font-semibold text-slate-500 dark:text-slate-400">
                     {" "}
                     / {maxRawScore}

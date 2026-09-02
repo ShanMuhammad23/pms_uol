@@ -31,7 +31,11 @@ import { cn } from "@/lib/utils";
 import { useIsClient } from "@/app/hooks/use-is-client";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import { FormDescription } from "@/app/components/forms/FormDescription";
-import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
+import { RatingScoreField, AnswerScoreReadout } from "@/app/components/forms/RatingScoreField";
+import {
+  formatScoreValue,
+  resolveDisplayedAnswerPoints,
+} from "@/app/helpers/form-rating-scoring";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
 
@@ -312,8 +316,22 @@ export default function BulkAssessmentReview({
         const points = row.managerScore ?? fallbackScore;
         const rating = row.managerRating ?? fallbackRating;
         const remarks = row.managerRemarks ?? fallbackRemarks;
+        const computedPoints =
+          points == null && rating == null
+            ? null
+            : resolveDisplayedAnswerPoints(
+                {
+                  totalMarks: currentQuestion.totalMarks,
+                  ratingScaleId: currentQuestion.ratingScale?.id ?? null,
+                },
+                currentQuestion.ratingBased,
+                currentQuestion.ratingScale
+                  ? [currentQuestion.ratingScale]
+                  : [],
+                { pointsEarned: points, ratingValue: rating },
+              );
         next.set(row.submissionId, {
-          pointsEarned: points == null ? "" : String(points),
+          pointsEarned: computedPoints == null ? "" : String(computedPoints),
           ratingValue: rating == null ? "" : String(rating),
           remarks: remarks ?? "",
         });
@@ -1401,8 +1419,30 @@ function WorkspaceView({
                           {row.employeeId}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums font-semibold text-teal-700 dark:text-teal-300">
-                        {row.selfScore != null ? row.selfScore : "—"}
+                      <td className="min-w-0 max-w-[12rem] overflow-hidden px-3 py-3 text-right tabular-nums font-semibold text-teal-700 dark:text-teal-300">
+                        {currentQuestion.ratingBased && currentQuestion.ratingScale ? (
+                          <AnswerScoreReadout
+                            question={{
+                              totalMarks: currentQuestion.totalMarks,
+                              ratingScaleId: currentQuestion.ratingScale.id,
+                            }}
+                            ratingBased
+                            ratingScales={[currentQuestion.ratingScale]}
+                            answer={
+                              row.selfRating == null && row.selfScore == null
+                                ? undefined
+                                : {
+                                    pointsEarned: row.selfScore,
+                                    ratingValue: row.selfRating,
+                                  }
+                            }
+                            tone="teal"
+                          />
+                        ) : row.selfScore != null ? (
+                          formatScoreValue(row.selfScore)
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         {row.selfRemarks ? (
