@@ -57,6 +57,8 @@ const DEFAULT_EMPLOYEE_WIDTH = 140;
 const RATING_EMPLOYEE_WIDTH = 200;
 const MIN_COL_WIDTH = 60;
 const MAX_COL_WIDTH = 500;
+const FROZEN_EDGE_SHADOW =
+  "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.28)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.55)]";
 
 type ScoreDraft = {
   pointsEarned: string;
@@ -576,6 +578,8 @@ export default function DirectAssessmentSpreadsheet({
   const staffColumnWidth = data.ratingBased
     ? RATING_EMPLOYEE_WIDTH
     : DEFAULT_EMPLOYEE_WIDTH;
+  const srWidth = getColumnWidth("sr", DEFAULT_SR_WIDTH);
+  const kpiWidth = getColumnWidth("kpi", DEFAULT_KPI_WIDTH);
 
   return (
     <div className="space-y-3">
@@ -644,22 +648,29 @@ export default function DirectAssessmentSpreadsheet({
       </div>
 
       <div className="overflow-auto max-h-[75vh] rounded-md border border-slate-300 dark:border-slate-700">
-        <table className="border-collapse text-left text-sm">
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-800 dark:bg-slate-950/80">
+        <table className="border-separate border-spacing-0 text-left text-sm">
+          <thead className="sticky top-0 z-40">
+            <tr className="bg-slate-800 dark:bg-slate-950">
               <ResizableHeader
                 columnId="sr"
-                width={getColumnWidth("sr", DEFAULT_SR_WIDTH)}
+                width={srWidth}
                 onResize={handleColumnResize}
-                className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200"
+                frozen
+                stickyLeft={0}
+                className="top-0 whitespace-nowrap border-r border-slate-700 bg-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:bg-slate-950"
               >
                 Sr.
               </ResizableHeader>
               <ResizableHeader
                 columnId="kpi"
-                width={getColumnWidth("kpi", DEFAULT_KPI_WIDTH)}
+                width={kpiWidth}
                 onResize={handleColumnResize}
-                className="border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200"
+                frozen
+                stickyLeft={srWidth}
+                className={cn(
+                  "top-0 border-r border-slate-700 bg-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200 dark:bg-slate-950",
+                  FROZEN_EDGE_SHADOW,
+                )}
               >
                 Key Performance Indicators (KPIs)
               </ResizableHeader>
@@ -669,7 +680,7 @@ export default function DirectAssessmentSpreadsheet({
                 onResize={handleColumnResize}
                 className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200"
               >
-                Max
+                Weightage
               </ResizableHeader>
               {filteredEmployees.map((emp) => {
                 const isEditable = emp.canEdit;
@@ -761,21 +772,41 @@ export default function DirectAssessmentSpreadsheet({
                     ) : (
                     <tr
                       className={cn(
-                        "align-top border-b border-slate-100 dark:border-slate-700/40",
+                        "align-top [&>td]:border-b [&>td]:border-slate-100 dark:[&>td]:border-slate-700/40",
                         isEvenRow
                           ? "bg-white dark:bg-slate-900/40"
                           : "bg-slate-50/60 dark:bg-slate-800/20",
                       )}
                     >
                       <td
-                        className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40"
-                        style={{ width: getColumnWidth("sr", DEFAULT_SR_WIDTH), minWidth: getColumnWidth("sr", DEFAULT_SR_WIDTH), maxWidth: getColumnWidth("sr", DEFAULT_SR_WIDTH) }}
+                        className={cn(
+                          "sticky left-0 z-20 border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40",
+                          isEvenRow
+                            ? "bg-white dark:bg-slate-900"
+                            : "bg-slate-50 dark:bg-slate-800",
+                        )}
+                        style={{
+                          width: srWidth,
+                          minWidth: srWidth,
+                          maxWidth: srWidth,
+                        }}
                       >
                         {row.sr}
                       </td>
                       <td
-                        className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40"
-                        style={{ width: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), minWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), maxWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH) }}
+                        className={cn(
+                          "sticky z-20 border-r border-slate-200 px-3 py-2.5 dark:border-slate-700",
+                          FROZEN_EDGE_SHADOW,
+                          isEvenRow
+                            ? "bg-white dark:bg-slate-900"
+                            : "bg-slate-50 dark:bg-slate-800",
+                        )}
+                        style={{
+                          left: srWidth,
+                          width: kpiWidth,
+                          minWidth: kpiWidth,
+                          maxWidth: kpiWidth,
+                        }}
                       >
                         <p className="break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
                           {question!.questionText}
@@ -869,11 +900,18 @@ export default function DirectAssessmentSpreadsheet({
             )}
           </tbody>
           {rows.length > 0 ? (
-            <tfoot className="sticky bottom-0 z-10 shadow-[0_-6px_12px_rgba(15,23,42,0.12)]">
-              <tr className="bg-slate-800 dark:bg-slate-950/80">
+            <tfoot className="sticky bottom-0 z-30 shadow-[0_-6px_12px_rgba(15,23,42,0.12)]">
+              <tr className="bg-slate-800 dark:bg-slate-950">
                 <td
                   colSpan={2}
-                  className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200"
+                  className={cn(
+                    "sticky left-0 z-30 bg-slate-800 px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-200 dark:bg-slate-950",
+                    FROZEN_EDGE_SHADOW,
+                  )}
+                  style={{
+                    minWidth: srWidth + kpiWidth,
+                    width: srWidth + kpiWidth,
+                  }}
                 >
                   Total
                 </td>
@@ -920,7 +958,14 @@ export default function DirectAssessmentSpreadsheet({
               <tr className="border-t border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
                 <td
                   colSpan={2}
-                  className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300"
+                  className={cn(
+                    "sticky left-0 z-30 bg-slate-50 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:bg-slate-900 dark:text-slate-300",
+                    FROZEN_EDGE_SHADOW,
+                  )}
+                  style={{
+                    minWidth: srWidth + kpiWidth,
+                    width: srWidth + kpiWidth,
+                  }}
                 >
                   Review actions
                 </td>

@@ -81,6 +81,27 @@ export async function fetchDirectAssessmentTemplates(
   return parseResponse<FormTemplateListItem[]>(response);
 }
 
+export interface DirectAssessmentStaffByEntity {
+  entityId: number;
+  count: number;
+}
+
+export async function fetchDirectAssessmentOrgStaffCounts(): Promise<
+  DirectAssessmentStaffByEntity[]
+> {
+  const response = await fetch(
+    "/api/templates?directAssessment=true&orgCounts=true",
+    {
+      credentials: "include",
+      cache: "no-store",
+    },
+  );
+  const data = await parseResponse<{ staffByEntity: DirectAssessmentStaffByEntity[] }>(
+    response,
+  );
+  return data.staffByEntity ?? [];
+}
+
 export async function fetchFormTemplate(id: number): Promise<FormTemplateRecord> {
   const response = await fetch(`/api/admin/forms/${id}`, {
     credentials: "include",

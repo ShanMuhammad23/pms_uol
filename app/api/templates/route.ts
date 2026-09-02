@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
 import { isHeadRole } from "@/lib/auth/home-path";
+import { listDirectAssessmentStaffByEntity } from "@/lib/queries/direct-assessment-org-counts";
 import { listFormTemplates, listDirectAssessmentTemplates } from "@/lib/queries/forms";
 import { resolveEntitySubtreeIdsForRoots } from "@/lib/queries/entity-scope";
 import { apiHandler } from "@/lib/api-handler";
@@ -49,6 +50,13 @@ export const GET = apiHandler(async (request: Request) => {
       // where the admin is Manager 1 or Manager 2. Managers always see
       // only the templates for employees they review.
       const managedOnly = url.searchParams.get("scope") === "managed";
+      if (url.searchParams.get("orgCounts") === "true") {
+        if (!isAdmin) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        const staffByEntity = await listDirectAssessmentStaffByEntity();
+        return NextResponse.json({ staffByEntity });
+      }
       if (isAdmin && !managedOnly) {
         const category2Ids = parseEntityIdList(
           url.searchParams.get("category2"),

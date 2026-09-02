@@ -269,6 +269,93 @@ function fromStringIds(values: string[] | null): MultiFilterSelection<number> {
   return values === null ? null : values.map(Number);
 }
 
+function rollupStaffCountsToEntities(
+  staffByEntity: Array<{ entityId: number; count: number }>,
+  optionEntities: EntityRecord[],
+  entities: EntityRecord[],
+): MultiSelectOption[] {
+  const optionIds = new Set(optionEntities.map((entity) => entity.id));
+  const counts = new Map<number, number>();
+  for (const entity of optionEntities) {
+    counts.set(entity.id, 0);
+  }
+
+  for (const row of staffByEntity) {
+    if (!Number.isInteger(row.entityId) || row.count <= 0) {
+      continue;
+    }
+    const chain = getEntitySelfAndAncestorIds(row.entityId, entities);
+    for (const ancestorId of chain) {
+      if (optionIds.has(ancestorId)) {
+        counts.set(ancestorId, (counts.get(ancestorId) ?? 0) + row.count);
+      }
+    }
+  }
+
+  return optionEntities
+    .map((entity) => ({
+      value: String(entity.id),
+      label: entity.name,
+      count: counts.get(entity.id) ?? 0,
+    }))
+    .sort((left, right) =>
+      left.label.localeCompare(right.label, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    );
+}
+
+function buildDirectAssessmentEntityOptions(
+  employees: DirectAssessmentEmployee[],
+  filters: DirectAssessmentFilterState,
+  entities: EntityRecord[],
+  excludeDimension: DirectAssessmentFilterDimension,
+  optionEntities: EntityRecord[],
+): MultiSelectOption[] {
+  const optionIds = new Set(optionEntities.map((entity) => entity.id));
+  const counts = new Map<number, number>();
+  for (const entity of optionEntities) {
+    counts.set(entity.id, 0);
+  }
+
+  for (const emp of employees) {
+    if (
+      !matchesDirectAssessmentFiltersExcluding(
+        emp,
+        filters,
+        entities,
+        excludeDimension,
+      )
+    ) {
+      continue;
+    }
+    if (emp.entityId == null) {
+      continue;
+    }
+    const chain = getEntitySelfAndAncestorIds(emp.entityId, entities);
+    for (const ancestorId of chain) {
+      if (optionIds.has(ancestorId)) {
+        counts.set(ancestorId, (counts.get(ancestorId) ?? 0) + 1);
+      }
+    }
+  }
+
+  return optionEntities
+    .map((entity) => ({
+      value: String(entity.id),
+      label: entity.name,
+      count: counts.get(entity.id) ?? 0,
+    }))
+    .filter((option) => option.count > 0)
+    .sort((left, right) =>
+      left.label.localeCompare(right.label, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    );
+}
+
 /**
  * Builds filter options with cascading counts from the employee dataset.
  *
@@ -487,56 +574,41 @@ export function useDirectAssessmentFilters(
   // filters. Only entities that actually have employees in the dataset are
   // shown (zero-count entities are filtered out) so the dropdown reflects
   // real data, not the full org tree.
-  const category0Options = useMemo<MultiSelectOption[]>(() => {
-    return buildOptionsWithCounts(
-      employees,
-      filterState,
-      entities,
-      "category0",
-      (emp) => {
-        if (emp.entityId == null) return null;
-        const selfAndAncestors = getEntitySelfAndAncestorIds(emp.entityId, entities);
-        const match = category0Entities.find((e) => selfAndAncestors.has(e.id));
-        return match ? String(match.id) : null;
-      },
-      (value) =>
-        category0Entities.find((e) => String(e.id) === value)?.name ?? value,
-    );
-  }, [employees, filterState, entities, category0Entities]);
+  const category0Options = useMemo<MultiSelectOption[]>(
+    () =>
+      buildDirectAssessmentEntityOptions(
+        employees,
+        filterState,
+        entities,
+        "category0",
+        category0Entities,
+      ),
+    [employees, filterState, entities, category0Entities],
+  );
 
-  const category1Options = useMemo<MultiSelectOption[]>(() => {
-    return buildOptionsWithCounts(
-      employees,
-      filterState,
-      entities,
-      "category1",
-      (emp) => {
-        if (emp.entityId == null) return null;
-        const selfAndAncestors = getEntitySelfAndAncestorIds(emp.entityId, entities);
-        const match = category1Entities.find((e) => selfAndAncestors.has(e.id));
-        return match ? String(match.id) : null;
-      },
-      (value) =>
-        category1Entities.find((e) => String(e.id) === value)?.name ?? value,
-    );
-  }, [employees, filterState, entities, category1Entities]);
+  const category1Options = useMemo<MultiSelectOption[]>(
+    () =>
+      buildDirectAssessmentEntityOptions(
+        employees,
+        filterState,
+        entities,
+        "category1",
+        category1Entities,
+      ),
+    [employees, filterState, entities, category1Entities],
+  );
 
-  const category2Options = useMemo<MultiSelectOption[]>(() => {
-    return buildOptionsWithCounts(
-      employees,
-      filterState,
-      entities,
-      "category2",
-      (emp) => {
-        if (emp.entityId == null) return null;
-        const selfAndAncestors = getEntitySelfAndAncestorIds(emp.entityId, entities);
-        const match = category2Entities.find((e) => selfAndAncestors.has(e.id));
-        return match ? String(match.id) : null;
-      },
-      (value) =>
-        category2Entities.find((e) => String(e.id) === value)?.name ?? value,
-    );
-  }, [employees, filterState, entities, category2Entities]);
+  const category2Options = useMemo<MultiSelectOption[]>(
+    () =>
+      buildDirectAssessmentEntityOptions(
+        employees,
+        filterState,
+        entities,
+        "category2",
+        category2Entities,
+      ),
+    [employees, filterState, entities, category2Entities],
+  );
 
   const hasActiveFilters = hasActiveDirectAssessmentFilters(filterState);
 
@@ -657,6 +729,7 @@ export function seedDirectAssessmentSpreadsheetOrgFilters(
 
 export function useDirectAssessmentOrgLevelFilters(
   entities: EntityRecord[],
+  staffByEntity: Array<{ entityId: number; count: number }> = [],
 ): UseDirectAssessmentOrgLevelFiltersResult {
   const [selectedCategory1EntityIds, setSelectedCategory1EntityIds] =
     useSessionStorageState<MultiFilterSelection<number>>(
@@ -688,23 +761,13 @@ export function useDirectAssessmentOrgLevelFilters(
   );
 
   const category1Options = useMemo<MultiSelectOption[]>(
-    () =>
-      category1Entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: 0,
-      })),
-    [category1Entities],
+    () => rollupStaffCountsToEntities(staffByEntity, category1Entities, entities),
+    [staffByEntity, category1Entities, entities],
   );
 
   const category2Options = useMemo<MultiSelectOption[]>(
-    () =>
-      category2Entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.name,
-        count: 0,
-      })),
-    [category2Entities],
+    () => rollupStaffCountsToEntities(staffByEntity, category2Entities, entities),
+    [staffByEntity, category2Entities, entities],
   );
 
   const handleCategory1EntityChange = useCallback((values: string[] | null) => {

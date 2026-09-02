@@ -144,7 +144,10 @@ export default function OverallRemarksSection({
   // Print mode: always read-only display of both remarks
   if (printMode) {
     return (
-      <div className="print-remarks-section mt-6 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+      <div
+        className="print-only print-remarks-section mt-6 rounded-lg border border-slate-200 p-4 dark:border-slate-700"
+        style={{ display: "none" }}
+      >
         <h3 className="mb-4 border-b border-slate-200 pb-2 text-sm font-bold uppercase tracking-wider text-slate-700 dark:border-slate-700 dark:text-slate-300">
           {SECTION_LABEL}
         </h3>
@@ -168,7 +171,7 @@ export default function OverallRemarksSection({
 
   // Interactive mode
   return (
-    <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/30 p-4 dark:border-slate-700 dark:bg-slate-900/30">
+    <div className="no-print mt-6 rounded-lg border border-slate-200 bg-slate-50/30 p-4 dark:border-slate-700 dark:bg-slate-900/30">
       <h3 className="mb-4 border-b border-slate-200 pb-2 text-sm font-bold uppercase tracking-wider text-slate-700 dark:border-slate-700 dark:text-slate-300">
         {SECTION_LABEL}
       </h3>

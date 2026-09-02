@@ -37,6 +37,7 @@ interface FormTemplateListRow {
   question_count: string;
   appraisal_count: string;
   assigned_employee_count: string;
+  submission_count: string;
   created_at: string;
   updated_at: string;
   updated_by: string | null;
@@ -101,7 +102,28 @@ export class FormTemplateError extends Error {
 }
 
 const APPRAISAL_ANSWER_BLOCK_MESSAGE =
-  "This form has appraisal answers linked to questions that would be removed. Delete or archive those answers first, or only edit question text/options in place.";
+  "This form has submissions linked to questions that would be removed. Only edit question text/options in place, or add new questions.";
+
+/** Assignment creates appraisals; a submission exists after self-assessment submit or later review. */
+function sqlAppraisalHasSubmission(alias: string): string {
+  return `(
+    ${alias}.submitted_at IS NOT NULL
+    OR ${alias}.status IN ('PENDING_HR_CALIBRATION', 'PENDING_BOARD_APPROVAL', 'APPROVED', 'COMPLETED')
+    OR (${alias}.status = 'PENDING_HEAD_REVIEW' AND COALESCE(${alias}.manager_level, 1) > 1)
+  )`;
+}
+
+function sqlAssignedSubmissionCountSubquery(): string {
+  return `
+    SELECT efa.template_id, COUNT(*)::text AS submission_count
+    FROM employee_form_assignments efa
+    INNER JOIN appraisals ap
+      ON ap.template_id = efa.template_id
+     AND ap.employee_id = efa.employee_id
+    WHERE ${sqlAppraisalHasSubmission("ap")}
+    GROUP BY efa.template_id
+  `;
+}
 
 let ratingBasedSchemaReady = false;
 
@@ -368,6 +390,7 @@ function mapFormTemplateListItem(row: FormTemplateListRow): FormTemplateListItem
     questionCount: Number(row.question_count),
     appraisalCount: Number(row.appraisal_count),
     assignedEmployeeCount: Number(row.assigned_employee_count),
+    submissionCount: Number(row.submission_count ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     updatedById: row.updated_by != null ? Number(row.updated_by) : null,
@@ -440,14 +463,24 @@ async function assertQuestionCanBeDeleted(
 ): Promise<void> {
   const result = await client.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
-     FROM appraisal_answers
-     WHERE question_id = $1`,
+     FROM appraisal_answers aa
+     INNER JOIN appraisals ap ON ap.id = aa.appraisal_id
+     WHERE aa.question_id = $1
+       AND ${sqlAppraisalHasSubmission("ap")}`,
     [questionId],
   );
 
   if (Number(result.rows[0]?.count ?? 0) > 0) {
     throw new FormTemplateError(APPRAISAL_ANSWER_BLOCK_MESSAGE, 409);
   }
+
+  await client.query(
+    `DELETE FROM appraisal_answer_attachments WHERE question_id = $1`,
+    [questionId],
+  );
+  await client.query(`DELETE FROM appraisal_answers WHERE question_id = $1`, [
+    questionId,
+  ]);
 }
 
 async function assertOptionCanBeDeleted(
@@ -456,8 +489,10 @@ async function assertOptionCanBeDeleted(
 ): Promise<void> {
   const result = await client.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
-     FROM appraisal_answers
-     WHERE selected_option_id = $1`,
+     FROM appraisal_answers aa
+     INNER JOIN appraisals ap ON ap.id = aa.appraisal_id
+     WHERE aa.selected_option_id = $1
+       AND ${sqlAppraisalHasSubmission("ap")}`,
     [optionId],
   );
 
@@ -1047,6 +1082,21 @@ export async function getFormTemplateAppraisalCount(
   return Number(result.rows[0]?.count ?? 0);
 }
 
+/** Count appraisals that have actually been submitted or advanced past first review. */
+export async function getFormTemplateSubmissionCount(
+  templateId: number,
+): Promise<number> {
+  const result = await getDbClient().query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count
+     FROM appraisals ap
+     WHERE ap.template_id = $1
+       AND ${sqlAppraisalHasSubmission("ap")}`,
+    [templateId],
+  );
+
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
   // Pre-aggregate child counts. Joining questions × appraisals × assignments
   // before GROUP BY creates a cartesian product (e.g. 38×405×406 ≈ 6M rows).
@@ -1066,6 +1116,7 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        COALESCE(qc.question_count, '0') AS question_count,
        COALESCE(apc.appraisal_count, '0') AS appraisal_count,
        COALESCE(efa.assigned_employee_count, '0') AS assigned_employee_count,
+       COALESCE(subc.submission_count, '0') AS submission_count,
        ft.created_at::text,
        ft.updated_at::text,
        ft.updated_by::text,
@@ -1090,6 +1141,9 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        FROM employee_form_assignments
        GROUP BY template_id
      ) efa ON efa.template_id = ft.id
+     LEFT JOIN (
+       ${sqlAssignedSubmissionCountSubquery()}
+     ) subc ON subc.template_id = ft.id
      ORDER BY ft.updated_at DESC`,
   );
 
@@ -1137,6 +1191,9 @@ export async function listDirectAssessmentTemplates(scope: {
          COALESCE(qc.question_count, '0') AS question_count,
          COALESCE(apc.appraisal_count, '0') AS appraisal_count,
          COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
+         COUNT(DISTINCT CASE
+           WHEN ${sqlAppraisalHasSubmission("ap")} THEN efa.employee_id
+         END)::text AS submission_count,
          ft.created_at::text,
          ft.updated_at::text,
          ft.updated_by::text,
@@ -1163,6 +1220,9 @@ export async function listDirectAssessmentTemplates(scope: {
          AND COALESCE(u.assessment_eligibility, true) = true
          AND efa.self_assessment_disabled = true
          ${adminEntityClause}
+       LEFT JOIN appraisals ap
+         ON ap.template_id = efa.template_id
+        AND ap.employee_id = efa.employee_id
        GROUP BY
          ft.id,
          ac.fiscal_year,
@@ -1216,6 +1276,9 @@ export async function listDirectAssessmentTemplates(scope: {
        COALESCE(qc.question_count, '0') AS question_count,
        COALESCE(apc.appraisal_count, '0') AS appraisal_count,
        COUNT(DISTINCT efa.employee_id)::text AS assigned_employee_count,
+       COUNT(DISTINCT CASE
+         WHEN ${sqlAppraisalHasSubmission("ap")} THEN efa.employee_id
+       END)::text AS submission_count,
        ft.created_at::text,
        ft.updated_at::text,
        ft.updated_by::text,
@@ -1242,6 +1305,9 @@ export async function listDirectAssessmentTemplates(scope: {
        AND COALESCE(u.assessment_eligibility, true) = true
        AND efa.self_assessment_disabled = true
        ${visibilityClause}
+     LEFT JOIN appraisals ap
+       ON ap.template_id = efa.template_id
+      AND ap.employee_id = efa.employee_id
      GROUP BY
        ft.id,
        ac.fiscal_year,

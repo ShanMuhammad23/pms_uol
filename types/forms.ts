@@ -318,6 +318,8 @@ export interface FormTemplateListItem {
   questionCount: number;
   appraisalCount: number;
   assignedEmployeeCount: number;
+  /** Assigned employees who have submitted or advanced past first review. */
+  submissionCount: number;
   createdAt: string;
   updatedAt: string;
   /** User id of who last updated the template, if known. */

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchDirectAssessmentTemplates,
+  fetchDirectAssessmentOrgStaffCounts,
   type DirectAssessmentTemplateScope,
 } from "@/lib/queries/forms-client";
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
@@ -37,7 +38,16 @@ export default function DirectAssessmentTab({
     enabled: showSplitViews,
   });
 
-  const orgFilters = useDirectAssessmentOrgLevelFilters(entities);
+  const { data: orgStaffByEntity = [] } = useQuery({
+    queryKey: ["direct-assessment-org-staff-counts"],
+    queryFn: fetchDirectAssessmentOrgStaffCounts,
+    enabled: showSplitViews,
+  });
+
+  const orgFilters = useDirectAssessmentOrgLevelFilters(
+    entities,
+    orgStaffByEntity,
+  );
 
   const { data: managedTemplates = [], isLoading: managedLoading } = useQuery({
     queryKey: ["direct-assessment-templates", "managed"],

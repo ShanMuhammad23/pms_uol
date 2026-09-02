@@ -9,6 +9,7 @@ export type EmployeeCategory =
 
 export type FormState =
   | "PENDING_SELF_ASSESSMENT"
+  | "PENDING_DIRECT_ASSESSMENT"
   | "PENDING_MANAGER_1_REVIEW"
   | "PENDING_MANAGER_2_REVIEW"
   | "PENDING_HR_CALIBRATION"

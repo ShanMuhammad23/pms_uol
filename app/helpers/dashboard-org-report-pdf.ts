@@ -74,7 +74,7 @@ function setText(pdf: jsPDF, color: Rgb) {
 
 function drawPmsWatermark(pdf: jsPDF, pageWidth: number, pageHeight: number) {
   pdf.saveGraphicsState();
-  pdf.setGState(pdf.GState({ opacity: 0.08 }));
+  pdf.setGState(pdf.GState({ opacity: 0.03 }));
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(120);
   setText(pdf, NAVY);

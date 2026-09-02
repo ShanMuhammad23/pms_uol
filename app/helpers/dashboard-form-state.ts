@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ClipboardPen,
   Gavel,
   Scale,
   User,
@@ -36,6 +37,14 @@ export const FORM_STATE_CONFIG: Record<
     border: "border-slate-200",
     icon: User,
     phase: 0,
+  },
+  PENDING_DIRECT_ASSESSMENT: {
+    label: "Direct Assessment",
+    color: "text-sky-700 dark:text-sky-300",
+    bg: "bg-sky-50 dark:bg-sky-900/30",
+    border: "border-sky-200 dark:border-sky-700/50",
+    icon: ClipboardPen,
+    phase: 1,
   },
   PENDING_MANAGER_1_REVIEW: {
     label: "Manager 1 Review",
@@ -103,14 +112,31 @@ type StatusRow = {
   status: AppraisalStatus;
   managerLevel?: number | null;
   directScoreEntry?: boolean;
+  selfAssessmentEnabled?: boolean;
 };
 
+export function isPendingDirectAssessment(row: StatusRow): boolean {
+  return (
+    row.selfAssessmentEnabled === false &&
+    row.status === "PENDING_HEAD_REVIEW" &&
+    !row.directScoreEntry
+  );
+}
+
 export function isPendingManager1Review(row: StatusRow): boolean {
-  return row.status === "PENDING_HEAD_REVIEW" && (row.managerLevel ?? 1) < 2;
+  return (
+    row.status === "PENDING_HEAD_REVIEW" &&
+    (row.managerLevel ?? 1) < 2 &&
+    !isPendingDirectAssessment(row)
+  );
 }
 
 export function isPendingManager2Review(row: StatusRow): boolean {
-  return row.status === "PENDING_HEAD_REVIEW" && (row.managerLevel ?? 1) >= 2;
+  return (
+    row.status === "PENDING_HEAD_REVIEW" &&
+    (row.managerLevel ?? 1) >= 2 &&
+    !isPendingDirectAssessment(row)
+  );
 }
 
 export function getPendingManagerReviewConfig(managerLevel: number | null | undefined) {
@@ -130,6 +156,10 @@ export function getSubmissionStatusConfig(row: StatusRow): StatusStyle {
     };
   }
 
+  if (isPendingDirectAssessment(row)) {
+    return FORM_STATE_CONFIG.PENDING_DIRECT_ASSESSMENT;
+  }
+
   if (row.status === "PENDING_HEAD_REVIEW") {
     return getPendingManagerReviewConfig(row.managerLevel);
   }
@@ -142,6 +172,9 @@ export function getSubmissionStatusLabel(row: StatusRow): string {
 }
 
 export function matchesFormStateOption(row: StatusRow, state: string): boolean {
+  if (state === "PENDING_DIRECT_ASSESSMENT") {
+    return isPendingDirectAssessment(row);
+  }
   if (state === "PENDING_MANAGER_1_REVIEW") {
     return isPendingManager1Review(row);
   }
@@ -172,6 +205,7 @@ export function normalizeSelectedFormStates(
 
   for (const state of states) {
     if (state === LEGACY_HEAD_REVIEW_FORM_STATE) {
+      add("PENDING_DIRECT_ASSESSMENT");
       add("PENDING_MANAGER_1_REVIEW");
       add("PENDING_MANAGER_2_REVIEW");
       continue;

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import FormBuilderWizard from "@/app/components/forms/FormBuilderWizard";
 import { requireModuleEditPage } from "@/lib/auth/require-module-page";
 import { listAppraisalCycles } from "@/lib/queries/appraisal-cycles";
-import { getFormTemplateAppraisalCount, getFormTemplateById } from "@/lib/queries/forms";
+import { getFormTemplateById, getFormTemplateSubmissionCount } from "@/lib/queries/forms";
 import { withDb } from "@/lib/db-context";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +29,7 @@ export default async function EditFormPage({ params }: EditFormPageProps) {
     }
 
     const appraisalCycles = await listAppraisalCycles();
-    const appraisalCount = await getFormTemplateAppraisalCount(templateId);
+    const submissionCount = await getFormTemplateSubmissionCount(templateId);
 
     return (
       <div className="-m-4 flex h-[100dvh] flex-col overflow-hidden">
@@ -37,7 +37,7 @@ export default async function EditFormPage({ params }: EditFormPageProps) {
           templateId={templateId}
           initialData={template}
           appraisalCycles={appraisalCycles}
-          appraisalCount={appraisalCount}
+          submissionCount={submissionCount}
         />
       </div>
     );

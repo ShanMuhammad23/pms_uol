@@ -17,6 +17,45 @@ interface FormsListTableProps {
   canEdit?: boolean;
 }
 
+function AssignedSubmissionProgress({
+  assigned,
+  submitted,
+}: {
+  assigned: number;
+  submitted: number;
+}) {
+  const clampedSubmitted = Math.min(Math.max(submitted, 0), Math.max(assigned, 0));
+  const percent =
+    assigned > 0 ? Math.round((clampedSubmitted / assigned) * 100) : 0;
+
+  return (
+    <div
+      className="mx-auto flex w-28 flex-col items-stretch gap-1"
+      title={`${clampedSubmitted} of ${assigned} assigned employees submitted (${percent}%)`}
+    >
+      <span className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+        {assigned}
+      </span>
+      <span className="text-[11px] leading-tight tabular-nums text-slate-500 dark:text-slate-400">
+        {clampedSubmitted} submitted
+      </span>
+      <div
+        className="h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-label={`${clampedSubmitted} of ${assigned} assigned employees submitted`}
+      >
+        <div
+          className="h-full rounded-full bg-emerald-500 dark:bg-emerald-400"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function FormsListTable({ templates, canEdit = true }: FormsListTableProps) {
   const queryClient = useQueryClient();
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -115,7 +154,7 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
             <tr className="divide-x divide-white/15">
               <th className="px-4 py-3.5">Title</th>
               <th className="px-4 py-3.5">Code</th>
-              <th className="px-2 py-2 w-1/16 text-center">Assigned </th>
+              <th className="px-2 py-2 w-1/16 text-center">Assigned</th>
               <th className="px-4 py-3.5 text-center w-1/16">Cycle</th>
               <th className="px-4 py-3.5 text-center w-1/16">Questions</th>
               <th className="px-4 py-3.5 text-center">Last updated</th>
@@ -145,7 +184,10 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                   </span>
                 </td>
                 <td className="px-2 py-2 text-center text-slate-700 dark:text-slate-300">
-                  {template.assignedEmployeeCount}
+                  <AssignedSubmissionProgress
+                    assigned={template.assignedEmployeeCount}
+                    submitted={template.submissionCount}
+                  />
                 </td>
                 <td className="px-4 py-4 text-center text-slate-700 dark:text-slate-300">
                   FY {template.fiscalYear}

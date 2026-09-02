@@ -808,7 +808,7 @@ export function BulkUploadStaffModal({
               }
               className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:bg-amber-600 dark:hover:bg-amber-500"
             >
-              Save changes
+              Next
             </button>
           </div>
         </footer>

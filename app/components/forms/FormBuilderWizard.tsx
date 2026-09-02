@@ -232,7 +232,8 @@ interface FormBuilderWizardProps {
   templateId?: number;
   initialData?: FormTemplateRecord;
   appraisalCycles?: AppraisalCycleRecord[];
-  appraisalCount?: number;
+  /** Submitted/advanced appraisals — assignment alone does not lock structure. */
+  submissionCount?: number;
   copyMode?: boolean;
 }
 
@@ -403,6 +404,28 @@ function validateQuestionFields(
   });
 }
 
+function findQuestionByClientId(
+  sections: FormSectionInput[],
+  questions: QuestionInput[],
+  clientId: string,
+): QuestionInput | undefined {
+  const root = questions.find((question) => question.clientId === clientId);
+  if (root) return root;
+
+  for (const section of sections) {
+    const inSection = section.questions.find((question) => question.clientId === clientId);
+    if (inSection) return inSection;
+    for (const subsection of section.subsections) {
+      const inSubsection = subsection.questions.find(
+        (question) => question.clientId === clientId,
+      );
+      if (inSubsection) return inSubsection;
+    }
+  }
+
+  return undefined;
+}
+
 // --- Modern Form Design Step Components ---
 
 interface ModernFormDesignStepProps {
@@ -422,6 +445,7 @@ interface ModernFormDesignStepProps {
   onScoringModeChange: (mode: "absolute" | "rating") => void;
   onRatingScalesChange: (scales: FormRatingScaleInput[]) => void;
   onStructureChange: (sections: FormSectionInput[], questions: QuestionInput[]) => void;
+  lockExistingQuestions?: boolean;
 }
 
 function ModernFormDesignStep({
@@ -441,6 +465,7 @@ function ModernFormDesignStep({
   onScoringModeChange,
   onRatingScalesChange,
   onStructureChange,
+  lockExistingQuestions = false,
 }: ModernFormDesignStepProps) {
   const [activePanel, setActivePanel] = useState<"builder" | "preview">("builder");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
@@ -567,6 +592,15 @@ function ModernFormDesignStep({
   };
 
   const removeSection = (clientId: string) => {
+    const section = sections.find((s) => s.clientId === clientId);
+    if (
+      lockExistingQuestions &&
+      section &&
+      (section.questions.some((q) => q.id != null) ||
+        section.subsections.some((sub) => sub.questions.some((q) => q.id != null)))
+    ) {
+      return;
+    }
     commitStructure(sections.filter(s => s.clientId !== clientId), questions);
   };
 
@@ -593,6 +627,11 @@ function ModernFormDesignStep({
   };
 
   const removeQuestion = (questionClientId: string) => {
+    const existing = findQuestionByClientId(sections, questions, questionClientId);
+    if (lockExistingQuestions && existing?.id != null) {
+      return;
+    }
+
     if (questions.some(q => q.clientId === questionClientId)) {
       commitStructure(
         sections,
@@ -666,6 +705,15 @@ function ModernFormDesignStep({
   };
 
   const removeSubsection = (sectionClientId: string, subsectionClientId: string) => {
+    const section = sections.find((s) => s.clientId === sectionClientId);
+    const subsection = section?.subsections.find((sub) => sub.clientId === subsectionClientId);
+    if (
+      lockExistingQuestions &&
+      subsection?.questions.some((question) => question.id != null)
+    ) {
+      return;
+    }
+
     commitStructure(
       sections.map(s => {
         if (s.clientId === sectionClientId) {
@@ -1271,6 +1319,7 @@ function ModernFormDesignStep({
                           formSelfAssessmentEnabled={selfAssessmentEnabled}
                           ratingBased={ratingBased}
                           ratingScales={ratingScales}
+                          lockExistingQuestions={lockExistingQuestions}
                         />
                       );
                     }
@@ -1305,6 +1354,7 @@ function ModernFormDesignStep({
                         formSelfAssessmentEnabled={selfAssessmentEnabled}
                         ratingBased={ratingBased}
                         ratingScales={ratingScales}
+                        lockExistingQuestions={lockExistingQuestions}
                       />
                     );
                   })}
@@ -1376,6 +1426,7 @@ function SubsectionCard({
   formSelfAssessmentEnabled = true,
   ratingBased = false,
   ratingScales = [],
+  lockExistingQuestions = false,
 }: {
   subsection: FormSubsectionInput;
   subsectionIndex: number;
@@ -1393,10 +1444,14 @@ function SubsectionCard({
   formSelfAssessmentEnabled?: boolean;
   ratingBased?: boolean;
   ratingScales?: FormRatingScaleInput[];
+  lockExistingQuestions?: boolean;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [dragOverPos, setDragOverPos] = useState<"before" | "after" | null>(null);
   const titleError = errors[`section-${sectionIndex}-sub-${subsectionIndex}-title`];
+  const subsectionLocked =
+    lockExistingQuestions &&
+    subsection.questions.some((question) => question.id != null);
 
   return (
     <div
@@ -1492,8 +1547,13 @@ function SubsectionCard({
           </button>
           <button
             onClick={onRemove}
-            className="rounded p-1 text-teal-400 hover:bg-red-100 hover:text-red-600 dark:text-teal-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-            title="Delete subsection"
+            disabled={subsectionLocked}
+            className="rounded p-1 text-teal-400 hover:bg-red-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-teal-400 dark:text-teal-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+            title={
+              subsectionLocked
+                ? "Cannot delete a subsection with questions after submissions exist"
+                : "Delete subsection"
+            }
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -1554,6 +1614,7 @@ function SubsectionCard({
             formSelfAssessmentEnabled={formSelfAssessmentEnabled}
             ratingBased={ratingBased}
             ratingScales={ratingScales}
+            lockExistingQuestions={lockExistingQuestions}
           />
         ))}
 
@@ -1588,6 +1649,7 @@ function SectionCard({
   formSelfAssessmentEnabled = true,
   ratingBased = false,
   ratingScales = [],
+  lockExistingQuestions = false,
 }: {
   section: FormSectionInput;
   index: number;
@@ -1610,12 +1672,19 @@ function SectionCard({
   formSelfAssessmentEnabled?: boolean;
   ratingBased?: boolean;
   ratingScales?: FormRatingScaleInput[];
+  lockExistingQuestions?: boolean;
 }) {
   const [sectionDragOver, setSectionDragOver] = useState(false);
   const [headerDragPos, setHeaderDragPos] = useState<"before" | "after" | null>(null);
   const hasTitleError = errors[`section-${index}-title`];
   const hasAnyError = Object.keys(errors).some(k => k.startsWith(`section-${index}`));
   const totalQuestions = section.questions.length + section.subsections.reduce((sum, sub) => sum + sub.questions.length, 0);
+  const sectionLocked =
+    lockExistingQuestions &&
+    (section.questions.some((question) => question.id != null) ||
+      section.subsections.some((sub) =>
+        sub.questions.some((question) => question.id != null),
+      ));
 
   return (
     <div className={cn(
@@ -1749,8 +1818,13 @@ function SectionCard({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="rounded p-1.5 text-indigo-400 hover:bg-red-100 hover:text-red-600 dark:text-indigo-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-            title="Delete section"
+            disabled={sectionLocked}
+            className="rounded p-1.5 text-indigo-400 hover:bg-red-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-indigo-400 dark:text-indigo-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+            title={
+              sectionLocked
+                ? "Cannot delete a section with questions after submissions exist"
+                : "Delete section"
+            }
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -1853,6 +1927,7 @@ function SectionCard({
                       formSelfAssessmentEnabled={formSelfAssessmentEnabled}
                       ratingBased={ratingBased}
                       ratingScales={ratingScales}
+                      lockExistingQuestions={lockExistingQuestions}
                     />
                   );
                 }
@@ -1886,6 +1961,7 @@ function SectionCard({
                     formSelfAssessmentEnabled={formSelfAssessmentEnabled}
                     ratingBased={ratingBased}
                     ratingScales={ratingScales}
+                    lockExistingQuestions={lockExistingQuestions}
                   />
                 );
               });
@@ -1930,6 +2006,7 @@ function QuestionCard({
   formSelfAssessmentEnabled = true,
   ratingBased = false,
   ratingScales = [],
+  lockExistingQuestions = false,
 }: {
   question: QuestionInput;
   index: number;
@@ -1947,6 +2024,7 @@ function QuestionCard({
   formSelfAssessmentEnabled?: boolean;
   ratingBased?: boolean;
   ratingScales?: FormRatingScaleInput[];
+  lockExistingQuestions?: boolean;
 }) {
   const textError = errors[errorPrefix];
   const typeError = errors[`${errorPrefix}-type`];
@@ -1957,6 +2035,7 @@ function QuestionCard({
   const [dragOverPos, setDragOverPos] = useState<"before" | "after" | null>(null);
   const dropLayoutIndex = layoutIndex ?? index;
   const canAcceptDrop = !!(onDropQuestion || onDropSubsection || onDropSection);
+  const questionLocked = lockExistingQuestions && question.id != null;
 
   useEffect(() => {
     const handleDragEnd = () => setDragOverPos(null);
@@ -2238,7 +2317,13 @@ function QuestionCard({
                       const newOptions = question.options.filter((_, i) => i !== oIdx);
                       onChange({ options: newOptions });
                     }}
-                    className="text-sky-400 hover:text-red-600 dark:text-sky-500 dark:hover:text-red-400"
+                    disabled={lockExistingQuestions && option.id != null}
+                    className="text-sky-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sky-400 dark:text-sky-500 dark:hover:text-red-400"
+                    title={
+                      lockExistingQuestions && option.id != null
+                        ? "Cannot remove an option after submissions exist"
+                        : "Remove option"
+                    }
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -2258,7 +2343,13 @@ function QuestionCard({
         <button
           type="button"
           onClick={onRemove}
-          className="mt-1 opacity-0 transition-opacity group-hover:opacity-100 text-sky-400 hover:text-red-600 dark:text-sky-500 dark:hover:text-red-400"
+          disabled={questionLocked}
+          className="mt-1 text-sky-400 hover:text-red-600 opacity-0 transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sky-400 dark:text-sky-500 dark:hover:text-red-400"
+          title={
+            questionLocked
+              ? "Cannot remove a question after submissions exist"
+              : "Remove question"
+          }
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -2273,7 +2364,7 @@ export default function FormBuilderWizard({
   templateId,
   initialData,
   appraisalCycles = [],
-  appraisalCount = 0,
+  submissionCount = 0,
   copyMode = false,
 }: FormBuilderWizardProps) {
   const router = useRouter();
@@ -2652,11 +2743,11 @@ export default function FormBuilderWizard({
         </div>
       </header>
 
-      {templateId && appraisalCount > 0 ? (
+      {templateId && submissionCount > 0 ? (
         <div className="flex shrink-0 items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            This form has active appraisals — removing questions is restricted.
+            This form has submissions — removing questions is restricted.
             You can still edit question text, options, and add new questions.
           </p>
         </div>
@@ -2706,6 +2797,7 @@ export default function FormBuilderWizard({
             }}
             onRatingScalesChange={setRatingScales}
             onStructureChange={handleStructureChange}
+            lockExistingQuestions={submissionCount > 0}
           />
         ) : (
           <div className="flex h-full min-h-0 flex-col overflow-hidden">

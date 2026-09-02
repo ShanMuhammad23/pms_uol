@@ -38,6 +38,7 @@ import {
   type FormRatingScaleRecord,
   type QuestionRecord,
 } from "@/types/forms";
+import { getPendingManagerReviewConfig } from "@/app/helpers/dashboard-form-state";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 import { cn } from "@/lib/utils";
 import {
@@ -252,10 +253,7 @@ function SubmissionInfoTile({
   return (
     <div
       className={cn(
-        "flex min-h-15 min-w-0 flex-col items-center justify-center rounded-lg border px-3 py-2 text-center",
-        accent
-          ? "border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40"
-          : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900",
+        "flex  min-w-0 flex-col items-center justify-center  text-center"
       )}
     >
       <dt
@@ -975,6 +973,10 @@ export default function SubmissionDetailView({
   }
 
   const rows = buildFormTableRows(data.sections, data.rootQuestions);
+  const statusLabel =
+    data.status === "PENDING_HEAD_REVIEW"
+      ? getPendingManagerReviewConfig(data.managerLevel).label
+      : APPRAISAL_STATUS_LABELS[data.status];
 
   const statusStyles: Record<AppraisalStatus, string> = {
     PENDING_SELF_ASSESSMENT:
@@ -1097,7 +1099,7 @@ export default function SubmissionDetailView({
           { label: "ORG Level 1", value: displayOrgValue(data.orgLevel1Name) },
           { label: "ORG Level 2", value: displayOrgValue(data.orgLevel2Name) },
           { label: "Form", value: data.templateTitle },
-          { label: "Status", value: APPRAISAL_STATUS_LABELS[data.status] },
+          { label: "Status", value: statusLabel },
           { label: "Score", value: `${formatScoreValue(displayedFormScore)}/${data.maxRawScore} (${displayedFormPercent}%)` },
           {
             label: "Manager 1",
@@ -1110,8 +1112,8 @@ export default function SubmissionDetailView({
         ]}
       />
       <div className="border-b border-slate-200/50 bg-slate-200 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/40">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <div className="flex min-w-0 w-full items-center gap-3 md:w-52 md:shrink-0">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center border-b border-slate-200/50 justify-between">
+          <div className="flex min-w-0  items-center gap-3 w-[20%]">
             <div
               className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
               aria-hidden="true"
@@ -1134,7 +1136,7 @@ export default function SubmissionDetailView({
                     statusStyles[data.status],
                   )}
                 >
-                  {APPRAISAL_STATUS_LABELS[data.status]}
+                  {statusLabel}
                 </span>
               </div>
               {data.templateTitle ? (
@@ -1144,7 +1146,7 @@ export default function SubmissionDetailView({
               ) : null}
             </div>
           </div>
-          <dl className="grid min-w-0 w-full flex-1 grid-cols-2 gap-2 lg:grid-cols-4">
+          <dl className="flex flex-wrap gap-2 w-[50%] justify-between items-center p-4 bg-white rounded-md shadow-md">
             <SubmissionInfoTile
               icon={Gauge}
               label="Score"
@@ -1171,7 +1173,7 @@ export default function SubmissionDetailView({
               }
             />
           </dl>
-          <div className="no-print flex w-full shrink-0 flex-wrap items-center gap-2 md:w-auto md:justify-end">
+          <div className="no-print flex flex-col xl:flex-row w-full shrink-0 flex-wrap items-center gap-2 md:w-auto md:justify-end ">
             {/* Reset Form — admin only */}
             {isAdminRole && rows.length > 0 ? (
               <button
