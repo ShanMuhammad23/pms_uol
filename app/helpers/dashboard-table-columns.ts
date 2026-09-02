@@ -363,7 +363,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   status: {
     id: "status",
-    label: "Status",
+    label: "Stage",
     width: 180,
     getValue: (row) => getSubmissionStatusLabel(row),
   },
@@ -439,7 +439,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   ratingO: {
     id: "ratingO",
-    label: "Rating (O)",
+    label: "Rating (A)",
     getValue: (row) => formatNullable(getAdjustedRating(row)),
   },
   calibrationFactor: {
@@ -453,7 +453,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   hrApprovalStatus: {
     id: "hrApprovalStatus",
-    label: "HR Actions",
+    label: "HR Actions (Perf)s",
     align: "center",
     width: 110,
     getValue: (row) => {
@@ -567,7 +567,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   incrementAdjusted: {
     id: "incrementAdjusted",
-    label: "Increment Adjustment",
+    label: "Increment Adj.",
     align: "right",
     numeric: true,
     getValue: (row) => formatNumber(getIncrementAdjusted(row)),
@@ -588,14 +588,14 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   remarksCompensation: {
     id: "remarksCompensation",
-    label: "Salary Remarks",
+    label: "Comp. Remarks",
     width: 220,
     wrap: true,
     getValue: (row) => formatNullable(row.remarksCompensation),
   },
   hodReviewComments: {
     id: "hodReviewComments",
-    label: "HOD Remarks",
+    label: "Remarks Perf.",
     width: 220,
     wrap: true,
     getValue: (row) => formatNullable(row.hodReviewComments),

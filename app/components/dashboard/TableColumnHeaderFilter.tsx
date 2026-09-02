@@ -413,7 +413,7 @@ export function TableColumnHeaderFilter({
       : null;
 
   return (
-    <div className="inline-flex items-center gap-1">
+    <div className="flex items-center justify-center gap-1">
       <span>{column.label}</span>
       <button
         ref={triggerRef}

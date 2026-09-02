@@ -96,3 +96,20 @@ export const getPerformanceLevelTint = (
 export const getQuartileShade = (quartileIndex: number) => {
   return QUARTILE_SHADES[Math.min(quartileIndex, QUARTILE_SHADES.length - 1)];
 };
+
+/**
+ * UoL Experience cell color by years of service.
+ * < 1: no color; 1–5 inclusive: yellow; > 5 through 10: blue; > 10: green.
+ */
+export function getUolExperienceBandClass(
+  years: number | null | undefined,
+): string | null {
+  if (years == null || Number.isNaN(years) || years < 1) return null;
+  if (years <= 5) {
+    return "bg-yellow-400 text-yellow-950 dark:bg-yellow-400 dark:text-yellow-950";
+  }
+  if (years <= 10) {
+    return "bg-blue-500 text-white dark:bg-blue-500";
+  }
+  return "bg-green-500 text-white dark:bg-green-500";
+}

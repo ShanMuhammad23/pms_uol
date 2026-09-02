@@ -92,6 +92,7 @@ import {
   canonicalPerformanceLevelName,
   getPerformanceLevelColor,
   getQuartileShade,
+  getUolExperienceBandClass,
 } from "@/app/helpers/dashboard-helpers";
 import { useFormSubmissionsQuery } from "@/app/queries/forms";
 import { DEFAULT_PAGE_SIZE } from "@/lib/dashboard/filter-params";
@@ -135,12 +136,20 @@ function columnCellClassName(
   );
 }
 
+function columnHeaderClassName(extra?: string) {
+  return cn(
+    "px-2 py-1 text-center",
+    "whitespace-normal break-words",
+    extra,
+  );
+}
+
 const STICKY_EDGE_SHADOW_LEFT =
   "shadow-[6px_0_12px_-8px_rgba(15,23,42,0.2)] dark:shadow-[6px_0_12px_-8px_rgba(0,0,0,0.5)]";
 
 function stickySelectHeaderClassName() {
   return cn(
-    "sticky left-0 top-0 z-50 border-b border-primary/80 bg-primary px-3 py-3",
+    "sticky left-0 top-0 z-50 border-b border-primary/80 bg-primary px-3 py-3 text-center",
     STICKY_EDGE_SHADOW_LEFT,
   );
 }
@@ -382,6 +391,27 @@ function renderCell(
         className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white"
         style={{ backgroundColor }}
         title={getEligibilityDisplayLabel(status)}
+      >
+        {value}
+      </span>
+    );
+  }
+
+  if (columnId === "uolExperience") {
+    const bandClass = getUolExperienceBandClass(submission.uolExperienceYears);
+    if (!bandClass) {
+      return (
+        <span className="block tabular-nums text-slate-700 dark:text-slate-300">
+          {value}
+        </span>
+      );
+    }
+    return (
+      <span
+        className={cn(
+          "inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold tabular-nums",
+          bandClass,
+        )}
       >
         {value}
       </span>
@@ -1676,8 +1706,7 @@ export function DashboardSubmissionsTable({
                     onResize={setColumnWidth}
                     frozen={isFrozen}
                     stickyLeft={isFrozen ? stickyOffsets[column.id] : undefined}
-                    className={columnCellClassName(
-                      column,
+                    className={columnHeaderClassName(
                       cn(
                         stickyHeaderClassName(),
                         "text-xs font-semibold uppercase tracking-wider text-white",
