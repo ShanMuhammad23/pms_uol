@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { signOutAndRedirect } from "@/lib/queries/auth-client";
 import {
   ChevronDown,
@@ -16,7 +17,12 @@ import {
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { ViewAsDropdown } from "@/app/components/layout/ViewAsDropdown";
 import { SignOutConfirmModal } from "@/app/components/layout/SignOutConfirmModal";
-import { useSidebar } from "@/app/components/layout/sidebar-context";
+import {
+  SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_EXPANDED_WIDTH,
+  SIDEBAR_LAYOUT_TRANSITION,
+  useSidebar,
+} from "@/app/components/layout/sidebar-context";
 import { isEmployeeRole } from "@/lib/auth/home-path";
 import formIcon from '@/public/icons8-form-80.png';
 import usersIcon from '@/public/icons8-users-64.png';
@@ -84,6 +90,90 @@ const SUPER_ADMIN_ONLY_LINKS = [
   },
 ] as const;
 
+const ADMIN_SUBMENU_TRANSITION = {
+  duration: 0.28,
+  ease: [0.22, 1, 0.36, 1] as const,
+};
+
+function SidebarLabel({ children }: { children: React.ReactNode }) {
+  const { collapsed } = useSidebar();
+
+  return (
+    <motion.span
+      initial={false}
+      animate={{
+        opacity: collapsed ? 0 : 1,
+        maxWidth: collapsed ? 0 : 200,
+      }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      className="overflow-hidden whitespace-nowrap"
+    >
+      {children}
+    </motion.span>
+  );
+}
+
+function AnimatedAdminLinks({
+  open,
+  links,
+  pathname,
+  navLinkClass,
+}: {
+  open: boolean;
+  links: Array<{
+    href: string;
+    label: string;
+    icon: (typeof ADMIN_LINKS)[number]["icon"] | (typeof SUPER_ADMIN_ONLY_LINKS)[number]["icon"];
+    match: (pathname: string) => boolean;
+  }>;
+  pathname: string;
+  navLinkClass: (active: boolean) => string;
+}) {
+  return (
+    <AnimatePresence initial={false}>
+      {open ? (
+        <motion.div
+          key="admin-submenu"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={ADMIN_SUBMENU_TRANSITION}
+          className="overflow-hidden"
+        >
+          <ul className="mt-0.5 ml-6 space-y-0.5 border-l border-slate-300/60 dark:border-white/10">
+            {links.map((link, index) => {
+              const Icon = link.icon;
+              const active = link.match(pathname);
+              return (
+                <motion.li
+                  key={link.href}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{
+                    duration: 0.2,
+                    delay: index * 0.035,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                >
+                  <Link
+                    href={link.href}
+                    aria-current={active ? "page" : undefined}
+                    title={link.label}
+                    className={cn(navLinkClass(active), "pl-4")}
+                  >
+                    <Image src={Icon} alt={link.label} width={24} height={24} className="shrink-0" />
+                    {link.label}
+                  </Link>
+                </motion.li>
+              );
+            })}
+          </ul>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
 const Sidebar = () => {
   const pathname = usePathname();
   const { data: session } = useSession();
@@ -142,32 +232,43 @@ const Sidebar = () => {
   const navLinkClass = (active: boolean) =>
     cn(
       "sidebar-nav-link",
-      collapsed && "justify-center px-0",
+      collapsed && "justify-center px-2",
       active
         ? "border-r-4 border-primary "
         : "border-primary hover:border-r-4 hover:bg-primary/10",
     );
 
   return (
-    <aside
-      className={cn(
-        "no-print fixed top-0 left-0 z-40 flex h-full flex-col overflow-auto border border-r border-slate-300/80 py-6 transition-[width,colors] duration-300 ease-in-out dark:border-white/15",
-        collapsed ? "w-[72px]" : "w-[264px]",
-      )}
+    <motion.aside
+      className="no-print fixed top-0 left-0 z-40 flex h-full flex-col overflow-x-hidden overflow-y-auto border border-r border-slate-300/80 py-6 dark:border-white/15"
+      initial={false}
+      animate={{
+        width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
+      }}
+      transition={SIDEBAR_LAYOUT_TRANSITION}
     >
-      <div
+      <motion.div
+        layout
         className={cn(
           "relative flex items-center gap-2 px-3",
           collapsed ? "flex-col" : "gap-4 px-4",
         )}
+        transition={SIDEBAR_LAYOUT_TRANSITION}
       >
-        {!collapsed ? (
-          <div className="flex flex-1 flex-wrap items-center gap-2">
-            <h2 className="text-4xl font-bold">PMS</h2>
-          </div>
-        ) : null}
+        <motion.div
+          initial={false}
+          animate={{ opacity: collapsed ? 0 : 1, maxWidth: collapsed ? 0 : 160 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-1 items-center overflow-hidden whitespace-nowrap"
+        >
+          <h2 className="text-4xl font-bold">PMS</h2>
+        </motion.div>
 
-        <div className={cn("flex items-center gap-2", collapsed && "flex-col")}>
+        <motion.div
+          layout
+          className={cn("flex items-center gap-2", collapsed && "flex-col")}
+          transition={SIDEBAR_LAYOUT_TRANSITION}
+        >
           <ThemeToggle />
           <button
             type="button"
@@ -183,8 +284,8 @@ const Sidebar = () => {
               <PanelLeftClose className="h-5 w-5" />
             )}
           </button>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       <hr className="my-6 border-slate-300/80 dark:border-white/15" />
 
@@ -199,8 +300,8 @@ const Sidebar = () => {
                   title="My Forms"
                   className={navLinkClass(isMyForms)}
                 >
-                  <Image src={formIcon} alt="My Forms" width={24} height={24} />
-                  {!collapsed ? "My Forms" : null}
+                  <Image src={formIcon} alt="My Forms" width={24} height={24} className="shrink-0" />
+                  <SidebarLabel>My Forms</SidebarLabel>
                 </Link>
               </li>
 
@@ -225,7 +326,7 @@ const Sidebar = () => {
                             title={link.label}
                             className={navLinkClass(active)}
                           >
-                            <Image src={Icon} alt={link.label} width={24} height={24} />
+                            <Image src={Icon} alt={link.label} width={24} height={24} className="shrink-0" />
                           </Link>
                         );
                       })}
@@ -243,38 +344,21 @@ const Sidebar = () => {
                       >
                         <Settings2 className="size-4 shrink-0" />
                         <span className="flex-1">Administration</span>
-                        <ChevronDown
-                          className={cn(
-                            "size-4 shrink-0 transition-transform duration-200",
-                            adminOpen && "rotate-180",
-                          )}
-                        />
+                        <motion.span
+                          className="inline-flex shrink-0"
+                          animate={{ rotate: adminOpen ? 180 : 0 }}
+                          transition={ADMIN_SUBMENU_TRANSITION}
+                        >
+                          <ChevronDown className="size-4" />
+                        </motion.span>
                       </button>
 
-                      {adminOpen ? (
-                        <ul className="mt-0.5 space-y-0.5 border-l border-slate-300/60 ml-6 dark:border-white/10">
-                          {adminLinks.map((link) => {
-                            const Icon = link.icon;
-                            const active = link.match(pathname);
-                            return (
-                              <li key={link.href}>
-                                <Link
-                                  href={link.href}
-                                  aria-current={active ? "page" : undefined}
-                                  title={link.label}
-                                  className={cn(
-                                    navLinkClass(active),
-                                    "pl-4",
-                                  )}
-                                >
-                                  <Image src={Icon} alt={link.label} width={24} height={24} />
-                                  {link.label}
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : null}
+                      <AnimatedAdminLinks
+                        open={adminOpen}
+                        links={adminLinks}
+                        pathname={pathname}
+                        navLinkClass={navLinkClass}
+                      />
                     </div>
                   )}
                 </li>
@@ -289,8 +373,8 @@ const Sidebar = () => {
                   title="Dashboard"
                   className={navLinkClass(isDashboard)}
                 >
-                  <Image src={dashboardIcon} alt="Dashboard" width={24} height={24} />
-                  {!collapsed ? "Dashboard" : null}
+                  <Image src={dashboardIcon} alt="Dashboard" width={24} height={24} className="shrink-0" />
+                  <SidebarLabel>Dashboard</SidebarLabel>
                 </Link>
               </li>
 
@@ -301,8 +385,8 @@ const Sidebar = () => {
                   title="My Forms"
                   className={navLinkClass(isMyForms)}
                 >
-                  <Image src={formIcon} alt="My Forms" width={24} height={24} />
-                  {!collapsed ? "My Forms" : null}
+                  <Image src={formIcon} alt="My Forms" width={24} height={24} className="shrink-0" />
+                  <SidebarLabel>My Forms</SidebarLabel>
                 </Link>
               </li>
 
@@ -314,8 +398,8 @@ const Sidebar = () => {
                     title="Bulk Assessment Review"
                     className={navLinkClass(isBulkReview)}
                   >
-                    <Image src={reportsIcon} alt="Bulk Assessment Review" width={24} height={24} />
-                    {!collapsed ? "Bulk Assessment Review" : null}
+                    <Image src={reportsIcon} alt="Bulk Assessment Review" width={24} height={24} className="shrink-0" />
+                    <SidebarLabel>Bulk Assessment Review</SidebarLabel>
                   </Link>
                 </li>
               ) : null}
@@ -328,7 +412,7 @@ const Sidebar = () => {
                         className="flex justify-center py-2 text-secondary"
                         title="Administration"
                       >
-                        <Image src={securityIcon} alt="Security Events" width={24} height={24} />
+                        <Image src={securityIcon} alt="Security Events" width={24} height={24} className="shrink-0" />
                       </div>
                       {adminLinks.map((link) => {
                         const Icon = link.icon;
@@ -341,7 +425,7 @@ const Sidebar = () => {
                             title={link.label}
                             className={navLinkClass(active)}
                           >
-                            <Image src={Icon} alt={link.label} width={24} height={24} />
+                            <Image src={Icon} alt={link.label} width={24} height={24} className="shrink-0" />
                           </Link>
                         );
                       })}
@@ -357,40 +441,23 @@ const Sidebar = () => {
                           isAdminRouteActive && "text-primary",
                         )}
                       >
-                        <Image src={securityIcon} alt="Security Events" width={24} height={24} />
+                        <Image src={securityIcon} alt="Security Events" width={24} height={24} className="shrink-0" />
                         <span className="flex-1">Administration</span>
-                        <ChevronDown
-                          className={cn(
-                            "size-4 shrink-0 transition-transform duration-200",
-                            adminOpen && "rotate-180",
-                          )}
-                        />
+                        <motion.span
+                          className="inline-flex shrink-0"
+                          animate={{ rotate: adminOpen ? 180 : 0 }}
+                          transition={ADMIN_SUBMENU_TRANSITION}
+                        >
+                          <ChevronDown className="size-4" />
+                        </motion.span>
                       </button>
 
-                      {adminOpen ? (
-                        <ul className="mt-0.5 space-y-0.5 border-l border-slate-300/60 ml-6 dark:border-white/10">
-                          {adminLinks.map((link) => {
-                            const Icon = link.icon;
-                            const active = link.match(pathname);
-                            return (
-                              <li key={link.href}>
-                                <Link
-                                  href={link.href}
-                                  aria-current={active ? "page" : undefined}
-                                  title={link.label}
-                                  className={cn(
-                                    navLinkClass(active),
-                                    "pl-4",
-                                  )}
-                                >
-                                  <Image src={Icon} alt={link.label} width={24} height={24} />
-                                  {link.label}
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : null}
+                      <AnimatedAdminLinks
+                        open={adminOpen}
+                        links={adminLinks}
+                        pathname={pathname}
+                        navLinkClass={navLinkClass}
+                      />
                     </div>
                   )}
                 </li>
@@ -402,54 +469,74 @@ const Sidebar = () => {
 
       <div
         className={cn(
-          "mt-6 border-t border-slate-300/80 pt-4 dark:border-white/15",
+          "mt-6 overflow-hidden border-t border-slate-300/80 pt-4 dark:border-white/15",
           collapsed ? "px-2" : "px-4",
         )}
       >
-        {collapsed ? (
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-              {initials}
-            </div>
-            <button
-              type="button"
-              onClick={() => setSignOutOpen(true)}
-              title="Sign out"
-              className="flex size-9 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+        <AnimatePresence mode="wait" initial={false}>
+          {collapsed ? (
+            <motion.div
+              key="sidebar-footer-collapsed"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              className="flex flex-col items-center gap-2"
             >
-              <LogOut className="size-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+              <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
                 {initials}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                <p className="truncate text-sm font-semibold text-text-primary">
-                  {user?.name ?? "User"}
-                </p>
-                <Link href="/dashboard/profile" className="text-xs text-white bg-secondary rounded-md px-2 py-1">Profile</Link>
-                </div>
-               
-                <p className="truncate text-xs text-foreground/60">
-                  {user?.designation ?? "—"}
-                </p>
-              </div>
-            </div>
-            <ViewAsDropdown />
-            <button
-              type="button"
-              onClick={() => setSignOutOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300/80 py-2 text-xs font-medium text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-white/15"
+              <button
+                type="button"
+                onClick={() => setSignOutOpen(true)}
+                title="Sign out"
+                className="flex size-9 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              >
+                <LogOut className="size-4" />
+              </button>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="sidebar-footer-expanded"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              className="space-y-3"
             >
-              <LogOut className="size-3.5" />
-              Sign out
-            </button>
-          </div>
-        )}
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                  {initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-text-primary">
+                      {user?.name ?? "User"}
+                    </p>
+                    <Link
+                      href="/dashboard/profile"
+                      className="rounded-md bg-secondary px-2 py-1 text-xs text-white"
+                    >
+                      Profile
+                    </Link>
+                  </div>
+                  <p className="truncate text-xs text-foreground/60">
+                    {user?.designation ?? "—"}
+                  </p>
+                </div>
+              </div>
+              <ViewAsDropdown />
+              <button
+                type="button"
+                onClick={() => setSignOutOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300/80 py-2 text-xs font-medium text-red-500 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-white/15"
+              >
+                <LogOut className="size-3.5" />
+                Sign out
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       <SignOutConfirmModal
         open={signOutOpen}
@@ -459,7 +546,7 @@ const Sidebar = () => {
         }}
         onClose={() => setSignOutOpen(false)}
       />
-    </aside>
+    </motion.aside>
   );
 };
 
