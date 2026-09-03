@@ -68,6 +68,7 @@ import {
   AlertTriangle,
   Building2,
   CalendarDays,
+  CheckCircle2,
   Gauge,
   Network,
   RotateCcw,
@@ -90,7 +91,7 @@ function emptyManagerDraft(): ManagerDraft {
 function managerDraftHasInput(draft: ManagerDraft): boolean {
   return (
     draft.ratingValue !== "" ||
-    (draft.pointsEarned !== "" && Number(draft.pointsEarned) > 0) ||
+    (draft.pointsEarned !== "" && Number.isFinite(Number(draft.pointsEarned))) ||
     Boolean(draft.remarks.trim())
   );
 }
@@ -137,14 +138,55 @@ function answersFromManagerDrafts(
 ) {
   return questions.filter(isScoredQuestion).map((question) => {
     const draft = drafts.get(question.id);
+    const pointsRaw = draft?.pointsEarned;
+    const pointsEarned =
+      pointsRaw === "" || pointsRaw == null
+        ? undefined
+        : Number(pointsRaw);
     return {
       questionId: question.id,
       pointsEarned:
-        draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+        pointsEarned != null && Number.isFinite(pointsEarned)
+          ? pointsEarned
+          : undefined,
       ratingValue: ratingValueFromDraft(draft),
       remarks: draft?.remarks?.trim() || null,
     };
   });
+}
+
+function managerDraftScoreFilled(
+  question: QuestionRecord,
+  draft: ManagerDraft | undefined,
+  ratingBased: boolean,
+  ratingScales: FormRatingScaleRecord[],
+): boolean {
+  const current = draft ?? emptyManagerDraft();
+  if (usesRatingScore(question, ratingBased, ratingScales)) {
+    return (
+      current.ratingValue !== "" &&
+      Number.isFinite(Number(current.ratingValue))
+    );
+  }
+  if (current.pointsEarned === "") return false;
+  const points = Number(current.pointsEarned);
+  return Number.isFinite(points) && points >= 0;
+}
+
+function collectIncompleteRequiredQuestionIds(
+  questions: QuestionRecord[],
+  drafts: Map<number, ManagerDraft>,
+  ratingBased: boolean,
+  ratingScales: FormRatingScaleRecord[],
+): number[] {
+  return questions
+    .filter(
+      (question) =>
+        isScoredQuestion(question) &&
+        question.isRequired &&
+        !managerDraftScoreFilled(question, drafts.get(question.id), ratingBased, ratingScales),
+    )
+    .map((question) => question.id);
 }
 
 function savedManagerAnswersPatch(
@@ -165,6 +207,7 @@ function ManagerScoreEditor({
   onChange,
   inputClassName,
   tone = "violet",
+  invalid = false,
 }: {
   question: QuestionRecord;
   ratingBased: boolean;
@@ -173,8 +216,11 @@ function ManagerScoreEditor({
   onChange: (patch: Partial<ManagerDraft>) => void;
   inputClassName: string;
   tone?: "violet" | "indigo";
+  invalid?: boolean;
 }) {
   const scale = getQuestionRatingScale(question, ratingScales);
+  const invalidClass =
+    "border-red-500 ring-2 ring-red-400/80 focus-visible:ring-red-500 dark:border-red-400";
   if (usesRatingScore(question, ratingBased, ratingScales) && scale) {
     return (
       <RatingScoreField
@@ -182,6 +228,7 @@ function ManagerScoreEditor({
         weight={question.totalMarks}
         ratingValue={draft.ratingValue}
         tone={tone}
+        invalid={invalid}
         onRatingChange={(ratingValue, pointsEarned) =>
           onChange({ ratingValue, pointsEarned })
         }
@@ -201,7 +248,8 @@ function ManagerScoreEditor({
           pointsEarned: clampScore(event.target.value, question.totalMarks),
         })
       }
-      className={inputClassName}
+      className={cn(inputClassName, invalid && invalidClass)}
+      aria-invalid={invalid || undefined}
     />
   );
 }
@@ -360,6 +408,28 @@ function managerColumnAnswer(
     return employee;
   }
   return undefined;
+}
+
+function sumOwnManagerScores(
+  questions: QuestionRecord[],
+  answersByQuestion: Map<number, EmployeeFormAnswerRecord>,
+  ratingBased: boolean,
+  ratingScales: FormRatingScaleRecord[],
+): number {
+  return questions.reduce((sum, question) => {
+    if (!isScoredQuestion(question)) return sum;
+    const answer = answersByQuestion.get(question.id);
+    if (!answer) return sum;
+    return (
+      sum +
+      resolveDisplayedAnswerPoints(
+        question,
+        ratingBased,
+        ratingScales,
+        answer,
+      )
+    );
+  }, 0);
 }
 
 interface ScoreAdjustmentsPanelProps {
@@ -546,6 +616,10 @@ export default function SubmissionDetailView({
   const canViewAnyAdjustment =
     isAdminRole || canViewCreditHours || canViewOric || canViewQec;
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveMessageIsError, setSaveMessageIsError] = useState(false);
+  const [incompleteQuestionIds, setIncompleteQuestionIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
     new Map(),
   );
@@ -580,7 +654,9 @@ export default function SubmissionDetailView({
     if (data) {
       const incoming = buildManagerDraftMap(
         data.questions,
-        data.managerAnswers,
+        (data.managerLevel ?? 1) === 2
+          ? (data.manager2Answers ?? data.managerAnswers)
+          : (data.manager1Answers ?? data.managerAnswers),
         data.answers,
         data.manager1Answers,
         data.managerLevel ?? undefined,
@@ -624,6 +700,8 @@ export default function SubmissionDetailView({
     },
     onSuccess: (result) => {
       setSaveMessage("Manager review saved.");
+      setSaveMessageIsError(false);
+      setIncompleteQuestionIds(new Set());
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         const managerLevel =
@@ -658,6 +736,7 @@ export default function SubmissionDetailView({
     },
     onError: (mutationError: Error) => {
       setSaveMessage(mutationError.message);
+      setSaveMessageIsError(true);
     },
   });
 
@@ -682,6 +761,8 @@ export default function SubmissionDetailView({
     },
     onSuccess: (result) => {
       setSaveMessage("Manager review approved.");
+      setSaveMessageIsError(false);
+      setIncompleteQuestionIds(new Set());
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         return {
@@ -698,6 +779,7 @@ export default function SubmissionDetailView({
     },
     onError: (mutationError: Error) => {
       setSaveMessage(mutationError.message);
+      setSaveMessageIsError(true);
     },
   });
 
@@ -716,6 +798,7 @@ export default function SubmissionDetailView({
     },
     onSuccess: (result) => {
       setSaveMessage("HR review saved.");
+      setSaveMessageIsError(false);
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         const managerLevel =
@@ -738,6 +821,7 @@ export default function SubmissionDetailView({
     },
     onError: (mutationError: Error) => {
       setSaveMessage(mutationError.message);
+      setSaveMessageIsError(true);
     },
   });
 
@@ -759,6 +843,7 @@ export default function SubmissionDetailView({
           ? "Approved successfully."
           : "HR review approved. Sent to Board for final approval.",
       );
+      setSaveMessageIsError(false);
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         return {
@@ -774,6 +859,7 @@ export default function SubmissionDetailView({
     },
     onError: (mutationError: Error) => {
       setSaveMessage(mutationError.message);
+      setSaveMessageIsError(true);
     },
   });
 
@@ -781,6 +867,7 @@ export default function SubmissionDetailView({
     mutationFn: () => resetFormSubmission(submissionId),
     onSuccess: (result) => {
       setSaveMessage("Assessment form has been reset successfully.");
+      setSaveMessageIsError(false);
       // Force a full server refetch instead of manually patching the cache.
       // The FormSubmissionDetail type has 40+ score/adjustment/remark fields
       // — manually setting each one in setQueryData is error-prone and was
@@ -805,6 +892,7 @@ export default function SubmissionDetailView({
     },
     onError: (mutationError: Error) => {
       setSaveMessage(mutationError.message);
+      setSaveMessageIsError(true);
     },
   });
 
@@ -915,6 +1003,8 @@ export default function SubmissionDetailView({
     setManager1OverallRemarks(initialOverallRemarks.manager1);
     setManager2OverallRemarks(initialOverallRemarks.manager2);
     setSaveMessage(null);
+    setSaveMessageIsError(false);
+    setIncompleteQuestionIds(new Set());
   }, [initialDraftsSnapshot, initialOverallRemarks]);
 
   useEffect(() => {
@@ -1007,46 +1097,19 @@ export default function SubmissionDetailView({
       )
     );
   }, 0);
-  const manager1Total = data.questions.reduce((sum, question) => {
-    if (!isScoredQuestion(question)) return sum;
-    const resolved = managerColumnAnswer(
-      question,
-      selfAssessmentEnabled,
-      manager1AnswerMap.get(question.id) ??
-        managerAnswerMap.get(question.id),
-      undefined,
-      answerMap.get(question.id),
-    );
-    return (
-      sum +
-      resolveDisplayedAnswerPoints(
-        question,
-        data.ratingBased,
-        data.ratingScales,
-        resolved,
-      )
-    );
-  }, 0);
+  const manager1Total = sumOwnManagerScores(
+    data.questions,
+    manager1AnswerMap,
+    data.ratingBased,
+    data.ratingScales ?? [],
+  );
   const manager2Total = hasManager2
-    ? data.questions.reduce((sum, question) => {
-        if (!isScoredQuestion(question)) return sum;
-        const resolved = managerColumnAnswer(
-          question,
-          selfAssessmentEnabled,
-          manager2AnswerMap.get(question.id),
-          manager1AnswerMap.get(question.id),
-          answerMap.get(question.id),
-        );
-        return (
-          sum +
-          resolveDisplayedAnswerPoints(
-            question,
-            data.ratingBased,
-            data.ratingScales,
-            resolved,
-          )
-        );
-      }, 0)
+    ? sumOwnManagerScores(
+        data.questions,
+        manager2AnswerMap,
+        data.ratingBased,
+        data.ratingScales ?? [],
+      )
     : null;
   const managerDraftTotal = data.questions.reduce((sum, question) => {
     if (!isScoredQuestion(question)) return sum;
@@ -1065,8 +1128,8 @@ export default function SubmissionDetailView({
     ? managerDraftTotal
     : editingManager1
       ? managerDraftTotal
-      : hasManager2 && showManager2Data
-        ? (manager2Total ?? manager1Total)
+      : currentManagerLevel > 1 && manager2Total != null
+        ? manager2Total
         : manager1Total > 0
           ? manager1Total
           : selfTotal;
@@ -1082,10 +1145,60 @@ export default function SubmissionDetailView({
     setManagerDrafts((current) => {
       const next = new Map(current);
       const existing = next.get(questionId) ?? emptyManagerDraft();
-      next.set(questionId, { ...existing, ...patch });
+      const updated = { ...existing, ...patch };
+      next.set(questionId, updated);
       return next;
     });
-    setSaveMessage(null);
+    setIncompleteQuestionIds((current) => {
+      if (!current.has(questionId)) return current;
+      const question = data.questions.find((item) => item.id === questionId);
+      if (!question) return current;
+      const existing = managerDrafts.get(questionId) ?? emptyManagerDraft();
+      const merged = { ...existing, ...patch };
+      if (
+        !managerDraftScoreFilled(
+          question,
+          merged,
+          data.ratingBased,
+          data.ratingScales ?? [],
+        )
+      ) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(questionId);
+      if (next.size === 0) {
+        setSaveMessage(null);
+        setSaveMessageIsError(false);
+      }
+      return next;
+    });
+  };
+
+  const handleApproveReview = () => {
+    const missing = collectIncompleteRequiredQuestionIds(
+      data.questions,
+      managerDrafts,
+      data.ratingBased,
+      data.ratingScales ?? [],
+    );
+    if (missing.length > 0) {
+      setIncompleteQuestionIds(new Set(missing));
+      setSaveMessageIsError(true);
+      setSaveMessage(
+        missing.length === 1
+          ? "Enter a score for the highlighted mandatory question. A mark of 0 is allowed."
+          : `Enter a score for ${missing.length} highlighted mandatory questions. A mark of 0 is allowed.`,
+      );
+      requestAnimationFrame(() => {
+        document
+          .getElementById(`manager-question-${missing[0]}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      return;
+    }
+    setIncompleteQuestionIds(new Set());
+    approveMutation.mutate();
   };
 
   return (
@@ -1212,7 +1325,7 @@ export default function SubmissionDetailView({
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => approveMutation.mutate()}
+                  onClick={handleApproveReview}
                   disabled={saveMutation.isPending || approveMutation.isPending}
                   className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
                 >
@@ -1378,8 +1491,22 @@ export default function SubmissionDetailView({
       ) : null}
 
       {saveMessage ? (
-        <div className="no-print border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
-          {saveMessage}
+        <div
+          role={saveMessageIsError ? "alert" : "status"}
+          aria-live="polite"
+          className={cn(
+            "no-print sticky top-0 z-20 flex items-start gap-3 border-b px-4 py-3 text-sm font-medium shadow-sm",
+            saveMessageIsError
+              ? "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+              : "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+          )}
+        >
+          {saveMessageIsError ? (
+            <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
+          )}
+          <p className="min-w-0 flex-1">{saveMessage}</p>
         </div>
       ) : null}
 
@@ -1464,10 +1591,11 @@ export default function SubmissionDetailView({
                   question!,
                   selfAssessmentEnabled,
                   mgr2Answer,
-                  mgr1Answer,
-                  answer,
+                  undefined,
+                  undefined,
                 );
                 const isEvenRow = rowIdx % 2 === 0;
+                const needsMark = incompleteQuestionIds.has(question!.id);
 
                 return (
                   <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
@@ -1493,18 +1621,28 @@ export default function SubmissionDetailView({
                       </tr>
                     ) : (
                   <tr
+                    id={`manager-question-${question!.id}`}
                     className={cn(
                       "align-top border-b border-slate-100 dark:border-slate-700/40",
-                      isEvenRow
-                        ? "bg-white dark:bg-slate-900/40"
-                        : "bg-slate-50/60 dark:bg-slate-800/20",
+                      needsMark
+                        ? "bg-red-50 dark:bg-red-950/30"
+                        : isEvenRow
+                          ? "bg-white dark:bg-slate-900/40"
+                          : "bg-slate-50/60 dark:bg-slate-800/20",
                     )}
                   >
                     <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40">
                       {row.sr}
                     </td>
                     <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
-                      <p className="max-w-[450px] break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
+                      <p
+                        className={cn(
+                          "max-w-[450px] break-words whitespace-pre-wrap text-xs leading-snug",
+                          needsMark
+                            ? "font-semibold text-red-800 dark:text-red-200"
+                            : "text-slate-800 dark:text-slate-200",
+                        )}
+                      >
                         {question!.questionText}
                         <QuestionRequiredIndicator isRequired={question!.isRequired} />
                       </p>
@@ -1558,6 +1696,7 @@ export default function SubmissionDetailView({
                             ratingScales={data.ratingScales ?? []}
                             draft={managerDraft}
                             tone="violet"
+                            invalid={needsMark}
                             onChange={(patch) =>
                               updateManagerDraft(question!.id, patch)
                             }
@@ -1614,6 +1753,7 @@ export default function SubmissionDetailView({
                                 ratingScales={data.ratingScales ?? []}
                                 draft={managerDraft}
                                 tone="indigo"
+                                invalid={needsMark}
                                 onChange={(patch) =>
                                   updateManagerDraft(question!.id, patch)
                                 }

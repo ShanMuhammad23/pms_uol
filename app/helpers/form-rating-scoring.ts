@@ -72,6 +72,36 @@ function isPresentRating(rating: unknown): boolean {
   return Number.isFinite(Number(rating));
 }
 
+/** True when a numeric score was entered. Zero is filled; empty is not. */
+export function hasExplicitNumericScore(
+  value: number | string | null | undefined,
+): boolean {
+  if (value === undefined || value === null || value === "") {
+    return false;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0;
+}
+
+/**
+ * Whether a manager/employee has actually marked a scored question.
+ * A mark of 0 is valid. A missing rating or blank points field is not.
+ */
+export function hasProvidedAnswerScore(
+  question: Pick<QuestionRecord, "totalMarks" | "ratingScaleId">,
+  ratingBased: boolean | undefined,
+  scales: FormRatingScaleRecord[] | undefined,
+  answer:
+    | { pointsEarned?: number | null; ratingValue?: number | null | string }
+    | undefined,
+): boolean {
+  if (!answer) return false;
+  if (usesRatingScore(question, ratingBased, scales)) {
+    return isPresentRating(answer.ratingValue);
+  }
+  return hasExplicitNumericScore(answer.pointsEarned);
+}
+
 /** Select `value` that matches a scale option by numeric rating, not string equality. */
 export function matchingScaleSelectValue(
   scale: FormRatingScaleRecord | null | undefined,

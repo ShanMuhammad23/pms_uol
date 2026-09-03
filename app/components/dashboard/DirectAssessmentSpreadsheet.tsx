@@ -78,10 +78,15 @@ function draftToSaveAnswer(
   question: { id: number },
   draft: ScoreDraft | undefined,
 ) {
+  const pointsRaw = draft?.pointsEarned;
+  const pointsEarned =
+    pointsRaw === "" || pointsRaw == null ? undefined : Number(pointsRaw);
   return {
     questionId: question.id,
     pointsEarned:
-      draft?.pointsEarned === "" ? 0 : Number(draft?.pointsEarned ?? 0),
+      pointsEarned != null && Number.isFinite(pointsEarned)
+        ? pointsEarned
+        : undefined,
     ratingValue: ratingValueFromDraft(draft),
     remarks: draft?.remarks?.trim() || null,
   };
@@ -199,7 +204,7 @@ function scoreDraftHasInput(draft: ScoreDraft | undefined): boolean {
   if (!draft) return false;
   return (
     draft.ratingValue !== "" ||
-    (draft.pointsEarned !== "" && Number(draft.pointsEarned) > 0) ||
+    (draft.pointsEarned !== "" && Number.isFinite(Number(draft.pointsEarned))) ||
     Boolean(draft.remarks.trim())
   );
 }

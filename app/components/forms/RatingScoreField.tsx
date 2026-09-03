@@ -34,6 +34,7 @@ interface RatingScoreFieldProps {
   tone?: ScoreTone;
   /** When no rating is selected, still show stored/calculated points. */
   fallbackPoints?: number | null;
+  invalid?: boolean;
 }
 
 export function RatingScoreField({
@@ -45,6 +46,7 @@ export function RatingScoreField({
   className,
   tone = "teal",
   fallbackPoints = null,
+  invalid = false,
 }: RatingScoreFieldProps) {
   const storedMax = Number(scale.maxValue);
   const maxRating = deriveRatingScaleMaxValue(
@@ -105,7 +107,10 @@ export function RatingScoreField({
         className={cn(
           "box-border h-8 w-full min-w-0 max-w-full [field-sizing:fixed] rounded border border-slate-300 bg-white px-1 text-xs focus-visible:outline-none focus-visible:ring-2 disabled:opacity-80 dark:border-white/15 dark:bg-slate-800",
           TONE_SELECT[tone],
+          invalid &&
+            "border-red-500 ring-2 ring-red-400/80 focus-visible:ring-red-500 dark:border-red-400",
         )}
+        aria-invalid={invalid || undefined}
         aria-label="Select rating"
       >
         <option value="">Select rating</option>
@@ -159,7 +164,9 @@ export function AnswerScoreReadout({
     );
     const hasAnswer =
       rating != null ||
-      (answer?.pointsEarned != null && Number(answer.pointsEarned) > 0);
+      (answer?.pointsEarned != null &&
+        Number.isFinite(Number(answer.pointsEarned)) &&
+        Number(answer.pointsEarned) >= 0);
     if (!hasAnswer) {
       return <span className="text-slate-400">{emptyLabel}</span>;
     }

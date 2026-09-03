@@ -364,16 +364,18 @@ export default function BulkAssessmentReview({
       if (!currentQuestion) return;
       const entries: SaveBulkReviewEntry[] = [];
       for (const [submissionId, draft] of drafts) {
-        const points = Number(draft.pointsEarned);
-        if (Number.isNaN(points)) continue;
+        const hasPoints =
+          draft.pointsEarned !== "" && Number.isFinite(Number(draft.pointsEarned));
         const ratingValue =
           draft.ratingValue === "" ? null : Number(draft.ratingValue);
+        const hasRating = ratingValue != null && !Number.isNaN(ratingValue);
+        const remarks = draft.remarks.trim() || null;
+        if (!hasPoints && !hasRating && !remarks) continue;
         entries.push({
           submissionId,
-          pointsEarned: points,
-          ratingValue:
-            ratingValue != null && !Number.isNaN(ratingValue) ? ratingValue : null,
-          remarks: draft.remarks.trim() || null,
+          pointsEarned: hasPoints ? Number(draft.pointsEarned) : 0,
+          ratingValue: hasRating ? ratingValue : null,
+          remarks,
         });
       }
       if (entries.length === 0) return;

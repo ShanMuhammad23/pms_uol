@@ -19,7 +19,15 @@ import { getFormTemplateById } from "@/lib/queries/forms";
 import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { deleteFormAttachmentFile } from "@/lib/uploads/form-attachments";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
-import { getQuestionRatingScale, hydrateAnswerPoints, resolveAnswerScore, resolveDisplayedAnswerPoints, resolveDisplayedRatingValue, usesRatingScore } from "@/app/helpers/form-rating-scoring";
+import {
+  getQuestionRatingScale,
+  hasExplicitNumericScore,
+  hasProvidedAnswerScore,
+  hydrateAnswerPoints,
+  resolveAnswerScore,
+  resolveDisplayedAnswerPoints,
+  usesRatingScore,
+} from "@/app/helpers/form-rating-scoring";
 import { applyCompensationWorksheet } from "@/app/helpers/compensation-worksheet";
 import type {
   EmployeeFormAnswerAttachment,
@@ -1348,7 +1356,7 @@ export async function saveBulkReviewQuestionScores(
 
     if (
       resolved.ratingValue == null &&
-      !(resolved.pointsEarned > 0) &&
+      !hasExplicitNumericScore(entry.pointsEarned) &&
       !remarks
     ) {
       continue;
@@ -1550,11 +1558,11 @@ export async function saveManagerReviewAnswers(
         ? answer.remarks.trim() || null
         : null;
 
-    // Never persist an empty score row — writing 0/null overwrites
-    // ratings the manager already saved (e.g. after a draft reset).
+    // Skip blank rows so an empty draft cannot overwrite a saved score.
+    // An explicit 0 is a real mark and must be persisted.
     if (
       resolved.ratingValue == null &&
-      !(resolved.pointsEarned > 0) &&
+      !hasExplicitNumericScore(answer.pointsEarned) &&
       !remarks
     ) {
       continue;
@@ -1638,29 +1646,18 @@ async function assertRequiredManagerRatingsComplete(
       continue;
     }
     const answer = byQuestion.get(question.id);
-    if (usesRatingScore(question, template.ratingBased, template.ratingScales)) {
-      const rating = resolveDisplayedRatingValue(
+    if (
+      !hasProvidedAnswerScore(
         question,
         template.ratingBased,
         template.ratingScales,
         answer,
-      );
-      if (rating == null) {
-        throw new FormSubmissionError(
-          `Select a rating for "${question.questionText.slice(0, 80)}".`,
-        );
-      }
-      continue;
-    }
-    const points = resolveDisplayedAnswerPoints(
-      question,
-      template.ratingBased,
-      template.ratingScales,
-      answer,
-    );
-    if (!(points > 0)) {
+      )
+    ) {
       throw new FormSubmissionError(
-        `Enter a score for "${question.questionText.slice(0, 80)}".`,
+        usesRatingScore(question, template.ratingBased, template.ratingScales)
+          ? `Select a rating for "${question.questionText.slice(0, 80)}".`
+          : `Enter a score for "${question.questionText.slice(0, 80)}". A mark of 0 is allowed.`,
       );
     }
   }
