@@ -28,6 +28,7 @@ interface OverviewRow {
   manager_1_score: string | null;
   manager_2_score: string | null;
   direct_score_entry: boolean | null;
+  form_assigned: boolean;
   assigned_performance_matrix_label: string | null;
   initial_rating: PerformanceRating | null;
   calibrated_rating: PerformanceRating | null;
@@ -148,7 +149,7 @@ function mapOverviewRow(
     templateId: null,
     templateTitle: null,
     templateCode: null,
-    formAssigned: false,
+    formAssigned: Boolean(row.form_assigned),
     directScoreEntry: Boolean(row.direct_score_entry),
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: null,
@@ -181,6 +182,7 @@ function mapOverviewRow(
       toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric),
     ratingN: row.calibrated_rating,
     performanceLevelName: null,
+    adjustedPerformanceLevelName: null,
     quartileName: null,
     initialRating: row.initial_rating,
     calibratedRating: row.calibrated_rating,
@@ -331,6 +333,7 @@ export async function listDashboardOverview(
          )
        ) AS direct_score_entry,
        assigned_performance_matrix.matrix_label AS assigned_performance_matrix_label,
+       (assigned.template_id IS NOT NULL) AS form_assigned,
        ap.initial_rating,
        ap.calibrated_rating,
        ${scoreSelect}

@@ -7,11 +7,12 @@ import { getDbClient, withTransaction } from "@/lib/db-context";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import {
   calculateScorePercent,
-  getActiveFinancialYearQuartileBands,
   getActiveFinancialYearQuartileBandsByMatrixLabel,
   getActiveIncrementPercentageLookup,
   resolveSubmissionPerformanceQuartile,
+  resolveSubmissionPerformanceQuartileByType,
   bandsForAssignedMatrix,
+  canResolvePerformanceRating,
 } from "@/lib/queries/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import { getFormTemplateById } from "@/lib/queries/forms";
@@ -227,7 +228,6 @@ async function getAnswersForSubmission(
 
 function mapSubmissionRow(
   row: SubmissionListRow,
-  quartileBands: Awaited<ReturnType<typeof getActiveFinancialYearQuartileBands>>,
   eligibilityContext: {
     financialYear: number | null;
     cycleEndDate: string | null;
@@ -241,41 +241,51 @@ function mapSubmissionRow(
   const scoreO = toNumber(row.initial_score_numeric) ?? rawScore;
   const normalizedScore =
     toNumber(row.normalized_score) ?? toNumber(row.calibrated_score_numeric);
-  const resolvedBands = bandsForAssignedMatrix(
-    row.assigned_performance_matrix_label,
-    bandsByLabel,
-    quartileBands,
-  );
+  const formAssigned = Boolean(row.form_assigned);
+  const directScoreEntry = Boolean(row.direct_score_entry);
+  const assignedMatrix =
+    row.assigned_performance_matrix_label ?? row.assigned_performance_matrix;
+  const resolvedBands = bandsForAssignedMatrix(assignedMatrix, bandsByLabel);
+  const canRate =
+    canResolvePerformanceRating({
+      formAssigned,
+      directScoreEntry,
+      assignedPerformanceMatrix: assignedMatrix,
+    }) && resolvedBands.length > 0;
+
+  const scoreFields = {
+    normalizedScore,
+    directScoreEntry,
+    scoreO,
+    manager1Score: toNumber(row.manager_1_score),
+    manager2Score: toNumber(row.manager_2_score),
+    manager2UserId: row.manager_2_user_id
+      ? Number(row.manager_2_user_id)
+      : null,
+    status: row.status,
+    creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
+    pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
+    qecScoreAdj: toNumber(row.qec_score_adj),
+    calibrationFactor: toNumber(row.calibration_factor),
+    maxRawScore,
+  };
 
   // Build a partial submission-like object for the shared resolver.
-  // The performance level and quartile must be resolved from the
-  // NORMALIZED score percentage (Score O + adjustments + calibration
-  // factor), NOT the raw self-assessment score percentage. Using the raw
-  // score % here was the root cause of the matrix not matching the Staff
-  // Listing - the persisted performanceLevelName/quartileName were based
-  // on the self-assessment score, while the dashboard matrix used the
-  // normalized score.
-  const resolved = hasAppraisal
-    ? resolveSubmissionPerformanceQuartile(
-        {
-          normalizedScore,
-          directScoreEntry: Boolean(row.direct_score_entry),
-          scoreO,
-          manager1Score: toNumber(row.manager_1_score),
-          manager2Score: toNumber(row.manager_2_score),
-          manager2UserId: row.manager_2_user_id
-            ? Number(row.manager_2_user_id)
-            : null,
-          status: row.status,
-          creditHrsErpScoreAdj: toNumber(row.credit_hrs_erp_score_adj),
-          pubOricScoreAdj: toNumber(row.pub_oric_score_adj),
-          qecScoreAdj: toNumber(row.qec_score_adj),
-          calibrationFactor: toNumber(row.calibration_factor),
-          maxRawScore,
-        },
-        resolvedBands,
-      )
-    : null;
+  // Rating (N) uses the NORMALIZED score % against the assigned matrix.
+  // Rating (A) uses the ADJUSTED score % against the same assigned matrix.
+  // No fallback matrix: unassigned form or unassigned matrix → no rating.
+  const resolved =
+    hasAppraisal && canRate
+      ? resolveSubmissionPerformanceQuartile(scoreFields, resolvedBands)
+      : null;
+  const resolvedAdjusted =
+    hasAppraisal && canRate
+      ? resolveSubmissionPerformanceQuartileByType(
+          scoreFields,
+          resolvedBands,
+          "adjusted",
+        )
+      : null;
 
   // Prefer FY-scoped values stored on the appraisal; compute only as fallback.
   const computed = computeAppraisalEligibility(row.date_of_joining, {
@@ -296,8 +306,8 @@ function mapSubmissionRow(
     templateId: row.template_id,
     templateTitle: row.template_title,
     templateCode: row.template_code,
-    formAssigned: Boolean(row.form_assigned),
-    directScoreEntry: Boolean(row.direct_score_entry),
+    formAssigned,
+    directScoreEntry,
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: row.entity_name,
     parentEntityName: row.parent_entity_name,
@@ -326,6 +336,7 @@ function mapSubmissionRow(
     normalizedScore,
     ratingN: row.calibrated_rating,
     performanceLevelName: resolved?.performanceLevelName ?? null,
+    adjustedPerformanceLevelName: resolvedAdjusted?.performanceLevelName ?? null,
     quartileName: row.stored_quartile_name ?? resolved?.quartileName ?? null,
     initialRating: row.initial_rating,
     calibratedRating: row.calibrated_rating,
@@ -455,8 +466,6 @@ export async function listFormSubmissions(
     getActiveIncrementPercentageLookup(),
     getEligibilityContext(),
   ]);
-
-  const quartileBands = [...bandsByMatrixLabel.values()].flat();
 
   const roleCategorySelect = roleCategoryReady
     ? `u.role_category,`
@@ -746,7 +755,6 @@ export async function listFormSubmissions(
   return result.rows.map((row) => {
     const item = mapSubmissionRow(
       row,
-      quartileBands,
       {
         financialYear: eligibilityContext.financialYear,
         cycleEndDate: eligibilityContext.cycleEndDate,
@@ -1923,27 +1931,34 @@ export async function getFormSubmissionById(
     }
   }
 
-  const quartileBands = await getActiveFinancialYearQuartileBands();
+  const bandsByLabel = await getActiveFinancialYearQuartileBandsByMatrixLabel();
+  const assignedBands = bandsForAssignedMatrix(
+    summary.assignedPerformanceMatrix,
+    bandsByLabel,
+  );
   // Use the normalized score % (Score O + adjustments + calibration factor)
   // for resolving the quartile range, consistent with the Staff Listing and
-  // Performance Matrix. Previously this used the raw self-assessment score %.
-  const resolved = resolveSubmissionPerformanceQuartile(
-    {
-      normalizedScore: summary.normalizedScore,
-      directScoreEntry: summary.directScoreEntry,
-      scoreO: summary.scoreO,
-      manager1Score: summary.manager1Score,
-      manager2Score: summary.manager2Score,
-      manager2UserId: summary.manager2UserId,
-      status: summary.status,
-      creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,
-      pubOricScoreAdj: summary.pubOricScoreAdj,
-      qecScoreAdj: summary.qecScoreAdj,
-      calibrationFactor: summary.calibrationFactor,
-      maxRawScore: summary.maxRawScore,
-    },
-    quartileBands,
-  );
+  // Performance Matrix. No fallback matrix when none is assigned.
+  const resolved =
+    canResolvePerformanceRating(summary) && assignedBands.length > 0
+      ? resolveSubmissionPerformanceQuartile(
+          {
+            normalizedScore: summary.normalizedScore,
+            directScoreEntry: summary.directScoreEntry,
+            scoreO: summary.scoreO,
+            manager1Score: summary.manager1Score,
+            manager2Score: summary.manager2Score,
+            manager2UserId: summary.manager2UserId,
+            status: summary.status,
+            creditHrsErpScoreAdj: summary.creditHrsErpScoreAdj,
+            pubOricScoreAdj: summary.pubOricScoreAdj,
+            qecScoreAdj: summary.qecScoreAdj,
+            calibrationFactor: summary.calibrationFactor,
+            maxRawScore: summary.maxRawScore,
+          },
+          assignedBands,
+        )
+      : null;
 
   return {
     id: summary.id,

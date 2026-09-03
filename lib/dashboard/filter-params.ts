@@ -1,11 +1,17 @@
 import {
   EMPTY_MASTER_FILTER_STATE,
   MASTER_FILTER_MULTI_COLUMNS,
+  MASTER_FILTER_NUMERIC_COLUMNS,
   MASTER_FILTER_TEXT_COLUMNS,
   type MasterFilterState,
   type MasterFilterTextColumnId,
 } from "@/app/helpers/dashboard-master-filters";
 import type { DashboardTableColumnId } from "@/app/helpers/dashboard-table-columns";
+import {
+  hasNumericRange,
+  parseNumericRangeParam,
+  serializeNumericRange,
+} from "@/app/helpers/numeric-range-filter";
 import {
   normalizeSelectedFormStates,
 } from "@/app/helpers/dashboard-form-state";
@@ -107,6 +113,7 @@ export function parseMasterFilterParams(
 ): MasterFilterState {
   const text: MasterFilterState["text"] = {};
   const multi: MasterFilterState["multi"] = {};
+  const numeric: MasterFilterState["numeric"] = {};
 
   for (const column of MASTER_FILTER_TEXT_COLUMNS) {
     const value = searchParams.get(`mft_${column.id}`);
@@ -121,7 +128,14 @@ export function parseMasterFilterParams(
     multi[column.id] = parseCsv(raw) ?? [];
   }
 
-  return { text, multi, numeric: {} };
+  for (const column of MASTER_FILTER_NUMERIC_COLUMNS) {
+    const range = parseNumericRangeParam(searchParams.get(`mfn_${column.id}`));
+    if (range) {
+      numeric[column.id] = range;
+    }
+  }
+
+  return { text, multi, numeric };
 }
 
 export function appendMasterFilterParams(
@@ -137,6 +151,13 @@ export function appendMasterFilterParams(
   for (const [columnId, selected] of Object.entries(filters.multi)) {
     if (selected === undefined || selected === null) continue;
     params.set(`mfm_${columnId}`, selected.join(","));
+  }
+
+  for (const [columnId, range] of Object.entries(filters.numeric)) {
+    const serialized = serializeNumericRange(range);
+    if (serialized) {
+      params.set(`mfn_${columnId}`, serialized);
+    }
   }
 }
 
@@ -185,7 +206,10 @@ export function hasMasterFilterState(filters: MasterFilterState): boolean {
     MASTER_FILTER_MULTI_COLUMNS.some((column) => {
       const selected = filters.multi[column.id as DashboardTableColumnId];
       return selected !== undefined && selected !== null;
-    })
+    }) ||
+    MASTER_FILTER_NUMERIC_COLUMNS.some((column) =>
+      hasNumericRange(filters.numeric[column.id as DashboardTableColumnId]),
+    )
   );
 }
 

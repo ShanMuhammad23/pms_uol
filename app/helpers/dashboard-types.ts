@@ -8,6 +8,7 @@ export type EmployeeCategory =
   | "Management";
 
 export type FormState =
+  | "NOT_INITIATED"
   | "PENDING_SELF_ASSESSMENT"
   | "PENDING_DIRECT_ASSESSMENT"
   | "PENDING_MANAGER_1_REVIEW"

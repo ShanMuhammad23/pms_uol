@@ -44,8 +44,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     const filters = parseDashboardFilterParams(request.nextUrl.searchParams);
 
-    // Parse the optional scoreType query param for the Rating × Quartile
-    // Matrix dropdown. Defaults to "normalized" (the original behavior).
+    // Parse the optional scoreType query param for the Rating Curve and
+    // Rating × Quartile Matrix. Defaults to "normalized".
     const scoreTypeParam = request.nextUrl.searchParams.get("scoreType");
     const scoreType: MatrixScoreType =
       scoreTypeParam && VALID_SCORE_TYPES.has(scoreTypeParam as MatrixScoreType)

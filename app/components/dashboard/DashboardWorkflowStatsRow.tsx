@@ -56,7 +56,7 @@ export function DashboardWorkflowStatsRow({
         activeCategory={activeEligibilityCategory}
       />
       <StatCard
-        title="Self Assessment"
+        title="Assessments"
         awaiting={selfAssessmentStats.awaiting}
         completed={selfAssessmentStats.completed}
         percentageLabel={selfAssessmentStats.percentageLabel}

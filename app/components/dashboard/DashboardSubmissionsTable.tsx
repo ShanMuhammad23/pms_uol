@@ -79,7 +79,7 @@ import {
   patchStaffListingCaches,
 } from "@/app/helpers/dashboard-listing-cache";
 import { buildQuartileBandsFromMatrix, sortPerformanceMatrix } from "@/lib/performance-matrix";
-import { resolveSubmissionPerformanceQuartile } from "@/lib/performance-rating";
+import { canResolvePerformanceRating } from "@/lib/performance-rating";
 import type { PerformanceQuartileBand } from "@/lib/performance-rating";
 import type { PerformanceLevelWithQuartiles } from "@/types/performance-matrices";
 import { ExcelExportButton } from "@/app/components/common/ExcelExportButton";
@@ -91,7 +91,6 @@ import {
 import {
   canonicalPerformanceLevelName,
   getPerformanceLevelColor,
-  getQuartileShade,
   getUolExperienceBandClass,
 } from "@/app/helpers/dashboard-helpers";
 import { useFormSubmissionsQuery } from "@/app/queries/forms";
@@ -100,6 +99,7 @@ import type { DashboardFilterParams } from "@/types/dashboard-api";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 /** Page size used when "Show All" is enabled. The server caps pageSize at 100000. */
@@ -740,54 +740,26 @@ function renderCell(
   }
 
   if (columnId === "quartile") {
-    if (ctx?.quartileBands && ctx.sortedMatrix) {
-      const resolved = resolveSubmissionPerformanceQuartile(
-        submission,
-        ctx.quartileBands,
-      );
-      if (!resolved) {
-        return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
-      }
-      const levelIndex = ctx.sortedMatrix.findIndex(
-        (l) => l.id === resolved.performanceLevelId,
-      );
-      const level = levelIndex >= 0 ? ctx.sortedMatrix[levelIndex] : null;
-      const quartileIndex = level
-        ? level.quartiles.findIndex((q) => q.id === resolved.quartileId)
-        : -1;
-      const levelColor = getPerformanceLevelColor(
-        resolved.performanceLevelName,
-        levelIndex >= 0 ? levelIndex : 0,
-      );
-      const quartileShade =
-        quartileIndex >= 0 ? getQuartileShade(quartileIndex) : "";
-      return (
-        <span
-          className={cn(
-            "inline-flex rounded-md",
-            levelColor,
-          )}
-        >
-          <span
-            className={cn(
-              "rounded-md px-2 py-0.5 text-xs font-medium text-white",
-              quartileShade,
-            )}
-          >
-            {resolved.quartileName}
-          </span>
-        </span>
-      );
+    if (!canResolvePerformanceRating(submission) || value === "—") {
+      return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
     }
+    const levelName = submission.performanceLevelName
+      ? canonicalPerformanceLevelName(submission.performanceLevelName)
+      : "";
     return (
-      <span className="block text-slate-700 dark:text-slate-300">
-        {value === "—" ? <span className="text-slate-400 italic dark:text-slate-500">—</span> : value}
+      <span
+        className={cn(
+          "inline-flex rounded-md px-2 py-0.5 text-xs font-medium text-white",
+          getPerformanceLevelColor(levelName || value),
+        )}
+      >
+        {value}
       </span>
     );
   }
 
   if (columnId === "ratingO") {
-    if (value === "—") {
+    if (!canResolvePerformanceRating(submission) || value === "—") {
       return (
         <span className="text-slate-400 italic dark:text-slate-500">—</span>
       );
@@ -801,43 +773,25 @@ function renderCell(
         )}
         title={levelName}
       >
-        {value}
+        {levelName}
       </span>
     );
   }
 
   if (columnId === "ratingN") {
-    if (ctx?.quartileBands && ctx.sortedMatrix) {
-      const resolved = resolveSubmissionPerformanceQuartile(
-        submission,
-        ctx.quartileBands,
-      );
-      if (!resolved) {
-        return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
-      }
-      const levelIndex = ctx.sortedMatrix.findIndex(
-        (l) => l.id === resolved.performanceLevelId,
-      );
-      const level = levelIndex >= 0 ? ctx.sortedMatrix[levelIndex] : null;
-      const levelName = level?.name ?? resolved.performanceLevelName;
-      const levelColor = getPerformanceLevelColor(
-        resolved.performanceLevelName,
-        levelIndex >= 0 ? levelIndex : 0,
-      );
-      return (
-        <span
-          className={cn(
-            "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold text-white",
-            levelColor,
-          )}
-        >
-          {levelName}
-        </span>
-      );
+    if (!canResolvePerformanceRating(submission) || value === "—") {
+      return <span className="text-slate-400 italic dark:text-slate-500">—</span>;
     }
+    const levelName = canonicalPerformanceLevelName(value);
     return (
-      <span className="block text-slate-700 dark:text-slate-300">
-        {value === "—" ? <span className="text-slate-400 italic dark:text-slate-500">—</span> : value}
+      <span
+        className={cn(
+          "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold text-white",
+          getPerformanceLevelColor(levelName),
+        )}
+        title={levelName}
+      >
+        {levelName}
       </span>
     );
   }
@@ -1485,6 +1439,7 @@ export function DashboardSubmissionsTable({
     columnId: DashboardTableColumnId,
     filter: NumericRangeFilter | undefined,
   ) => {
+    setPage(1);
     setMasterFilters((current) => {
       const numeric = { ...current.numeric };
 
@@ -1736,7 +1691,10 @@ export function DashboardSubmissionsTable({
             {isLoading ? (
               <tr>
                 <td colSpan={colSpan} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
-                  Loading submissions...
+                  <div className="flex items-center ">
+                  <Image src='/Signature load.svg' alt="Loading" width={200} height={100} className="ml-12"/>
+
+                  </div>
                 </td>
               </tr>
             ) : error ? (

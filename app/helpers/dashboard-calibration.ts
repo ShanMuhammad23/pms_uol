@@ -21,7 +21,7 @@ export function normalizeRating(rating: string): string {
 
 /**
  * Performance level used for the Rating Curve Actual series — same source as
- * the Rating × Quartile Matrix (resolved from normalized score after HR alignment).
+ * the Rating × Quartile Matrix (resolved from the selected score type).
  */
 export function getSubmissionDisplayRating(
   submission: FormSubmissionListItem,

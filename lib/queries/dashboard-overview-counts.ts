@@ -1,5 +1,4 @@
 import {
-  contributesToPerformanceDistribution,
   contributesToMatrixByScoreType,
 } from "@/app/helpers/dashboard-chart-submissions";
 import { getSubmissionEligibilityDisplayStatus } from "@/app/helpers/dashboard-eligibility";
@@ -24,7 +23,7 @@ import {
 } from "@/app/helpers/dashboard-form-state";
 import {
   bandsForAssignedMatrix,
-  resolveSubmissionPerformanceQuartile,
+  canResolvePerformanceRating,
   resolveSubmissionPerformanceQuartileByType,
   type MatrixScoreType,
 } from "@/lib/performance-rating";
@@ -81,19 +80,20 @@ function countByValue(
 
 function bandsForSubmission(
   submission: FormSubmissionListItem,
-  fallbackBands: PerformanceQuartileBand[],
   bandsByLabel?: Map<string, PerformanceQuartileBand[]>,
 ): PerformanceQuartileBand[] {
+  if (!canResolvePerformanceRating(submission)) {
+    return [];
+  }
   return bandsForAssignedMatrix(
     submission.assignedPerformanceMatrix,
     bandsByLabel,
-    fallbackBands,
   );
 }
 
 function buildRatingQuartileCounts(
   submissions: FormSubmissionListItem[],
-  bands: PerformanceQuartileBand[],
+  _bands: PerformanceQuartileBand[],
   scoreType: MatrixScoreType = "normalized",
   bandsByLabel?: Map<string, PerformanceQuartileBand[]>,
 ): DashboardOverviewCounts["ratingQuartileCounts"] {
@@ -134,7 +134,7 @@ function buildRatingQuartileCounts(
 
     const resolved = resolveSubmissionPerformanceQuartileByType(
       submission,
-      bandsForSubmission(submission, bands, bandsByLabel),
+      bandsForSubmission(submission, bandsByLabel),
       scoreType,
     );
     if (!resolved) continue;
@@ -152,17 +152,19 @@ function buildRatingQuartileCounts(
 
 function buildRatingDistribution(
   submissions: FormSubmissionListItem[],
-  bands: PerformanceQuartileBand[],
+  _bands: PerformanceQuartileBand[],
   bandsByLabel?: Map<string, PerformanceQuartileBand[]>,
+  scoreType: MatrixScoreType = "normalized",
 ): CountOption[] {
   const counts = new Map<string, number>();
 
   for (const submission of submissions) {
-    if (!contributesToPerformanceDistribution(submission)) continue;
+    if (!contributesToMatrixByScoreType(submission, scoreType)) continue;
 
-    const resolved = resolveSubmissionPerformanceQuartile(
+    const resolved = resolveSubmissionPerformanceQuartileByType(
       submission,
-      bandsForSubmission(submission, bands, bandsByLabel),
+      bandsForSubmission(submission, bandsByLabel),
+      scoreType,
     );
     if (!resolved) continue;
 
@@ -325,6 +327,7 @@ export function buildDashboardOverviewCounts(
       filtered,
       quartileBands,
       bandsByMatrixLabel,
+      scoreType,
     ),
     ratingQuartileCounts: buildRatingQuartileCounts(
       filtered,
@@ -332,7 +335,8 @@ export function buildDashboardOverviewCounts(
       scoreType,
       bandsByMatrixLabel,
     ),
-    chartEmployeeCount: filtered.filter(contributesToPerformanceDistribution)
-      .length,
+    chartEmployeeCount: filtered.filter((submission) =>
+      contributesToMatrixByScoreType(submission, scoreType),
+    ).length,
   };
 }

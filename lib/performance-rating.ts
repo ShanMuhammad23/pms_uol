@@ -109,11 +109,28 @@ export function resolvePerformanceQuartileForRawScore(
   return resolvePerformanceQuartile(scorePercent, bands);
 }
 
-/** Bands for the employee's assigned performance matrix, else the fallback set. */
+/**
+ * True when a rating may be calculated: a form (or direct score entry) is
+ * assigned AND a performance matrix is assigned. Never invent a rating from a
+ * default / fallback matrix.
+ */
+export function canResolvePerformanceRating(
+  row: {
+    formAssigned?: boolean;
+    directScoreEntry?: boolean;
+    assignedPerformanceMatrix?: string | null;
+  },
+): boolean {
+  if (!row.formAssigned && !row.directScoreEntry) {
+    return false;
+  }
+  return Boolean(row.assignedPerformanceMatrix?.trim());
+}
+
+/** Bands for the employee's assigned performance matrix. Empty when none is assigned. */
 export function bandsForAssignedMatrix(
   assignedMatrixLabel: string | null | undefined,
   bandsByLabel: Map<string, PerformanceQuartileBand[]> | undefined,
-  fallback: PerformanceQuartileBand[],
 ): PerformanceQuartileBand[] {
   const label = assignedMatrixLabel?.trim();
   if (label && bandsByLabel) {
@@ -126,7 +143,7 @@ export function bandsForAssignedMatrix(
       return assigned;
     }
   }
-  return fallback;
+  return [];
 }
 
 /**
@@ -318,6 +335,66 @@ export function getAdjustedScorePercent(
   const adjusted = getAdjustedScore(row);
   if (adjusted === null || row.maxRawScore <= 0) return null;
   return Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
+}
+
+type AdjustedRatingRow = Pick<
+  FormSubmissionListItem,
+  | "normalizedScore"
+  | "directScoreEntry"
+  | "scoreO"
+  | "manager1Score"
+  | "manager2Score"
+  | "manager2UserId"
+  | "status"
+  | "creditHrsErpScoreAdj"
+  | "pubOricScoreAdj"
+  | "qecScoreAdj"
+  | "calibrationFactor"
+  | "maxRawScore"
+  | "performanceLevelName"
+  | "formAssigned"
+  | "assignedPerformanceMatrix"
+>;
+
+/**
+ * Rating (A) for the adjusted score (Score O + CH/ORIC/QEC adj).
+ *
+ * Uses only the assigned performance matrix. No default-band fallback.
+ * When bands are unavailable and adjusted % equals normalized %, reuse the
+ * assigned-matrix Rating (N) already on the row.
+ */
+export function resolveAdjustedPerformanceLevelName(
+  row: AdjustedRatingRow,
+  bands?: PerformanceQuartileBand[] | null,
+): string | null {
+  if (!canResolvePerformanceRating(row)) {
+    return null;
+  }
+
+  const officialScore = getReportingManagerScore(row);
+  if (officialScore == null || officialScore <= 0) {
+    return null;
+  }
+
+  if (bands && bands.length > 0) {
+    return (
+      resolveSubmissionPerformanceQuartileByType(row, bands, "adjusted")
+        ?.performanceLevelName ?? null
+    );
+  }
+
+  const adjPct = getAdjustedScorePercent(row);
+  const normPct = getNormalizedScorePercent(row);
+  if (
+    adjPct != null &&
+    normPct != null &&
+    Math.abs(adjPct - normPct) < 0.05 &&
+    row.performanceLevelName
+  ) {
+    return row.performanceLevelName;
+  }
+
+  return null;
 }
 
 /**

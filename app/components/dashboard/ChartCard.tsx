@@ -34,7 +34,7 @@ export function ChartCard({
         className,
       )}
     >
-      <div className="mb-5 flex min-w-0 items-start justify-between">
+      <div className="mb-5 flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-white">
             {title}
@@ -43,7 +43,7 @@ export function ChartCard({
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
           ) : null}
         </div>
-        {action}
+        {action ? <div className="shrink-0">{action}</div> : null}
       </div>
       <div className="min-w-0">{children}</div>
     </motion.div>

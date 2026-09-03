@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  CircleDashed,
   ClipboardPen,
   Gavel,
   Scale,
@@ -30,13 +31,21 @@ export const FORM_STATE_CONFIG: Record<
   FormState,
   StatusStyle & { phase: number }
 > = {
+  NOT_INITIATED: {
+    label: "Not Initiated",
+    color: "text-slate-500 dark:text-slate-400",
+    bg: "bg-slate-50 dark:bg-slate-800/50",
+    border: "border-slate-200 dark:border-slate-700",
+    icon: CircleDashed,
+    phase: 0,
+  },
   PENDING_SELF_ASSESSMENT: {
     label: "Self Assessment",
     color: "text-slate-700",
     bg: "bg-slate-100",
     border: "border-slate-200",
     icon: User,
-    phase: 0,
+    phase: 1,
   },
   PENDING_DIRECT_ASSESSMENT: {
     label: "Direct Assessment",
@@ -44,12 +53,12 @@ export const FORM_STATE_CONFIG: Record<
     bg: "bg-sky-50 dark:bg-sky-900/30",
     border: "border-sky-200 dark:border-sky-700/50",
     icon: ClipboardPen,
-    phase: 1,
+    phase: 2,
   },
   PENDING_MANAGER_1_REVIEW: {
     label: "Manager 1 Review",
     ...HEAD_REVIEW_STYLE,
-    phase: 1,
+    phase: 3,
   },
   PENDING_MANAGER_2_REVIEW: {
     label: "Manager 2 Review",
@@ -57,7 +66,7 @@ export const FORM_STATE_CONFIG: Record<
     bg: "bg-yellow-50",
     border: "border-yellow-300",
     icon: Users,
-    phase: 2,
+    phase: 4,
   },
   PENDING_HR_CALIBRATION: {
     label: "HR Alignment",
@@ -65,7 +74,7 @@ export const FORM_STATE_CONFIG: Record<
     bg: "bg-orange-50",
     border: "border-orange-200",
     icon: Scale,
-    phase: 3,
+    phase: 5,
   },
   PENDING_BOARD_APPROVAL: {
     label: "Board Approval",
@@ -73,7 +82,7 @@ export const FORM_STATE_CONFIG: Record<
     bg: "bg-violet-50",
     border: "border-violet-200",
     icon: Gavel,
-    phase: 4,
+    phase: 6,
   },
   APPROVED: {
     label: "Approved",
@@ -81,7 +90,7 @@ export const FORM_STATE_CONFIG: Record<
     bg: "bg-emerald-50",
     border: "border-emerald-200",
     icon: CheckCircle2,
-    phase: 5,
+    phase: 7,
   },
 };
 
@@ -113,7 +122,12 @@ type StatusRow = {
   managerLevel?: number | null;
   directScoreEntry?: boolean;
   selfAssessmentEnabled?: boolean;
+  formAssigned?: boolean;
 };
+
+export function isNotInitiated(row: StatusRow): boolean {
+  return row.formAssigned === false && !row.directScoreEntry;
+}
 
 export function isPendingDirectAssessment(row: StatusRow): boolean {
   return (
@@ -156,6 +170,10 @@ export function getSubmissionStatusConfig(row: StatusRow): StatusStyle {
     };
   }
 
+  if (isNotInitiated(row)) {
+    return FORM_STATE_CONFIG.NOT_INITIATED;
+  }
+
   if (isPendingDirectAssessment(row)) {
     return FORM_STATE_CONFIG.PENDING_DIRECT_ASSESSMENT;
   }
@@ -172,6 +190,12 @@ export function getSubmissionStatusLabel(row: StatusRow): string {
 }
 
 export function matchesFormStateOption(row: StatusRow, state: string): boolean {
+  if (state === "NOT_INITIATED") {
+    return isNotInitiated(row);
+  }
+  if (isNotInitiated(row)) {
+    return false;
+  }
   if (state === "PENDING_DIRECT_ASSESSMENT") {
     return isPendingDirectAssessment(row);
   }

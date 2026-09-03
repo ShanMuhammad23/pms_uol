@@ -15,6 +15,7 @@ import {
 import {
   getAdjustedScore as sharedGetAdjustedScore,
   getNormalizedScorePercent as sharedGetNormalizedScorePercent,
+  canResolvePerformanceRating,
 } from "@/lib/performance-rating";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AdditionalAccessModule } from "@/types/additional-access";
@@ -222,22 +223,8 @@ function getAdjustedScorePercent(row: FormSubmissionListItem): number | null {
 }
 
 function getAdjustedRating(row: FormSubmissionListItem): string | null {
-  // Rating (O) depends completely on Score (O). Only show a rating when
-  // the official reporting-manager score is valid and greater than 0.
-  // This prevents stale ratings, self-assessment ratings, or calculated
-  // ratings from appearing without a valid official score.
-  const officialScore = getReportingManagerScore(row);
-  if (officialScore === null || officialScore === undefined || officialScore <= 0) {
-    return null;
-  }
-
-  const pct = getAdjustedScorePercent(row);
-  if (pct === null) return null;
-  if (pct >= 85) return "OS";
-  if (pct >= 70) return "EX";
-  if (pct >= 55) return "ST";
-  if (pct >= 40) return "IN";
-  return "UN";
+  if (!canResolvePerformanceRating(row)) return null;
+  return row.adjustedPerformanceLevelName;
 }
 
 function getNormalizedScorePercent(row: FormSubmissionListItem): number | null {
@@ -495,7 +482,10 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     // resolved from the normalized score % and the configured performance
     // matrix bands. This is the single source of truth — do NOT
     // recalculate with hardcoded thresholds here.
-    getValue: (row) => formatNullable(row.performanceLevelName),
+    getValue: (row) =>
+      canResolvePerformanceRating(row)
+        ? formatNullable(row.performanceLevelName)
+        : "—",
   },
   quartile: {
     id: "quartile",
@@ -504,7 +494,10 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     // from the normalized score % and the configured performance matrix
     // bands. This is the single source of truth — do NOT recalculate
     // with hardcoded level definitions here.
-    getValue: (row) => formatNullable(row.quartileName),
+    getValue: (row) =>
+      canResolvePerformanceRating(row)
+        ? formatNullable(row.quartileName)
+        : "—",
   },
   remarksEvaluation: {
     id: "remarksEvaluation",

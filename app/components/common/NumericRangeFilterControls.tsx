@@ -63,7 +63,7 @@ export function NumericRangeFilterControls({
       <div className="flex items-center gap-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
-            &gt;
+            ≥
           </span>
           <input
             type="number"
@@ -76,7 +76,7 @@ export function NumericRangeFilterControls({
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
-            &lt;
+            ≤
           </span>
           <input
             type="number"
@@ -119,7 +119,7 @@ export function NumericRangeFilterControls({
       <div className="flex items-center gap-2">
         <div className="flex flex-1 items-center gap-1">
           <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-            &gt;
+            ≥
           </span>
           <input
             type="number"
@@ -135,7 +135,7 @@ export function NumericRangeFilterControls({
         </div>
         <div className="flex flex-1 items-center gap-1">
           <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-            &lt;
+            ≤
           </span>
           <input
             type="number"

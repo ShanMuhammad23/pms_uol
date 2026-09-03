@@ -69,6 +69,12 @@ export interface FormSubmissionListItem {
   normalizedScore: number | null;
   ratingN: PerformanceRating | null;
   performanceLevelName: string | null;
+  /**
+   * Performance level from the assigned matrix using the adjusted score
+   * (Score O + CH/ORIC/QEC adj). Rating (A). Null when no form/matrix is
+   * assigned or there is no official Score (O).
+   */
+  adjustedPerformanceLevelName: string | null;
   quartileName: string | null;
   initialRating: PerformanceRating | null;
   calibratedRating: PerformanceRating | null;

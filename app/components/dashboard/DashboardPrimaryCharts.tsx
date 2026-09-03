@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CalibrationDistributionMatrix } from "@/app/components/dashboard/CalibrationDistributionMatrix";
+import { CalibrationDistributionMatrix, MatrixScoreTypeSelect } from "@/app/components/dashboard/CalibrationDistributionMatrix";
 import { ChartCard } from "@/app/components/dashboard/ChartCard";
 import { CustomTooltip } from "@/app/components/dashboard/CustomTooltip";
 import { containerVariants } from "@/app/helpers/dashboard-animations";
@@ -166,15 +166,20 @@ export function DashboardPrimaryCharts({
             title="Performance Rating Quartile Matrix"
             delay={0.36}
             className="lg:col-span-6"
+            action={
+              matrixScoreType && onMatrixScoreTypeChange ? (
+                <MatrixScoreTypeSelect
+                  value={matrixScoreType}
+                  onChange={onMatrixScoreTypeChange}
+                />
+              ) : null
+            }
           >
             <CalibrationDistributionMatrix
               rows={ratingQuartileMatrix.rows}
               columns={ratingQuartileMatrix.columns}
               employeeCount={employeeCount}
               isLoading={performanceMatrixLoading}
-              hideHeader
-              scoreType={matrixScoreType}
-              onScoreTypeChange={onMatrixScoreTypeChange}
             />
           </ChartCard>
         )}

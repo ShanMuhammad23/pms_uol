@@ -16,6 +16,7 @@ import {
 import {
   getAdjustedScorePercent,
   getNormalizedScorePercent,
+  canResolvePerformanceRating,
 } from "@/lib/performance-rating";
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
@@ -293,15 +294,8 @@ function formatListingFormStatus(row: FormSubmissionListItem): string {
 }
 
 function formatRatingO(row: FormSubmissionListItem): string {
-  const officialScore = getReportingManagerScore(row);
-  if (officialScore == null || officialScore <= 0) return "";
-  const pct = getAdjustedScorePercent(row);
-  if (pct == null) return "";
-  if (pct >= 85) return "OS";
-  if (pct >= 70) return "EX";
-  if (pct >= 55) return "ST";
-  if (pct >= 40) return "IN";
-  return "UN";
+  if (!canResolvePerformanceRating(row)) return "";
+  return row.adjustedPerformanceLevelName ?? "";
 }
 
 function formatHrActions(row: FormSubmissionListItem): string {
@@ -445,7 +439,9 @@ export function buildBulkUploadRowValues(
     hrApprovalStatus: formatHrActions(row),
     normalizedScore: normalizedPct != null ? String(normalizedPct) : "",
     performanceMatrixAssignment: row.assignedPerformanceMatrix ?? "",
-    ratingN: row.performanceLevelName ?? asText(row.ratingN),
+    ratingN: canResolvePerformanceRating(row)
+      ? (row.performanceLevelName ?? asText(row.ratingN))
+      : "",
     quartile: row.quartileName ?? "",
     remarksEvaluation: row.remarksEvaluation ?? "",
     currentSalary: asText(row.currentSalary),

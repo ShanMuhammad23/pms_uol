@@ -31,7 +31,7 @@ function hasValidNormalizedScoreForCharts(
 
 /**
  * Rows that may populate the Performance Rating Curve (Actual) and the
- * Rating × Quartile Matrix. Requires:
+ * Rating × Quartile Matrix when Score (N) is selected. Requires:
  * - appraisal progress + eligibility
  * - HR alignment completed (past PENDING_HR_CALIBRATION)
  * - a valid normalized score (persisted Norm. Score or derived %)

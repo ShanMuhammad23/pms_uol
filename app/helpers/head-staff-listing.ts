@@ -16,6 +16,7 @@ export function toHeadStaffListingItem(
     calibrationFactor: null,
     normalizedScore: null,
     performanceLevelName: null,
+    adjustedPerformanceLevelName: null,
     quartileName: null,
     remarksEvaluation: null,
     currentSalary: null,
