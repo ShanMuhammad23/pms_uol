@@ -3,7 +3,6 @@ import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-sub
 import { isHeadRole } from "@/lib/auth/home-path";
 import { submissionVisibleToHead } from "@/app/helpers/manager-review";
 import { parseDashboardFilterParams } from "@/lib/dashboard/filter-params";
-import { resolveEntitySubtreeIds } from "@/lib/queries/entity-scope";
 import { listEntities } from "@/lib/queries/entities";
 import { listDashboardOverview } from "@/lib/queries/dashboard-overview";
 import { buildDashboardOverviewCounts } from "@/lib/queries/dashboard-overview-counts";
@@ -23,16 +22,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   try {
-    let scopedEntityIds: number[] | undefined;
     let managedByUserId: number | undefined;
     const isHead = isHeadRole(auth.user?.role);
-    // When viewing as a different role (view-as feature), skip the entity
-    // subtree scoping — only show employees directly assigned to the user as
-    // Manager 1 or Manager 2.
-    const isViewingAs = Boolean(auth.user?.viewAsRole);
 
     if (isHead) {
-      const headEntityId = auth.user?.entityId;
       const viewerUserId = auth.user?.id ? Number(auth.user.id) : null;
 
       if (viewerUserId == null || !Number.isFinite(viewerUserId)) {
@@ -47,10 +40,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
       }
 
       managedByUserId = viewerUserId;
-      scopedEntityIds =
-        !isViewingAs && headEntityId != null && Number.isFinite(headEntityId)
-          ? await resolveEntitySubtreeIds(headEntityId)
-          : [];
     }
 
     const filters = parseDashboardFilterParams(request.nextUrl.searchParams);
@@ -65,7 +54,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     const [overview, entities, bandsByLabel] = await Promise.all([
       listDashboardOverview({
-        scopedEntityIds,
         managedByUserId,
       }),
       listEntities(),
@@ -75,15 +63,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     let scopedOverview = overview;
     if (isHead) {
-      const headEntityId = isViewingAs ? null : (auth.user?.entityId ?? null);
       const viewerUserId = Number(auth.user!.id);
       scopedOverview = overview.filter((submission) =>
-        submissionVisibleToHead(
-          viewerUserId,
-          headEntityId,
-          submission,
-          entities,
-        ),
+        submissionVisibleToHead(viewerUserId, submission),
       );
     }
 

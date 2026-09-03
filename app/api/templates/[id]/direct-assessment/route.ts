@@ -35,13 +35,9 @@ export const GET = apiHandler(async (request: Request, context: RouteContext) =>
 
   const isHead = isHeadRole(auth.user?.role);
   const isAdmin = isAdminRole(auth.user?.role);
-  const headEntityId =
-    isHead && auth.user?.entityId != null
-      ? Number(auth.user.entityId)
-      : null;
   const url = new URL(request.url);
   // Admins may request only employees they personally manage. Managers
-  // always receive the head-scoped list; `scope=managed` is ignored.
+  // always receive the Manager 1 / Manager 2 list.
   const managedOnly =
     isAdmin && url.searchParams.get("scope") === "managed";
 
@@ -50,7 +46,6 @@ export const GET = apiHandler(async (request: Request, context: RouteContext) =>
       templateId,
       reviewerUserId,
       isHead,
-      headEntityId,
       managedOnly,
       isAdmin,
     );

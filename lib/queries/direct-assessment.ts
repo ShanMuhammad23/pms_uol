@@ -10,9 +10,6 @@ import type {
   EmployeeFormAnswerRecord,
 } from "@/types/employee-forms";
 import { hydrateAnswerPoints } from "@/app/helpers/form-rating-scoring";
-import {
-  resolveEntitySubtreeIds,
-} from "@/lib/queries/entity-scope";
 
 export interface DirectAssessmentEmployee {
   submissionId: number;
@@ -87,12 +84,10 @@ export async function getDirectAssessmentData(
   templateId: number,
   reviewerUserId: number,
   isHead: boolean,
-  headEntityId: number | null,
   /**
    * When true, only employees where the reviewer is Manager 1 (`head_id`)
    * or Manager 2 (`manager_2_id`). Used so Super Admin / HR / Board can
-   * separate their own manager queue from the org-wide list. Does not
-   * include entity-subtree visibility.
+   * separate their own manager queue from the org-wide list.
    */
   managedOnly = false,
   /**
@@ -111,40 +106,15 @@ export async function getDirectAssessmentData(
   let visibilityClause = "";
   let visibilityParams: unknown[] = [];
 
-  if (managedOnly) {
+  if (managedOnly || isHead) {
     visibilityClause = `AND (
       u.head_id = $2
       OR u.manager_2_id = $2
     )`;
     visibilityParams = [reviewerUserId];
-  } else if (isHead) {
-    const scopedEntityIds =
-      headEntityId != null && Number.isFinite(headEntityId)
-        ? await resolveEntitySubtreeIds(headEntityId)
-        : [];
-
-    if (scopedEntityIds.length > 0) {
-      visibilityClause = `AND (
-        u.entity_id = ANY($2::bigint[])
-        OR u.head_id = $3
-        OR u.manager_2_id = $3
-      )`;
-      visibilityParams = [scopedEntityIds, reviewerUserId];
-    } else {
-      visibilityClause = `AND (
-        u.head_id = $2
-        OR u.manager_2_id = $2
-      )`;
-      visibilityParams = [reviewerUserId];
-    }
   }
 
-  const templateParamIndex =
-    visibilityParams.length === 0
-      ? 2
-      : visibilityParams.length === 1
-        ? 3
-        : 4;
+  const templateParamIndex = visibilityParams.length === 0 ? 2 : 3;
 
   const result = await getDbClient().query<AssignmentRow>(
     `SELECT

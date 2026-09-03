@@ -97,7 +97,7 @@ export default function DirectAssessmentTab({
     return (
       <DirectAssessmentSpreadsheet
         templateId={selectedTemplateId}
-        scope={showSplitViews ? view : "all"}
+        scope={showSplitViews ? view : "managed"}
         onBack={() => setSelectedTemplateId(null)}
       />
     );
@@ -108,7 +108,9 @@ export default function DirectAssessmentTab({
       ? "You are not assigned as Manager 1 or Manager 2 on any direct assessment form. Switch to All Direct Assessments to view organization-wide forms."
       : showSplitViews && view === "all" && orgFilters.hasActiveOrgFilters
         ? "No direct assessment forms match the selected organization."
-        : "No forms with self-assessment disabled. When you create a form with self-assessment turned off, it will appear here for direct manager assessment.";
+        : showSplitViews
+          ? "No forms with self-assessment disabled. When you create a form with self-assessment turned off, it will appear here for direct manager assessment."
+          : "You are not assigned as Manager 1 or Manager 2 on any direct assessment form.";
 
   return (
     <div className="space-y-4">
@@ -121,7 +123,7 @@ export default function DirectAssessmentTab({
           <p className="text-sm text-foreground/70">
             {showSplitViews
               ? "My Direct Assessments are forms where you are Manager 1 or Manager 2. All Direct Assessments include every form with self-assessment disabled, regardless of manager."
-              : "Forms where self-assessment is disabled. Reporting heads enter scores directly without employee self-assessment."}
+              : "Forms for staff where you are Manager 1 or Manager 2 and self-assessment is disabled."}
           </p>
         </div>
       </div>

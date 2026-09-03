@@ -1,6 +1,7 @@
 /**
  * Shared SQL visibility for staff listing / dashboard overview.
- * Includes org subtree and/or employees where the viewer is Manager 1 or 2.
+ * Managers see only employees where they are Manager 1 (`head_id`) or
+ * Manager 2 (`manager_2_id`). Entity subtree is never used for visibility.
  */
 
 export type StaffListScope = {

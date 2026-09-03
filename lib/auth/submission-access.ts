@@ -2,17 +2,12 @@ import "server-only";
 
 import type { Session } from "next-auth";
 import { NextResponse } from "next/server";
-import {
-  managerCanReviewSubmission,
-  toEmployeeManagers,
-} from "@/app/helpers/manager-review";
-import { submissionInEntitySubtree } from "@/app/helpers/entity-scope";
+import { isAssignedReportingManager } from "@/app/helpers/manager-review";
 import { isHeadRole } from "@/lib/auth/home-path";
 import {
   canAccessDashboardSubmissions,
   canReviewSubmissions,
 } from "@/lib/auth/submission-review-roles";
-import { listEntities } from "@/lib/queries/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 export class SubmissionAccessError extends Error {
@@ -55,27 +50,7 @@ export async function assertSubmissionAccessible(
     throw new SubmissionAccessError("Forbidden", 403);
   }
 
-  const managers = toEmployeeManagers(submission);
-  const isAssignedManager =
-    managers.manager1Id === viewerUserId ||
-    managers.manager2Id === viewerUserId;
-
-  const headEntityId = session.user?.entityId;
-  const entities = await listEntities();
-  const inOrgSubtree =
-    headEntityId != null &&
-    Number.isFinite(headEntityId) &&
-    submissionInEntitySubtree(submission, headEntityId, entities);
-
-  if (!isAssignedManager && !inOrgSubtree) {
-    throw new SubmissionAccessError("Forbidden", 403);
-  }
-
-  if (
-    submission.status === "PENDING_HEAD_REVIEW" &&
-    !isAssignedManager &&
-    !managerCanReviewSubmission(viewerUserId, submission)
-  ) {
+  if (!isAssignedReportingManager(viewerUserId, submission)) {
     throw new SubmissionAccessError("Forbidden", 403);
   }
 }

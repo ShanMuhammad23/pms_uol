@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { requireDashboardSubmissionsApi } from "@/lib/auth/require-dashboard-submissions";
-import { isHeadRole } from "@/lib/auth/home-path";
 import { listDirectAssessmentStaffByEntity } from "@/lib/queries/direct-assessment-org-counts";
 import { listFormTemplates, listDirectAssessmentTemplates } from "@/lib/queries/forms";
 import { resolveEntitySubtreeIdsForRoots } from "@/lib/queries/entity-scope";
@@ -34,12 +33,7 @@ export const GET = apiHandler(async (request: Request) => {
 
     const reviewerUserId = auth.user?.id ? Number(auth.user.id) : null;
     const role = auth.user?.role;
-    const isHead = isHeadRole(role);
     const isAdmin = isAdminRole(role);
-    const headEntityId =
-      isHead && auth.user?.entityId != null
-        ? Number(auth.user.entityId)
-        : null;
 
     if (directAssessment) {
       if (reviewerUserId == null || !Number.isFinite(reviewerUserId)) {
@@ -73,16 +67,12 @@ export const GET = apiHandler(async (request: Request) => {
 
         const templates = await listDirectAssessmentTemplates({
           reviewerUserId: null,
-          headEntityId: null,
           filterEntityIds,
         });
         return NextResponse.json(templates);
       }
       const templates = await listDirectAssessmentTemplates({
         reviewerUserId,
-        // Admins in the managed view must not pick up entity-subtree
-        // visibility — only employees they personally manage.
-        headEntityId: isAdmin ? null : headEntityId,
       });
       return NextResponse.json(templates);
     }

@@ -1,7 +1,6 @@
 import type { EntityRecord } from "@/types/entities";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AppraisalStatus } from "@/types/forms";
-import { submissionInEntitySubtree } from "@/app/helpers/entity-scope";
 
 export const MAX_MANAGER_LEVEL = 2;
 
@@ -152,36 +151,34 @@ export function isAssignedManagerAtLevel(
 }
 
 /**
- * HEAD listing visibility:
- * - org subtree staff (dashboard context), or
- * - staff where the viewer is assigned as Manager 1 or 2
- * Pending reviews are limited to forms the viewer can actually approve.
+ * True when the viewer is this employee's Manager 1 or Manager 2.
+ * Manager dashboards list and count only these people — never org-subtree staff.
+ */
+export function isAssignedReportingManager(
+  viewerUserId: number,
+  submission: Pick<
+    FormSubmissionListItem,
+    "manager1UserId" | "manager2UserId"
+  >,
+): boolean {
+  const managers = toEmployeeManagers(submission);
+  return (
+    managers.manager1Id === viewerUserId ||
+    managers.manager2Id === viewerUserId
+  );
+}
+
+/**
+ * HEAD listing visibility: staff where the viewer is assigned as Manager 1 or 2.
  */
 export function submissionVisibleToHead(
   viewerUserId: number,
-  viewerEntityId: number | null,
-  submission: FormSubmissionListItem,
-  entities: EntityRecord[],
+  submission: Pick<
+    FormSubmissionListItem,
+    "manager1UserId" | "manager2UserId"
+  >,
 ): boolean {
-  const managers = toEmployeeManagers(submission);
-  const isAssignedManager =
-    managers.manager1Id === viewerUserId ||
-    managers.manager2Id === viewerUserId;
-
-  const inOrgSubtree =
-    viewerEntityId != null &&
-    submissionInEntitySubtree(submission, viewerEntityId, entities);
-
-  if (!isAssignedManager && !inOrgSubtree) {
-    return false;
-  }
-
-  if (submission.status === "PENDING_HEAD_REVIEW") {
-    if (isAssignedManager) return true;
-    return managerCanReviewSubmission(viewerUserId, submission);
-  }
-
-  return true;
+  return isAssignedReportingManager(viewerUserId, submission);
 }
 
 export function submissionRequiresSecondManagerReview(

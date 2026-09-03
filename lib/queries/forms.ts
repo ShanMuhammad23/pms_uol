@@ -5,7 +5,6 @@ import { db } from "../db";
 import { getDbClient, withTransaction } from "@/lib/db-context";
 import { upsertIncrementMatrices } from "./increment-matrices";
 import { getAppraisalCycleById, getDefaultAppraisalCycle, ensureDefaultAppraisalCycle } from "./appraisal-cycles";
-import { resolveEntitySubtreeIds } from "./entity-scope";
 import type {
   EmployeeCategory,
   FieldType,
@@ -1152,11 +1151,10 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
 
 export async function listDirectAssessmentTemplates(scope: {
   reviewerUserId: number | null;
-  headEntityId: number | null;
   /** When set, only assignments whose employee entity is in this set. */
   filterEntityIds?: number[] | null;
 }): Promise<FormTemplateListItem[]> {
-  const { reviewerUserId, headEntityId, filterEntityIds = null } = scope;
+  const { reviewerUserId, filterEntityIds = null } = scope;
 
   if (filterEntityIds != null && filterEntityIds.length === 0) {
     return [];
@@ -1172,8 +1170,7 @@ export async function listDirectAssessmentTemplates(scope: {
   // Admin org-wide mode (reviewerUserId === null): no visibility filter —
   // show all templates with self-assessment-disabled assignments.
   // When reviewerUserId is set, only templates for employees that user
-  // manages as Manager 1 (`head_id`) or Manager 2 (`manager_2_id`),
-  // optionally expanded to the head's entity subtree.
+  // manages as Manager 1 (`head_id`) or Manager 2 (`manager_2_id`).
   if (reviewerUserId == null) {
     const result = await getDbClient().query<FormTemplateListRow>(
       `SELECT
@@ -1237,28 +1234,11 @@ export async function listDirectAssessmentTemplates(scope: {
     return result.rows.map(mapFormTemplateListItem);
   }
 
-  const scopedEntityIds =
-    headEntityId != null && Number.isFinite(headEntityId)
-      ? await resolveEntitySubtreeIds(headEntityId)
-      : [];
-
-  let visibilityClause: string;
-  let visibilityParams: unknown[];
-
-  if (scopedEntityIds.length > 0) {
-    visibilityClause = `AND (
-      u.entity_id = ANY($1::bigint[])
-      OR u.head_id = $2
-      OR u.manager_2_id = $2
-    )`;
-    visibilityParams = [scopedEntityIds, reviewerUserId];
-  } else {
-    visibilityClause = `AND (
-      u.head_id = $1
-      OR u.manager_2_id = $1
-    )`;
-    visibilityParams = [reviewerUserId];
-  }
+  const visibilityClause = `AND (
+    u.head_id = $1
+    OR u.manager_2_id = $1
+  )`;
+  const visibilityParams: unknown[] = [reviewerUserId];
 
   const result = await getDbClient().query<FormTemplateListRow>(
     `SELECT
