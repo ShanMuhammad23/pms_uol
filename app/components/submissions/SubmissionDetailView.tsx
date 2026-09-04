@@ -1563,9 +1563,69 @@ export default function SubmissionDetailView({
                   const employeeAuthored = (data.authoredAnswers ?? []).filter(
                     (a) => a.openSectionId === sectionId,
                   );
+                  const mgr1Authored = (data.manager1AuthoredAnswers ?? []).filter(
+                    (a) => a.openSectionId === sectionId,
+                  );
+                  const mgr2Authored = (data.manager2AuthoredAnswers ?? []).filter(
+                    (a) => a.openSectionId === sectionId,
+                  );
                   const colSpan = selfAssessmentEnabled
                     ? ((hasManager2 && showManager2Data) ? 10 : 8)
                     : ((hasManager2 && showManager2Data) ? 8 : 6);
+
+                  const renderAuthoredBlock = (
+                    label: string,
+                    authored: EmployeeFormAnswerRecord[],
+                    labelColor: string,
+                  ) => {
+                    if (authored.length === 0) return null;
+                    return (
+                      <div className="space-y-1.5">
+                        <p className={cn("text-[11px] font-bold uppercase tracking-wide", labelColor)}>
+                          {label}
+                        </p>
+                        <div className="space-y-2">
+                          {authored.map((a, idx) => (
+                            <div
+                              key={idx}
+                              className="rounded-md border border-slate-200 bg-slate-50/40 p-2.5 dark:border-white/10 dark:bg-slate-800/20"
+                            >
+                              <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                                {idx + 1}. {a.authoredQuestionText}
+                              </p>
+                              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                {data.ratingBased
+                                  ? `Weight: ${a.authoredTotalMarks} · Rating: ${a.ratingValue ?? "—"} · Score: ${a.pointsEarned}`
+                                  : `Marks: ${a.authoredTotalMarks} · Score: ${a.pointsEarned}`}
+                                {a.remarks ? ` · Remarks: ${a.remarks}` : ""}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  const selfBlock = selfAssessmentEnabled
+                    ? renderAuthoredBlock("Self Assessment", employeeAuthored, "text-teal-600 dark:text-teal-400")
+                    : null;
+                  const m1Block = renderAuthoredBlock(
+                    `Manager 1${data.manager1Name ? ` (${data.manager1Name})` : ""}`,
+                    mgr1Authored,
+                    "text-violet-600 dark:text-violet-400",
+                  );
+                  const m2Block = (hasManager2 && showManager2Data)
+                    ? renderAuthoredBlock(
+                        `Manager 2${data.manager2Name ? ` (${data.manager2Name})` : ""}`,
+                        mgr2Authored,
+                        "text-blue-600 dark:text-blue-400",
+                      )
+                    : null;
+
+                  const hasAnyAuthored =
+                    employeeAuthored.length > 0 ||
+                    mgr1Authored.length > 0 ||
+                    mgr2Authored.length > 0;
 
                   return (
                     <Fragment key={`open-${row.sr}`}>
@@ -1583,28 +1643,15 @@ export default function SubmissionDetailView({
                           : "bg-slate-50/60 dark:bg-slate-800/20"
                       )}>
                         <td colSpan={colSpan} className="px-4 py-3">
-                          {employeeAuthored.length === 0 ? (
+                          {!hasAnyAuthored ? (
                             <p className="text-xs italic text-slate-400">
                               No questions were authored for this section.
                             </p>
                           ) : (
-                            <div className="space-y-2">
-                              {employeeAuthored.map((a, idx) => (
-                                <div
-                                  key={idx}
-                                  className="rounded-md border border-slate-200 bg-slate-50/40 p-2.5 dark:border-white/10 dark:bg-slate-800/20"
-                                >
-                                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                                    {idx + 1}. {a.authoredQuestionText}
-                                  </p>
-                                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                    {data.ratingBased
-                                      ? `Weight: ${a.authoredTotalMarks} · Rating: ${a.ratingValue ?? "—"} · Score: ${a.pointsEarned}`
-                                      : `Marks: ${a.authoredTotalMarks} · Self Score: ${a.pointsEarned}`}
-                                    {a.remarks ? ` · Remarks: ${a.remarks}` : ""}
-                                  </p>
-                                </div>
-                              ))}
+                            <div className="space-y-3">
+                              {selfBlock}
+                              {m1Block}
+                              {m2Block}
                             </div>
                           )}
                         </td>

@@ -2016,7 +2016,7 @@ export async function getFormSubmissionById(
   const managerIds = [summary.manager1UserId, summary.manager2UserId].filter(
     (id): id is number => id != null && Number.isFinite(id),
   );
-  const [answers, managerAnswers, manager1Answers, manager2Answers, managerSapResult, authoredAnswers, managerAuthoredAnswers] =
+  const [answers, managerAnswers, manager1Answers, manager2Answers, managerSapResult, authoredAnswers, managerAuthoredAnswers, manager1AuthoredAnswers, manager2AuthoredAnswers] =
     await Promise.all([
       getAnswersForSubmission(id, employeeUserId),
       reviewerUserId != null
@@ -2039,6 +2039,12 @@ export async function getFormSubmissionById(
       getAuthoredAnswersForSubmission(id, employeeUserId),
       reviewerUserId != null
         ? getAuthoredAnswersForSubmission(id, reviewerUserId)
+        : Promise.resolve([]),
+      summary.manager1UserId != null
+        ? getAuthoredAnswersForSubmission(id, summary.manager1UserId)
+        : Promise.resolve([]),
+      summary.manager2UserId != null
+        ? getAuthoredAnswersForSubmission(id, summary.manager2UserId)
         : Promise.resolve([]),
     ]);
 
@@ -2135,6 +2141,8 @@ export async function getFormSubmissionById(
     answers: hydrateAnswerPoints(answers, questions, ratingBased, ratingScales),
     authoredAnswers,
     managerAuthoredAnswers,
+    manager1AuthoredAnswers,
+    manager2AuthoredAnswers,
     managerAnswers: hydrateAnswerPoints(
       managerAnswers,
       questions,
