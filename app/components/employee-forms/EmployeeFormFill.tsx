@@ -7,7 +7,9 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
 import {
+  computeAuthoredRatingPoints,
   formatScoreValue,
+  getAuthoredRatingScale,
   getQuestionRatingScale,
   parseDraftScoreAnswer,
   resolveDisplayedAnswerPoints,
@@ -108,6 +110,8 @@ interface AuthoredQuestionDraft {
   authoredQuestionText: string;
   authoredTotalMarks: string;
   pointsEarned: string;
+  /** Rating selected for rating-based open-assessment sections. */
+  ratingValue: string;
   remarks: string;
 }
 
@@ -169,6 +173,7 @@ function buildInitialAuthoredAnswers(
       authoredQuestionText: a.authoredQuestionText ?? "",
       authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
       pointsEarned: String(a.pointsEarned ?? 0),
+      ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
       remarks: a.remarks ?? "",
     }));
   }
@@ -186,8 +191,10 @@ function authoredStateToPayload(
       const text = draft.authoredQuestionText.trim();
       const totalMarks = Number(draft.authoredTotalMarks) || 0;
       const points = draft.pointsEarned !== "" ? Number(draft.pointsEarned) : 0;
+      const rating =
+        draft.ratingValue !== "" ? Number(draft.ratingValue) : undefined;
       const remarks = draft.remarks.trim() || null;
-      if (!text && !totalMarks && !points && !remarks) {
+      if (!text && !totalMarks && !points && !remarks && rating == null) {
         continue;
       }
       result.push({
@@ -196,6 +203,7 @@ function authoredStateToPayload(
         authoredQuestionText: text || null,
         authoredTotalMarks: totalMarks,
         pointsEarned: points,
+        ratingValue: rating,
         remarks,
       });
     }
@@ -377,14 +385,23 @@ export default function EmployeeFormFill({
         );
       }, 0);
 
-    // Add authored question self-scores.
+    // Add authored question self-scores. In rating-based mode, points are
+    // derived from the selected rating and the authored weight.
+    const ratingBased = Boolean(data.template.ratingBased);
     const authoredScore = Object.values(authored).reduce(
       (sum, drafts) =>
         sum +
-        drafts.reduce(
-          (s, d) => s + (d.pointsEarned !== "" ? Number(d.pointsEarned) || 0 : 0),
-          0,
-        ),
+        drafts.reduce((s, d) => {
+          if (ratingBased) {
+            const rating = d.ratingValue !== "" ? Number(d.ratingValue) : NaN;
+            const weight = Number(d.authoredTotalMarks) || 0;
+            if (!Number.isFinite(rating) || rating <= 0) {
+              return s;
+            }
+            return s + computeAuthoredRatingPoints(rating, weight, data.template.ratingScales);
+          }
+          return s + (d.pointsEarned !== "" ? Number(d.pointsEarned) || 0 : 0);
+        }, 0),
       0,
     );
 
@@ -854,6 +871,11 @@ export default function EmployeeFormFill({
                     const remaining = budget - allocated;
                     const isHodOnly =
                       !data.selfAssessmentEnabled;
+                    // Open-assessment sections respect the form's scoring mode:
+                    // rating-based → author picks a rating per question;
+                    // absolute → author enters a numeric self-score.
+                    const authoredRatingBased = Boolean(data.template.ratingBased);
+                    const authoredScale = getAuthoredRatingScale(data.template.ratingScales);
 
                     const addAuthoredQuestion = () => {
                       setAuthored((current) => {
@@ -867,6 +889,7 @@ export default function EmployeeFormFill({
                               authoredQuestionText: "",
                               authoredTotalMarks: "",
                               pointsEarned: "",
+                              ratingValue: "",
                               remarks: "",
                             },
                           ],
@@ -938,7 +961,9 @@ export default function EmployeeFormFill({
                                 <div className="rounded-md border border-dashed border-amber-300/80 px-4 py-4 text-center text-xs text-foreground/60 dark:border-amber-700/40">
                                   {isReadOnly
                                     ? "No questions were authored for this section."
-                                    : "Click \"Add Question\" to write your own question and assign marks from the budget."}
+                                    : authoredRatingBased
+                                      ? "Click \"Add Question\" to write your own question, assign a weight from the budget, and select a rating."
+                                      : "Click \"Add Question\" to write your own question and assign marks from the budget."}
                                 </div>
                               ) : (
                                 <div className="space-y-2">
@@ -946,6 +971,22 @@ export default function EmployeeFormFill({
                                     const totalMarks = Number(draft.authoredTotalMarks) || 0;
                                     const points = draft.pointsEarned !== "" ? Number(draft.pointsEarned) : 0;
                                     const overBudget = points > totalMarks;
+                                    const updateAuthoredRating = (
+                                      ratingValue: string,
+                                      pointsEarned: string,
+                                    ) => {
+                                      setAuthored((current) => {
+                                        const existing = current[sectionId] ?? [];
+                                        return {
+                                          ...current,
+                                          [sectionId]: existing.map((d) =>
+                                            d.clientId === draft.clientId
+                                              ? { ...d, ratingValue, pointsEarned }
+                                              : d,
+                                          ),
+                                        };
+                                      });
+                                    };
                                     return (
                                       <div
                                         key={draft.clientId}
@@ -972,7 +1013,7 @@ export default function EmployeeFormFill({
                                             />
                                             <div className="flex flex-wrap items-center gap-3">
                                               <label className="text-[11px] font-medium text-foreground/70">
-                                                Marks:
+                                                {authoredRatingBased ? "Weight:" : "Marks:"}
                                                 <input
                                                   type="number"
                                                   min={0}
@@ -990,31 +1031,45 @@ export default function EmployeeFormFill({
                                                   placeholder="0"
                                                 />
                                               </label>
-                                              <label className="text-[11px] font-medium text-foreground/70">
-                                                Self Score:
-                                                <input
-                                                  type="number"
-                                                  min={0}
-                                                  max={totalMarks || undefined}
-                                                  step={0.5}
-                                                  value={draft.pointsEarned}
-                                                  disabled={isReadOnly || isHodOnly}
-                                                  onChange={(e) =>
-                                                    updateAuthored(
-                                                      draft.clientId,
-                                                      "pointsEarned",
-                                                      e.target.value,
-                                                    )
-                                                  }
-                                                  className={cn(
-                                                    "ml-1 h-7 w-20 rounded border bg-white px-2 text-right text-xs tabular-nums font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60 dark:bg-slate-800",
-                                                    overBudget
-                                                      ? "border-red-400 text-red-600 dark:border-red-600/50 dark:text-red-400"
-                                                      : "border-slate-300 text-teal-700 dark:border-white/15 dark:text-teal-300",
-                                                  )}
-                                                  placeholder="0"
-                                                />
-                                              </label>
+                                              {authoredRatingBased && authoredScale ? (
+                                                <div className="flex min-w-[180px] flex-col gap-0.5">
+                                                  <span className="text-[11px] font-medium text-foreground/70">Rating:</span>
+                                                  <RatingScoreField
+                                                    scale={authoredScale}
+                                                    weight={totalMarks}
+                                                    ratingValue={draft.ratingValue}
+                                                    onRatingChange={updateAuthoredRating}
+                                                    disabled={isReadOnly || isHodOnly}
+                                                    fallbackPoints={draft.pointsEarned !== "" ? Number(draft.pointsEarned) : null}
+                                                  />
+                                                </div>
+                                              ) : (
+                                                <label className="text-[11px] font-medium text-foreground/70">
+                                                  Self Score:
+                                                  <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={totalMarks || undefined}
+                                                    step={0.5}
+                                                    value={draft.pointsEarned}
+                                                    disabled={isReadOnly || isHodOnly}
+                                                    onChange={(e) =>
+                                                      updateAuthored(
+                                                        draft.clientId,
+                                                        "pointsEarned",
+                                                        e.target.value,
+                                                      )
+                                                    }
+                                                    className={cn(
+                                                      "ml-1 h-7 w-20 rounded border bg-white px-2 text-right text-xs tabular-nums font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60 dark:bg-slate-800",
+                                                      overBudget
+                                                        ? "border-red-400 text-red-600 dark:border-red-600/50 dark:text-red-400"
+                                                        : "border-slate-300 text-teal-700 dark:border-white/15 dark:text-teal-300",
+                                                    )}
+                                                    placeholder="0"
+                                                  />
+                                                </label>
+                                              )}
                                               {!isReadOnly && !isHodOnly ? (
                                                 <button
                                                   type="button"

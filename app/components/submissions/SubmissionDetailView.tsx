@@ -1568,7 +1568,9 @@ export default function SubmissionDetailView({
                                     {idx + 1}. {a.authoredQuestionText}
                                   </p>
                                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                    Marks: {a.authoredTotalMarks} · Self Score: {a.pointsEarned}
+                                    {data.ratingBased
+                                      ? `Weight: ${a.authoredTotalMarks} · Rating: ${a.ratingValue ?? "—"} · Score: ${a.pointsEarned}`
+                                      : `Marks: ${a.authoredTotalMarks} · Self Score: ${a.pointsEarned}`}
                                     {a.remarks ? ` · Remarks: ${a.remarks}` : ""}
                                   </p>
                                 </div>

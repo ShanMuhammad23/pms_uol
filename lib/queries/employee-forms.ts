@@ -34,6 +34,8 @@ import type {
 } from "@/types/forms";
 import { APPRAISAL_STATUSES, flattenAllQuestions } from "@/types/forms";
 import {
+  computeAuthoredRatingPoints,
+  isValidAuthoredRating,
   resolveAnswerScore,
   usesRatingScore,
   hydrateAnswerPoints,
@@ -344,9 +346,11 @@ export async function getAuthoredAnswersForAppraisal(
     authored_question_text: string | null;
     authored_total_marks: string;
     open_section_id: string | null;
+    rating_value: string | null;
   }>(
     `SELECT id, text_response, points_earned, remarks,
-            authored_question_text, authored_total_marks::text, open_section_id::text
+            authored_question_text, authored_total_marks::text, open_section_id::text,
+            rating_value::text
      FROM appraisal_answers
      WHERE appraisal_id = $1
        AND filled_by_id = $2
@@ -360,7 +364,10 @@ export async function getAuthoredAnswersForAppraisal(
     textResponse: row.text_response,
     selectedOptionId: null,
     pointsEarned: Number(row.points_earned),
-    ratingValue: null,
+    ratingValue:
+      row.rating_value == null || row.rating_value === ""
+        ? null
+        : Number(row.rating_value),
     remarks: row.remarks,
     attachments: [],
     authoredQuestionText: row.authored_question_text,
@@ -957,8 +964,29 @@ export async function saveEmployeeForm(
 
         const questionText = (authored.authoredQuestionText ?? "").trim();
         const totalMarks = Number(authored.authoredTotalMarks) || 0;
-        const pointsEarned = Number(authored.pointsEarned) || 0;
         const remarks = authored.remarks?.trim() || null;
+
+        // In rating-based mode, points are derived from the selected rating
+        // and the authored weight (totalMarks). In absolute mode, the author
+        // enters pointsEarned directly.
+        const ratingBased = Boolean(template.ratingBased);
+        const ratingValue =
+          authored.ratingValue == null
+            ? null
+            : Number(authored.ratingValue);
+        let pointsEarned: number;
+        let storedRatingValue: number | null;
+        if (ratingBased && ratingValue != null && Number.isFinite(ratingValue)) {
+          pointsEarned = computeAuthoredRatingPoints(
+            ratingValue,
+            totalMarks,
+            template.ratingScales,
+          );
+          storedRatingValue = ratingValue;
+        } else {
+          pointsEarned = Number(authored.pointsEarned) || 0;
+          storedRatingValue = ratingBased ? null : ratingValue;
+        }
 
         if (!questionText && !totalMarks && !pointsEarned && !remarks) {
           continue;
@@ -977,11 +1005,12 @@ export async function saveEmployeeForm(
              authored_question_text,
              authored_total_marks,
              open_section_id
-           ) VALUES ($1, NULL, $2, NULL, NULL, $3, NULL, $4, $5, $6, $7)`,
+           ) VALUES ($1, NULL, $2, NULL, NULL, $3, $4, $5, $6, $7, $8)`,
           [
             appraisal.id,
             userId,
             pointsEarned,
+            storedRatingValue,
             remarks,
             questionText,
             totalMarks,
@@ -1033,6 +1062,7 @@ export async function saveEmployeeForm(
 
       // Validate open-assessment sections: budget must be fully allocated
       // and each question's score must be within its authored total marks.
+      const formRatingBased = Boolean(template.ratingBased);
       for (const section of openSections) {
         const sectionAuthored = savedAuthored.filter(
           (a) => a.openSectionId === section.id,
@@ -1061,12 +1091,26 @@ export async function saveEmployeeForm(
               `Section "${section.title}": every question must have text.`,
             );
           }
-          const score = Number(authored.pointsEarned);
-          const max = Number(authored.authoredTotalMarks);
-          if (Number.isNaN(score) || score < 0 || score > max) {
-            throw new EmployeeFormError(
-              `Section "${section.title}": score must be between 0 and ${max} for each question.`,
-            );
+          if (formRatingBased) {
+            // Rating-based: a valid rating must be selected. Points are
+            // derived from the rating, so they are always within [0, weight].
+            const rating = authored.ratingValue;
+            if (
+              rating == null ||
+              !isValidAuthoredRating(Number(rating), template.ratingScales)
+            ) {
+              throw new EmployeeFormError(
+                `Section "${section.title}": select a valid rating for each question.`,
+              );
+            }
+          } else {
+            const score = Number(authored.pointsEarned);
+            const max = Number(authored.authoredTotalMarks);
+            if (Number.isNaN(score) || score < 0 || score > max) {
+              throw new EmployeeFormError(
+                `Section "${section.title}": score must be between 0 and ${max} for each question.`,
+              );
+            }
           }
         }
       }

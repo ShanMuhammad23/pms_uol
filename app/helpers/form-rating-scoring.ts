@@ -278,6 +278,52 @@ export function hydrateAnswerPoints<
 }
 
 /**
+ * Resolve the rating scale used for an open-assessment (authored) question.
+ * Authored questions have no ratingScaleId, so the form's first/default scale
+ * is used.
+ */
+export function getAuthoredRatingScale(
+  scales: FormRatingScaleRecord[] | undefined,
+): FormRatingScaleRecord | null {
+  return scales?.length ? scales[0] : null;
+}
+
+/**
+ * Points for an open-assessment (authored) question in rating-based mode:
+ * (rating / scale max) × authored weight. Uses the form's default scale.
+ */
+export function computeAuthoredRatingPoints(
+  ratingValue: number,
+  weight: number,
+  scales: FormRatingScaleRecord[] | undefined,
+): number {
+  const scale = getAuthoredRatingScale(scales);
+  const maxRating = scale
+    ? deriveRatingScaleMaxValue(
+        scale.options,
+        Number(scale.maxValue) || DEFAULT_RATING_MAX,
+      )
+    : DEFAULT_RATING_MAX;
+  return computeRatingPoints(ratingValue, weight, maxRating);
+}
+
+/**
+ * Whether a rating value matches a valid option on the form's default scale.
+ */
+export function isValidAuthoredRating(
+  ratingValue: number,
+  scales: FormRatingScaleRecord[] | undefined,
+): boolean {
+  const scale = getAuthoredRatingScale(scales);
+  if (!scale?.options.length) {
+    return false;
+  }
+  return scale.options.some(
+    (option) => Number(option.ratingValue) === ratingValue,
+  );
+}
+
+/**
  * Score for a rating-based question: (rating / scale max) × question weight.
  * Scale max defaults to 5 when not configured.
  */
