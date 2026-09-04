@@ -20,7 +20,7 @@ export function FormDescription({
     return (
       <details
         className={cn(
-          "group w-fit max-w-full rounded-md border border-indigo-200 bg-indigo-50/90 px-2.5 py-1.5 md:max-w-xl dark:border-indigo-500/30 dark:bg-indigo-950/35",
+          "group  max-w-full rounded-md border border-indigo-200 bg-indigo-50/90 px-2.5 py-1.5 md:max-w-xl dark:border-indigo-500/30 dark:bg-indigo-950/35",
           className,
         )}
       >
@@ -29,7 +29,7 @@ export function FormDescription({
             Form description
           </span>
           <p
-            className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-700 group-open:line-clamp-none group-open:whitespace-pre-wrap dark:text-slate-200"
+            className="mt-0.5 text-sm leading-snug  dark:text-slate-200"
             title={text}
           >
             {text}
@@ -46,10 +46,10 @@ export function FormDescription({
         className,
       )}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
+      <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
         Form description
       </p>
-      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+      <p className="mt-1 text-sm leading-relaxed  dark:text-slate-200">
         {text}
       </p>
     </div>

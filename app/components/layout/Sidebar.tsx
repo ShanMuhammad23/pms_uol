@@ -95,6 +95,8 @@ const ADMIN_SUBMENU_TRANSITION = {
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
+const NAV_ICON_CLASS = "size-6 shrink-0";
+
 function SidebarLabel({ children }: { children: React.ReactNode }) {
   const { collapsed } = useSidebar();
 
@@ -161,7 +163,7 @@ function AnimatedAdminLinks({
                     title={link.label}
                     className={cn(navLinkClass(active), "pl-4")}
                   >
-                    <Image src={Icon} alt={link.label} width={24} height={24} className="shrink-0" />
+                    <Image src={Icon} alt={link.label} width={24} height={24} className={NAV_ICON_CLASS} />
                     {link.label}
                   </Link>
                 </motion.li>
@@ -232,7 +234,7 @@ const Sidebar = () => {
   const navLinkClass = (active: boolean) =>
     cn(
       "sidebar-nav-link",
-      collapsed && "justify-center px-2",
+      collapsed ? "justify-center px-2" : "px-6",
       active
         ? "border-r-4 border-primary "
         : "border-primary hover:border-r-4 hover:bg-primary/10",
@@ -240,7 +242,7 @@ const Sidebar = () => {
 
   return (
     <motion.aside
-      className="no-print fixed top-0 left-0 z-40 flex h-full flex-col overflow-x-hidden overflow-y-auto border border-r border-slate-300/80 py-6 dark:border-white/15"
+      className="no-print fixed top-0 no-scrollbar left-0 z-40 flex h-full flex-col overflow-x-hidden overflow-y-auto border border-r border-slate-300/80 py-6 dark:border-white/15"
       initial={false}
       animate={{
         width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
@@ -289,7 +291,7 @@ const Sidebar = () => {
 
       <hr className="my-6 border-slate-300/80 dark:border-white/15" />
 
-      <nav aria-label="Primary sidebar navigation" className="flex-1">
+      <nav aria-label="Primary sidebar navigation" className="flex-1 no-scrollbar">
         <ul className="space-y-0.5 text-sm font-medium text-foreground/75">
           {isEmployee ? (
             <>
@@ -300,7 +302,7 @@ const Sidebar = () => {
                   title="My Forms"
                   className={navLinkClass(isMyForms)}
                 >
-                  <Image src={formIcon} alt="My Forms" width={24} height={24} className="shrink-0" />
+                  <Image src={formIcon} alt="My Forms" width={24} height={24} className={NAV_ICON_CLASS} />
                   <SidebarLabel>My Forms</SidebarLabel>
                 </Link>
               </li>
@@ -313,7 +315,7 @@ const Sidebar = () => {
                         className="flex justify-center py-2 text-secondary"
                         title="Administration"
                       >
-                        <Settings2 className="size-4" />
+                        <Settings2 className="size-6" />
                       </div>
                       {adminLinks.map((link) => {
                         const Icon = link.icon;
@@ -326,7 +328,7 @@ const Sidebar = () => {
                             title={link.label}
                             className={navLinkClass(active)}
                           >
-                            <Image src={Icon} alt={link.label} width={24} height={24} className="shrink-0" />
+                            <Image src={Icon} alt={link.label} width={24} height={24} className={NAV_ICON_CLASS} />
                           </Link>
                         );
                       })}
@@ -373,7 +375,7 @@ const Sidebar = () => {
                   title="Dashboard"
                   className={navLinkClass(isDashboard)}
                 >
-                  <Image src={dashboardIcon} alt="Dashboard" width={24} height={24} className="shrink-0" />
+                  <Image src={dashboardIcon} alt="Dashboard" width={24} height={24} className={NAV_ICON_CLASS} />
                   <SidebarLabel>Dashboard</SidebarLabel>
                 </Link>
               </li>
@@ -385,7 +387,7 @@ const Sidebar = () => {
                   title="My Forms"
                   className={navLinkClass(isMyForms)}
                 >
-                  <Image src={formIcon} alt="My Forms" width={24} height={24} className="shrink-0" />
+                  <Image src={formIcon} alt="My Forms" width={24} height={24} className={NAV_ICON_CLASS} />
                   <SidebarLabel>My Forms</SidebarLabel>
                 </Link>
               </li>
@@ -398,7 +400,7 @@ const Sidebar = () => {
                     title="Bulk Assessment Review"
                     className={navLinkClass(isBulkReview)}
                   >
-                    <Image src={reportsIcon} alt="Bulk Assessment Review" width={24} height={24} className="shrink-0" />
+                    <Image src={reportsIcon} alt="Bulk Assessment Review" width={24} height={24} className={NAV_ICON_CLASS} />
                     <SidebarLabel>Bulk Assessment Review</SidebarLabel>
                   </Link>
                 </li>
@@ -412,7 +414,7 @@ const Sidebar = () => {
                         className="flex justify-center py-2 text-secondary"
                         title="Administration"
                       >
-                        <Image src={securityIcon} alt="Security Events" width={24} height={24} className="shrink-0" />
+                        <Image src={securityIcon} alt="Security Events" width={24} height={24} className={NAV_ICON_CLASS} />
                       </div>
                       {adminLinks.map((link) => {
                         const Icon = link.icon;
@@ -425,7 +427,7 @@ const Sidebar = () => {
                             title={link.label}
                             className={navLinkClass(active)}
                           >
-                            <Image src={Icon} alt={link.label} width={24} height={24} className="shrink-0" />
+                            <Image src={Icon} alt={link.label} width={24} height={24} className={NAV_ICON_CLASS} />
                           </Link>
                         );
                       })}
@@ -441,7 +443,7 @@ const Sidebar = () => {
                           isAdminRouteActive && "text-primary",
                         )}
                       >
-                        <Image src={securityIcon} alt="Security Events" width={24} height={24} className="shrink-0" />
+                        <Image src={securityIcon} alt="Security Events" width={24} height={24} className={NAV_ICON_CLASS} />
                         <span className="flex-1">Administration</span>
                         <motion.span
                           className="inline-flex shrink-0"

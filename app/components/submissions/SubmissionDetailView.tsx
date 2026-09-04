@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   fetchFormSubmission,
@@ -66,7 +67,8 @@ import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScor
 import QuartileBadge from "@/app/components/dashboard/QuartileBadge";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, RotateCcw } from "lucide-react";
+import Link from "next/link";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
@@ -294,14 +296,31 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function HeroMetaSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex min-h-0 min-w-0 flex-col rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-600 dark:bg-slate-900/50">
+      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        {title}
+      </h3>
+      <dl className="mt-1 flex min-w-0 flex-1 flex-col gap-1">{children}</dl>
+    </section>
+  );
+}
+
 function HeroMetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 max-w-64 items-baseline gap-1 py-0.5">
+    <div className="flex min-w-0 items-baseline gap-1.5">
       <dt className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {label}
       </dt>
       <dd
-        className="truncate text-xs font-medium text-slate-800 dark:text-slate-100"
+        className="min-w-0 wrap-break-word text-xs font-medium text-slate-800 dark:text-slate-100"
         title={value}
       >
         {value}
@@ -346,19 +365,19 @@ function buildManagerDraftMap(
     const remarks = manager?.remarks ?? fallbackSource?.remarks ?? "";
     const displayedRating = source
       ? resolveDisplayedRatingValue(
-          question,
-          ratingBased,
-          ratingScales,
-          source,
-        )
+        question,
+        ratingBased,
+        ratingScales,
+        source,
+      )
       : null;
     const computedPoints = source
       ? resolveDisplayedAnswerPoints(
-          question,
-          ratingBased,
-          ratingScales,
-          source,
-        )
+        question,
+        ratingBased,
+        ratingScales,
+        source,
+      )
       : undefined;
 
     drafts.set(question.id, {
@@ -530,7 +549,7 @@ function ScoreAdjustmentsPanel({
           </p>
         </div>
 
-        
+
 
         <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -853,10 +872,10 @@ export default function SubmissionDetailView({
       // Debug: log deletion counts returned by the server for verification.
       console.info(
         `[ResetForm] submission=${submissionId} ` +
-          `status=${result.status} ` +
-          `deletedAttachments=${result.deletedAttachments} ` +
-          `deletedAnswers=${result.deletedAnswers} ` +
-          `resetAppraisal=${result.resetAppraisal}`,
+        `status=${result.status} ` +
+        `deletedAttachments=${result.deletedAttachments} ` +
+        `deletedAnswers=${result.deletedAnswers} ` +
+        `resetAppraisal=${result.resetAppraisal}`,
       );
     },
     onError: (mutationError: Error) => {
@@ -1001,11 +1020,10 @@ export default function SubmissionDetailView({
             <div className="h-6 w-28 rounded bg-slate-300/80 dark:bg-slate-700" />
             <div className="ml-auto h-7 w-20 rounded bg-slate-300/70 dark:bg-slate-700" />
           </div>
-          <div className="mt-2 flex flex-wrap gap-3 border-t border-slate-200 pt-2 dark:border-slate-700">
-            <div className="h-3 w-32 rounded bg-slate-300/70 dark:bg-slate-700" />
-            <div className="h-3 w-28 rounded bg-slate-300/70 dark:bg-slate-700" />
-            <div className="h-3 w-36 rounded bg-slate-300/70 dark:bg-slate-700" />
-            <div className="h-3 w-24 rounded bg-slate-300/70 dark:bg-slate-700" />
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="h-16 rounded-md border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-900/50" />
+            <div className="h-16 rounded-md border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-900/50" />
+            <div className="h-16 rounded-md border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-900/50" />
           </div>
         </div>
         <div className="p-6 text-sm text-foreground/70">Loading submission...</div>
@@ -1064,11 +1082,11 @@ export default function SubmissionDetailView({
   );
   const manager2Total = hasManager2
     ? sumOwnManagerScores(
-        data.questions,
-        manager2AnswerMap,
-        data.ratingBased,
-        data.ratingScales ?? [],
-      )
+      data.questions,
+      manager2AnswerMap,
+      data.ratingBased,
+      data.ratingScales ?? [],
+    )
     : null;
   const managerDraftTotal = data.questions.reduce((sum, question) => {
     if (!isScoredQuestion(question)) return sum;
@@ -1191,8 +1209,15 @@ export default function SubmissionDetailView({
         ]}
       />
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/50">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 ">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 border-b border-slate-200 pb-2">
+            <Link
+              href="/dashboard"
+              className="no-print inline-flex items-center gap-1 text-xs text-foreground/70 hover:text-text-primary"
+            >
+              <ArrowLeft className="size-3.5" />
+              Back
+            </Link>
             <div
               className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white"
               aria-hidden="true"
@@ -1307,7 +1332,7 @@ export default function SubmissionDetailView({
                   {hrSaveMutation.isPending ? "Saving..." : "Save"}
                 </button>
                 {(data.status === "PENDING_HR_CALIBRATION" ||
-                data.status === "PENDING_BOARD_APPROVAL") ? (
+                  data.status === "PENDING_BOARD_APPROVAL") ? (
                   <button
                     type="button"
                     onClick={() => setShowApproveConfirm(true)}
@@ -1330,27 +1355,32 @@ export default function SubmissionDetailView({
           </div>
         </div>
 
-        <dl className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
-          <HeroMetaItem
-            label="Form"
-            value={data.templateTitle?.trim() || "—"}
-          />
-          <HeroMetaItem label="ORG 1" value={displayOrgValue(data.orgLevel1Name)} />
-          <HeroMetaItem label="ORG 2" value={displayOrgValue(data.orgLevel2Name)} />
-          <HeroMetaItem label="Submitted" value={formatSubmittedAt(data.submittedAt)} />
-          <HeroMetaItem
-            label="Manager 1"
-            value={formatNameWithSap(data.manager1Name, data.manager1EmployeeId)}
-          />
-          <HeroMetaItem
-            label="Manager 2"
-            value={formatNameWithSap(data.manager2Name, data.manager2EmployeeId)}
-          />
-        </dl>
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <HeroMetaSection title="Form">
+            <HeroMetaItem
+              label="Title"
+              value={data.templateTitle?.trim() || "—"}
+            />
+            <HeroMetaItem label="Submitted" value={formatSubmittedAt(data.submittedAt)} />
+          </HeroMetaSection>
+          <HeroMetaSection title="Organization">
+            <HeroMetaItem label="ORG 1" value={displayOrgValue(data.orgLevel1Name)} />
+            <HeroMetaItem label="ORG 2" value={displayOrgValue(data.orgLevel2Name)} />
+          </HeroMetaSection>
+          <HeroMetaSection title="Managers">
+            <HeroMetaItem
+              label="Manager 1"
+              value={formatNameWithSap(data.manager1Name, data.manager1EmployeeId)}
+            />
+            <HeroMetaItem
+              label="Manager 2"
+              value={formatNameWithSap(data.manager2Name, data.manager2EmployeeId)}
+            />
+          </HeroMetaSection>
+        </div>
 
         <FormDescription
           description={data.templateDescription}
-          compact
           className="mt-2 no-print border-0 bg-transparent p-0"
         />
       </div>
@@ -1480,12 +1510,12 @@ export default function SubmissionDetailView({
               </th>
               {selfAssessmentEnabled ? (
                 <>
-              <th className="min-w-42 print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
-                Self Score
-              </th>
-              <th className="min-w-45 print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
-                Self Remarks
-              </th>
+                  <th className="min-w-42 print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+                    Self Score
+                  </th>
+                  <th className="min-w-45 print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+                    Self Remarks
+                  </th>
                 </>
               ) : null}
               <th className="min-w-42 print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
@@ -1629,161 +1659,105 @@ export default function SubmissionDetailView({
                         </td>
                       </tr>
                     ) : (
-                  <tr
-                    id={`manager-question-${question!.id}`}
-                    className={cn(
-                      "align-top border-b border-slate-100 dark:border-slate-700/40",
-                      needsMark
-                        ? "bg-red-50 dark:bg-red-950/30"
-                        : isEvenRow
-                          ? "bg-white dark:bg-slate-900/40"
-                          : "bg-slate-50/60 dark:bg-slate-800/20",
-                    )}
-                  >
-                    <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40">
-                      {row.sr}
-                    </td>
-                    <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
-                      <p
+                      <tr
+                        id={`manager-question-${question!.id}`}
                         className={cn(
-                          "max-w-112.5 wrap-break-word whitespace-pre-wrap text-xs leading-snug",
+                          "align-top border-b border-slate-100 dark:border-slate-700/40",
                           needsMark
-                            ? "font-semibold text-red-800 dark:text-red-200"
-                            : "text-slate-800 dark:text-slate-200",
+                            ? "bg-red-50 dark:bg-red-950/30"
+                            : isEvenRow
+                              ? "bg-white dark:bg-slate-900/40"
+                              : "bg-slate-50/60 dark:bg-slate-800/20",
                         )}
                       >
-                        {question!.questionText}
-                        <QuestionRequiredIndicator isRequired={question!.isRequired} />
-                      </p>
-                    </td>
-                    <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
-                      {scored ? question!.totalMarks : "—"}
-                    </td>
-                    {selfAssessmentEnabled ? (
-                      <>
-                    <td className="min-w-0 overflow-hidden border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-bold text-teal-700 dark:border-slate-700/40 dark:text-teal-300">
-                      {scored ? (
-                        questionSelfAssessmentEnabled ? (
-                          <AnswerScoreReadout
-                            question={question!}
-                            ratingBased={data.ratingBased}
-                            ratingScales={data.ratingScales ?? []}
-                            answer={answer}
-                            tone="teal"
-                          />
-                        ) : (
-                          <span className="text-slate-400" title="To be filled by Manager">N/A</span>
-                        )
-                      ) : "—"}
-                    </td>
-                    <td className="border-r border-slate-100 px-3 py-2.5 text-xs text-slate-600 dark:border-slate-700/40 dark:text-slate-300">
-                      {scored ? (
-                        questionSelfAssessmentEnabled ? (
-                          answer?.remarks?.trim() ? (
-                            <p className="whitespace-pre-wrap wrap-break-word">
-                              {answer.remarks}
-                            </p>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )
-                        ) : (
-                          <span className="text-slate-400" title="To be filled by Manager">N/A</span>
-                        )
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                      </>
-                    ) : null}
-                    {/* Manager 1 Score — read-only for admin roles unless assigned as Manager 1 */}
-                    <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
-                      {scored ? (
-                        (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
-                          <ManagerScoreEditor
-                            question={question!}
-                            ratingBased={data.ratingBased}
-                            ratingScales={data.ratingScales ?? []}
-                            draft={managerDraft}
-                            tone="violet"
-                            invalid={needsMark}
-                            onChange={(patch) =>
-                              updateManagerDraft(question!.id, patch)
-                            }
-                            inputClassName="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
-                          />
-                        ) : (
-                          <AnswerScoreReadout
-                            question={question!}
-                            ratingBased={data.ratingBased}
-                            ratingScales={data.ratingScales ?? []}
-                            answer={mgr1Display}
-                            tone="violet"
-                          />
-                        )
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    {/* Manager 1 Remarks — read-only for admin roles unless assigned as Manager 1 */}
-                    <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
-                      {scored ? (
-                        (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
-                          <textarea
-                            value={managerDraft.remarks}
-                            rows={2}
-                            onChange={(event) =>
-                              updateManagerDraft(question!.id, {
-                                remarks: event.target.value,
-                              })
-                            }
-                            className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                            placeholder="Optional remarks"
-                          />
-                        ) : mgr1Display?.remarks?.trim() ? (
-                          <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
-                            {mgr1Display.remarks}
+                        <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40">
+                          {row.sr}
+                        </td>
+                        <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+                          <p
+                            className={cn(
+                              "max-w-112.5 wrap-break-word whitespace-pre-wrap text-xs leading-snug",
+                              needsMark
+                                ? "font-semibold text-red-800 dark:text-red-200"
+                                : "text-slate-800 dark:text-slate-200",
+                            )}
+                          >
+                            {question!.questionText}
+                            <QuestionRequiredIndicator isRequired={question!.isRequired} />
                           </p>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    {/* Manager 2 Score + Remarks */}
-                    {hasManager2 && showManager2Data ? (
-                      <>
+                        </td>
+                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
+                          {scored ? question!.totalMarks : "—"}
+                        </td>
+                        {selfAssessmentEnabled ? (
+                          <>
+                            <td className="min-w-0 overflow-hidden border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-bold text-teal-700 dark:border-slate-700/40 dark:text-teal-300">
+                              {scored ? (
+                                questionSelfAssessmentEnabled ? (
+                                  <AnswerScoreReadout
+                                    question={question!}
+                                    ratingBased={data.ratingBased}
+                                    ratingScales={data.ratingScales ?? []}
+                                    answer={answer}
+                                    tone="teal"
+                                  />
+                                ) : (
+                                  <span className="text-slate-400" title="To be filled by Manager">N/A</span>
+                                )
+                              ) : "—"}
+                            </td>
+                            <td className="border-r border-slate-100 px-3 py-2.5 text-xs text-slate-600 dark:border-slate-700/40 dark:text-slate-300">
+                              {scored ? (
+                                questionSelfAssessmentEnabled ? (
+                                  answer?.remarks?.trim() ? (
+                                    <p className="whitespace-pre-wrap wrap-break-word">
+                                      {answer.remarks}
+                                    </p>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )
+                                ) : (
+                                  <span className="text-slate-400" title="To be filled by Manager">N/A</span>
+                                )
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          </>
+                        ) : null}
+                        {/* Manager 1 Score — read-only for admin roles unless assigned as Manager 1 */}
                         <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                           {scored ? (
-                            (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
+                            (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
                               <ManagerScoreEditor
                                 question={question!}
                                 ratingBased={data.ratingBased}
                                 ratingScales={data.ratingScales ?? []}
                                 draft={managerDraft}
-                                tone="indigo"
+                                tone="violet"
                                 invalid={needsMark}
                                 onChange={(patch) =>
                                   updateManagerDraft(question!.id, patch)
                                 }
-                                inputClassName="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-indigo-300"
+                                inputClassName="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
                               />
                             ) : (
                               <AnswerScoreReadout
                                 question={question!}
                                 ratingBased={data.ratingBased}
                                 ratingScales={data.ratingScales ?? []}
-                                answer={mgr2Display}
-                                tone="indigo"
+                                answer={mgr1Display}
+                                tone="violet"
                               />
                             )
                           ) : (
                             <span className="text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="px-2 py-2.5">
+                        {/* Manager 1 Remarks — read-only for admin roles unless assigned as Manager 1 */}
+                        <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                           {scored ? (
-                            (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
+                            (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
                               <textarea
                                 value={managerDraft.remarks}
                                 rows={2}
@@ -1792,12 +1766,12 @@ export default function SubmissionDetailView({
                                     remarks: event.target.value,
                                   })
                                 }
-                                className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                                 placeholder="Optional remarks"
                               />
-                            ) : mgr2Display?.remarks?.trim() ? (
+                            ) : mgr1Display?.remarks?.trim() ? (
                               <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
-                                {mgr2Display.remarks}
+                                {mgr1Display.remarks}
                               </p>
                             ) : (
                               <span className="text-slate-400">—</span>
@@ -1806,22 +1780,78 @@ export default function SubmissionDetailView({
                             <span className="text-slate-400">—</span>
                           )}
                         </td>
-                      </>
-                    ) : null}
-                    {/* Attachments uploaded by the employee — visible to every authorised reviewer */}
-                    <td className="px-2 py-2.5 align-top">
-                      <AttachmentList
-                        attachments={answer?.attachments ?? []}
-                        buildDownloadUrl={(attachmentId) =>
-                          getSubmissionAttachmentDownloadUrl(
-                            data.id,
-                            attachmentId,
-                          )
-                        }
-                        compact
-                      />
-                    </td>
-                  </tr>
+                        {/* Manager 2 Score + Remarks */}
+                        {hasManager2 && showManager2Data ? (
+                          <>
+                            <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                              {scored ? (
+                                (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
+                                  <ManagerScoreEditor
+                                    question={question!}
+                                    ratingBased={data.ratingBased}
+                                    ratingScales={data.ratingScales ?? []}
+                                    draft={managerDraft}
+                                    tone="indigo"
+                                    invalid={needsMark}
+                                    onChange={(patch) =>
+                                      updateManagerDraft(question!.id, patch)
+                                    }
+                                    inputClassName="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-indigo-300"
+                                  />
+                                ) : (
+                                  <AnswerScoreReadout
+                                    question={question!}
+                                    ratingBased={data.ratingBased}
+                                    ratingScales={data.ratingScales ?? []}
+                                    answer={mgr2Display}
+                                    tone="indigo"
+                                  />
+                                )
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2.5">
+                              {scored ? (
+                                (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
+                                  <textarea
+                                    value={managerDraft.remarks}
+                                    rows={2}
+                                    onChange={(event) =>
+                                      updateManagerDraft(question!.id, {
+                                        remarks: event.target.value,
+                                      })
+                                    }
+                                    className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                    placeholder="Optional remarks"
+                                  />
+                                ) : mgr2Display?.remarks?.trim() ? (
+                                  <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
+                                    {mgr2Display.remarks}
+                                  </p>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                          </>
+                        ) : null}
+                        {/* Attachments uploaded by the employee — visible to every authorised reviewer */}
+                        <td className="px-2 py-2.5 align-top">
+                          <AttachmentList
+                            attachments={answer?.attachments ?? []}
+                            buildDownloadUrl={(attachmentId) =>
+                              getSubmissionAttachmentDownloadUrl(
+                                data.id,
+                                attachmentId,
+                              )
+                            }
+                            compact
+                          />
+                        </td>
+                      </tr>
                     )}
                   </Fragment>
                 );
@@ -1842,10 +1872,10 @@ export default function SubmissionDetailView({
                 </td>
                 {selfAssessmentEnabled ? (
                   <>
-                <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-teal-300">
-                  {formatScoreValue(selfTotal)}
-                </td>
-                <td className="border-r border-slate-700 px-3 py-2.5" />
+                    <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-teal-300">
+                      {formatScoreValue(selfTotal)}
+                    </td>
+                    <td className="border-r border-slate-700 px-3 py-2.5" />
                   </>
                 ) : null}
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-violet-300">
@@ -1866,21 +1896,21 @@ export default function SubmissionDetailView({
           ) : null}
         </table>
       </div>
-            {rows.length > 0 ? (
+      {rows.length > 0 ? (
         <AssessmentSummaryFooter
           showMarks={false}
           entries={[
             ...(selfAssessmentEnabled
               ? [
-                  {
-                    label: "Self Assessment",
-                    awardedMarks: selfTotal,
-                    totalMarks: data.maxRawScore,
-                    accentClass:
-                      "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
-                    completed: selfAssessmentComplete,
-                  },
-                ]
+                {
+                  label: "Self Assessment",
+                  awardedMarks: selfTotal,
+                  totalMarks: data.maxRawScore,
+                  accentClass:
+                    "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+                  completed: selfAssessmentComplete,
+                },
+              ]
               : []),
             {
               label: "Manager 1 Assessment",
@@ -1896,21 +1926,21 @@ export default function SubmissionDetailView({
             },
             ...(hasManager2 && showManager2Data
               ? [
-                  {
-                    label: "Manager 2 Assessment",
-                    awardedMarks: editingManager2
-                      ? managerDraftTotal
-                      : (manager2Total ?? 0),
-                    totalMarks: data.maxRawScore,
-                    accentClass:
-                      "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
-                    personLabel: formatNameWithSap(
-                      data.manager2Name,
-                      data.manager2EmployeeId,
-                    ),
-                    completed: manager2ReviewComplete,
-                  },
-                ]
+                {
+                  label: "Manager 2 Assessment",
+                  awardedMarks: editingManager2
+                    ? managerDraftTotal
+                    : (manager2Total ?? 0),
+                  totalMarks: data.maxRawScore,
+                  accentClass:
+                    "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+                  personLabel: formatNameWithSap(
+                    data.manager2Name,
+                    data.manager2EmployeeId,
+                  ),
+                  completed: manager2ReviewComplete,
+                },
+              ]
               : []),
           ]}
         />

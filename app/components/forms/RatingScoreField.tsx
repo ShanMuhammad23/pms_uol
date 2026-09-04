@@ -108,7 +108,7 @@ export function RatingScoreField({
           "box-border h-8 w-full min-w-0 max-w-full [field-sizing:fixed] rounded border border-slate-300 bg-white px-1 text-xs focus-visible:outline-none focus-visible:ring-2 disabled:opacity-80 dark:border-white/15 dark:bg-slate-800",
           TONE_SELECT[tone],
           invalid &&
-            "border-red-500 ring-2 ring-red-400/80 focus-visible:ring-red-500 dark:border-red-400",
+            "border-red-500 ring-2 ring-red-400/80 focus-visible:ring-red-500 dark:border-red-400 bg-red-500",
         )}
         aria-invalid={invalid || undefined}
         aria-label="Select rating"
@@ -123,7 +123,7 @@ export function RatingScoreField({
           </option>
         ))}
       </select>
-      <span className="truncate text-[10px] tabular-nums text-slate-500 dark:text-slate-400">
+      <span className="truncate text-base tabular-nums  dark:text-slate-400">
         {points == null ? "—" : `${formatScoreValue(points)} / ${weight}`}
       </span>
     </div>
