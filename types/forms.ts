@@ -220,6 +220,10 @@ export interface OpenAssessmentSectionInput {
   sortOrder: number;
   isOpenAssessment: true;
   openAssessmentTotalMarks: number;
+  /** When true, the employee can author questions during self-assessment. */
+  selfAssessmentEnabled?: boolean;
+  /** When true, the HOD/manager can author questions during direct assessment. */
+  hodAssessmentEnabled?: boolean;
 }
 
 /**
@@ -248,6 +252,10 @@ export interface FormSectionInput {
   isOpenAssessment?: boolean;
   /** HR's marks budget for the open-assessment section. Only used when isOpenAssessment is true. */
   openAssessmentTotalMarks?: number;
+  /** When true, the employee can author questions during self-assessment (open-assessment sections). */
+  selfAssessmentEnabled?: boolean;
+  /** When true, the HOD/manager can author questions during direct assessment (open-assessment sections). */
+  hodAssessmentEnabled?: boolean;
 }
 
 export interface FormSubsectionRecord {
@@ -281,6 +289,10 @@ export interface FormSectionRecord {
   isOpenAssessment?: boolean;
   /** HR's marks budget for the open-assessment section. Only used when isOpenAssessment is true. */
   openAssessmentTotalMarks?: number;
+  /** When true, the employee can author questions during self-assessment (open-assessment sections). */
+  selfAssessmentEnabled?: boolean;
+  /** When true, the HOD/manager can author questions during direct assessment (open-assessment sections). */
+  hodAssessmentEnabled?: boolean;
 }
 
 export interface IncrementMatrixInput {
@@ -488,6 +500,8 @@ export function createEmptySection(sortOrder: number): FormSectionInput {
     layout: [],
     isOpenAssessment: false,
     openAssessmentTotalMarks: 0,
+    selfAssessmentEnabled: true,
+    hodAssessmentEnabled: true,
   };
 }
 

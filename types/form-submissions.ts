@@ -193,6 +193,10 @@ export interface FormSubmissionDetail {
   authoredAnswers: EmployeeFormAnswerRecord[];
   /** Authored answers for open-assessment sections by the current manager reviewer. */
   managerAuthoredAnswers: EmployeeFormAnswerRecord[];
+  /** Authored answers for open-assessment sections by Manager 1. */
+  manager1AuthoredAnswers: EmployeeFormAnswerRecord[];
+  /** Authored answers for open-assessment sections by Manager 2. */
+  manager2AuthoredAnswers: EmployeeFormAnswerRecord[];
   managerAnswers: EmployeeFormAnswerRecord[];
   manager1Answers: EmployeeFormAnswerRecord[];
   manager2Answers: EmployeeFormAnswerRecord[];

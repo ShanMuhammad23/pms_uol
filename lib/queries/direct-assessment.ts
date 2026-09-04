@@ -298,11 +298,12 @@ export async function getDirectAssessmentData(
       authored_question_text: string | null;
       authored_total_marks: string;
       open_section_id: string | null;
+      rating_value: string | null;
     }>(
       `SELECT appraisal_id::text, filled_by_id::text, id::text,
               text_response, points_earned::text, remarks,
               authored_question_text, authored_total_marks::text,
-              open_section_id::text
+              open_section_id::text, rating_value::text
        FROM appraisal_answers
        WHERE appraisal_id = ANY($1::bigint[])
          AND filled_by_id = ANY($2::bigint[])
@@ -318,7 +319,10 @@ export async function getDirectAssessmentData(
         textResponse: row.text_response,
         selectedOptionId: null,
         pointsEarned: Number(row.points_earned),
-        ratingValue: null,
+        ratingValue:
+          row.rating_value == null || row.rating_value === ""
+            ? null
+            : Number(row.rating_value),
         remarks: row.remarks ?? null,
         attachments: [],
         authoredQuestionText: row.authored_question_text,

@@ -53,6 +53,14 @@ export interface DirectAssessmentData {
     EmployeeFormAnswerRecord[]
   >;
   /**
+   * Map of submissionId → authored answers (open-assessment sections) for
+   * the current reviewer. Keyed by submissionId.
+   */
+  managerAuthoredAnswersBySubmission: Record<
+    number,
+    EmployeeFormAnswerRecord[]
+  >;
+  /**
    * Map of submissionId → overall remarks (manager1 / manager2). Shares the
    * same data model as the standard assessment workflow.
    */
@@ -84,6 +92,12 @@ export async function saveDirectAssessmentScores(
     pointsEarned?: number;
     ratingValue?: number | null;
     remarks?: string | null;
+    /** Authored question text (for open-assessment answers; questionId = 0). */
+    authoredQuestionText?: string | null;
+    /** Authored question max marks (for open-assessment answers). */
+    authoredTotalMarks?: number;
+    /** Open-assessment section ID (for open-assessment answers). */
+    openSectionId?: number | null;
   }>,
   overallRemarks?: string | null,
 ): Promise<{

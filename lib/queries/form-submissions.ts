@@ -20,6 +20,7 @@ import { listAttachmentsForAppraisal } from "@/lib/queries/employee-forms";
 import { deleteFormAttachmentFile } from "@/lib/uploads/form-attachments";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
+  computeAuthoredRatingPoints,
   getQuestionRatingScale,
   hasExplicitNumericScore,
   hasProvidedAnswerScore,
@@ -251,9 +252,11 @@ export async function getAuthoredAnswersForSubmission(
     authored_question_text: string | null;
     authored_total_marks: string;
     open_section_id: string | null;
+    rating_value: string | null;
   }>(
     `SELECT id, text_response, points_earned, remarks,
-            authored_question_text, authored_total_marks::text, open_section_id::text
+            authored_question_text, authored_total_marks::text, open_section_id::text,
+            rating_value::text
      FROM appraisal_answers
      WHERE appraisal_id = $1
        AND filled_by_id = $2
@@ -267,7 +270,10 @@ export async function getAuthoredAnswersForSubmission(
     textResponse: row.text_response,
     selectedOptionId: null,
     pointsEarned: Number(row.points_earned),
-    ratingValue: null,
+    ratingValue:
+      row.rating_value == null || row.rating_value === ""
+        ? null
+        : Number(row.rating_value),
     remarks: row.remarks ?? null,
     attachments: [],
     authoredQuestionText: row.authored_question_text,
@@ -1677,9 +1683,29 @@ export async function saveManagerReviewAnswers(
     for (const authored of authoredAnswers) {
       const questionText = (authored.authoredQuestionText ?? "").trim();
       const totalMarks = Number(authored.authoredTotalMarks) || 0;
-      const pointsEarned = Number(authored.pointsEarned) || 0;
       const remarks = authored.remarks?.trim() || null;
       const sectionId = authored.openSectionId!;
+
+      // In rating-based mode, derive points from the selected rating and the
+      // authored weight. In absolute mode, use the author's pointsEarned.
+      const ratingBased = Boolean(options?.ratingBased);
+      const ratingValue =
+        authored.ratingValue == null
+          ? null
+          : Number(authored.ratingValue);
+      let pointsEarned: number;
+      let storedRatingValue: number | null;
+      if (ratingBased && ratingValue != null && Number.isFinite(ratingValue)) {
+        pointsEarned = computeAuthoredRatingPoints(
+          ratingValue,
+          totalMarks,
+          options?.ratingScales,
+        );
+        storedRatingValue = ratingValue;
+      } else {
+        pointsEarned = Number(authored.pointsEarned) || 0;
+        storedRatingValue = ratingBased ? null : ratingValue;
+      }
 
       if (!questionText && !totalMarks && !pointsEarned && !remarks) {
         continue;
@@ -1698,11 +1724,12 @@ export async function saveManagerReviewAnswers(
            authored_question_text,
            authored_total_marks,
            open_section_id
-         ) VALUES ($1, NULL, $2, NULL, NULL, $3, NULL, $4, $5, $6, $7)`,
+         ) VALUES ($1, NULL, $2, NULL, NULL, $3, $4, $5, $6, $7, $8)`,
         [
           appraisalId,
           reviewerUserId,
           pointsEarned,
+          storedRatingValue,
           remarks,
           questionText,
           totalMarks,
@@ -1989,7 +2016,7 @@ export async function getFormSubmissionById(
   const managerIds = [summary.manager1UserId, summary.manager2UserId].filter(
     (id): id is number => id != null && Number.isFinite(id),
   );
-  const [answers, managerAnswers, manager1Answers, manager2Answers, managerSapResult, authoredAnswers, managerAuthoredAnswers] =
+  const [answers, managerAnswers, manager1Answers, manager2Answers, managerSapResult, authoredAnswers, managerAuthoredAnswers, manager1AuthoredAnswers, manager2AuthoredAnswers] =
     await Promise.all([
       getAnswersForSubmission(id, employeeUserId),
       reviewerUserId != null
@@ -2012,6 +2039,12 @@ export async function getFormSubmissionById(
       getAuthoredAnswersForSubmission(id, employeeUserId),
       reviewerUserId != null
         ? getAuthoredAnswersForSubmission(id, reviewerUserId)
+        : Promise.resolve([]),
+      summary.manager1UserId != null
+        ? getAuthoredAnswersForSubmission(id, summary.manager1UserId)
+        : Promise.resolve([]),
+      summary.manager2UserId != null
+        ? getAuthoredAnswersForSubmission(id, summary.manager2UserId)
         : Promise.resolve([]),
     ]);
 
@@ -2108,6 +2141,8 @@ export async function getFormSubmissionById(
     answers: hydrateAnswerPoints(answers, questions, ratingBased, ratingScales),
     authoredAnswers,
     managerAuthoredAnswers,
+    manager1AuthoredAnswers,
+    manager2AuthoredAnswers,
     managerAnswers: hydrateAnswerPoints(
       managerAnswers,
       questions,

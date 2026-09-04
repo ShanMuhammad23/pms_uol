@@ -311,6 +311,8 @@ function mapRecordToState(record: FormTemplateRecord) {
       layout: sectionLayout,
       isOpenAssessment: section.isOpenAssessment ?? false,
       openAssessmentTotalMarks: section.openAssessmentTotalMarks ?? 0,
+      selfAssessmentEnabled: section.selfAssessmentEnabled ?? true,
+      hodAssessmentEnabled: section.hodAssessmentEnabled ?? true,
     };
   });
   const mappedQuestions = record.questions.map(mapQ);
@@ -1898,6 +1900,35 @@ function SectionCard({
                   The employee or manager will split this budget across their own
                   questions. The sum of all question marks must equal this budget.
                 </p>
+                <div className="mt-2.5 flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+                    <input
+                      type="checkbox"
+                      checked={section.selfAssessmentEnabled !== false}
+                      onChange={(e) =>
+                        onUpdate({
+                          selfAssessmentEnabled: e.target.checked,
+                        })
+                      }
+                      disabled={!formSelfAssessmentEnabled}
+                      className="size-4 rounded border-slate-300 text-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40 dark:border-white/20 dark:bg-slate-800"
+                    />
+                    Self Assessment
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+                    <input
+                      type="checkbox"
+                      checked={section.hodAssessmentEnabled !== false}
+                      onChange={(e) =>
+                        onUpdate({
+                          hodAssessmentEnabled: e.target.checked,
+                        })
+                      }
+                      className="size-4 rounded border-slate-300 text-primary focus-visible:ring-2 focus-visible:ring-primary dark:border-white/20 dark:bg-slate-800"
+                    />
+                    HOD Assessment
+                  </label>
+                </div>
               </div>
             ) : null}
           </div>

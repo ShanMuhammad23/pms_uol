@@ -12,6 +12,8 @@ import {
   PERFORMANCE_RATINGS,
 } from "@/types/forms";
 
+/** Titles are free text (TEXT columns) — no length limit enforced. */
+
 function validateOpenAssessmentSection(
   section: FormTemplateInput["sections"][number],
   pathPrefix: string,

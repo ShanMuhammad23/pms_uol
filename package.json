@@ -21,6 +21,8 @@
     "db:migrate:assignment-self-assessment-reminder": "node scripts/migrate-assignment-self-assessment-reminder.mjs",
     "db:list:assessment-reminders": "node --env-file=.env scripts/list-assessment-reminders.mjs",
     "cron:assessment-reminders": "bash scripts/run-assessment-reminders.sh",
+    "db:migrate:section-title-length": "node scripts/migrate-section-title-length.mjs",
+    "db:migrate:open-assessment-flags": "node scripts/migrate-open-assessment-flags.mjs",
     "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
     "db:update:emails-from-excel": "node scripts/update-emails-from-excel.mjs",
     "db:seed:qualifications": "node scripts/seed-qualifications-from-excel.mjs",

@@ -79,7 +79,7 @@ CREATE TABLE appraisal_cycles (
 -- target_category / target_sub_category remain for legacy compatibility.
 CREATE TABLE form_templates (
     id BIGSERIAL PRIMARY KEY,
-    title VARCHAR(150) NOT NULL, -- e.g., 'Annual Faculty Evaluation Form'
+    title TEXT NOT NULL, -- e.g., 'Annual Faculty Evaluation Form'
     code VARCHAR(50) NOT NULL DEFAULT '', -- user-defined short identifier, e.g. 'FAC-2026'
     description TEXT,
     cycle_id INT NOT NULL REFERENCES appraisal_cycles(id) ON DELETE CASCADE,
@@ -114,8 +114,12 @@ CREATE TABLE form_sections (
     id BIGSERIAL PRIMARY KEY,
     template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
     parent_section_id BIGINT REFERENCES form_sections(id) ON DELETE CASCADE,
-    title VARCHAR(150) NOT NULL,
+    title TEXT NOT NULL,
     sort_order INT NOT NULL DEFAULT 0,
+    -- Per-section assessment flags (used by open-assessment sections to
+    -- control who can author questions, mirroring per-question flags).
+    self_assessment_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    hod_assessment_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
