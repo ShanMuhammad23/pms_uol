@@ -47,7 +47,7 @@ export default function Providers({ children }: ProvidersProps) {
               error: { duration: 7000 },
               style: {
                 maxWidth: "28rem",
-                fontSize: "13px",
+                fontSize: "18px",
                 lineHeight: "1.4",
               },
             }}

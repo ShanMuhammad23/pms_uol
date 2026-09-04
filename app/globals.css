@@ -93,11 +93,26 @@ body {
 }
 
 .sidebar-nav-link {
-  @apply flex items-center gap-2.5 text-text-primary px-6 py-3 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:bg-primary/10 hover:border-r-4 border-primary;
+  @apply flex items-center gap-2.5 py-3 text-text-primary transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:border-r-4 hover:bg-primary/10 border-primary;
 }
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 html {
   scrollbar-width: none;
-  --webkit-scrollbar: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
 }
 
 /* ==========================================================================
@@ -128,7 +143,6 @@ html {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-
   body {
     background: #ffffff !important;
     color: #000000 !important;

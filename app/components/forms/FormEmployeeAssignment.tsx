@@ -60,7 +60,7 @@ type FilterState = {
 const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
   { id: "assignmentStatus", label: "Assignment Status" },
   { id: "assessmentEligibility", label: "Eligibility" },
-  { id: "entityName", label: "Entity" },
+  { id: "entityName", label: "Org Level" },
   { id: "designation", label: "Designation" },
   { id: "roleCategory", label: "Role Category" },
   { id: "headName", label: "Manager 1" },
@@ -655,7 +655,7 @@ export default function FormEmployeeAssignment({
     { id: "employeeId", label: "SAP Code", width: 120, mode: "text", getValue: (u) => u.employeeId },
     { id: "name", label: "Employee Name", width: 200, mode: "text", getValue: (u) => `${u.firstName} ${u.lastName}`.trim() },
     { id: "designation", label: "Designation", width: 180, mode: "multi", getValue: (u) => u.designation ?? "—" },
-    { id: "entityName", label: "Entity", width: 160, mode: "multi", getValue: (u) => u.entityName ?? "—" },
+    { id: "entityName", label: "Org Level", width: 160, mode: "multi", getValue: (u) => u.entityName ?? "—" },
     { id: "roleCategory", label: "Role Category", width: 150, mode: "multi", getValue: (u) => u.roleCategory ?? "—" },
     { id: "headName", label: "Manager 1", width: 160, mode: "multi", getValue: (u) => u.headName ?? "—" },
     { id: "manager2Name", label: "Manager 2", width: 160, mode: "multi", getValue: (u) => u.manager2Name ?? "—" },

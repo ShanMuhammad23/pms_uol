@@ -25,7 +25,6 @@ import { useMemo } from "react";
 import type { DashboardTableColumnId } from "@/app/helpers/dashboard-table-columns";
 import type { AdditionalAccessModule } from "@/types/additional-access";
 import { cn } from "@/lib/utils";
-
 interface HRDashboardPageProps {
   role?: string | null;
 }
@@ -58,7 +57,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     if (extra.length === 0) return base;
     return [...base, ...extra];
   }, [isHead, permissions]);
-
+  
   const [statsVisible, setStatsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");

@@ -38,10 +38,7 @@ export default async function AssignFormPage({ params }: AssignFormPageProps) {
             <ArrowLeft className="size-4" />
             Back to Form
           </Link>
-          <h1 className="mt-3 text-2xl font-bold text-primary">Assign Form to Employees</h1>
-          <p className="mt-1 text-sm text-foreground/70">
-            Choose any number of employees for this form template.
-          </p>
+       
         </div>
 
         <FormEmployeeAssignment

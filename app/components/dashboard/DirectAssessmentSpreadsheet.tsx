@@ -955,25 +955,33 @@ export default function DirectAssessmentSpreadsheet({
                         const cellInvalid =
                           incompleteCells?.submissionId === emp.submissionId &&
                           incompleteCells.questionIds.has(question!.id);
+                        const isRatingQuestion = usesRatingScore(
+                          question!,
+                          data.ratingBased,
+                          data.ratingScales,
+                        );
+                        const hasRatingSelected =
+                          isRatingQuestion &&
+                          ratingValueFromDraft(draft) != null;
 
                         return (
                           <td
                             key={emp.submissionId}
                             className={cn(
                               "min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40",
-                              !isEditable &&
-                                "bg-slate-50/50 dark:bg-slate-800/20",
-                              cellInvalid && "bg-red-50 dark:bg-red-950/30",
+                              cellInvalid
+                                ? "bg-red-500 dark:bg-red-950/30"
+                                : hasRatingSelected
+                                  ? "bg-emerald-500 dark:bg-emerald-950/35"
+                                  : !isEditable
+                                    ? "bg-slate-50/50 dark:bg-slate-800/20"
+                                    : undefined,
                             )}
                             style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
                           >
                           {scored ? (
                             isEditable ? (
-                              usesRatingScore(
-                                question!,
-                                data.ratingBased,
-                                data.ratingScales,
-                              ) ? (
+                              isRatingQuestion ? (
                                 <RatingScoreField
                                   scale={
                                     getQuestionRatingScale(
@@ -984,6 +992,11 @@ export default function DirectAssessmentSpreadsheet({
                                   weight={question!.totalMarks}
                                   ratingValue={draft?.ratingValue ?? ""}
                                   invalid={cellInvalid}
+                                  className={
+                                    hasRatingSelected && !cellInvalid
+                                      ? "[&_select]:bg-emerald-50 dark:[&_select]:bg-emerald-950/40"
+                                      : undefined
+                                  }
                                   onRatingChange={(ratingValue, pointsEarned) =>
                                     updateDraft(emp.submissionId, question!.id, {
                                       ratingValue,
