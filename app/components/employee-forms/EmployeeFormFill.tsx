@@ -24,6 +24,7 @@ import {
   uploadEmployeeFormAttachment,
 } from "@/lib/queries/employee-forms-client";
 import { fetchFormTemplate } from "@/lib/queries/forms-client";
+import { toast } from "react-hot-toast";
 import type {
   EmployeeFormAnswerAttachment,
   EmployeeFormAnswerInput,
@@ -904,6 +905,12 @@ export default function EmployeeFormFill({
                     const authoredScale = getAuthoredRatingScale(data.template.ratingScales);
 
                     const addAuthoredQuestion = () => {
+                      if (remaining <= 0) {
+                        toast.error(
+                          `Section budget of ${budget} marks is fully allocated. Reduce the marks of existing questions to add more.`,
+                        );
+                        return;
+                      }
                       setAuthored((current) => {
                         const existing = current[sectionId] ?? [];
                         return {
@@ -972,14 +979,26 @@ export default function EmployeeFormFill({
                                   Remaining: <span className={cn("font-bold", remaining < 0 ? "text-red-600" : "text-emerald-600")}>{remaining}</span>
                                 </p>
                                 {!isReadOnly && !isHodOnly ? (
-                                  <button
-                                    type="button"
-                                    onClick={addAuthoredQuestion}
-                                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-primary/90"
-                                  >
-                                    <Plus className="size-3" />
-                                    Add Question
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={addAuthoredQuestion}
+                                      className={cn(
+                                        "inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-white",
+                                        remaining <= 0
+                                          ? "bg-slate-400 cursor-not-allowed hover:bg-slate-400"
+                                          : "bg-primary hover:bg-primary/90",
+                                      )}
+                                    >
+                                      <Plus className="size-3" />
+                                      Add Question
+                                    </button>
+                                    {remaining <= 0 && drafts.length > 0 ? (
+                                      <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                                        Budget fully allocated — reduce marks on existing questions to add more
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 ) : null}
                               </div>
 

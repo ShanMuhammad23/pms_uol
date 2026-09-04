@@ -100,7 +100,6 @@ export default function FormSectionEditor({
               onChange({ ...section, title: event.target.value })
             }
             rows={2}
-            maxLength={500}
             className="w-full resize-y rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
             placeholder="Section title (Press Enter for new line)"
           />

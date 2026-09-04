@@ -13,6 +13,7 @@ import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   formatScoreValue,
+  getAuthoredRatingScale,
   getQuestionRatingScale,
   hasProvidedAnswerScore,
   incompleteRequiredReviewMessage,
@@ -34,7 +35,7 @@ import {
   formatSubsectionLabel,
   type FormTableRow,
 } from "@/app/helpers/form-table-rows";
-import { ArrowLeft, Save, CheckCircle, MessageSquareText } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle, MessageSquareText, Plus, Trash2, X } from "lucide-react";
 import { DirectAssessmentFilterBar } from "@/app/components/dashboard/DirectAssessmentFilterBar";
 import {
   filterDirectAssessmentEmployees,
@@ -99,6 +100,144 @@ type RemarksDraft = {
   manager1: string;
   manager2: string;
 };
+
+// ---------------------------------------------------------------------------
+// Authored question drafts (open-assessment sections)
+// ---------------------------------------------------------------------------
+
+interface AuthoredQuestionDraft {
+  clientId: string;
+  authoredQuestionText: string;
+  authoredTotalMarks: string;
+  pointsEarned: string;
+  ratingValue: string;
+  remarks: string;
+}
+
+/** submissionId → sectionId → drafts */
+type AuthoredDraftState = Record<number, Record<number, AuthoredQuestionDraft[]>>;
+
+let authoredClientIdCounter = 0;
+function nextAuthoredClientId(): string {
+  authoredClientIdCounter += 1;
+  return `da-authored-${Date.now()}-${authoredClientIdCounter}`;
+}
+
+function buildInitialAuthoredDrafts(
+  data: DirectAssessmentData,
+): AuthoredDraftState {
+  const state: AuthoredDraftState = {};
+  const openSections = data.sections.filter((s) => s.isOpenAssessment);
+
+  for (const emp of data.employees) {
+    if (emp.submissionId === 0) continue;
+    const authoredAnswers =
+      data.managerAuthoredAnswersBySubmission[emp.submissionId] ?? [];
+    const sectionMap: Record<number, AuthoredQuestionDraft[]> = {};
+
+    for (const section of openSections) {
+      const sectionAnswers = authoredAnswers.filter(
+        (a) => a.openSectionId === section.id,
+      );
+      sectionMap[section.id] = sectionAnswers.map((a) => ({
+        clientId: nextAuthoredClientId(),
+        authoredQuestionText: a.authoredQuestionText ?? "",
+        authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
+        pointsEarned: String(a.pointsEarned ?? 0),
+        ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
+        remarks: a.remarks ?? "",
+      }));
+    }
+
+    state[emp.submissionId] = sectionMap;
+  }
+
+  return state;
+}
+
+function authoredDraftsToSaveAnswers(
+  authored: AuthoredDraftState,
+  submissionId: number,
+): Array<{
+  questionId: number;
+  pointsEarned?: number;
+  ratingValue?: number | null;
+  remarks?: string | null;
+  authoredQuestionText?: string | null;
+  authoredTotalMarks?: number;
+  openSectionId?: number | null;
+}> {
+  const submissionDrafts = authored[submissionId];
+  if (!submissionDrafts) return [];
+  const result: Array<{
+    questionId: number;
+    pointsEarned?: number;
+    ratingValue?: number | null;
+    remarks?: string | null;
+    authoredQuestionText?: string | null;
+    authoredTotalMarks?: number;
+    openSectionId?: number | null;
+  }> = [];
+
+  for (const [sectionIdStr, drafts] of Object.entries(submissionDrafts)) {
+    const openSectionId = Number(sectionIdStr);
+    for (const draft of drafts) {
+      const text = draft.authoredQuestionText.trim();
+      const totalMarks = Number(draft.authoredTotalMarks) || 0;
+      const points = draft.pointsEarned !== "" ? Number(draft.pointsEarned) : 0;
+      const rating = draft.ratingValue !== "" ? Number(draft.ratingValue) : undefined;
+      if (!text && !totalMarks && !points && !draft.remarks.trim()) continue;
+      result.push({
+        questionId: 0,
+        openSectionId,
+        authoredQuestionText: text || null,
+        authoredTotalMarks: totalMarks,
+        pointsEarned: points || undefined,
+        ratingValue: rating ?? null,
+        remarks: draft.remarks.trim() || null,
+      });
+    }
+  }
+
+  return result;
+}
+
+function mergeAuthoredDrafts(
+  current: AuthoredDraftState,
+  incoming: AuthoredDraftState,
+): AuthoredDraftState {
+  if (Object.keys(current).length === 0) return incoming;
+  const next: AuthoredDraftState = { ...incoming };
+  for (const [subKey, sections] of Object.entries(current)) {
+    const submissionId = Number(subKey);
+    const incomingSections = next[submissionId] ?? {};
+    const merged: Record<number, AuthoredQuestionDraft[]> = {};
+    // Prefer incoming (from server), but keep current drafts that have
+    // input where the server has nothing.
+    for (const [secKey, drafts] of Object.entries(incomingSections)) {
+      merged[Number(secKey)] = drafts;
+    }
+    for (const [secKey, drafts] of Object.entries(sections)) {
+      const sectionId = Number(secKey);
+      const incomingDrafts = merged[sectionId] ?? [];
+      // If the server returned drafts, use them. Otherwise keep local edits.
+      if (incomingDrafts.length > 0) continue;
+      const hasLocalInput = drafts.some(
+        (d) =>
+          d.authoredQuestionText.trim() ||
+          d.authoredTotalMarks.trim() ||
+          d.pointsEarned.trim() ||
+          d.ratingValue.trim() ||
+          d.remarks.trim(),
+      );
+      if (hasLocalInput) {
+        merged[sectionId] = drafts;
+      }
+    }
+    next[submissionId] = merged;
+  }
+  return next;
+}
 
 function clampScore(value: string, maxMarks: number): string {
   if (value === "") return "";
@@ -282,6 +421,10 @@ export default function DirectAssessmentSpreadsheet({
   >({});
   const remarksDraftsRef = useRef(remarksDrafts);
   remarksDraftsRef.current = remarksDrafts;
+  // Authored question drafts for open-assessment sections.
+  const [authoredDrafts, setAuthoredDrafts] = useState<AuthoredDraftState>({});
+  const authoredDraftsRef = useRef(authoredDrafts);
+  authoredDraftsRef.current = authoredDrafts;
   // Modal state for the compact Additional Remarks flow. Only one modal is
   // open at a time; remarksSubmissionId identifies the active employee.
   const [remarksModalOpen, setRemarksModalOpen] = useState(false);
@@ -290,6 +433,12 @@ export default function DirectAssessmentSpreadsheet({
   >(null);
   // Tracks whether the modal is currently saving (separate from score save).
   const [remarksSaving, setRemarksSaving] = useState(false);
+  // Authored questions modal state: identifies which employee + section
+  // is currently being edited.
+  const [authoredModalState, setAuthoredModalState] = useState<{
+    submissionId: number;
+    sectionId: number;
+  } | null>(null);
 
   // Column resize state — keyed by column id ("sr", "kpi", "max", or
   // `emp-${submissionId}` for employee columns).
@@ -362,6 +511,9 @@ export default function DirectAssessmentSpreadsheet({
       }
       return next;
     });
+    setAuthoredDrafts((current) =>
+      mergeAuthoredDrafts(current, buildInitialAuthoredDrafts(d)),
+    );
   }, []);
 
   const [prevAssessmentData, setPrevAssessmentData] = useState(data);
@@ -386,13 +538,20 @@ export default function DirectAssessmentSpreadsheet({
           return draftToSaveAnswer(q, draft);
         });
 
+      // Append authored answers for open-assessment sections.
+      const authoredAnswers = authoredDraftsToSaveAnswers(
+        authoredDraftsRef.current,
+        submissionId,
+      );
+      const allAnswers = [...answers, ...authoredAnswers];
+
       const overallRemarks = overallRemarksForSubmission(
         data,
         remarksDraftsRef.current,
         submissionId,
       );
 
-      return saveDirectAssessmentScores(submissionId, answers, overallRemarks);
+      return saveDirectAssessmentScores(submissionId, allAnswers, overallRemarks);
     },
     onSuccess: (_result, submissionId) => {
       toast.success(`Saved scores for submission ${data?.employees.find((e) => e.submissionId === submissionId)?.employeeName}.`);
@@ -420,12 +579,17 @@ export default function DirectAssessmentSpreadsheet({
           const draft = empDrafts[q.id];
           return draftToSaveAnswer(q, draft);
         });
+      const authoredAnswers = authoredDraftsToSaveAnswers(
+        authoredDraftsRef.current,
+        submissionId,
+      );
+      const allAnswers = [...answers, ...authoredAnswers];
       const overallRemarks = overallRemarksForSubmission(
         data,
         remarksDraftsRef.current,
         submissionId,
       );
-      await saveDirectAssessmentScores(submissionId, answers, overallRemarks);
+      await saveDirectAssessmentScores(submissionId, allAnswers, overallRemarks);
       return approveDirectAssessment(submissionId);
     },
     onSuccess: (_result, submissionId) => {
@@ -500,6 +664,94 @@ export default function DirectAssessmentSpreadsheet({
     setRemarksModalSubmissionId(null);
   };
 
+  // ---- Authored question helpers (open-assessment sections) ----
+
+  const addAuthoredQuestion = (submissionId: number, sectionId: number) => {
+    const section = data?.sections.find((s) => s.id === sectionId);
+    const budget = section?.openAssessmentTotalMarks ?? 0;
+    const existing = authoredDraftsRef.current[submissionId]?.[sectionId] ?? [];
+    const allocated = existing.reduce(
+      (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+      0,
+    );
+    const remaining = budget - allocated;
+    if (remaining <= 0) {
+      toast.error(
+        `Section budget of ${budget} marks is fully allocated. Reduce the marks of existing questions to add more.`,
+      );
+      return;
+    }
+    setAuthoredDrafts((current) => {
+      const empSections = current[submissionId] ?? {};
+      const existingDrafts = empSections[sectionId] ?? [];
+      return {
+        ...current,
+        [submissionId]: {
+          ...empSections,
+          [sectionId]: [
+            ...existingDrafts,
+            {
+              clientId: nextAuthoredClientId(),
+              authoredQuestionText: "",
+              authoredTotalMarks: "",
+              pointsEarned: "",
+              ratingValue: "",
+              remarks: "",
+            },
+          ],
+        },
+      };
+    });
+  };
+
+  const updateAuthoredDraft = (
+    submissionId: number,
+    sectionId: number,
+    clientId: string,
+    field: keyof AuthoredQuestionDraft,
+    value: string,
+  ) => {
+    setAuthoredDrafts((current) => {
+      const empSections = current[submissionId] ?? {};
+      const existing = empSections[sectionId] ?? [];
+      return {
+        ...current,
+        [submissionId]: {
+          ...empSections,
+          [sectionId]: existing.map((d) =>
+            d.clientId === clientId ? { ...d, [field]: value } : d,
+          ),
+        },
+      };
+    });
+  };
+
+  const removeAuthoredDraft = (
+    submissionId: number,
+    sectionId: number,
+    clientId: string,
+  ) => {
+    setAuthoredDrafts((current) => {
+      const empSections = current[submissionId] ?? {};
+      const existing = empSections[sectionId] ?? [];
+      return {
+        ...current,
+        [submissionId]: {
+          ...empSections,
+          [sectionId]: existing.filter((d) => d.clientId !== clientId),
+        },
+      };
+    });
+  };
+
+  const openAuthoredModal = (submissionId: number, sectionId: number) => {
+    setAuthoredModalState({ submissionId, sectionId });
+  };
+
+  const closeAuthoredModal = () => {
+    setAuthoredModalState(null);
+  };
+
   const assertRequiredScoresFilled = (
     submissionId: number,
     action: "save" | "approve",
@@ -554,12 +806,17 @@ export default function DirectAssessmentSpreadsheet({
           const draft = empDrafts[q.id];
           return draftToSaveAnswer(q, draft);
         });
+      const authoredAnswers = authoredDraftsToSaveAnswers(
+        authoredDraftsRef.current,
+        submissionId,
+      );
+      const allAnswers = [...answers, ...authoredAnswers];
       const overallRemarks = overallRemarksForSubmission(
         data,
         nextDrafts,
         submissionId,
       );
-      await saveDirectAssessmentScores(submissionId, answers, overallRemarks);
+      await saveDirectAssessmentScores(submissionId, allAnswers, overallRemarks);
       setRemarksDrafts(nextDrafts);
       toast.success(`Saved remarks for submission ${data?.employees.find((e) => e.submissionId === submissionId)?.employeeName}.`);
       queryClient.invalidateQueries({
@@ -826,13 +1083,15 @@ export default function DirectAssessmentSpreadsheet({
                 const scored = question ? isScoredQuestion(question) : false;
                 const isEvenRow = rowIdx % 2 === 0;
 
-                // Open-assessment section: render a row showing authored
-                // question counts per employee.
+                // Open-assessment section: render per-employee cells with
+                // an "Add Question" / "Edit Questions" button that opens a
+                // modal with the full authored-question editor.
                 if (row.isOpenAssessment) {
                   const section = data?.sections.find(
                     (s) => s.isOpenAssessment && s.title === row.sectionTitle,
                   );
                   const sectionId = section?.id ?? 0;
+                  const budget = row.openAssessmentTotalMarks ?? section?.openAssessmentTotalMarks ?? 0;
                   return (
                     <Fragment key={`open-${row.sr}`}>
                       {row.isFirstInSection && row.sectionTitle ? (
@@ -857,12 +1116,68 @@ export default function DirectAssessmentSpreadsheet({
                           {row.sr}
                         </td>
                         <td
-                          colSpan={2 + filteredEmployees.length}
-                          className="px-3 py-2.5 text-xs italic text-amber-700 dark:text-amber-300"
+                          className="overflow-hidden whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-xs text-amber-700 dark:border-slate-700/40 dark:text-amber-300"
+                          style={{ width: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), minWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), maxWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH) }}
                         >
-                          Open Assessment — each employee/manager authors their own questions
-                          {sectionId ? ` (Section ID: ${sectionId})` : ""}
+                          <span className="italic">Open Assessment</span>
+                          <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+                            Manager authors questions
+                          </p>
                         </td>
+                        <td
+                          className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
+                          style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
+                        >
+                          {budget || "—"}
+                        </td>
+                        {filteredEmployees.map((emp) => {
+                          const isEditable = emp.canEdit;
+                          const empAuthored =
+                            authoredDrafts[emp.submissionId]?.[sectionId] ?? [];
+                          const authoredCount = empAuthored.length;
+                          const empColId = `emp-${emp.submissionId}`;
+                          const empWidth = getColumnWidth(empColId, staffColumnWidth);
+                          return (
+                            <td
+                              key={emp.submissionId}
+                              className={cn(
+                                "border-r border-slate-100 px-2 py-2.5 text-center dark:border-slate-700/40",
+                                !isEditable && "bg-slate-50/50 dark:bg-slate-800/20",
+                              )}
+                              style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
+                            >
+                              {isEditable ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openAuthoredModal(emp.submissionId, sectionId)
+                                    }
+                                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white hover:bg-primary/90"
+                                  >
+                                    <Plus className="size-3" />
+                                    {authoredCount > 0
+                                      ? `Edit (${authoredCount})`
+                                      : "Add Question"}
+                                  </button>
+                                  {authoredCount > 0 && (
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                      {authoredCount} question{authoredCount !== 1 ? "s" : ""}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : authoredCount > 0 ? (
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                  {authoredCount} question{authoredCount !== 1 ? "s" : ""}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] italic text-slate-300 dark:text-slate-600">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
                     </Fragment>
                   );
@@ -1296,6 +1611,199 @@ export default function DirectAssessmentSpreadsheet({
           }
         }}
       />
+
+      {/* Authored questions modal for open-assessment sections */}
+      {authoredModalState && data ? (() => {
+        const { submissionId, sectionId } = authoredModalState;
+        const emp = data.employees.find((e) => e.submissionId === submissionId);
+        const section = data.sections.find((s) => s.id === sectionId);
+        const budget = section?.openAssessmentTotalMarks ?? 0;
+        const drafts = authoredDrafts[submissionId]?.[sectionId] ?? [];
+        const allocated = drafts.reduce(
+          (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+          0,
+        );
+        const remaining = budget - allocated;
+        const authoredRatingBased = data.ratingBased;
+        const authoredScale = getAuthoredRatingScale(data.ratingScales);
+        const empName = emp?.employeeName ?? "";
+        const sectionTitle = section?.title ?? "Open Assessment";
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 dark:bg-black/60"
+            onClick={closeAuthoredModal}
+          >
+            <div
+              className="mt-8 w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-white/15 dark:bg-slate-900"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Open Assessment — {sectionTitle}
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    Employee: {empName}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAuthoredModal}
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Budget: <span className="font-bold text-amber-700 dark:text-amber-300">{budget}</span>
+                  {" — "}
+                  Allocated: <span className={cn("font-bold", remaining < 0 ? "text-red-600" : remaining === 0 ? "text-emerald-600" : "text-amber-700 dark:text-amber-300")}>{allocated}</span>
+                  {" / "}
+                  Remaining: <span className={cn("font-bold", remaining < 0 ? "text-red-600" : "text-emerald-600")}>{remaining}</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => addAuthoredQuestion(submissionId, sectionId)}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-white",
+                      remaining <= 0
+                        ? "bg-slate-400 cursor-not-allowed hover:bg-slate-400"
+                        : "bg-primary hover:bg-primary/90",
+                    )}
+                  >
+                    <Plus className="size-3" />
+                    Add Question
+                  </button>
+                  {remaining <= 0 && drafts.length > 0 ? (
+                    <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      Budget fully allocated — reduce marks on existing questions to add more
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {drafts.length === 0 ? (
+                <div className="rounded-md border border-dashed border-amber-300/80 px-4 py-6 text-center text-xs text-slate-500 dark:border-amber-700/40 dark:text-slate-400">
+                  {authoredRatingBased
+                    ? 'Click "Add Question" to write a question, assign a weight from the budget, and select a rating.'
+                    : 'Click "Add Question" to write a question and assign marks from the budget.'}
+                </div>
+              ) : (
+                <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                  {drafts.map((draft, draftIdx) => {
+                    const totalMarks = Number(draft.authoredTotalMarks) || 0;
+                    const updateAuthoredRating = (
+                      ratingValue: string,
+                      pointsEarned: string,
+                    ) => {
+                      updateAuthoredDraft(submissionId, sectionId, draft.clientId, "ratingValue", ratingValue);
+                      updateAuthoredDraft(submissionId, sectionId, draft.clientId, "pointsEarned", pointsEarned);
+                    };
+                    return (
+                      <div
+                        key={draft.clientId}
+                        className="rounded-md border border-slate-200 bg-slate-50/40 p-3 dark:border-white/10 dark:bg-slate-800/20"
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="mt-1.5 text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400">
+                            {draftIdx + 1}.
+                          </span>
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <textarea
+                              value={draft.authoredQuestionText}
+                              onChange={(e) =>
+                                updateAuthoredDraft(submissionId, sectionId, draft.clientId, "authoredQuestionText", e.target.value)
+                              }
+                              rows={2}
+                              className="w-full resize-y rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
+                              placeholder="Type the question here..."
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                                {authoredRatingBased ? "Weight:" : "Marks:"}
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={draft.authoredTotalMarks}
+                                  onChange={(e) =>
+                                    updateAuthoredDraft(submissionId, sectionId, draft.clientId, "authoredTotalMarks", e.target.value)
+                                  }
+                                  className="ml-1 h-7 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums font-bold text-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-amber-300"
+                                  placeholder="0"
+                                />
+                              </label>
+                              {authoredRatingBased && authoredScale ? (
+                                <div className="flex min-w-[180px] flex-col gap-0.5">
+                                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">Rating:</span>
+                                  <RatingScoreField
+                                    scale={authoredScale}
+                                    weight={totalMarks}
+                                    ratingValue={draft.ratingValue}
+                                    onRatingChange={updateAuthoredRating}
+                                    fallbackPoints={draft.pointsEarned !== "" ? Number(draft.pointsEarned) : null}
+                                  />
+                                </div>
+                              ) : (
+                                <label className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                                  Score:
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={totalMarks || undefined}
+                                    step={0.5}
+                                    value={draft.pointsEarned}
+                                    onChange={(e) =>
+                                      updateAuthoredDraft(submissionId, sectionId, draft.clientId, "pointsEarned", e.target.value)
+                                    }
+                                    className="ml-1 h-7 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums font-bold text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
+                                    placeholder="0"
+                                  />
+                                </label>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => removeAuthoredDraft(submissionId, sectionId, draft.clientId)}
+                                className="ml-auto inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-950/30"
+                              >
+                                <Trash2 className="size-3" />
+                                Remove
+                              </button>
+                            </div>
+                            <textarea
+                              value={draft.remarks}
+                              onChange={(e) =>
+                                updateAuthoredDraft(submissionId, sectionId, draft.clientId, "remarks", e.target.value)
+                              }
+                              rows={2}
+                              className="w-full resize-y rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                              placeholder="Remarks (optional)..."
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeAuthoredModal}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }

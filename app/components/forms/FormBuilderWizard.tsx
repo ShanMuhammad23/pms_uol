@@ -1536,7 +1536,6 @@ function SubsectionCard({
           }}
           placeholder="Subsection Title (Press Enter for new line)"
           rows={1}
-          maxLength={500}
           className={cn(
             "min-w-0 flex-1 resize-y bg-transparent text-sm font-semibold outline-none whitespace-pre-wrap",
             titleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400" : "text-teal-900 placeholder:text-teal-400 dark:text-teal-100"
@@ -1787,7 +1786,6 @@ function SectionCard({
               }}
               placeholder="Section Title (Press Enter for new line)"
               rows={1}
-              maxLength={500}
               className={cn(
                 "w-full resize-y bg-transparent text-sm font-semibold outline-none whitespace-pre-wrap",
                 hasTitleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-indigo-900 placeholder:text-indigo-400 dark:text-indigo-100 dark:placeholder:text-indigo-400"

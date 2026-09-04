@@ -40,16 +40,21 @@ function fail(label, detail = "") {
 
 async function columnLength(client, tableName, columnName) {
   const result = await client.query(
-    `SELECT character_maximum_length
+    `SELECT data_type, character_maximum_length
      FROM information_schema.columns
      WHERE table_schema = 'public'
        AND table_name = $1
        AND column_name = $2`,
     [tableName, columnName],
   );
-  return result.rows.length > 0
-    ? Number(result.rows[0].character_maximum_length)
-    : null;
+  if (result.rows.length === 0) {
+    return null;
+  }
+  // TEXT columns have character_maximum_length = NULL → treat as unlimited.
+  if (result.rows[0].data_type === "text") {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Number(result.rows[0].character_maximum_length);
 }
 
 async function runPreChecks(client) {
@@ -79,9 +84,9 @@ async function runPreChecks(client) {
   }
 
   const sectionLen = await columnLength(client, "form_sections", "title");
-  if (sectionLen != null && sectionLen >= 500) {
+  if (sectionLen != null && (sectionLen === Number.POSITIVE_INFINITY || sectionLen >= 500)) {
     pass(
-      `form_sections.title already >= 500 (current: ${sectionLen})`,
+      `form_sections.title is already unlimited/TEXT (current: ${sectionLen === Number.POSITIVE_INFINITY ? "TEXT" : `VARCHAR(${sectionLen})`})`,
       "will re-run idempotently",
     );
   }
@@ -110,17 +115,17 @@ async function runPostChecks(client) {
   console.log("\n=== Post-migration sanity checks ===");
 
   const sectionLen = await columnLength(client, "form_sections", "title");
-  if (sectionLen != null && sectionLen >= 500) {
-    pass(`form_sections.title is VARCHAR(${sectionLen})`);
+  if (sectionLen === Number.POSITIVE_INFINITY) {
+    pass("form_sections.title is TEXT (unlimited)");
   } else {
-    fail(`form_sections.title is VARCHAR(${sectionLen}) — expected >= 500`);
+    fail(`form_sections.title is VARCHAR(${sectionLen}) — expected TEXT`);
   }
 
   const templateLen = await columnLength(client, "form_templates", "title");
-  if (templateLen != null && templateLen >= 500) {
-    pass(`form_templates.title is VARCHAR(${templateLen})`);
+  if (templateLen === Number.POSITIVE_INFINITY) {
+    pass("form_templates.title is TEXT (unlimited)");
   } else {
-    fail(`form_templates.title is VARCHAR(${templateLen}) — expected >= 500`);
+    fail(`form_templates.title is VARCHAR(${templateLen}) — expected TEXT`);
   }
 }
 
