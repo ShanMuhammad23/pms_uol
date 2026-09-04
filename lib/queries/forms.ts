@@ -68,6 +68,8 @@ interface SectionRow {
   sort_order: number;
   is_open_assessment: boolean;
   open_assessment_total_marks: number;
+  self_assessment_enabled: boolean;
+  hod_assessment_enabled: boolean;
 }
 
 interface QuestionRow {
@@ -183,7 +185,9 @@ async function ensureOpenAssessmentSchema(client: PoolClient): Promise<void> {
   await client.query(`
     ALTER TABLE form_sections
       ADD COLUMN IF NOT EXISTS is_open_assessment BOOLEAN NOT NULL DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS open_assessment_total_marks INT NOT NULL DEFAULT 0
+      ADD COLUMN IF NOT EXISTS open_assessment_total_marks INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS self_assessment_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS hod_assessment_enabled BOOLEAN NOT NULL DEFAULT TRUE
   `);
   await client.query(`
     ALTER TABLE appraisal_answers ALTER COLUMN question_id DROP NOT NULL
@@ -680,7 +684,13 @@ async function upsertSection(
   templateId: number,
   section: Pick<
     FormSectionInput,
-    "id" | "title" | "sortOrder" | "isOpenAssessment" | "openAssessmentTotalMarks"
+    | "id"
+    | "title"
+    | "sortOrder"
+    | "isOpenAssessment"
+    | "openAssessmentTotalMarks"
+    | "selfAssessmentEnabled"
+    | "hodAssessmentEnabled"
   >,
   parentSectionId: number | null,
   client: PoolClient,
@@ -689,6 +699,8 @@ async function upsertSection(
   const openAssessmentTotalMarks = isOpenAssessment
     ? Number(section.openAssessmentTotalMarks) || 0
     : 0;
+  const selfAssessmentEnabled = section.selfAssessmentEnabled !== false;
+  const hodAssessmentEnabled = section.hodAssessmentEnabled !== false;
 
   if (section.id !== undefined) {
     await client.query(
@@ -697,14 +709,18 @@ async function upsertSection(
            sort_order = $2,
            parent_section_id = $3,
            is_open_assessment = $4,
-           open_assessment_total_marks = $5
-       WHERE id = $6 AND template_id = $7`,
+           open_assessment_total_marks = $5,
+           self_assessment_enabled = $6,
+           hod_assessment_enabled = $7
+       WHERE id = $8 AND template_id = $9`,
       [
         section.title,
         section.sortOrder,
         parentSectionId,
         isOpenAssessment,
         openAssessmentTotalMarks,
+        selfAssessmentEnabled,
+        hodAssessmentEnabled,
         section.id,
         templateId,
       ],
@@ -715,9 +731,10 @@ async function upsertSection(
   const sectionResult = await client.query<{ id: string }>(
     `INSERT INTO form_sections (
        template_id, parent_section_id, title, sort_order,
-       is_open_assessment, open_assessment_total_marks
+       is_open_assessment, open_assessment_total_marks,
+       self_assessment_enabled, hod_assessment_enabled
      )
-     VALUES ($1, $2, $3, $4, $5, $6)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id`,
     [
       templateId,
@@ -726,6 +743,8 @@ async function upsertSection(
       section.sortOrder,
       isOpenAssessment,
       openAssessmentTotalMarks,
+      selfAssessmentEnabled,
+      hodAssessmentEnabled,
     ],
   );
 
@@ -890,13 +909,16 @@ async function insertSectionsAndQuestions(
     const openAssessmentTotalMarks = isOpenAssessment
       ? Number(section.openAssessmentTotalMarks) || 0
       : 0;
+    const selfAssessmentEnabled = section.selfAssessmentEnabled !== false;
+    const hodAssessmentEnabled = section.hodAssessmentEnabled !== false;
 
     const sectionResult = await client.query<{ id: string }>(
       `INSERT INTO form_sections (
          template_id, parent_section_id, title, sort_order,
-         is_open_assessment, open_assessment_total_marks
+         is_open_assessment, open_assessment_total_marks,
+         self_assessment_enabled, hod_assessment_enabled
        )
-       VALUES ($1, NULL, $2, $3, $4, $5)
+       VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [
         templateId,
@@ -904,6 +926,8 @@ async function insertSectionsAndQuestions(
         section.sortOrder,
         isOpenAssessment,
         openAssessmentTotalMarks,
+        selfAssessmentEnabled,
+        hodAssessmentEnabled,
       ],
     );
 
@@ -1042,7 +1066,8 @@ async function getFormStructureForTemplate(
 
   const sectionsResult = await executor.query<SectionRow>(
     `SELECT id, parent_section_id, title, sort_order,
-            is_open_assessment, open_assessment_total_marks
+            is_open_assessment, open_assessment_total_marks,
+            self_assessment_enabled, hod_assessment_enabled
      FROM form_sections
      WHERE template_id = $1
      ORDER BY sort_order ASC`,
@@ -1153,6 +1178,8 @@ async function getFormStructureForTemplate(
       layout,
       isOpenAssessment,
       openAssessmentTotalMarks: Number(section.open_assessment_total_marks) || 0,
+      selfAssessmentEnabled: section.self_assessment_enabled !== false,
+      hodAssessmentEnabled: section.hod_assessment_enabled !== false,
     });
   }
 

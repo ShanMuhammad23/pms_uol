@@ -1062,8 +1062,12 @@ export async function saveEmployeeForm(
 
       // Validate open-assessment sections: budget must be fully allocated
       // and each question's score must be within its authored total marks.
+      // Skip sections where self-assessment is disabled (HOD-only sections).
       const formRatingBased = Boolean(template.ratingBased);
-      for (const section of openSections) {
+      const selfOpenSections = openSections.filter(
+        (s) => s.selfAssessmentEnabled !== false,
+      );
+      for (const section of selfOpenSections) {
         const sectionAuthored = savedAuthored.filter(
           (a) => a.openSectionId === section.id,
         );

@@ -17,6 +17,8 @@
     "db:migrate:additional-remarks": "node scripts/migrate-additional-remarks.mjs",
     "db:migrate:form-rating-based": "node scripts/migrate-form-rating-based.mjs",
     "db:migrate:return-submission": "node scripts/migrate-return-submission.mjs",
+    "db:migrate:section-title-length": "node scripts/migrate-section-title-length.mjs",
+    "db:migrate:open-assessment-flags": "node scripts/migrate-open-assessment-flags.mjs",
     "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
     "db:update:emails-from-excel": "node scripts/update-emails-from-excel.mjs",
     "db:seed:qualifications": "node scripts/seed-qualifications-from-excel.mjs",

@@ -12,6 +12,9 @@ import {
   PERFORMANCE_RATINGS,
 } from "@/types/forms";
 
+/** Max character length for section/subsection/form titles (DB column limit). */
+export const TITLE_MAX_LENGTH = 500;
+
 function validateOpenAssessmentSection(
   section: FormTemplateInput["sections"][number],
   pathPrefix: string,
@@ -129,6 +132,10 @@ export function validateFormTemplateInput(
     return "Form title is required.";
   }
 
+  if (input.title.length > TITLE_MAX_LENGTH) {
+    return `Form title must be ${TITLE_MAX_LENGTH} characters or fewer.`;
+  }
+
   if (!input.code?.trim()) {
     return "Form code is required.";
   }
@@ -184,6 +191,10 @@ export function validateFormTemplateInput(
       return `Section ${sectionIndex + 1}: title is required.`;
     }
 
+    if (section.title.length > TITLE_MAX_LENGTH) {
+      return `Section ${sectionIndex + 1}: title must be ${TITLE_MAX_LENGTH} characters or fewer.`;
+    }
+
     // Open-assessment sections: validate budget, skip question validation.
     if (section.isOpenAssessment) {
       const openError = validateOpenAssessmentSection(
@@ -216,6 +227,10 @@ export function validateFormTemplateInput(
 
       if (!subsection.title?.trim()) {
         return `Section ${sectionIndex + 1}, subsection ${subsectionIndex + 1}: title is required.`;
+      }
+
+      if (subsection.title.length > TITLE_MAX_LENGTH) {
+        return `Section ${sectionIndex + 1}, subsection ${subsectionIndex + 1}: title must be ${TITLE_MAX_LENGTH} characters or fewer.`;
       }
 
       for (

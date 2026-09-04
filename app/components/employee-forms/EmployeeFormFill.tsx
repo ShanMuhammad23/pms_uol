@@ -62,9 +62,10 @@ function buildPreviewDetail(template: FormTemplateRecord): EmployeeFormDetail {
   const templateMax = flattenAllQuestions(template)
     .filter((question) => Number(question.totalMarks) > 0)
     .reduce((sum, question) => sum + Number(question.totalMarks), 0);
-  // Include open-assessment section budgets in the max score.
+  // Include open-assessment section budgets in the max score, but only for
+  // sections the employee is allowed to self-assess.
   const openBudget = template.sections
-    .filter((s) => s.isOpenAssessment)
+    .filter((s) => s.isOpenAssessment && s.selfAssessmentEnabled !== false)
     .reduce((sum, s) => sum + Number(s.openAssessmentTotalMarks ?? 0), 0);
   const maxRawScore = templateMax + openBudget;
 
@@ -352,9 +353,10 @@ export default function EmployeeFormFill({
       .filter(isScoredQuestion)
       .reduce((sum, question) => sum + Number(question.totalMarks), 0);
 
-    // Include open-assessment section budgets.
+    // Include open-assessment section budgets, but only for sections the
+    // employee is allowed to self-assess (HOD-only sections are excluded).
     const openBudget = data.template.sections
-      .filter((s) => s.isOpenAssessment)
+      .filter((s) => s.isOpenAssessment && s.selfAssessmentEnabled !== false)
       .reduce((sum, s) => sum + Number(s.openAssessmentTotalMarks ?? 0), 0);
 
     const total = fromTemplate + openBudget;
@@ -529,6 +531,29 @@ export default function EmployeeFormFill({
       // skipped (no score), remarks are also optional.
       if (hasScore && !(answer!.remarks ?? "").trim()) {
         return `Remarks are required for "${question.questionText.slice(0, 60)}..."`;
+      }
+    }
+
+    // Validate open-assessment sections that the employee is allowed to fill.
+    for (const section of data.template.sections.filter(
+      (s) => s.isOpenAssessment && s.selfAssessmentEnabled !== false,
+    )) {
+      const drafts = authored[section.id] ?? [];
+      if (drafts.length === 0) {
+        return `Section "${section.title}": add at least one question to the open-assessment section.`;
+      }
+      const budget = section.openAssessmentTotalMarks ?? 0;
+      const allocated = drafts.reduce(
+        (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+        0,
+      );
+      if (allocated !== budget) {
+        return `Section "${section.title}": total marks allocated (${allocated}) must equal the budget (${budget}).`;
+      }
+      for (const draft of drafts) {
+        if (!draft.authoredQuestionText.trim()) {
+          return `Section "${section.title}": every question must have text.`;
+        }
       }
     }
 
@@ -870,7 +895,8 @@ export default function EmployeeFormFill({
                     );
                     const remaining = budget - allocated;
                     const isHodOnly =
-                      !data.selfAssessmentEnabled;
+                      !data.selfAssessmentEnabled ||
+                      (section?.selfAssessmentEnabled === false);
                     // Open-assessment sections respect the form's scoring mode:
                     // rating-based → author picks a rating per question;
                     // absolute → author enters a numeric self-score.
