@@ -9,6 +9,8 @@ import {
   returnedToManager1ManagerTemplate,
   returnedToManager2ManagerTemplate,
   selfAssessmentSubmittedTemplate,
+  selfAssessmentReminderTemplate,
+  managerPendingWorkReminderTemplate,
 } from "./templates";
 
 /**
@@ -115,3 +117,7 @@ export async function notifySubmissionReturned(
 export { getSubmissionRecipients, type NotificationRecipient, type SubmissionRecipients } from "./recipients";
 export { dispatchNotification, type NotificationTarget } from "./dispatch";
 export type { EmailContent } from "./templates";
+export {
+  selfAssessmentReminderTemplate,
+  managerPendingWorkReminderTemplate,
+};

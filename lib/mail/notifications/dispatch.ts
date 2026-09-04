@@ -28,27 +28,28 @@ export interface NotificationTarget {
  * This function is self-contained — it never throws. Call it with `void` for
  * fire-and-forget, or `await` it if you need to know the result.
  *
- * @param appraisalId  For logging only (never in the email body).
+ * @param appraisalId  For logging only (never in the email body). Use 0 for digests.
  * @param event        Short event name for log lines (e.g. "manager1_approved").
  * @param target       Recipient with email + name.
  * @param content      Subject/HTML/text from a template function.
+ * @returns true when the message was accepted by SMTP; false when skipped/failed.
  */
 export async function dispatchNotification(
   appraisalId: number,
   event: string,
   target: NotificationTarget,
   content: EmailContent,
-): Promise<void> {
+): Promise<boolean> {
   const logPrefix = `[mail/notify] appraisal=${appraisalId} event=${event}`;
 
   if (!isSmtpConfigured()) {
     console.warn(`${logPrefix} skipped — SMTP not configured.`);
-    return;
+    return false;
   }
 
   if (!target.email || !target.email.trim()) {
     console.warn(`${logPrefix} skipped — recipient has no email address.`);
-    return;
+    return false;
   }
 
   try {
@@ -61,12 +62,14 @@ export async function dispatchNotification(
     console.info(
       `${logPrefix} sent to="${target.email}" messageId="${result.messageId}" accepted=${result.accepted.length}`,
     );
+    return true;
   } catch (error) {
     const sanitized = sanitizeSmtpError(error);
     console.error(
       `${logPrefix} FAILED to="${target.email}" message="${sanitized.message}"` +
         (sanitized.code ? ` code=${sanitized.code}` : ""),
     );
+    return false;
   }
 }
 

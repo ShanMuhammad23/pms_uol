@@ -4,19 +4,14 @@ import {
   escapeHtml,
   infoRowHtml,
   infoRowText,
+  portalLoginButtonHtml,
+  portalLoginText,
   renderHtmlEmail,
   renderTextFooter,
   returnReasonHtml,
   returnReasonText,
 } from "./layout";
 
-/**
- * PMS notification email templates.
- *
- * Each template function returns `{ subject, html, text }`.
- * Templates contain NO business logic — they only format data passed in.
- * Recipient names and return reasons are HTML-escaped via `escapeHtml`.
- */
 
 export interface EmailContent {
   subject: string;
@@ -190,6 +185,92 @@ ${returnReasonText(returnReason)}`;
 
   return {
     subject: "Action Required \u2013 PMS Submission Returned to Manager 2",
+    html: renderHtmlEmail(bodyHtml),
+    text: bodyText + renderTextFooter(),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* 9. Employee self-assessment reminder                                       */
+/* -------------------------------------------------------------------------- */
+
+export function selfAssessmentReminderTemplate(params: {
+  employeeName: string;
+  formTitle: string;
+  cycleFiscalYear: number;
+}): EmailContent {
+  const { employeeName, formTitle, cycleFiscalYear } = params;
+
+  const bodyHtml = `
+    <p>Dear ${escapeHtml(employeeName)},</p>
+    <p>This is a reminder that your self-assessment is still pending in the Performance Management System.</p>
+    ${infoRowHtml("Form", formTitle)}
+    ${infoRowHtml("Appraisal Cycle", String(cycleFiscalYear))}
+    ${infoRowHtml("Current Status", "Pending Self-Assessment")}
+    <p>Please log in to the Performance Management System and complete your self-assessment at your earliest convenience.</p>
+    ${portalLoginButtonHtml()}`;
+
+  const bodyText = `Dear ${employeeName},
+
+This is a reminder that your self-assessment is still pending in the Performance Management System.
+
+${infoRowText("Form", formTitle)}
+${infoRowText("Appraisal Cycle", String(cycleFiscalYear))}
+${infoRowText("Current Status", "Pending Self-Assessment")}
+
+Please log in to the Performance Management System and complete your self-assessment at your earliest convenience.
+${portalLoginText()}`;
+
+  return {
+    subject: "Reminder \u2013 Complete Your PMS Self-Assessment",
+    html: renderHtmlEmail(bodyHtml),
+    text: bodyText + renderTextFooter(),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* 10. Manager pending-work reminder digest                                   */
+/* -------------------------------------------------------------------------- */
+
+export function managerPendingWorkReminderTemplate(params: {
+  managerName: string;
+  directAssessmentCount: number;
+  pendingReviewCount: number;
+  cycleFiscalYear: number;
+}): EmailContent {
+  const {
+    managerName,
+    directAssessmentCount,
+    pendingReviewCount,
+    cycleFiscalYear,
+  } = params;
+
+  const total = directAssessmentCount + pendingReviewCount;
+
+  const bodyHtml = `
+    <p>Dear ${escapeHtml(managerName)},</p>
+    <p>This is a reminder that you have pending assessment work in the Performance Management System.</p>
+    ${infoRowHtml("Appraisal Cycle", String(cycleFiscalYear))}
+    ${infoRowHtml("Direct assessments to complete", String(directAssessmentCount))}
+    ${infoRowHtml("Submissions awaiting your review", String(pendingReviewCount))}
+    ${infoRowHtml("Total pending items", String(total))}
+    <p>Please log in to the Performance Management System to complete your direct assessments and review submitted appraisals.</p>
+    ${portalLoginButtonHtml()}`;
+
+  const bodyText = `Dear ${managerName},
+
+This is a reminder that you have pending assessment work in the Performance Management System.
+
+${infoRowText("Appraisal Cycle", String(cycleFiscalYear))}
+${infoRowText("Direct assessments to complete", String(directAssessmentCount))}
+${infoRowText("Submissions awaiting your review", String(pendingReviewCount))}
+${infoRowText("Total pending items", String(total))}
+
+Please log in to the Performance Management System to complete your direct assessments and review submitted appraisals.
+${portalLoginText()}`;
+
+  return {
+    subject: `Reminder \u2013 ${total} Pending PMS Assessment Item${total === 1 ? "" : "s"}`,
     html: renderHtmlEmail(bodyHtml),
     text: bodyText + renderTextFooter(),
   };

@@ -19,13 +19,17 @@ const REQUIRED = [
   "SMTP_SECURE",
   "SMTP_USER",
   "SMTP_PASSWORD",
-  "MAIL_FROM_EMAIL",
-  "MAIL_FROM_NAME",
 ];
 
 const missing = REQUIRED.filter((k) => !process.env[k] || !String(process.env[k]).trim());
-if (missing.length > 0) {
-  console.error(`[verify-smtp] Missing env vars: ${missing.join(", ")}`);
+const fromEmail =
+  (process.env.SMTP_FROM_EMAIL && String(process.env.SMTP_FROM_EMAIL).trim()) ||
+  (process.env.MAIL_FROM_EMAIL && String(process.env.MAIL_FROM_EMAIL).trim()) ||
+  "";
+if (missing.length > 0 || !fromEmail) {
+  const report = [...missing];
+  if (!fromEmail) report.push("SMTP_FROM_EMAIL (or MAIL_FROM_EMAIL)");
+  console.error(`[verify-smtp] Missing env vars: ${report.join(", ")}`);
   console.error("Set them in .env and run: node --env-file=.env scripts/verify-smtp.mjs");
   process.exit(2);
 }
