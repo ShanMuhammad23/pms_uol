@@ -8,7 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ElementType,
 } from "react";
 import {
   fetchFormSubmission,
@@ -42,6 +41,7 @@ import {
 } from "@/types/forms";
 import { getPendingManagerReviewConfig } from "@/app/helpers/dashboard-form-state";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
+import type { FormSubmissionDetail } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 import {
   buildFormTableRows,
@@ -66,14 +66,7 @@ import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScor
 import QuartileBadge from "@/app/components/dashboard/QuartileBadge";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
-import {
-  AlertTriangle,
-  Building2,
-  CalendarDays,
-  Gauge,
-  Network,
-  RotateCcw,
-} from "lucide-react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 
 interface SubmissionDetailViewProps {
   submissionId: number;
@@ -281,6 +274,19 @@ function displayOrgValue(value: string | null | undefined): string {
   return value.trim();
 }
 
+function formatSubmittedAt(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -288,41 +294,14 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function SubmissionInfoTile({
-  icon: Icon,
-  label,
-  value,
-  accent = false,
-}: {
-  icon: ElementType;
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
+function HeroMetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      className={cn(
-        "flex  min-w-0 flex-col items-center justify-center  text-center"
-      )}
-    >
-      <dt
-        className={cn(
-          "flex items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide",
-          accent
-            ? "text-indigo-600 dark:text-indigo-300"
-            : "text-slate-500 dark:text-slate-400",
-        )}
-      >
-        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+    <div className="flex min-w-0 max-w-64 items-baseline gap-1 py-0.5">
+      <dt className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {label}
       </dt>
       <dd
-        className={cn(
-          "mt-1 w-full truncate text-sm font-semibold leading-tight",
-          accent
-            ? "text-indigo-800 dark:text-indigo-200"
-            : "text-slate-900 dark:text-slate-100",
-        )}
+        className="truncate text-xs font-medium text-slate-800 dark:text-slate-100"
         title={value}
       >
         {value}
@@ -700,7 +679,7 @@ export default function SubmissionDetailView({
     onSuccess: (result) => {
       toast.success("Manager review saved.");
       setIncompleteQuestionIds(new Set());
-      queryClient.setQueryData(["form-submission", submissionId], (current) => {
+      queryClient.setQueryData<FormSubmissionDetail>(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         const managerLevel =
           "managerLevel" in current
@@ -759,7 +738,7 @@ export default function SubmissionDetailView({
     onSuccess: (result) => {
       toast.success("Manager review approved.");
       setIncompleteQuestionIds(new Set());
-      queryClient.setQueryData(["form-submission", submissionId], (current) => {
+      queryClient.setQueryData<FormSubmissionDetail>(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         return {
           ...current,
@@ -793,7 +772,7 @@ export default function SubmissionDetailView({
     },
     onSuccess: (result) => {
       toast.success("HR review saved.");
-      queryClient.setQueryData(["form-submission", submissionId], (current) => {
+      queryClient.setQueryData<FormSubmissionDetail>(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         const managerLevel =
           "managerLevel" in current
@@ -836,7 +815,7 @@ export default function SubmissionDetailView({
           ? "Approved successfully."
           : "HR review approved. Sent to Board for final approval.",
       );
-      queryClient.setQueryData(["form-submission", submissionId], (current) => {
+      queryClient.setQueryData<FormSubmissionDetail>(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         return {
           ...current,
@@ -950,12 +929,6 @@ export default function SubmissionDetailView({
   const editingManager2 =
     isEligible && data?.canEditManagerReview && currentManagerLevel === 2;
   const editingHr = isEligible && (data?.canEditHrReview ?? false);
-  // When an HR/Board/SuperAdmin user is assigned as Manager 1 or Manager 2
-  // for this employee, they must be able to edit manager assessment inputs
-  // just like a regular manager. This flag separates "system role
-  // permission" from "assessment assignment permission" — the
-  // employee-manager assignment determines whether the user can act as
-  // Manager 1 or Manager 2, regardless of their system role.
   const isAssignedManagerForCurrentLevel =
     data?.isAssignedManagerForCurrentLevel ?? false;
 
@@ -1016,24 +989,23 @@ export default function SubmissionDetailView({
   if (isLoading) {
     return (
       <div className="min-w-0 overflow-hidden rounded-md border border-slate-300 bg-white shadow-md shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-900/30">
-        <div className="border-b border-slate-200/50 bg-slate-200 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/40">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <div className="flex min-w-0 items-center gap-3 md:w-52 md:shrink-0">
-              <div className="size-11 shrink-0 rounded-full bg-slate-300/80 dark:bg-slate-700" />
-              <div className="min-w-0 space-y-2">
-                <div className="h-5 w-32 rounded bg-slate-300/80 dark:bg-slate-700" />
-                <div className="h-3 w-28 rounded bg-slate-300/60 dark:bg-slate-700/80" />
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/50">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <div className="size-9 shrink-0 rounded-full bg-slate-300/80 dark:bg-slate-700" />
+              <div className="min-w-0 space-y-1.5">
+                <div className="h-4 w-40 rounded bg-slate-300/80 dark:bg-slate-700" />
+                <div className="h-3 w-24 rounded bg-slate-300/60 dark:bg-slate-700/80" />
               </div>
             </div>
-            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }, (_, index) => (
-                <div
-                  key={index}
-                  className="min-h-15 rounded-lg border border-slate-300/70 bg-white/70 dark:border-slate-700 dark:bg-slate-900/50"
-                />
-              ))}
-            </div>
-            <div className="hidden h-8 w-24 shrink-0 rounded-lg bg-slate-300/70 md:block dark:bg-slate-700" />
+            <div className="h-6 w-28 rounded bg-slate-300/80 dark:bg-slate-700" />
+            <div className="ml-auto h-7 w-20 rounded bg-slate-300/70 dark:bg-slate-700" />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-3 border-t border-slate-200 pt-2 dark:border-slate-700">
+            <div className="h-3 w-32 rounded bg-slate-300/70 dark:bg-slate-700" />
+            <div className="h-3 w-28 rounded bg-slate-300/70 dark:bg-slate-700" />
+            <div className="h-3 w-36 rounded bg-slate-300/70 dark:bg-slate-700" />
+            <div className="h-3 w-24 rounded bg-slate-300/70 dark:bg-slate-700" />
           </div>
         </div>
         <div className="p-6 text-sm text-foreground/70">Loading submission...</div>
@@ -1218,69 +1190,56 @@ export default function SubmissionDetailView({
           },
         ]}
       />
-      <div className="border-b border-slate-200/50 bg-slate-200 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/40">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center border-b border-slate-200/50 justify-between">
-          <div className="flex min-w-0  items-center gap-3 w-[20%]">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/50">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <div
-              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white"
               aria-hidden="true"
             >
               {getInitials(data.employeeName)}
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                {data.employeeName}
-              </h2>
-              <div className="mt-0.5 flex flex-wrap items-center gap-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <h2 className="truncate text-base font-bold tracking-tight text-slate-900 dark:text-slate-50">
+                  {data.employeeName}
+                </h2>
                 {data.employeeId ? (
-                  <span className="rounded-md border border-slate-200 bg-white px-1.5 py-px text-[11px] font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                  <span className="text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
                     SAP {data.employeeId}
                   </span>
                 ) : null}
                 <span
                   className={cn(
-                    "rounded-md px-1.5 py-px text-[11px] font-semibold",
+                    "rounded px-1.5 py-px text-[11px] font-semibold",
                     statusStyles[data.status],
                   )}
                 >
                   {statusLabel}
                 </span>
               </div>
-              {data.templateTitle ? (
-                <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                  {data.templateTitle}
-                </p>
-              ) : null}
             </div>
           </div>
-          <dl className="flex flex-wrap gap-2 w-[50%] justify-between items-center p-4 bg-white rounded-md shadow-md">
-            <SubmissionInfoTile
-              icon={Gauge}
-              label="Score"
-              value={`${formatScoreValue(displayedFormScore)}/${data.maxRawScore} (${displayedFormPercent}%)`}
-              accent
-            />
-            <SubmissionInfoTile
-              icon={Building2}
-              label="ORG Level 1"
-              value={displayOrgValue(data.orgLevel1Name)}
-            />
-            <SubmissionInfoTile
-              icon={Network}
-              label="ORG Level 2"
-              value={displayOrgValue(data.orgLevel2Name)}
-            />
-            <SubmissionInfoTile
-              icon={CalendarDays}
-              label="Submitted"
-              value={
-                data.submittedAt
-                  ? new Date(data.submittedAt).toLocaleString()
-                  : "—"
-              }
-            />
-          </dl>
-          <div className="no-print flex flex-col xl:flex-row w-full shrink-0 flex-wrap items-center gap-2 md:w-auto md:justify-end ">
+
+          <div
+            className="flex shrink-0 items-baseline gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 dark:bg-primary/15"
+            aria-label={`Score ${formatScoreValue(displayedFormScore)} out of ${data.maxRawScore}, ${displayedFormPercent} percent`}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Score
+            </span>
+            <span className="tabular-nums text-lg font-bold leading-none text-primary">
+              {formatScoreValue(displayedFormScore)}
+            </span>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              / {data.maxRawScore}
+            </span>
+            <span className="text-sm font-semibold tabular-nums text-primary">
+              {displayedFormPercent}%
+            </span>
+          </div>
+
+          <div className="no-print ml-auto flex flex-wrap items-center justify-end gap-1.5">
             {/* Reset Form — admin only */}
             {isAdminRole && rows.length > 0 ? (
               <button
@@ -1371,10 +1330,28 @@ export default function SubmissionDetailView({
           </div>
         </div>
 
+        <dl className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+          <HeroMetaItem
+            label="Form"
+            value={data.templateTitle?.trim() || "—"}
+          />
+          <HeroMetaItem label="ORG 1" value={displayOrgValue(data.orgLevel1Name)} />
+          <HeroMetaItem label="ORG 2" value={displayOrgValue(data.orgLevel2Name)} />
+          <HeroMetaItem label="Submitted" value={formatSubmittedAt(data.submittedAt)} />
+          <HeroMetaItem
+            label="Manager 1"
+            value={formatNameWithSap(data.manager1Name, data.manager1EmployeeId)}
+          />
+          <HeroMetaItem
+            label="Manager 2"
+            value={formatNameWithSap(data.manager2Name, data.manager2EmployeeId)}
+          />
+        </dl>
+
         <FormDescription
           description={data.templateDescription}
           compact
-          className="mt-3 no-print"
+          className="mt-2 no-print border-0 bg-transparent p-0"
         />
       </div>
 
@@ -1495,7 +1472,7 @@ export default function SubmissionDetailView({
               <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Sr. No.
               </th>
-              <th className="min-w-[260px] print-col-large border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+              <th className="min-w-65 print-col-large border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Key Performance Indicators (KPIs)
               </th>
               <th className="print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
@@ -1503,31 +1480,31 @@ export default function SubmissionDetailView({
               </th>
               {selfAssessmentEnabled ? (
                 <>
-              <th className="min-w-[10.5rem] print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+              <th className="min-w-42 print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
                 Self Score
               </th>
-              <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
+              <th className="min-w-45 print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-teal-300">
                 Self Remarks
               </th>
                 </>
               ) : null}
-              <th className="min-w-[10.5rem] print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
+              <th className="min-w-42 print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
                 Mgr 1 Score
               </th>
-              <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
+              <th className="min-w-45 print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-violet-300">
                 Mgr 1 Remarks
               </th>
               {hasManager2 && showManager2Data ? (
                 <>
-                  <th className="min-w-[10.5rem] print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                  <th className="min-w-42 print-col-minimal whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
                     Mgr 2 Score
                   </th>
-                  <th className="min-w-[180px] print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                  <th className="min-w-45 print-col-medium border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-indigo-300">
                     Mgr 2 Remarks
                   </th>
                 </>
               ) : null}
-              <th className="min-w-[180px] print-col-medium px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
+              <th className="min-w-45 print-col-medium px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200">
                 Attachments
               </th>
             </tr>
@@ -1611,7 +1588,7 @@ export default function SubmissionDetailView({
                     <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
                       <p
                         className={cn(
-                          "max-w-[450px] break-words whitespace-pre-wrap text-xs leading-snug",
+                          "max-w-112.5 wrap-break-word whitespace-pre-wrap text-xs leading-snug",
                           needsMark
                             ? "font-semibold text-red-800 dark:text-red-200"
                             : "text-slate-800 dark:text-slate-200",
@@ -1645,7 +1622,7 @@ export default function SubmissionDetailView({
                       {scored ? (
                         questionSelfAssessmentEnabled ? (
                           answer?.remarks?.trim() ? (
-                            <p className="whitespace-pre-wrap break-words">
+                            <p className="whitespace-pre-wrap wrap-break-word">
                               {answer.remarks}
                             </p>
                           ) : (
@@ -1701,11 +1678,11 @@ export default function SubmissionDetailView({
                                 remarks: event.target.value,
                               })
                             }
-                            className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                            className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                             placeholder="Optional remarks"
                           />
                         ) : mgr1Display?.remarks?.trim() ? (
-                          <p className="whitespace-pre-wrap break-words text-xs text-slate-600 dark:text-slate-300">
+                          <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                             {mgr1Display.remarks}
                           </p>
                         ) : (
@@ -1757,11 +1734,11 @@ export default function SubmissionDetailView({
                                     remarks: event.target.value,
                                   })
                                 }
-                                className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                                 placeholder="Optional remarks"
                               />
                             ) : mgr2Display?.remarks?.trim() ? (
-                              <p className="whitespace-pre-wrap break-words text-xs text-slate-600 dark:text-slate-300">
+                              <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                 {mgr2Display.remarks}
                               </p>
                             ) : (
