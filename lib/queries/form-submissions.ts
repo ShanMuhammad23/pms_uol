@@ -319,7 +319,7 @@ function mapSubmissionRow(
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: row.entity_name,
     parentEntityName: row.parent_entity_name,
-    orgLevel1Name: row.org_level_1_name,
+    orgLevel1Name: row.org_level_1_name ?? row.parent_entity_name,
     orgLevel2Name: row.org_level_2_name,
     status: row.status,
     managerLevel: row.manager_level != null ? Number(row.manager_level) : null,
@@ -637,7 +637,13 @@ export async function listFormSubmissions(
          WHEN p1_cat.code = 'C1' THEN p1.name
          WHEN p2_cat.code = 'C1' THEN p2.name
          WHEN p3_cat.code = 'C1' THEN p3.name
-         ELSE NULL
+         -- C2 departments sometimes hang directly under C0 (no C1 faculty).
+         -- Fall back to the C0 ancestor, then the immediate parent / self.
+         WHEN ent_cat.code = 'C0' THEN ent.name
+         WHEN p1_cat.code = 'C0' THEN p1.name
+         WHEN p2_cat.code = 'C0' THEN p2.name
+         WHEN p3_cat.code = 'C0' THEN p3.name
+         ELSE COALESCE(p1.name, ent.name)
        END AS org_level_1_name,
        CASE
          WHEN ent_cat.code = 'C2' THEN ent.name

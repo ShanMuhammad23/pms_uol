@@ -315,8 +315,10 @@ export function orgLevelsFromEntityId(
   let org1 = "";
   let org2 = "";
 
+  let org0 = "";
   while (current) {
     if (current.categoryCode === "C1") org1 = String(current.id);
+    if (current.categoryCode === "C0" && !org0) org0 = String(current.id);
     if (current.categoryCode === "C2") org2 = String(current.id);
     current =
       current.parentEntityId != null
@@ -324,7 +326,15 @@ export function orgLevelsFromEntityId(
         : null;
   }
 
-  if (org1 || org2) return { org1, org2 };
+  if (!org1) org1 = org0;
+  if (org1 || org2) {
+    if (!org1) {
+      const entity = byId.get(entityId);
+      if (entity?.parentEntityId) org1 = String(entity.parentEntityId);
+      else if (entity) org1 = String(entity.id);
+    }
+    return { org1, org2 };
+  }
 
   const entity = byId.get(entityId);
   if (!entity) return { org1: "", org2: "" };

@@ -37,7 +37,7 @@ export interface FormSubmissionListItem {
   entityId: number | null;
   entityName: string | null;
   parentEntityName: string | null;
-  /** Entity with category code C1 on the assignment chain (self or ancestor). */
+  /** C1 ancestor when present; otherwise C0 / parent entity on the assignment chain. */
   orgLevel1Name: string | null;
   /** Entity with category code C2 on the assignment chain (self or ancestor). */
   orgLevel2Name: string | null;
@@ -158,7 +158,7 @@ export interface FormSubmissionDetail {
   templateTitle: string | null;
   templateCode: string | null;
   templateDescription: string | null;
-  /** Entity with category code C1 on the assignment chain (self or ancestor). */
+  /** C1 ancestor when present; otherwise C0 / parent entity on the assignment chain. */
   orgLevel1Name: string | null;
   /** Entity with category code C2 on the assignment chain (self or ancestor). */
   orgLevel2Name: string | null;

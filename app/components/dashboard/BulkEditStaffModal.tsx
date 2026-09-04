@@ -47,6 +47,8 @@ type FieldKey =
   | "qualificationSubject"
   | "qualificationInstitute"
   | "qualificationCountry"
+  | "currentSalary"
+  | "previousSalary"
   | "creditHrsErpScoreAdj"
   | "pubOricScoreAdj"
   | "qecScoreAdj"
@@ -66,6 +68,8 @@ const TEXT_FIELDS: { key: FieldKey; label: string; placeholder: string }[] = [
 ];
 
 const NUMBER_FIELDS: { key: FieldKey; label: string; placeholder: string; step?: string }[] = [
+  { key: "currentSalary", label: "Current Salary", placeholder: "e.g. 85000", step: "1" },
+  { key: "previousSalary", label: "Salary (Cycle Start)", placeholder: "e.g. 80000", step: "1" },
   { key: "qualificationYear", label: "Year", placeholder: "Enter year", step: "1" },
   { key: "creditHrsErpScoreAdj", label: "CH ADJ", placeholder: "e.g. 0", step: "1" },
   { key: "pubOricScoreAdj", label: "ORIC ADJ", placeholder: "e.g. 0", step: "1" },
@@ -286,6 +290,8 @@ export function BulkEditStaffModal({
           ...(fields.qualificationSubject != null ? { qualificationSubject: fields.qualificationSubject as string } : {}),
           ...(fields.qualificationInstitute != null ? { qualificationInstitute: fields.qualificationInstitute as string } : {}),
           ...(fields.qualificationCountry != null ? { qualificationCountry: fields.qualificationCountry as string } : {}),
+          ...(fields.currentSalary != null ? { currentSalary: fields.currentSalary as number } : {}),
+          ...(fields.previousSalary != null ? { previousSalary: fields.previousSalary as number } : {}),
           ...(fields.creditHrsErpScoreAdj != null ? { creditHrsErpScoreAdj: fields.creditHrsErpScoreAdj as number } : {}),
           ...(fields.pubOricScoreAdj != null ? { pubOricScoreAdj: fields.pubOricScoreAdj as number } : {}),
           ...(fields.qecScoreAdj != null ? { qecScoreAdj: fields.qecScoreAdj as number } : {}),

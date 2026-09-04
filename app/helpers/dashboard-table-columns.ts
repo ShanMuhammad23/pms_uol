@@ -212,6 +212,13 @@ function formatNumber(value: number | string | null | undefined, digits = 2): st
   return Number.isInteger(num) ? String(num) : num.toFixed(digits);
 }
 
+function formatWholeCurrency(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const num = Number(value);
+  if (Number.isNaN(num)) return "—";
+  return Math.round(num).toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
+
 function getAdjustedScore(row: FormSubmissionListItem): number | null {
   return sharedGetAdjustedScore(row);
 }
@@ -501,7 +508,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   },
   remarksEvaluation: {
     id: "remarksEvaluation",
-    label: "Remarks Evaluation",
+    label: "Sal. Change Remarks",
     width: 220,
     wrap: true,
     getValue: (row) => formatNullable(row.remarksEvaluation),
@@ -511,14 +518,14 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     label: "Current Sal",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(row.currentSalary),
+    getValue: (row) => formatWholeCurrency(row.currentSalary),
   },
   previousSalary: {
     id: "previousSalary",
     label: "Salary(Cycle Start)",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(row.previousSalary),
+    getValue: (row) => formatWholeCurrency(row.previousSalary),
   },
   salaryDiff: {
     id: "salaryDiff",

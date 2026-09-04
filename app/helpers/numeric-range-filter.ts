@@ -49,7 +49,7 @@ export function parseNumericRangeParam(
 
 export function parseNumericCell(cellValue: string): number | null {
   if (cellValue === "—" || !cellValue) return null;
-  const num = Number(cellValue);
+  const num = Number(cellValue.replace(/,/g, ""));
   return Number.isNaN(num) ? null : num;
 }
 

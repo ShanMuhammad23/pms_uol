@@ -155,7 +155,16 @@ export function matchesMasterFiltersExcluding(
       return false;
     }
 
-    if (!selected.includes(column.getValue(submission))) {
+    const cellValue = column.getValue(submission);
+    if (column.numeric === true) {
+      const cellNum = parseNumericCell(cellValue);
+      const selectedMatch = selected.some(
+        (value) => parseNumericCell(value) === cellNum,
+      );
+      if (!selectedMatch) {
+        return false;
+      }
+    } else if (!selected.includes(cellValue)) {
       return false;
     }
   }

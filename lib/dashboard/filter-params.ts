@@ -43,6 +43,35 @@ function serializeCsv(values: Array<string | number> | null | undefined): string
   return values.map(String).join(",");
 }
 
+/**
+ * Master-filter values can contain commas (e.g. Current Salary "30,000").
+ * JSON keeps each value intact through URLSearchParams; legacy CSV is still
+ * accepted when reading older query strings.
+ */
+function serializeMasterMultiSelection(selected: string[]): string {
+  return JSON.stringify(selected);
+}
+
+function parseMasterMultiSelection(raw: string | null): string[] | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === "") return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((item) => typeof item === "string")
+      ) {
+        return parsed;
+      }
+    } catch {
+      // Fall through to legacy comma-separated parsing.
+    }
+  }
+  return parseCsv(trimmed) ?? [];
+}
+
 export function emptyDashboardFilterParams(): DashboardFilterParams {
   return {
     searchQuery: "",
@@ -125,7 +154,7 @@ export function parseMasterFilterParams(
   for (const column of MASTER_FILTER_MULTI_COLUMNS) {
     const raw = searchParams.get(`mfm_${column.id}`);
     if (raw == null) continue;
-    multi[column.id] = parseCsv(raw) ?? [];
+    multi[column.id] = parseMasterMultiSelection(raw) ?? [];
   }
 
   for (const column of MASTER_FILTER_NUMERIC_COLUMNS) {
@@ -150,7 +179,7 @@ export function appendMasterFilterParams(
 
   for (const [columnId, selected] of Object.entries(filters.multi)) {
     if (selected === undefined || selected === null) continue;
-    params.set(`mfm_${columnId}`, selected.join(","));
+    params.set(`mfm_${columnId}`, serializeMasterMultiSelection(selected));
   }
 
   for (const [columnId, range] of Object.entries(filters.numeric)) {
