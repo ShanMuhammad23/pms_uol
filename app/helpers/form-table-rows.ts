@@ -243,7 +243,7 @@ export function formatSectionLabel(row: FormTableRow): string {
   if (row.isOpenAssessment) {
     const budget = row.openAssessmentTotalMarks;
     return budget > 0
-      ? `${base}  (Open Assessment — Budget: ${budget})`
+      ? `${base} `
       : `${base}  (Open Assessment)`;
   }
 
