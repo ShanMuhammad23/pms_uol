@@ -36,6 +36,7 @@ import {
   formatScoreValue,
   resolveDisplayedAnswerPoints,
 } from "@/app/helpers/form-rating-scoring";
+import { toast } from "react-hot-toast";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
 
@@ -65,6 +66,20 @@ function clampScore(value: string, maxMarks: number): string {
   if (parsed < 0) return "0";
   if (parsed > maxMarks) return String(maxMarks);
   return value;
+}
+
+function missingBulkScoreMessage(
+  missingCount: number,
+  ratingBased: boolean,
+): string {
+  if (ratingBased) {
+    return missingCount === 1
+      ? "Select a rating for the highlighted employee before continuing."
+      : `Select a rating for ${missingCount} highlighted employees before continuing.`;
+  }
+  return missingCount === 1
+    ? "Enter a score for the highlighted employee before continuing. A mark of 0 is allowed."
+    : `Enter a score for ${missingCount} highlighted employees before continuing. A mark of 0 is allowed.`;
 }
 
 function formatDate(iso: string | null): string {
@@ -381,11 +396,17 @@ export default function BulkAssessmentReview({
       if (entries.length === 0) return;
       return saveBulkReviewQuestionScores(currentQuestion.questionId, entries);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (result) {
+        toast.success("Scores saved.");
+      }
       // Invalidate question data to refetch saved scores
       void queryClient.invalidateQueries({
         queryKey: ["bulk-review-questions", selectedIdArray],
       });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to save scores.");
     },
   });
 
@@ -394,21 +415,29 @@ export default function BulkAssessmentReview({
     mutationFn: () => finishBulkReview(selectedIdArray),
     onSuccess: (result) => {
       setFinishResult(result);
+      const approvedCount = result.approved.length;
+      const skippedCount = result.skipped.length;
+      if (skippedCount > 0) {
+        toast.error(
+          `${approvedCount} approved, ${skippedCount} skipped. Check the summary for details.`,
+        );
+      } else {
+        toast.success(
+          `${approvedCount} submission${approvedCount !== 1 ? "s" : ""} approved.`,
+        );
+      }
       void queryClient.invalidateQueries({
         queryKey: ["bulk-review-queue", userId],
       });
     },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to finish the review.",
+      );
+    },
   });
 
   // --- Navigation ---
-  const goNext = useCallback(() => {
-    if (saveMutation.isPending) return;
-    saveMutation.mutate();
-    if (currentQuestionIdx < totalQuestions - 1) {
-      setCurrentQuestionIdx((idx) => idx + 1);
-    }
-  }, [saveMutation, currentQuestionIdx, totalQuestions]);
-
   const goPrev = useCallback(() => {
     if (currentQuestionIdx > 0) {
       setCurrentQuestionIdx((idx) => idx - 1);
@@ -478,6 +507,41 @@ export default function BulkAssessmentReview({
     return missing;
   }, [currentQuestion, drafts]);
 
+  const currentQuestionIsRating = Boolean(
+    currentQuestion?.ratingBased && currentQuestion.ratingScale,
+  );
+
+  const goNext = useCallback(() => {
+    if (saveMutation.isPending) return;
+    if (currentQuestion?.isRequired && missingScores.size > 0) {
+      toast.error(
+        missingBulkScoreMessage(missingScores.size, currentQuestionIsRating),
+      );
+      return;
+    }
+    saveMutation.mutate();
+    if (currentQuestionIdx < totalQuestions - 1) {
+      setCurrentQuestionIdx((idx) => idx + 1);
+    }
+  }, [
+    saveMutation,
+    currentQuestion,
+    currentQuestionIsRating,
+    missingScores.size,
+    currentQuestionIdx,
+    totalQuestions,
+  ]);
+
+  const handleFinishClick = useCallback(() => {
+    if (currentQuestion?.isRequired && missingScores.size > 0) {
+      toast.error(
+        missingBulkScoreMessage(missingScores.size, currentQuestionIsRating),
+      );
+      return;
+    }
+    setFinishDialogOpen(true);
+  }, [currentQuestion, currentQuestionIsRating, missingScores.size]);
+
   /* -------------------------------------------------------------------------- */
   /* Render                                                                      */
   /* -------------------------------------------------------------------------- */
@@ -505,7 +569,7 @@ export default function BulkAssessmentReview({
         onUpdateDraft={updateDraft}
         onPrev={goPrev}
         onNext={goNext}
-        onFinish={() => setFinishDialogOpen(true)}
+        onFinish={handleFinishClick}
         onFinishConfirm={handleFinishConfirm}
         onFinishClose={handleFinishClose}
         onBackToList={handleBackToList}
@@ -1531,7 +1595,12 @@ function WorkspaceView({
           {/* Validation warning */}
           {missingScores.size > 0 ? (
             <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-              {missingScores.size} submission{missingScores.size !== 1 ? "s" : ""} missing a manager score. Please fill in all scores before continuing.
+              {missingBulkScoreMessage(
+                missingScores.size,
+                Boolean(
+                  currentQuestion.ratingBased && currentQuestion.ratingScale,
+                ),
+              )}
             </p>
           ) : null}
         </div>

@@ -171,7 +171,7 @@ export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
   col("quartile", "Quartile", "performance", "readonly", 110),
   col("remarksEvaluation", "Remarks Evaluation", "performance", "readonly", 200),
   col("currentSalary", "Current Salary", "compensation", "number", 120, true),
-  col("previousSalary", "Prev Salary", "compensation", "number", 120, true),
+  col("previousSalary", "Salary (Cycle Start)", "compensation", "number", 120, true),
   col("salaryDiff", "Difference", "compensation", "readonly", 100),
   col("applicableSalaryForIncrement", "Applicable Sal", "compensation", "readonly", 120),
   col("applicableMatrix", "Applicable Matrix", "compensation", "readonly", 150),
@@ -180,8 +180,8 @@ export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
   col("incrementAdjusted", "Increment Adjustment", "compensation", "readonly", 150),
   col("revisedSalary", "Revised Salary", "compensation", "readonly", 120),
   col("revisedSalaryRo", "Revised Salary RO", "compensation", "readonly", 130),
-  col("remarksCompensation", "Salary remarks", "compensation", "textarea", 200, true),
-  col("hodReviewComments", "HOD Remarks", "compensation", "readonly", 200),
+  col("remarksCompensation", "Salary Change Remarks", "compensation", "textarea", 200, true),
+  col("hodReviewComments", "Remarks Perf.", "compensation", "readonly", 200),
 ];
 
 export const BULK_UPLOAD_COLUMN_GROUPS: readonly BulkUploadColumnGroup[] = [

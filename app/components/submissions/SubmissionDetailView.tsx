@@ -23,11 +23,13 @@ import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   formatScoreValue,
   getQuestionRatingScale,
+  incompleteRequiredReviewMessage,
   parseDraftScoreAnswer,
   resolveDisplayedAnswerPoints,
   resolveDisplayedRatingValue,
   usesRatingScore,
 } from "@/app/helpers/form-rating-scoring";
+import { toast } from "react-hot-toast";
 import {
   AnswerScoreReadout,
   RatingScoreField,
@@ -68,7 +70,6 @@ import {
   AlertTriangle,
   Building2,
   CalendarDays,
-  CheckCircle2,
   Gauge,
   Network,
   RotateCcw,
@@ -358,7 +359,7 @@ function buildManagerDraftMap(
     const manager1 = manager1Map.get(question.id);
 
     // Prefill from the previous stage so the manager only changes scores
-    // they disagree with: Manager 1 ← self-assessment; Manager 2 ← Manager 1,
+    // they disagree with: Manager 1 ? self-assessment; Manager 2 ? Manager 1,
     // then self-assessment. HOD-only questions have no employee answer.
     const fallbackSource =
       managerLevel === 2 ? (manager1 ?? employee) : (employee ?? manager1);
@@ -615,8 +616,6 @@ export default function SubmissionDetailView({
   const canEditQec = isAdminRole || canEditModule("QEC_ADJUSTMENTS");
   const canViewAnyAdjustment =
     isAdminRole || canViewCreditHours || canViewOric || canViewQec;
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [saveMessageIsError, setSaveMessageIsError] = useState(false);
   const [incompleteQuestionIds, setIncompleteQuestionIds] = useState<Set<number>>(
     () => new Set(),
   );
@@ -699,8 +698,7 @@ export default function SubmissionDetailView({
       return saveManagerReview(submissionId, answers, overallRemarks);
     },
     onSuccess: (result) => {
-      setSaveMessage("Manager review saved.");
-      setSaveMessageIsError(false);
+      toast.success("Manager review saved.");
       setIncompleteQuestionIds(new Set());
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
@@ -735,8 +733,7 @@ export default function SubmissionDetailView({
       }
     },
     onError: (mutationError: Error) => {
-      setSaveMessage(mutationError.message);
-      setSaveMessageIsError(true);
+      toast.error(mutationError.message);
     },
   });
 
@@ -760,8 +757,7 @@ export default function SubmissionDetailView({
       return approveManagerReview(submissionId);
     },
     onSuccess: (result) => {
-      setSaveMessage("Manager review approved.");
-      setSaveMessageIsError(false);
+      toast.success("Manager review approved.");
       setIncompleteQuestionIds(new Set());
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
@@ -778,8 +774,7 @@ export default function SubmissionDetailView({
       invalidateStaffListingQueries(queryClient);
     },
     onError: (mutationError: Error) => {
-      setSaveMessage(mutationError.message);
-      setSaveMessageIsError(true);
+      toast.error(mutationError.message);
     },
   });
 
@@ -797,8 +792,7 @@ export default function SubmissionDetailView({
       return saveHrReview(submissionId, answers);
     },
     onSuccess: (result) => {
-      setSaveMessage("HR review saved.");
-      setSaveMessageIsError(false);
+      toast.success("HR review saved.");
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         const managerLevel =
@@ -820,8 +814,7 @@ export default function SubmissionDetailView({
       );
     },
     onError: (mutationError: Error) => {
-      setSaveMessage(mutationError.message);
-      setSaveMessageIsError(true);
+      toast.error(mutationError.message);
     },
   });
 
@@ -838,12 +831,11 @@ export default function SubmissionDetailView({
       return approveHrCalibration(submissionId);
     },
     onSuccess: (result) => {
-      setSaveMessage(
+      toast.success(
         result.status === "APPROVED"
           ? "Approved successfully."
           : "HR review approved. Sent to Board for final approval.",
       );
-      setSaveMessageIsError(false);
       queryClient.setQueryData(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         return {
@@ -858,16 +850,14 @@ export default function SubmissionDetailView({
       invalidateStaffListingQueries(queryClient);
     },
     onError: (mutationError: Error) => {
-      setSaveMessage(mutationError.message);
-      setSaveMessageIsError(true);
+      toast.error(mutationError.message);
     },
   });
 
   const resetFormMutation = useMutation({
     mutationFn: () => resetFormSubmission(submissionId),
     onSuccess: (result) => {
-      setSaveMessage("Assessment form has been reset successfully.");
-      setSaveMessageIsError(false);
+      toast.success("Assessment form has been reset successfully.");
       // Force a full server refetch instead of manually patching the cache.
       // The FormSubmissionDetail type has 40+ score/adjustment/remark fields
       // — manually setting each one in setQueryData is error-prone and was
@@ -891,8 +881,7 @@ export default function SubmissionDetailView({
       );
     },
     onError: (mutationError: Error) => {
-      setSaveMessage(mutationError.message);
-      setSaveMessageIsError(true);
+      toast.error(mutationError.message);
     },
   });
 
@@ -1002,8 +991,6 @@ export default function SubmissionDetailView({
     );
     setManager1OverallRemarks(initialOverallRemarks.manager1);
     setManager2OverallRemarks(initialOverallRemarks.manager2);
-    setSaveMessage(null);
-    setSaveMessageIsError(false);
     setIncompleteQuestionIds(new Set());
   }, [initialDraftsSnapshot, initialOverallRemarks]);
 
@@ -1167,37 +1154,44 @@ export default function SubmissionDetailView({
       }
       const next = new Set(current);
       next.delete(questionId);
-      if (next.size === 0) {
-        setSaveMessage(null);
-        setSaveMessageIsError(false);
-      }
       return next;
     });
   };
 
-  const handleApproveReview = () => {
+  const assertRequiredScoresFilled = (action: "save" | "approve"): boolean => {
     const missing = collectIncompleteRequiredQuestionIds(
       data.questions,
       managerDrafts,
       data.ratingBased,
       data.ratingScales ?? [],
     );
-    if (missing.length > 0) {
-      setIncompleteQuestionIds(new Set(missing));
-      setSaveMessageIsError(true);
-      setSaveMessage(
-        missing.length === 1
-          ? "Enter a score for the highlighted mandatory question. A mark of 0 is allowed."
-          : `Enter a score for ${missing.length} highlighted mandatory questions. A mark of 0 is allowed.`,
-      );
-      requestAnimationFrame(() => {
-        document
-          .getElementById(`manager-question-${missing[0]}`)
-          ?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
+    if (missing.length === 0) {
+      setIncompleteQuestionIds(new Set());
+      return true;
+    }
+    setIncompleteQuestionIds(new Set(missing));
+    toast.error(
+      incompleteRequiredReviewMessage(missing.length, data.ratingBased, action),
+    );
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`manager-question-${missing[0]}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return false;
+  };
+
+  const handleSaveReview = () => {
+    if (!assertRequiredScoresFilled("save")) {
       return;
     }
-    setIncompleteQuestionIds(new Set());
+    saveMutation.mutate();
+  };
+
+  const handleApproveReview = () => {
+    if (!assertRequiredScoresFilled("approve")) {
+      return;
+    }
     approveMutation.mutate();
   };
 
@@ -1315,7 +1309,7 @@ export default function SubmissionDetailView({
                     </button>
                     <button
                       type="button"
-                      onClick={() => saveMutation.mutate()}
+                      onClick={handleSaveReview}
                       disabled={saveMutation.isPending || approveMutation.isPending}
                       className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-950/40"
                     >
@@ -1487,26 +1481,6 @@ export default function SubmissionDetailView({
               </button>
             </div>
           </div>
-        </div>
-      ) : null}
-
-      {saveMessage ? (
-        <div
-          role={saveMessageIsError ? "alert" : "status"}
-          aria-live="polite"
-          className={cn(
-            "no-print sticky top-0 z-20 flex items-start gap-3 border-b px-4 py-3 text-sm font-medium shadow-sm",
-            saveMessageIsError
-              ? "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
-              : "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
-          )}
-        >
-          {saveMessageIsError ? (
-            <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-          ) : (
-            <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
-          )}
-          <p className="min-w-0 flex-1">{saveMessage}</p>
         </div>
       ) : null}
 
@@ -1979,7 +1953,7 @@ export default function SubmissionDetailView({
                   Reset Assessment Form?
                 </h2>
                 <p className="text-xs font-medium uppercase tracking-wider text-red-500 dark:text-red-400">
-                  Danger Zone · This action cannot be undone
+                  Danger Zone — This action cannot be undone
                 </p>
               </div>
             </div>
