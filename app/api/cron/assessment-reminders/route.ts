@@ -1,20 +1,22 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { runAssessmentReminders } from "@/lib/services/assessment-reminders";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+/** Allow long SMTP batches when the caller awaits completion (?await=1). */
+export const maxDuration = 600;
 
 /**
  * GET/POST /api/cron/assessment-reminders
  *
- * Sends due assessment reminder emails:
- * - Employees: pending self-assessment (cooldown 48 hours)
- * - Managers: digest of pending direct assessments + unreviewed submissions
- *   (cooldown 3 days)
+ * Default: returns HTTP 202 immediately and sends emails in `after()` so the
+ * cron shell script does not time out on large batches (~300 recipients).
+ *
+ * Optional: `?await=1` waits for the full run and returns the result JSON
+ * (useful for debugging; needs a long curl --max-time).
  *
  * Auth: `Authorization: Bearer <CRON_SECRET>`
- * Schedule this daily (or hourly). Cooldown columns prevent same-day resends.
  */
 
 function authorizeCron(request: Request): boolean {
@@ -42,21 +44,52 @@ function authorizeCron(request: Request): boolean {
   }
 }
 
+function wantsAwait(request: Request): boolean {
+  const url = new URL(request.url);
+  const value = url.searchParams.get("await");
+  return value === "1" || value === "true";
+}
+
 async function handle(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const result = await runAssessmentReminders();
-    return NextResponse.json({ ok: true, ...result });
-  } catch (error) {
-    console.error("[cron/assessment-reminders] failed:", error);
-    return NextResponse.json(
-      { ok: false, error: "Assessment reminder run failed." },
-      { status: 500 },
-    );
+  if (wantsAwait(request)) {
+    console.info("[cron/assessment-reminders] running synchronously (?await=1)");
+    try {
+      const result = await runAssessmentReminders();
+      return NextResponse.json({ ok: true, ...result });
+    } catch (error) {
+      console.error("[cron/assessment-reminders] failed:", error);
+      return NextResponse.json(
+        { ok: false, error: "Assessment reminder run failed." },
+        { status: 500 },
+      );
+    }
   }
+
+  console.info(
+    "[cron/assessment-reminders] accepted — sending in background via after()",
+  );
+
+  after(async () => {
+    try {
+      await runAssessmentReminders();
+    } catch (error) {
+      console.error("[cron/assessment-reminders] background run failed:", error);
+    }
+  });
+
+  return NextResponse.json(
+    {
+      ok: true,
+      accepted: true,
+      message:
+        "Assessment reminders accepted. Watch pm2 logs for send progress/completion.",
+    },
+    { status: 202 },
+  );
 }
 
 export async function GET(request: Request) {

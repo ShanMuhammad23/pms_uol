@@ -39,6 +39,9 @@ export function getTransporter(): Transporter {
       user: config.user,
       pass: config.password,
     },
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
     // Timeout to prevent hanging background tasks when SMTP server is slow
     // or unreachable. These are fire-and-forget notifications, so a timeout
     // just means the email is skipped — the workflow still succeeds.
