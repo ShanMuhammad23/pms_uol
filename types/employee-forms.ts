@@ -43,6 +43,12 @@ export interface EmployeeFormAnswerRecord {
   ratingValue?: number | null;
   remarks: string | null;
   attachments: EmployeeFormAnswerAttachment[];
+  /** Authored question text (for open-assessment answers where questionId is 0). */
+  authoredQuestionText?: string | null;
+  /** Authored question max marks (for open-assessment answers). */
+  authoredTotalMarks?: number;
+  /** Open-assessment section ID (for open-assessment answers). */
+  openSectionId?: number | null;
 }
 
 export interface EmployeeFormDetail {
@@ -51,6 +57,8 @@ export interface EmployeeFormDetail {
   status: EmployeeFormStatus;
   submittedAt: string | null;
   answers: EmployeeFormAnswerRecord[];
+  /** Authored answers for open-assessment sections (questionId = 0). */
+  authoredAnswers: EmployeeFormAnswerRecord[];
   rawScore: number;
   maxRawScore: number;
   selfAssessmentEnabled: boolean;
@@ -76,6 +84,12 @@ export interface EmployeeFormAnswerInput {
   pointsEarned?: number;
   ratingValue?: number | null;
   remarks?: string | null;
+  /** Authored question text (for open-assessment answers; questionId = 0). */
+  authoredQuestionText?: string | null;
+  /** Authored question max marks (for open-assessment answers). */
+  authoredTotalMarks?: number;
+  /** Open-assessment section ID (for open-assessment answers). */
+  openSectionId?: number | null;
 }
 
 export interface SaveEmployeeFormInput {
@@ -88,6 +102,12 @@ export interface ManagerReviewAnswerInput {
   pointsEarned?: number;
   ratingValue?: number | null;
   remarks?: string | null;
+  /** Authored question text (for open-assessment answers; questionId = 0). */
+  authoredQuestionText?: string | null;
+  /** Authored question max marks (for open-assessment answers). */
+  authoredTotalMarks?: number;
+  /** Open-assessment section ID (for open-assessment answers). */
+  openSectionId?: number | null;
 }
 
 export interface SaveManagerReviewInput {

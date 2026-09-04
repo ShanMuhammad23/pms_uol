@@ -12,6 +12,29 @@ import {
   PERFORMANCE_RATINGS,
 } from "@/types/forms";
 
+function validateOpenAssessmentSection(
+  section: FormTemplateInput["sections"][number],
+  pathPrefix: string,
+): string | null {
+  if (section.isOpenAssessment) {
+    if (
+      section.openAssessmentTotalMarks === undefined ||
+      section.openAssessmentTotalMarks === null ||
+      Number.isNaN(Number(section.openAssessmentTotalMarks))
+    ) {
+      return `${pathPrefix}: total marks budget is required for open-assessment sections.`;
+    }
+    if (Number(section.openAssessmentTotalMarks) <= 0) {
+      return `${pathPrefix}: total marks budget must be greater than 0 for open-assessment sections.`;
+    }
+    if (section.questions.length > 0 || section.subsections.length > 0) {
+      return `${pathPrefix}: open-assessment sections cannot contain pre-defined questions or subsections.`;
+    }
+    return null;
+  }
+  return null;
+}
+
 function validateQuestion(
   question: QuestionInput,
   pathPrefix: string,
@@ -159,6 +182,18 @@ export function validateFormTemplateInput(
 
     if (!section.title?.trim()) {
       return `Section ${sectionIndex + 1}: title is required.`;
+    }
+
+    // Open-assessment sections: validate budget, skip question validation.
+    if (section.isOpenAssessment) {
+      const openError = validateOpenAssessmentSection(
+        section,
+        `Section ${sectionIndex + 1}`,
+      );
+      if (openError) {
+        return openError;
+      }
+      continue;
     }
 
     for (let questionIndex = 0; questionIndex < section.questions.length; questionIndex += 1) {

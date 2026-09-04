@@ -309,6 +309,8 @@ function mapRecordToState(record: FormTemplateRecord) {
       questions: mappedSectionQuestions,
       subsections: mappedSubsections,
       layout: sectionLayout,
+      isOpenAssessment: section.isOpenAssessment ?? false,
+      openAssessmentTotalMarks: section.openAssessmentTotalMarks ?? 0,
     };
   });
   const mappedQuestions = record.questions.map(mapQ);
@@ -1796,8 +1798,9 @@ function SectionCard({
             </h4>
           )}
           <p className="text-xs text-indigo-600/70 dark:text-indigo-300/70">
-            {totalQuestions} question{totalQuestions !== 1 ? "s" : ""}
-            {section.subsections.length > 0 ? ` · ${section.subsections.length} subsection${section.subsections.length !== 1 ? "s" : ""}` : ""}
+            {section.isOpenAssessment
+              ? `Open Assessment · Budget: ${section.openAssessmentTotalMarks ?? 0} marks`
+              : `${totalQuestions} question${totalQuestions !== 1 ? "s" : ""}${section.subsections.length > 0 ? ` · ${section.subsections.length} subsection${section.subsections.length !== 1 ? "s" : ""}` : ""}`}
           </p>
         </div>
 
@@ -1844,6 +1847,69 @@ function SectionCard({
             </p>
           )}
 
+          {/* Open Assessment toggle */}
+          <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5 dark:border-white/10 dark:bg-slate-800/30">
+            <label className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+              <input
+                type="checkbox"
+                checked={Boolean(section.isOpenAssessment)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    onUpdate({
+                      isOpenAssessment: true,
+                      questions: [],
+                      subsections: [],
+                      layout: [],
+                      openAssessmentTotalMarks: section.openAssessmentTotalMarks ?? 100,
+                    });
+                  } else {
+                    onUpdate({
+                      isOpenAssessment: false,
+                      openAssessmentTotalMarks: 0,
+                    });
+                  }
+                }}
+                className="size-4 rounded border-slate-300 text-primary focus-visible:ring-2 focus-visible:ring-primary dark:border-white/20 dark:bg-slate-800"
+              />
+              Open Assessment Section
+              <span className="font-normal text-foreground/50">
+                (employee/manager writes the questions at fill time)
+              </span>
+            </label>
+            {section.isOpenAssessment ? (
+              <div className="mt-2.5">
+                <label className="mb-1 block text-xs font-medium text-foreground/70">
+                  Total Marks Budget
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={section.openAssessmentTotalMarks ?? 0}
+                  onChange={(e) =>
+                    onUpdate({
+                      openAssessmentTotalMarks: Number(e.target.value) || 0,
+                    })
+                  }
+                  className="h-8 w-32 rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
+                  placeholder="e.g. 100"
+                />
+                <p className="mt-1.5 text-xs text-foreground/50">
+                  The employee or manager will split this budget across their own
+                  questions. The sum of all question marks must equal this budget.
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          {section.isOpenAssessment ? (
+            <div className="rounded-lg border border-dashed border-amber-300/80 bg-amber-50/40 px-4 py-6 text-center text-sm text-amber-700 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300">
+              This is an open-assessment section. Questions will be authored by the
+              employee (self-assessment) or manager (direct assessment) at fill time.
+              No questions need to be created here.
+            </div>
+          ) : (
+            <>
           {/* Interleaved section children — subsections and direct questions
               rendered in creation order using the section layout. */}
           <div
@@ -1985,6 +2051,8 @@ function SectionCard({
               Add Question
             </button>
           </div>
+            </>
+          )}
         </div>
       )}
     </div>

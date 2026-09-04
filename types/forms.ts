@@ -208,6 +208,21 @@ export interface FormSubsectionInput {
 }
 
 /**
+ * Open Assessment section: HR sets a total marks budget. The employee (self
+ * assessment) or manager (direct assessment) authors the questions at fill
+ * time and splits the budget across them. No form_questions rows are created
+ * for an open-assessment section.
+ */
+export interface OpenAssessmentSectionInput {
+  id?: number;
+  clientId: string;
+  title: string;
+  sortOrder: number;
+  isOpenAssessment: true;
+  openAssessmentTotalMarks: number;
+}
+
+/**
  * Ordered layout item within a section — defines the interleaved display
  * order of subsections and direct questions. Mirrors the root-level layout
  * concept (FormRootLayoutItem) but for section children.
@@ -229,6 +244,10 @@ export interface FormSectionInput {
    * subsections-first then questions (legacy behavior).
    */
   layout?: FormSectionLayoutInputItem[];
+  /** When true, this section is an open-assessment section (no pre-defined questions). */
+  isOpenAssessment?: boolean;
+  /** HR's marks budget for the open-assessment section. Only used when isOpenAssessment is true. */
+  openAssessmentTotalMarks?: number;
 }
 
 export interface FormSubsectionRecord {
@@ -258,6 +277,10 @@ export interface FormSectionRecord {
    * subsections-first then questions (legacy behavior).
    */
   layout?: FormSectionLayoutRecordItem[];
+  /** When true, this section is an open-assessment section (no pre-defined questions). */
+  isOpenAssessment?: boolean;
+  /** HR's marks budget for the open-assessment section. Only used when isOpenAssessment is true. */
+  openAssessmentTotalMarks?: number;
 }
 
 export interface IncrementMatrixInput {
@@ -463,6 +486,8 @@ export function createEmptySection(sortOrder: number): FormSectionInput {
     subsections: [],
     questions: [],
     layout: [],
+    isOpenAssessment: false,
+    openAssessmentTotalMarks: 0,
   };
 }
 
@@ -730,6 +755,12 @@ export function countAllQuestions(
   let count = rootQuestions.length;
 
   for (const section of sections) {
+    if (section.isOpenAssessment) {
+      // Open-assessment sections count as 1 "question slot" for validation
+      // purposes (at least one scored item must exist on the form).
+      count += 1;
+      continue;
+    }
     count += section.questions.length;
     for (const subsection of section.subsections) {
       count += subsection.questions.length;
@@ -739,12 +770,22 @@ export function countAllQuestions(
   return count;
 }
 
+/** Returns true when the section is an open-assessment section. */
+export function isOpenAssessmentSection(
+  section: { isOpenAssessment?: boolean },
+): boolean {
+  return Boolean(section.isOpenAssessment);
+}
+
 export function flattenAllQuestions(
   template: Pick<FormTemplateRecord, "sections" | "questions">,
 ): QuestionRecord[] {
   const result: QuestionRecord[] = [...template.questions];
 
   for (const section of template.sections) {
+    if (section.isOpenAssessment) {
+      continue;
+    }
     result.push(...section.questions);
     for (const subsection of section.subsections) {
       result.push(...subsection.questions);
@@ -752,6 +793,13 @@ export function flattenAllQuestions(
   }
 
   return result;
+}
+
+/** Returns all open-assessment sections from a template. */
+export function getOpenAssessmentSections(
+  template: Pick<FormTemplateRecord, "sections">,
+): FormSectionRecord[] {
+  return template.sections.filter((s) => s.isOpenAssessment);
 }
 
 export function mapQuestionRecordToInput(

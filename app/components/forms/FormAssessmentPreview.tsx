@@ -396,7 +396,7 @@ export default function FormAssessmentPreview({
                   const { question } = row;
                   const isEvenRow = rowIdx % 2 === 0;
                   return (
-                    <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
+                    <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : row.isOpenAssessment ? `open-${row.sr}` : question!.id}>
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-slate-100 dark:bg-slate-800/60">
                           <td
@@ -417,7 +417,21 @@ export default function FormAssessmentPreview({
                           </td>
                         </tr>
                       ) : null}
-                      {row.isHeaderOnly ? (
+                      {row.isOpenAssessment ? (
+                        <tr className={cn(
+                          "align-top border-b border-slate-100 dark:border-slate-700/40",
+                          isEvenRow
+                            ? "bg-white dark:bg-slate-900/40"
+                            : "bg-slate-50/60 dark:bg-slate-800/20"
+                        )}>
+                          <td
+                            colSpan={headerColSpan}
+                            className="px-3 py-3 text-xs italic text-amber-700 dark:text-amber-300"
+                          >
+                            Open Assessment — questions are authored at fill time.
+                          </td>
+                        </tr>
+                      ) : row.isHeaderOnly ? (
                         <tr className="bg-teal-50/40 dark:bg-teal-950/10">
                           <td
                             colSpan={headerColSpan}

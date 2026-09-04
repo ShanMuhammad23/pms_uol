@@ -190,7 +190,7 @@ async function getAnswersForSubmission(
   filledById: number,
 ): Promise<EmployeeFormAnswerRecord[]> {
   const result = await db.query<{
-    question_id: string;
+    question_id: string | null;
     text_response: string | null;
     selected_option_id: string | null;
     points_earned: string;
@@ -201,7 +201,8 @@ async function getAnswersForSubmission(
             rating_value::text, remarks
      FROM appraisal_answers
      WHERE appraisal_id = $1
-       AND filled_by_id = $2`,
+       AND filled_by_id = $2
+       AND question_id IS NOT NULL`,
     [appraisalId, filledById],
   );
 
@@ -232,6 +233,47 @@ async function getAnswersForSubmission(
       attachments: attachmentsByQuestion.get(questionId) ?? [],
     };
   });
+}
+
+/**
+ * Fetch authored answers (open-assessment sections) for a given submission
+ * and reviewer. These rows have question_id = NULL and open_section_id set.
+ */
+export async function getAuthoredAnswersForSubmission(
+  appraisalId: number,
+  filledById: number,
+): Promise<EmployeeFormAnswerRecord[]> {
+  const result = await db.query<{
+    id: string;
+    text_response: string | null;
+    points_earned: string;
+    remarks: string | null;
+    authored_question_text: string | null;
+    authored_total_marks: string;
+    open_section_id: string | null;
+  }>(
+    `SELECT id, text_response, points_earned, remarks,
+            authored_question_text, authored_total_marks::text, open_section_id::text
+     FROM appraisal_answers
+     WHERE appraisal_id = $1
+       AND filled_by_id = $2
+       AND open_section_id IS NOT NULL
+     ORDER BY id ASC`,
+    [appraisalId, filledById],
+  );
+
+  return result.rows.map((row) => ({
+    questionId: 0,
+    textResponse: row.text_response,
+    selectedOptionId: null,
+    pointsEarned: Number(row.points_earned),
+    ratingValue: null,
+    remarks: row.remarks ?? null,
+    attachments: [],
+    authoredQuestionText: row.authored_question_text,
+    authoredTotalMarks: Number(row.authored_total_marks),
+    openSectionId: row.open_section_id ? Number(row.open_section_id) : null,
+  }));
 }
 
 function mapSubmissionRow(
@@ -1533,6 +1575,10 @@ export async function saveManagerReviewAnswers(
     ratingScales: options?.ratingScales ?? [],
   };
 
+  // Separate normal answers from authored (open-assessment) answers.
+  const normalAnswers = answers.filter((a) => a.questionId !== 0 && a.openSectionId == null);
+  const authoredAnswers = answers.filter((a) => a.openSectionId != null && a.questionId === 0);
+
   const validAnswers: Array<{
     questionId: number;
     pointsEarned: number;
@@ -1540,7 +1586,7 @@ export async function saveManagerReviewAnswers(
     remarks: string | null;
   }> = [];
 
-  for (const answer of answers) {
+  for (const answer of normalAnswers) {
     const question = questionById.get(answer.questionId);
     if (!question || !isScoredQuestion(question)) {
       continue;
@@ -1608,6 +1654,62 @@ export async function saveManagerReviewAnswers(
          updated_at = CURRENT_TIMESTAMP`,
       [appraisalId, questionIds, reviewerUserId, pointsArray, ratingArray, remarksArray],
     );
+  }
+
+  // Save authored answers for open-assessment sections.
+  // Strategy: delete existing authored rows for this appraisal + reviewer +
+  // the relevant open sections, then insert the new set.
+  if (authoredAnswers.length > 0) {
+    const openSectionIds = [...new Set(
+      authoredAnswers.map((a) => a.openSectionId!).filter(Boolean),
+    )];
+
+    if (openSectionIds.length > 0) {
+      await getDbClient().query(
+        `DELETE FROM appraisal_answers
+         WHERE appraisal_id = $1
+           AND filled_by_id = $2
+           AND open_section_id = ANY($3::bigint[])`,
+        [appraisalId, reviewerUserId, openSectionIds],
+      );
+    }
+
+    for (const authored of authoredAnswers) {
+      const questionText = (authored.authoredQuestionText ?? "").trim();
+      const totalMarks = Number(authored.authoredTotalMarks) || 0;
+      const pointsEarned = Number(authored.pointsEarned) || 0;
+      const remarks = authored.remarks?.trim() || null;
+      const sectionId = authored.openSectionId!;
+
+      if (!questionText && !totalMarks && !pointsEarned && !remarks) {
+        continue;
+      }
+
+      await getDbClient().query(
+        `INSERT INTO appraisal_answers (
+           appraisal_id,
+           question_id,
+           filled_by_id,
+           text_response,
+           selected_option_id,
+           points_earned,
+           rating_value,
+           remarks,
+           authored_question_text,
+           authored_total_marks,
+           open_section_id
+         ) VALUES ($1, NULL, $2, NULL, NULL, $3, NULL, $4, $5, $6, $7)`,
+        [
+          appraisalId,
+          reviewerUserId,
+          pointsEarned,
+          remarks,
+          questionText,
+          totalMarks,
+          sectionId,
+        ],
+      );
+    }
   }
 
   // Save overall remarks independently from question-level answers.
@@ -1887,7 +1989,7 @@ export async function getFormSubmissionById(
   const managerIds = [summary.manager1UserId, summary.manager2UserId].filter(
     (id): id is number => id != null && Number.isFinite(id),
   );
-  const [answers, managerAnswers, manager1Answers, manager2Answers, managerSapResult] =
+  const [answers, managerAnswers, manager1Answers, manager2Answers, managerSapResult, authoredAnswers, managerAuthoredAnswers] =
     await Promise.all([
       getAnswersForSubmission(id, employeeUserId),
       reviewerUserId != null
@@ -1907,6 +2009,10 @@ export async function getFormSubmissionById(
             [managerIds],
           )
         : Promise.resolve({ rows: [] as { id: string; employee_id: string }[] }),
+      getAuthoredAnswersForSubmission(id, employeeUserId),
+      reviewerUserId != null
+        ? getAuthoredAnswersForSubmission(id, reviewerUserId)
+        : Promise.resolve([]),
     ]);
 
   const managerSapByUserId = new Map(
@@ -2000,6 +2106,8 @@ export async function getFormSubmissionById(
     rootQuestions,
     questions,
     answers: hydrateAnswerPoints(answers, questions, ratingBased, ratingScales),
+    authoredAnswers,
+    managerAuthoredAnswers,
     managerAnswers: hydrateAnswerPoints(
       managerAnswers,
       questions,

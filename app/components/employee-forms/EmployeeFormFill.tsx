@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, Paperclip, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/app/components/auth/Button";
 import { RatingScoreField } from "@/app/components/forms/RatingScoreField";
@@ -25,6 +25,7 @@ import { fetchFormTemplate } from "@/lib/queries/forms-client";
 import type {
   EmployeeFormAnswerAttachment,
   EmployeeFormAnswerInput,
+  EmployeeFormAnswerRecord,
   EmployeeFormDetail,
 } from "@/types/employee-forms";
 import {
@@ -56,9 +57,14 @@ function buildPreviewDetail(template: FormTemplateRecord): EmployeeFormDetail {
   // Match the backend's calculateMaxRawScore: sum ALL scored questions
   // regardless of selfAssessmentEnabled or isRequired status. This ensures
   // the preview shows the same total as the live assessment flow.
-  const maxRawScore = flattenAllQuestions(template)
+  const templateMax = flattenAllQuestions(template)
     .filter((question) => Number(question.totalMarks) > 0)
     .reduce((sum, question) => sum + Number(question.totalMarks), 0);
+  // Include open-assessment section budgets in the max score.
+  const openBudget = template.sections
+    .filter((s) => s.isOpenAssessment)
+    .reduce((sum, s) => sum + Number(s.openAssessmentTotalMarks ?? 0), 0);
+  const maxRawScore = templateMax + openBudget;
 
   return {
     template,
@@ -66,6 +72,7 @@ function buildPreviewDetail(template: FormTemplateRecord): EmployeeFormDetail {
     status: "NOT_STARTED",
     submittedAt: null,
     answers: [],
+    authoredAnswers: [],
     rawScore: 0,
     maxRawScore,
     selfAssessmentEnabled: template.selfAssessmentEnabled,
@@ -89,6 +96,22 @@ type AnswerState = Record<
     attachments: EmployeeFormAnswerAttachment[];
   }
 >;
+
+/**
+ * Authored question state for an open-assessment section.
+ * Each entry represents one user-authored question with its text, total
+ * marks, self-awarded points, and remarks.
+ */
+interface AuthoredQuestionDraft {
+  /** Stable client-side id for React keys. */
+  clientId: string;
+  authoredQuestionText: string;
+  authoredTotalMarks: string;
+  pointsEarned: string;
+  remarks: string;
+}
+
+type AuthoredState = Record<number, AuthoredQuestionDraft[]>;
 
 function buildInitialAnswers(
   questions: Array<{ id: number }>,
@@ -124,8 +147,67 @@ function buildInitialAnswers(
   return map;
 }
 
-function toPayload(answers: AnswerState): EmployeeFormAnswerInput[] {
-  return Object.entries(answers)
+let authoredClientIdCounter = 0;
+function nextAuthoredClientId(): string {
+  authoredClientIdCounter += 1;
+  return `authored-${Date.now()}-${authoredClientIdCounter}`;
+}
+
+function buildInitialAuthoredAnswers(
+  template: FormTemplateRecord,
+  existingAuthored: EmployeeFormAnswerRecord[],
+): AuthoredState {
+  const state: AuthoredState = {};
+  const openSections = template.sections.filter((s) => s.isOpenAssessment);
+
+  for (const section of openSections) {
+    const sectionAnswers = existingAuthored.filter(
+      (a) => a.openSectionId === section.id,
+    );
+    state[section.id] = sectionAnswers.map((a) => ({
+      clientId: nextAuthoredClientId(),
+      authoredQuestionText: a.authoredQuestionText ?? "",
+      authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
+      pointsEarned: String(a.pointsEarned ?? 0),
+      remarks: a.remarks ?? "",
+    }));
+  }
+
+  return state;
+}
+
+function authoredStateToPayload(
+  authored: AuthoredState,
+): EmployeeFormAnswerInput[] {
+  const result: EmployeeFormAnswerInput[] = [];
+  for (const [sectionIdStr, drafts] of Object.entries(authored)) {
+    const openSectionId = Number(sectionIdStr);
+    for (const draft of drafts) {
+      const text = draft.authoredQuestionText.trim();
+      const totalMarks = Number(draft.authoredTotalMarks) || 0;
+      const points = draft.pointsEarned !== "" ? Number(draft.pointsEarned) : 0;
+      const remarks = draft.remarks.trim() || null;
+      if (!text && !totalMarks && !points && !remarks) {
+        continue;
+      }
+      result.push({
+        questionId: 0,
+        openSectionId,
+        authoredQuestionText: text || null,
+        authoredTotalMarks: totalMarks,
+        pointsEarned: points,
+        remarks,
+      });
+    }
+  }
+  return result;
+}
+
+function toPayload(
+  answers: AnswerState,
+  authored: AuthoredState,
+): EmployeeFormAnswerInput[] {
+  const normal = Object.entries(answers)
     .map(([questionId, value]) => ({
       questionId: Number(questionId),
       pointsEarned:
@@ -140,6 +222,7 @@ function toPayload(answers: AnswerState): EmployeeFormAnswerInput[] {
         answer.ratingValue !== undefined ||
         Boolean(answer.remarks),
     );
+  return [...normal, ...authoredStateToPayload(authored)];
 }
 
 function clampScore(value: string, maxMarks: number): string {
@@ -184,6 +267,7 @@ export default function EmployeeFormFill({
   const queryClient = useQueryClient();
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [answers, setAnswers] = useState<AnswerState>({});
+  const [authored, setAuthored] = useState<AuthoredState>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [thankYouOpen, setThankYouOpen] = useState(false);
@@ -237,6 +321,9 @@ export default function EmployeeFormFill({
       setAnswers(
         buildInitialAnswers(flattenAllQuestions(data.template), data.answers),
       );
+      setAuthored(
+        buildInitialAuthoredAnswers(data.template, data.authoredAnswers ?? []),
+      );
     }
   }
 
@@ -257,7 +344,13 @@ export default function EmployeeFormFill({
       .filter(isScoredQuestion)
       .reduce((sum, question) => sum + Number(question.totalMarks), 0);
 
-    return fromTemplate > 0 ? fromTemplate : (data.maxRawScore ?? 0);
+    // Include open-assessment section budgets.
+    const openBudget = data.template.sections
+      .filter((s) => s.isOpenAssessment)
+      .reduce((sum, s) => sum + Number(s.openAssessmentTotalMarks ?? 0), 0);
+
+    const total = fromTemplate + openBudget;
+    return total > 0 ? total : (data.maxRawScore ?? 0);
   }, [data]);
 
   const liveRawScore = useMemo(() => {
@@ -265,7 +358,7 @@ export default function EmployeeFormFill({
       return 0;
     }
 
-    return flattenAllQuestions(data.template)
+    const templateScore = flattenAllQuestions(data.template)
       .filter(
         (question) =>
           isScoredQuestion(question) &&
@@ -283,14 +376,27 @@ export default function EmployeeFormFill({
           )
         );
       }, 0);
-  }, [answers, data]);
+
+    // Add authored question self-scores.
+    const authoredScore = Object.values(authored).reduce(
+      (sum, drafts) =>
+        sum +
+        drafts.reduce(
+          (s, d) => s + (d.pointsEarned !== "" ? Number(d.pointsEarned) || 0 : 0),
+          0,
+        ),
+      0,
+    );
+
+    return templateScore + authoredScore;
+  }, [answers, authored, data]);
 
   const displayedRawScore = liveRawScore;
 
   const saveMutation = useMutation({
     mutationFn: (submit: boolean) =>
       saveEmployeeForm(templateId, {
-        answers: toPayload(answers),
+        answers: toPayload(answers, authored),
         submit,
       }),
     onSuccess: (result, submit) => {
@@ -471,7 +577,7 @@ export default function EmployeeFormFill({
     try {
       // Persist current scores/remarks first so attachment stays tied to draft answers.
       await saveEmployeeForm(templateId, {
-        answers: toPayload(answers),
+        answers: toPayload(answers, authored),
         submit: false,
       });
 
@@ -729,6 +835,224 @@ export default function EmployeeFormFill({
                 rows.map((row, rowIdx) => {
                   const { question } = row;
                   const isEvenRow = rowIdx % 2 === 0;
+
+                  // Open-assessment section: render a dynamic authored-question
+                  // editor instead of a fixed question row.
+                  if (row.isOpenAssessment) {
+                    const section = data.template.sections.find(
+                      (s) => s.id === row.sectionNumber && s.isOpenAssessment,
+                    ) ?? data.template.sections.find(
+                      (s) => s.isOpenAssessment && s.title === row.sectionTitle,
+                    );
+                    const sectionId = section?.id ?? 0;
+                    const budget = row.openAssessmentTotalMarks;
+                    const drafts = authored[sectionId] ?? [];
+                    const allocated = drafts.reduce(
+                      (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+                      0,
+                    );
+                    const remaining = budget - allocated;
+                    const isHodOnly =
+                      !data.selfAssessmentEnabled;
+
+                    const addAuthoredQuestion = () => {
+                      setAuthored((current) => {
+                        const existing = current[sectionId] ?? [];
+                        return {
+                          ...current,
+                          [sectionId]: [
+                            ...existing,
+                            {
+                              clientId: nextAuthoredClientId(),
+                              authoredQuestionText: "",
+                              authoredTotalMarks: "",
+                              pointsEarned: "",
+                              remarks: "",
+                            },
+                          ],
+                        };
+                      });
+                    };
+
+                    const updateAuthored = (
+                      clientId: string,
+                      field: keyof AuthoredQuestionDraft,
+                      value: string,
+                    ) => {
+                      setAuthored((current) => {
+                        const existing = current[sectionId] ?? [];
+                        return {
+                          ...current,
+                          [sectionId]: existing.map((d) =>
+                            d.clientId === clientId ? { ...d, [field]: value } : d,
+                          ),
+                        };
+                      });
+                    };
+
+                    const removeAuthored = (clientId: string) => {
+                      setAuthored((current) => {
+                        const existing = current[sectionId] ?? [];
+                        return {
+                          ...current,
+                          [sectionId]: existing.filter(
+                            (d) => d.clientId !== clientId,
+                          ),
+                        };
+                      });
+                    };
+
+                    return (
+                      <Fragment key={`open-${row.sr}`}>
+                        {row.isFirstInSection && row.sectionTitle ? (
+                          <tr className="bg-amber-50/80 dark:bg-amber-950/20">
+                            <td colSpan={6} className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200">
+                              {formatSectionLabel(row)}
+                            </td>
+                          </tr>
+                        ) : null}
+                        <tr className="bg-white dark:bg-slate-900/40">
+                          <td colSpan={6} className="px-4 py-4">
+                            <div className="space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-xs text-foreground/70">
+                                  Budget: <span className="font-bold text-amber-700 dark:text-amber-300">{budget}</span> marks
+                                  {" — "}
+                                  Allocated: <span className={cn("font-bold", remaining < 0 ? "text-red-600" : remaining === 0 ? "text-emerald-600" : "text-amber-700 dark:text-amber-300")}>{allocated}</span>
+                                  {" / "}
+                                  Remaining: <span className={cn("font-bold", remaining < 0 ? "text-red-600" : "text-emerald-600")}>{remaining}</span>
+                                </p>
+                                {!isReadOnly && !isHodOnly ? (
+                                  <button
+                                    type="button"
+                                    onClick={addAuthoredQuestion}
+                                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-primary/90"
+                                  >
+                                    <Plus className="size-3" />
+                                    Add Question
+                                  </button>
+                                ) : null}
+                              </div>
+
+                              {drafts.length === 0 ? (
+                                <div className="rounded-md border border-dashed border-amber-300/80 px-4 py-4 text-center text-xs text-foreground/60 dark:border-amber-700/40">
+                                  {isReadOnly
+                                    ? "No questions were authored for this section."
+                                    : "Click \"Add Question\" to write your own question and assign marks from the budget."}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {drafts.map((draft, draftIdx) => {
+                                    const totalMarks = Number(draft.authoredTotalMarks) || 0;
+                                    const points = draft.pointsEarned !== "" ? Number(draft.pointsEarned) : 0;
+                                    const overBudget = points > totalMarks;
+                                    return (
+                                      <div
+                                        key={draft.clientId}
+                                        className="rounded-md border border-slate-200 bg-slate-50/40 p-3 dark:border-white/10 dark:bg-slate-800/20"
+                                      >
+                                        <div className="flex items-start gap-2">
+                                          <span className="mt-1.5 text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400">
+                                            {draftIdx + 1}.
+                                          </span>
+                                          <div className="min-w-0 flex-1 space-y-2">
+                                            <textarea
+                                              value={draft.authoredQuestionText}
+                                              disabled={isReadOnly || isHodOnly}
+                                              onChange={(e) =>
+                                                updateAuthored(
+                                                  draft.clientId,
+                                                  "authoredQuestionText",
+                                                  e.target.value,
+                                                )
+                                              }
+                                              rows={2}
+                                              className="w-full resize-y rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
+                                              placeholder="Type your question here..."
+                                            />
+                                            <div className="flex flex-wrap items-center gap-3">
+                                              <label className="text-[11px] font-medium text-foreground/70">
+                                                Marks:
+                                                <input
+                                                  type="number"
+                                                  min={0}
+                                                  step={1}
+                                                  value={draft.authoredTotalMarks}
+                                                  disabled={isReadOnly || isHodOnly}
+                                                  onChange={(e) =>
+                                                    updateAuthored(
+                                                      draft.clientId,
+                                                      "authoredTotalMarks",
+                                                      e.target.value,
+                                                    )
+                                                  }
+                                                  className="ml-1 h-7 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums text-amber-700 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-amber-300"
+                                                  placeholder="0"
+                                                />
+                                              </label>
+                                              <label className="text-[11px] font-medium text-foreground/70">
+                                                Self Score:
+                                                <input
+                                                  type="number"
+                                                  min={0}
+                                                  max={totalMarks || undefined}
+                                                  step={0.5}
+                                                  value={draft.pointsEarned}
+                                                  disabled={isReadOnly || isHodOnly}
+                                                  onChange={(e) =>
+                                                    updateAuthored(
+                                                      draft.clientId,
+                                                      "pointsEarned",
+                                                      e.target.value,
+                                                    )
+                                                  }
+                                                  className={cn(
+                                                    "ml-1 h-7 w-20 rounded border bg-white px-2 text-right text-xs tabular-nums font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60 dark:bg-slate-800",
+                                                    overBudget
+                                                      ? "border-red-400 text-red-600 dark:border-red-600/50 dark:text-red-400"
+                                                      : "border-slate-300 text-teal-700 dark:border-white/15 dark:text-teal-300",
+                                                  )}
+                                                  placeholder="0"
+                                                />
+                                              </label>
+                                              {!isReadOnly && !isHodOnly ? (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => removeAuthored(draft.clientId)}
+                                                  className="ml-auto inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-950/30"
+                                                >
+                                                  <Trash2 className="size-3" />
+                                                  Remove
+                                                </button>
+                                              ) : null}
+                                            </div>
+                                            <textarea
+                                              value={draft.remarks}
+                                              disabled={isReadOnly || isHodOnly}
+                                              onChange={(e) =>
+                                                updateAuthored(
+                                                  draft.clientId,
+                                                  "remarks",
+                                                  e.target.value,
+                                                )
+                                              }
+                                              rows={2}
+                                              className="w-full resize-y rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                              placeholder="Remarks (optional)..."
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      </Fragment>
+                    );
+                  }
 
                   return (
                     <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>

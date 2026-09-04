@@ -122,7 +122,7 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                   const { question } = row;
                   const isEvenRow = rowIdx % 2 === 0;
                   return (
-                    <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
+                    <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : row.isOpenAssessment ? `open-${row.sr}` : question!.id}>
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-indigo-100/70 dark:bg-indigo-900/30">
                           <td colSpan={7} className="form-section-header-cell text-sm font-bold text-indigo-800 dark:text-indigo-200">
@@ -137,7 +137,23 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                           </td>
                         </tr>
                       ) : null}
-                      {row.isHeaderOnly ? (
+                      {row.isOpenAssessment ? (
+                        <tr className={cn(
+                          "align-top border-b border-indigo-100 dark:border-indigo-500/15",
+                          isEvenRow
+                            ? "bg-white dark:bg-slate-900/40"
+                            : "bg-indigo-50/40 dark:bg-indigo-950/20"
+                        )}>
+                          <td className="border-r border-indigo-100 px-3 py-2.5 text-center tabular-nums text-indigo-600 dark:border-indigo-500/15 dark:text-indigo-300">
+                            {row.sr}
+                          </td>
+                          <td className="border-r border-indigo-100 px-3 py-2.5 dark:border-indigo-500/15" colSpan={6}>
+                            <p className="text-xs italic text-amber-700 dark:text-amber-300">
+                              Open Assessment — questions are authored by the employee/manager at fill time.
+                            </p>
+                          </td>
+                        </tr>
+                      ) : row.isHeaderOnly ? (
                         <tr className="bg-teal-50/40 dark:bg-teal-950/10">
                           <td colSpan={7} className="px-3 py-2 pl-10 text-xs italic text-indigo-400 dark:text-indigo-400/70">
                             No questions in this subsection
@@ -218,7 +234,13 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                     Total
                   </td>
                   <td className="whitespace-nowrap border-r border-indigo-500/30 px-3 py-2.5 text-right tabular-nums text-sm font-bold text-indigo-50 dark:border-indigo-400/20 dark:text-indigo-100">
-                    {allQuestions.reduce((sum, q) => sum + q.totalMarks, 0)}
+                    {allQuestions.reduce((sum, q) => sum + q.totalMarks, 0) +
+                      template.sections
+                        .filter((s) => s.isOpenAssessment)
+                        .reduce(
+                          (sum, s) => sum + Number(s.openAssessmentTotalMarks ?? 0),
+                          0,
+                        )}
                   </td>
                 </tr>
               </tfoot>
