@@ -1137,11 +1137,18 @@ export default function DirectAssessmentSpreadsheet({
                           const authoredCount = empAuthored.length;
                           const empColId = `emp-${emp.submissionId}`;
                           const empWidth = getColumnWidth(empColId, staffColumnWidth);
-                          // Manager 1 authored count — shown for Manager 2 so
-                          // they can see Manager 1 has already authored questions.
-                          const mgr1AuthoredCount =
-                            (data.manager1AuthoredAnswersBySubmission[emp.submissionId] ?? [])
-                              .filter((a) => a.openSectionId === sectionId).length;
+                          // Manager 1 authored answers — shown for Manager 2 so
+                          // they can see Manager 1's complete free assessment.
+                          const mgr1AuthoredAnswers =
+                            (data.manager1AuthoredAnswersBySubmission?.[emp.submissionId] ?? [])
+                              .filter((a) => a.openSectionId === sectionId);
+                          const mgr1AuthoredCount = mgr1AuthoredAnswers.length;
+                          const mgr1TotalMarks = mgr1AuthoredAnswers.reduce(
+                            (sum, a) => sum + (a.authoredTotalMarks ?? 0), 0,
+                          );
+                          const mgr1TotalScore = mgr1AuthoredAnswers.reduce(
+                            (sum, a) => sum + (a.pointsEarned ?? 0), 0,
+                          );
                           const isMgr2ForThisEmp =
                             isEditable && emp.managerLevel === 2;
                           return (
@@ -1173,9 +1180,24 @@ export default function DirectAssessmentSpreadsheet({
                                     </span>
                                   )}
                                   {isMgr2ForThisEmp && mgr1AuthoredCount > 0 && (
-                                    <span className="text-[10px] text-violet-500 dark:text-violet-400" title="Manager 1 authored questions (read-only)">
-                                      M1: {mgr1AuthoredCount} Q
-                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openAuthoredModal(emp.submissionId, sectionId)
+                                      }
+                                      className="mt-1 w-full rounded border border-violet-200 bg-violet-50/60 px-1.5 py-1 text-[9px] font-medium text-violet-700 hover:bg-violet-100 dark:border-violet-900/30 dark:bg-violet-950/20 dark:text-violet-300 dark:hover:bg-violet-950/40"
+                                      title="View Manager 1's complete free assessment"
+                                    >
+                                      <span className="block font-bold uppercase tracking-wide">
+                                        Manager 1
+                                      </span>
+                                      <span className="block">
+                                        {mgr1AuthoredCount} Q · {mgr1TotalMarks} marks
+                                      </span>
+                                      <span className="block">
+                                        Score: {mgr1TotalScore}
+                                      </span>
+                                    </button>
                                   )}
                                 </div>
                               ) : authoredCount > 0 ? (
@@ -1644,7 +1666,7 @@ export default function DirectAssessmentSpreadsheet({
         // Manager 1's authored answers (read-only) — shown when the current
         // reviewer is Manager 2 so they can see Manager 1's questions.
         const mgr1AuthoredAnswers =
-          data.manager1AuthoredAnswersBySubmission[submissionId]?.filter(
+          data.manager1AuthoredAnswersBySubmission?.[submissionId]?.filter(
             (a) => a.openSectionId === sectionId,
           ) ?? [];
         const isManager2 =
@@ -1678,31 +1700,99 @@ export default function DirectAssessmentSpreadsheet({
               </div>
 
               {/* Manager 1 authored questions — read-only for Manager 2 */}
-              {isManager2 && mgr1AuthoredAnswers.length > 0 ? (
-                <div className="mb-4 rounded-md border border-violet-200 bg-violet-50/40 p-3 dark:border-violet-900/30 dark:bg-violet-950/20">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-violet-600 dark:text-violet-400">
-                    Manager 1 — Authored Questions (read-only)
-                  </p>
-                  <div className="space-y-2">
-                    {mgr1AuthoredAnswers.map((a, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-md border border-slate-200 bg-white/60 p-2.5 dark:border-white/10 dark:bg-slate-800/30"
-                      >
-                        <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                          {idx + 1}. {a.authoredQuestionText}
-                        </p>
-                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                          {authoredRatingBased
-                            ? `Weight: ${a.authoredTotalMarks} · Rating: ${a.ratingValue ?? "—"} · Score: ${a.pointsEarned}`
-                            : `Marks: ${a.authoredTotalMarks} · Score: ${a.pointsEarned}`}
-                          {a.remarks ? ` · Remarks: ${a.remarks}` : ""}
-                        </p>
-                      </div>
-                    ))}
+              {isManager2 && mgr1AuthoredAnswers.length > 0 ? (() => {
+                const m1TotalMarks = mgr1AuthoredAnswers.reduce(
+                  (sum, a) => sum + (a.authoredTotalMarks ?? 0), 0,
+                );
+                const m1TotalScore = mgr1AuthoredAnswers.reduce(
+                  (sum, a) => sum + (a.pointsEarned ?? 0), 0,
+                );
+                const m1Budget = section?.openAssessmentTotalMarks ?? 0;
+                return (
+                  <div className="mb-4 rounded-md border border-violet-300 bg-violet-50/50 p-3 dark:border-violet-800/40 dark:bg-violet-950/20">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                        Manager 1 — Complete Free Assessment (read-only)
+                      </p>
+                      <span className="text-[10px] text-violet-500 dark:text-violet-400">
+                        {mgr1AuthoredAnswers.length} question{mgr1AuthoredAnswers.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    {/* Summary bar */}
+                    <div className="mb-3 flex flex-wrap gap-3 rounded-md bg-violet-100/60 px-3 py-2 dark:bg-violet-900/20">
+                      <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                        Budget: <span className="font-bold">{m1Budget}</span>
+                      </span>
+                      <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                        Allocated: <span className="font-bold">{m1TotalMarks}</span>
+                      </span>
+                      <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                        Total Score: <span className="font-bold">{m1TotalScore}</span>
+                      </span>
+                      {authoredRatingBased && (
+                        <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                          Avg Rating: <span className="font-bold">
+                            {(mgr1AuthoredAnswers.reduce((s, a) => s + (a.ratingValue ?? 0), 0) / mgr1AuthoredAnswers.length).toFixed(1)}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                    {/* Questions table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-violet-200 dark:border-violet-800/40">
+                            <th className="px-2 py-1.5 text-left font-semibold text-violet-700 dark:text-violet-300" style={{ width: "40px" }}>#</th>
+                            <th className="px-2 py-1.5 text-left font-semibold text-violet-700 dark:text-violet-300">Question</th>
+                            <th className="px-2 py-1.5 text-right font-semibold text-violet-700 dark:text-violet-300" style={{ width: "70px" }}>{authoredRatingBased ? "Weight" : "Marks"}</th>
+                            {authoredRatingBased && (
+                              <th className="px-2 py-1.5 text-right font-semibold text-violet-700 dark:text-violet-300" style={{ width: "60px" }}>Rating</th>
+                            )}
+                            <th className="px-2 py-1.5 text-right font-semibold text-violet-700 dark:text-violet-300" style={{ width: "60px" }}>Score</th>
+                            <th className="px-2 py-1.5 text-left font-semibold text-violet-700 dark:text-violet-300" style={{ width: "150px" }}>Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {mgr1AuthoredAnswers.map((a, idx) => (
+                            <tr
+                              key={idx}
+                              className="border-b border-violet-100 dark:border-violet-900/20"
+                            >
+                              <td className="px-2 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">{idx + 1}</td>
+                              <td className="px-2 py-2 text-slate-800 dark:text-slate-200">
+                                <p className="whitespace-pre-wrap wrap-break-word">{a.authoredQuestionText}</p>
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums font-bold text-amber-700 dark:text-amber-300">{a.authoredTotalMarks}</td>
+                              {authoredRatingBased && (
+                                <td className="px-2 py-2 text-right tabular-nums font-bold text-slate-700 dark:text-slate-300">{a.ratingValue ?? "—"}</td>
+                              )}
+                              <td className="px-2 py-2 text-right tabular-nums font-bold text-teal-700 dark:text-teal-300">{a.pointsEarned}</td>
+                              <td className="px-2 py-2 text-slate-500 dark:text-slate-400">
+                                {a.remarks ? (
+                                  <p className="whitespace-pre-wrap wrap-break-word">{a.remarks}</p>
+                                ) : (
+                                  <span className="text-slate-300 dark:text-slate-600">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-violet-300 dark:border-violet-700/40">
+                            <td colSpan={authoredRatingBased ? 3 : 2} className="px-2 py-2 text-right font-bold text-violet-700 dark:text-violet-300">Total</td>
+                            <td className="px-2 py-2 text-right tabular-nums font-bold text-amber-700 dark:text-amber-300">{m1TotalMarks}</td>
+                            {authoredRatingBased && (
+                              <td className="px-2 py-2"></td>
+                            )}
+                            <td className="px-2 py-2 text-right tabular-nums font-bold text-teal-700 dark:text-teal-300">{m1TotalScore}</td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                );
+              })() : null}
 
               {/* Manager 2's own authored questions editor */}
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
