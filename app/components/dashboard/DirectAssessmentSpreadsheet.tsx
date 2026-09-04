@@ -1137,6 +1137,13 @@ export default function DirectAssessmentSpreadsheet({
                           const authoredCount = empAuthored.length;
                           const empColId = `emp-${emp.submissionId}`;
                           const empWidth = getColumnWidth(empColId, staffColumnWidth);
+                          // Manager 1 authored count — shown for Manager 2 so
+                          // they can see Manager 1 has already authored questions.
+                          const mgr1AuthoredCount =
+                            (data.manager1AuthoredAnswersBySubmission[emp.submissionId] ?? [])
+                              .filter((a) => a.openSectionId === sectionId).length;
+                          const isMgr2ForThisEmp =
+                            isEditable && emp.managerLevel === 2;
                           return (
                             <td
                               key={emp.submissionId}
@@ -1163,6 +1170,11 @@ export default function DirectAssessmentSpreadsheet({
                                   {authoredCount > 0 && (
                                     <span className="text-[10px] text-slate-400 dark:text-slate-500">
                                       {authoredCount} question{authoredCount !== 1 ? "s" : ""}
+                                    </span>
+                                  )}
+                                  {isMgr2ForThisEmp && mgr1AuthoredCount > 0 && (
+                                    <span className="text-[10px] text-violet-500 dark:text-violet-400" title="Manager 1 authored questions (read-only)">
+                                      M1: {mgr1AuthoredCount} Q
                                     </span>
                                   )}
                                 </div>
@@ -1629,6 +1641,15 @@ export default function DirectAssessmentSpreadsheet({
         const empName = emp?.employeeName ?? "";
         const sectionTitle = section?.title ?? "Open Assessment";
 
+        // Manager 1's authored answers (read-only) — shown when the current
+        // reviewer is Manager 2 so they can see Manager 1's questions.
+        const mgr1AuthoredAnswers =
+          data.manager1AuthoredAnswersBySubmission[submissionId]?.filter(
+            (a) => a.openSectionId === sectionId,
+          ) ?? [];
+        const isManager2 =
+          emp?.managerLevel === 2 && emp?.canEdit === true;
+
         return (
           <div
             className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 dark:bg-black/60"
@@ -1656,6 +1677,34 @@ export default function DirectAssessmentSpreadsheet({
                 </button>
               </div>
 
+              {/* Manager 1 authored questions — read-only for Manager 2 */}
+              {isManager2 && mgr1AuthoredAnswers.length > 0 ? (
+                <div className="mb-4 rounded-md border border-violet-200 bg-violet-50/40 p-3 dark:border-violet-900/30 dark:bg-violet-950/20">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-violet-600 dark:text-violet-400">
+                    Manager 1 — Authored Questions (read-only)
+                  </p>
+                  <div className="space-y-2">
+                    {mgr1AuthoredAnswers.map((a, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-md border border-slate-200 bg-white/60 p-2.5 dark:border-white/10 dark:bg-slate-800/30"
+                      >
+                        <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                          {idx + 1}. {a.authoredQuestionText}
+                        </p>
+                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          {authoredRatingBased
+                            ? `Weight: ${a.authoredTotalMarks} · Rating: ${a.ratingValue ?? "—"} · Score: ${a.pointsEarned}`
+                            : `Marks: ${a.authoredTotalMarks} · Score: ${a.pointsEarned}`}
+                          {a.remarks ? ` · Remarks: ${a.remarks}` : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Manager 2's own authored questions editor */}
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-slate-600 dark:text-slate-400">
                   Budget: <span className="font-bold text-amber-700 dark:text-amber-300">{budget}</span>

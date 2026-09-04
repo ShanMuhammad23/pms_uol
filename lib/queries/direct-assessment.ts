@@ -65,6 +65,15 @@ export interface DirectAssessmentData {
     EmployeeFormAnswerRecord[]
   >;
   /**
+   * Map of submissionId → authored answers (open-assessment sections) by
+   * Manager 1. Used so Manager 2 can see Manager 1's authored questions
+   * (read-only) when reviewing.
+   */
+  manager1AuthoredAnswersBySubmission: Record<
+    number,
+    EmployeeFormAnswerRecord[]
+  >;
+  /**
    * Map of submissionId → overall remarks (manager1 / manager2) stored on the
    * appraisal. Reuses the same columns as the standard assessment workflow so
    * Direct Assessment and standard assessment share one data model.
@@ -206,6 +215,10 @@ export async function getDirectAssessmentData(
     EmployeeFormAnswerRecord[]
   > = {};
   const managerAuthoredAnswersBySubmission: Record<
+    number,
+    EmployeeFormAnswerRecord[]
+  > = {};
+  const manager1AuthoredAnswersBySubmission: Record<
     number,
     EmployeeFormAnswerRecord[]
   > = {};
@@ -457,6 +470,15 @@ export async function getDirectAssessmentData(
     } else {
       managerAuthoredAnswersBySubmission[emp.submissionId] = [];
     }
+
+    // Manager 1 authored answers — always fetched so Manager 2 (and admins)
+    // can see Manager 1's open-assessment questions read-only.
+    if (emp.manager1UserId != null) {
+      manager1AuthoredAnswersBySubmission[emp.submissionId] =
+        getAuthoredAnswersForUser(emp.submissionId, emp.manager1UserId);
+    } else {
+      manager1AuthoredAnswersBySubmission[emp.submissionId] = [];
+    }
   }
 
   // Fetch overall remarks for every submission. Reuses the same
@@ -507,6 +529,7 @@ export async function getDirectAssessmentData(
     managerAnswersBySubmission,
     manager1AnswersBySubmission,
     managerAuthoredAnswersBySubmission,
+    manager1AuthoredAnswersBySubmission,
     overallRemarksBySubmission,
   };
 }
