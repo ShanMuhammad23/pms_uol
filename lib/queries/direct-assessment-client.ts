@@ -61,6 +61,15 @@ export interface DirectAssessmentData {
     EmployeeFormAnswerRecord[]
   >;
   /**
+   * Map of submissionId → authored answers (open-assessment sections) by
+   * Manager 1. Used so Manager 2 can see Manager 1's authored questions
+   * (read-only) when reviewing.
+   */
+  manager1AuthoredAnswersBySubmission: Record<
+    number,
+    EmployeeFormAnswerRecord[]
+  >;
+  /**
    * Map of submissionId → overall remarks (manager1 / manager2). Shares the
    * same data model as the standard assessment workflow.
    */
