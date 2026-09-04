@@ -18,10 +18,20 @@ if (!recipient) {
   process.exit(2);
 }
 
-const REQUIRED = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "MAIL_FROM_EMAIL", "MAIL_FROM_NAME"];
+const REQUIRED = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD"];
 const missing = REQUIRED.filter((k) => !process.env[k] || !String(process.env[k]).trim());
-if (missing.length > 0) {
-  console.error(`Missing env vars: ${missing.join(", ")}`);
+const fromEmail =
+  (process.env.SMTP_FROM_EMAIL && String(process.env.SMTP_FROM_EMAIL).trim()) ||
+  (process.env.MAIL_FROM_EMAIL && String(process.env.MAIL_FROM_EMAIL).trim()) ||
+  "";
+const fromName =
+  (process.env.SMTP_FROM_NAME && String(process.env.SMTP_FROM_NAME).trim()) ||
+  (process.env.MAIL_FROM_NAME && String(process.env.MAIL_FROM_NAME).trim()) ||
+  "Performance Management System";
+if (missing.length > 0 || !fromEmail) {
+  const report = [...missing];
+  if (!fromEmail) report.push("SMTP_FROM_EMAIL (or MAIL_FROM_EMAIL)");
+  console.error(`Missing env vars: ${report.join(", ")}`);
   process.exit(2);
 }
 
@@ -29,11 +39,9 @@ const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT),
   secure: String(process.env.SMTP_SECURE).trim().toLowerCase() === "true",
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
+  auth: { user: process.env.SMTP_USER, pass: String(process.env.SMTP_PASSWORD).trim() },
 });
 
-const fromName = process.env.MAIL_FROM_NAME;
-const fromEmail = process.env.MAIL_FROM_EMAIL;
 const from = `"${fromName}" <${fromEmail}>`;
 
 // --- Inline template reproductions (mirror lib/mail/notifications/templates.ts) ---
@@ -66,6 +74,16 @@ const tests = [
     event: "returned_to_manager2_manager",
     subject: "Action Required \u2013 PMS Submission Returned to Manager 2",
     body: `Dear Test Manager,\n\nA self-assessment submission of your staff has been returned to you for further review and action.\n\nEmployee: Test Employee\nCurrent Status: Returned to Manager 2\n\nPlease log in to the Performance Management System, review the employee's submission, make the required changes or take the necessary action, and continue the assessment workflow.\n\nReturn Reason:\nPlease re-evaluate the scores.${SIGNATURE}`,
+  },
+  {
+    event: "self_assessment_reminder",
+    subject: "Reminder \u2013 Complete Your PMS Self-Assessment",
+    body: `Dear Test Employee,\n\nThis is a reminder that your self-assessment is still pending in the Performance Management System.\n\nForm: Annual Faculty Evaluation Form\nAppraisal Cycle: 2026\nCurrent Status: Pending Self-Assessment\n\nPlease log in to the Performance Management System and complete your self-assessment at your earliest convenience.\n\nLog in to the PMS Portal:\nhttps://pms-hr.uol.edu.pk${SIGNATURE}`,
+  },
+  {
+    event: "manager_pending_work_reminder",
+    subject: "Reminder \u2013 5 Pending PMS Assessment Items",
+    body: `Dear Test Manager,\n\nThis is a reminder that you have pending assessment work in the Performance Management System.\n\nAppraisal Cycle: 2026\nDirect assessments to complete: 2\nSubmissions awaiting your review: 3\nTotal pending items: 5\n\nPlease log in to the Performance Management System to complete your direct assessments and review submitted appraisals.\n\nLog in to the PMS Portal:\nhttps://pms-hr.uol.edu.pk${SIGNATURE}`,
   },
 ];
 

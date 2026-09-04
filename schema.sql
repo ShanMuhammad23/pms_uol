@@ -56,6 +56,8 @@ CREATE TABLE users (
     head_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 1
     manager_2_id BIGINT REFERENCES users(id) ON DELETE SET NULL, -- Manager 2
     is_active BOOLEAN DEFAULT TRUE,
+    -- Last manager pending-work reminder digest (cron cooldown: 3 days)
+    last_manager_reminder_at TIMESTAMPTZ,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -174,6 +176,8 @@ CREATE TABLE employee_form_assignments (
     employee_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     template_id BIGINT NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
     self_assessment_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Last pending-self-assessment reminder email (cron cooldown: 48h)
+    last_self_assessment_reminder_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_employee_template_assignment UNIQUE (employee_id, template_id)
@@ -275,6 +279,8 @@ CREATE TABLE appraisals (
     manager2_overall_remarks TEXT,
     
     submitted_at TIMESTAMP WITH TIME ZONE,
+    -- Last pending-self-assessment reminder email (cron cooldown: 48h)
+    last_self_assessment_reminder_at TIMESTAMPTZ,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_employee_per_cycle UNIQUE (employee_id, cycle_id)
 );

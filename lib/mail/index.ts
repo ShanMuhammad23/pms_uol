@@ -9,6 +9,8 @@ export {
   missingSmtpEnvKeys,
   getSmtpConfig,
   formatFromAddress,
+  resolveFromEmail,
+  resolveFromName,
   type SmtpConfig,
 } from "./config";
 

@@ -9,9 +9,12 @@ import "server-only";
  *
  * Required env vars (see `.env`):
  *   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASSWORD,
- *   MAIL_FROM_EMAIL, MAIL_FROM_NAME
+ *   SMTP_FROM_EMAIL (or MAIL_FROM_EMAIL)
  *
- * SMTP credentials must NEVER be hardcoded. The App Password lives only in the
+ * Optional:
+ *   SMTP_FROM_NAME / MAIL_FROM_NAME (defaults to "Performance Management System")
+ *
+ * SMTP credentials must NEVER be hardcoded. Secrets live only in the
  * deployment environment / `.env` (which is gitignored).
  */
 
@@ -25,28 +28,55 @@ export interface SmtpConfig {
   fromName: string;
 }
 
-/** Keys that must be present for the mail service to function. */
-const SMTP_ENV_KEYS = [
+const DEFAULT_FROM_NAME = "Performance Management System";
+
+/** Connection/auth keys that must always be present. */
+const SMTP_CONNECTION_KEYS = [
   "SMTP_HOST",
   "SMTP_PORT",
   "SMTP_SECURE",
   "SMTP_USER",
   "SMTP_PASSWORD",
-  "MAIL_FROM_EMAIL",
-  "MAIL_FROM_NAME",
 ] as const;
 
+function readEnv(
+  env: NodeJS.ProcessEnv,
+  key: string,
+): string | undefined {
+  const value = env[key];
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/** Prefer SMTP_FROM_EMAIL, fall back to MAIL_FROM_EMAIL. */
+export function resolveFromEmail(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return readEnv(env, "SMTP_FROM_EMAIL") ?? readEnv(env, "MAIL_FROM_EMAIL");
+}
+
+/** Prefer SMTP_FROM_NAME / MAIL_FROM_NAME, else PMS default. */
+export function resolveFromName(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return (
+    readEnv(env, "SMTP_FROM_NAME") ??
+    readEnv(env, "MAIL_FROM_NAME") ??
+    DEFAULT_FROM_NAME
+  );
+}
+
 /**
- * Returns true when every SMTP env var is set to a non-empty value.
- * Used to decide whether the mail service is available without throwing.
+ * Returns true when SMTP connection vars and a from-address are configured.
  */
 export function isSmtpConfigured(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return SMTP_ENV_KEYS.every((key) => {
-    const value = env[key];
-    return typeof value === "string" && value.trim().length > 0;
-  });
+  const connectionOk = SMTP_CONNECTION_KEYS.every(
+    (key) => readEnv(env, key) != null,
+  );
+  return connectionOk && resolveFromEmail(env) != null;
 }
 
 /**
@@ -55,10 +85,13 @@ export function isSmtpConfigured(
 export function missingSmtpEnvKeys(
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-  return SMTP_ENV_KEYS.filter((key) => {
-    const value = env[key];
-    return typeof value !== "string" || value.trim().length === 0;
-  });
+  const missing: string[] = SMTP_CONNECTION_KEYS.filter(
+    (key) => readEnv(env, key) == null,
+  );
+  if (resolveFromEmail(env) == null) {
+    missing.push("SMTP_FROM_EMAIL (or MAIL_FROM_EMAIL)");
+  }
+  return missing;
 }
 
 /**
@@ -75,7 +108,7 @@ export function getSmtpConfig(
     );
   }
 
-  const portRaw = env.SMTP_PORT;
+  const portRaw = readEnv(env, "SMTP_PORT");
   const port = Number(portRaw);
   if (!Number.isFinite(port) || port <= 0 || port > 65535) {
     throw new Error(
@@ -83,17 +116,18 @@ export function getSmtpConfig(
     );
   }
 
-  const secureRaw = String(env.SMTP_SECURE).trim().toLowerCase();
+  const secureRaw = String(readEnv(env, "SMTP_SECURE")).toLowerCase();
   const secure = secureRaw === "true" || secureRaw === "1";
 
   return {
-    host: String(env.SMTP_HOST).trim(),
+    host: readEnv(env, "SMTP_HOST")!,
     port,
     secure,
-    user: String(env.SMTP_USER).trim(),
-    password: String(env.SMTP_PASSWORD),
-    fromEmail: String(env.MAIL_FROM_EMAIL).trim(),
-    fromName: String(env.MAIL_FROM_NAME).trim(),
+    user: readEnv(env, "SMTP_USER")!,
+    // Trim so accidental trailing whitespace in .env does not break auth.
+    password: String(env.SMTP_PASSWORD).trim(),
+    fromEmail: resolveFromEmail(env)!,
+    fromName: resolveFromName(env),
   };
 }
 
