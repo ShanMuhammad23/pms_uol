@@ -1522,6 +1522,65 @@ export default function SubmissionDetailView({
             ) : (
               rows.map((row, rowIdx) => {
                 const { question } = row;
+                const isEvenRow = rowIdx % 2 === 0;
+
+                // Open-assessment section: render authored questions display.
+                if (row.isOpenAssessment) {
+                  const section = data.sections.find(
+                    (s) => s.isOpenAssessment && s.title === row.sectionTitle,
+                  );
+                  const sectionId = section?.id ?? 0;
+                  const employeeAuthored = (data.authoredAnswers ?? []).filter(
+                    (a) => a.openSectionId === sectionId,
+                  );
+                  const colSpan = selfAssessmentEnabled
+                    ? ((hasManager2 && showManager2Data) ? 10 : 8)
+                    : ((hasManager2 && showManager2Data) ? 8 : 6);
+
+                  return (
+                    <Fragment key={`open-${row.sr}`}>
+                      {row.isFirstInSection && row.sectionTitle ? (
+                        <tr className="bg-amber-50/80 dark:bg-amber-950/20">
+                          <td colSpan={colSpan} className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200">
+                            {formatSectionLabel(row)}
+                          </td>
+                        </tr>
+                      ) : null}
+                      <tr className={cn(
+                        "align-top border-b border-slate-100 dark:border-slate-700/40",
+                        isEvenRow
+                          ? "bg-white dark:bg-slate-900/40"
+                          : "bg-slate-50/60 dark:bg-slate-800/20"
+                      )}>
+                        <td colSpan={colSpan} className="px-4 py-3">
+                          {employeeAuthored.length === 0 ? (
+                            <p className="text-xs italic text-slate-400">
+                              No questions were authored for this section.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {employeeAuthored.map((a, idx) => (
+                                <div
+                                  key={idx}
+                                  className="rounded-md border border-slate-200 bg-slate-50/40 p-2.5 dark:border-white/10 dark:bg-slate-800/20"
+                                >
+                                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                                    {idx + 1}. {a.authoredQuestionText}
+                                  </p>
+                                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                    Marks: {a.authoredTotalMarks} · Self Score: {a.pointsEarned}
+                                    {a.remarks ? ` · Remarks: ${a.remarks}` : ""}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    </Fragment>
+                  );
+                }
+
                 const answer = answerMap.get(question!.id);
                 const scored = isScoredQuestion(question!);
                 const questionSelfAssessmentEnabled =
@@ -1545,7 +1604,6 @@ export default function SubmissionDetailView({
                   undefined,
                   undefined,
                 );
-                const isEvenRow = rowIdx % 2 === 0;
                 const needsMark = incompleteQuestionIds.has(question!.id);
 
                 return (

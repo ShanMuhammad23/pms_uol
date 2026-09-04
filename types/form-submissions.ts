@@ -189,6 +189,10 @@ export interface FormSubmissionDetail {
   ratingBased: boolean;
   ratingScales: FormRatingScaleRecord[];
   answers: EmployeeFormAnswerRecord[];
+  /** Authored answers for open-assessment sections by the employee. */
+  authoredAnswers: EmployeeFormAnswerRecord[];
+  /** Authored answers for open-assessment sections by the current manager reviewer. */
+  managerAuthoredAnswers: EmployeeFormAnswerRecord[];
   managerAnswers: EmployeeFormAnswerRecord[];
   manager1Answers: EmployeeFormAnswerRecord[];
   manager2Answers: EmployeeFormAnswerRecord[];

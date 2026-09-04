@@ -274,18 +274,23 @@ async function getAnswersForAppraisal(
   const executor = client ?? getDbClient();
 
   const result = await executor.query<{
-    question_id: string;
+    question_id: string | null;
     text_response: string | null;
     selected_option_id: string | null;
     points_earned: string;
     rating_value: string | null;
     remarks: string | null;
+    authored_question_text: string | null;
+    authored_total_marks: string;
+    open_section_id: string | null;
   }>(
     `SELECT question_id, text_response, selected_option_id, points_earned,
-            rating_value::text, remarks
+            rating_value::text, remarks,
+            authored_question_text, authored_total_marks::text, open_section_id::text
      FROM appraisal_answers
      WHERE appraisal_id = $1
-       AND filled_by_id = $2`,
+       AND filled_by_id = $2
+       AND question_id IS NOT NULL`,
     [appraisalId, userId],
   );
 
@@ -318,6 +323,50 @@ async function getAnswersForAppraisal(
       attachments: attachmentsByQuestion.get(questionId) ?? [],
     };
   });
+}
+
+/**
+ * Fetch authored answers (open-assessment sections) for a given appraisal
+ * and user. These rows have question_id = NULL and open_section_id set.
+ */
+export async function getAuthoredAnswersForAppraisal(
+  appraisalId: number,
+  userId: number,
+  client?: PoolClient,
+): Promise<EmployeeFormAnswerRecord[]> {
+  const executor = client ?? getDbClient();
+
+  const result = await executor.query<{
+    id: string;
+    text_response: string | null;
+    points_earned: string;
+    remarks: string | null;
+    authored_question_text: string | null;
+    authored_total_marks: string;
+    open_section_id: string | null;
+  }>(
+    `SELECT id, text_response, points_earned, remarks,
+            authored_question_text, authored_total_marks::text, open_section_id::text
+     FROM appraisal_answers
+     WHERE appraisal_id = $1
+       AND filled_by_id = $2
+       AND open_section_id IS NOT NULL
+     ORDER BY id ASC`,
+    [appraisalId, userId],
+  );
+
+  return result.rows.map((row) => ({
+    questionId: 0,
+    textResponse: row.text_response,
+    selectedOptionId: null,
+    pointsEarned: Number(row.points_earned),
+    ratingValue: null,
+    remarks: row.remarks,
+    attachments: [],
+    authoredQuestionText: row.authored_question_text,
+    authoredTotalMarks: Number(row.authored_total_marks),
+    openSectionId: row.open_section_id ? Number(row.open_section_id) : null,
+  }));
 }
 
 export async function listAttachmentsForAppraisal(
@@ -403,20 +452,38 @@ function isScoredQuestion(question: QuestionRecord): boolean {
 function calculateRawScore(
   template: FormTemplateRecord,
   answers: Array<{ questionId: number; pointsEarned: number }>,
+  authoredAnswers?: Array<{ pointsEarned: number }>,
 ): number {
   const answerMap = new Map(
     answers.map((answer) => [answer.questionId, answer.pointsEarned]),
   );
 
-  return getTemplateQuestions(template)
+  const templateScore = getTemplateQuestions(template)
     .filter(isScoredQuestion)
     .reduce((sum, question) => sum + (answerMap.get(question.id) ?? 0), 0);
+
+  const authoredScore = (authoredAnswers ?? []).reduce(
+    (sum, a) => sum + Number(a.pointsEarned || 0),
+    0,
+  );
+
+  return templateScore + authoredScore;
 }
 
-function calculateMaxRawScore(template: FormTemplateRecord): number {
-  return getTemplateQuestions(template)
+function calculateMaxRawScore(
+  template: FormTemplateRecord,
+  authoredAnswers?: Array<{ authoredTotalMarks?: number }>,
+): number {
+  const templateMax = getTemplateQuestions(template)
     .filter(isScoredQuestion)
     .reduce((sum, question) => sum + Number(question.totalMarks), 0);
+
+  const authoredMax = (authoredAnswers ?? []).reduce(
+    (sum, a) => sum + Number(a.authoredTotalMarks || 0),
+    0,
+  );
+
+  return templateMax + authoredMax;
 }
 
 function validateAnswers(
@@ -710,14 +777,20 @@ export async function getEmployeeFormDetail(
     template.ratingScales,
   );
 
+  // Fetch authored answers for open-assessment sections.
+  const authoredAnswers = appraisal
+    ? await getAuthoredAnswersForAppraisal(Number(appraisal.id), userId)
+    : [];
+
   const rawScore = calculateRawScore(
     template,
     answers.map((answer) => ({
       questionId: answer.questionId,
       pointsEarned: answer.pointsEarned,
     })),
+    authoredAnswers,
   );
-  const maxRawScore = calculateMaxRawScore(template);
+  const maxRawScore = calculateMaxRawScore(template, authoredAnswers);
 
   const eligibilityCtx = await getUserAssessmentEligibilityContext(userId);
   const eligibility = resolveEmployeeAssessmentEligibility(
@@ -760,6 +833,7 @@ export async function getEmployeeFormDetail(
     status: resolveFormStatus(appraisal, answers.length),
     submittedAt: appraisal?.submitted_at ?? null,
     answers,
+    authoredAnswers,
     rawScore,
     maxRawScore,
     selfAssessmentEnabled,
@@ -794,6 +868,12 @@ export async function saveEmployeeForm(
   const matchedAssignment = assignments.find((a) => a.templateId === templateId);
   const selfAssessmentEnabled = matchedAssignment?.selfAssessmentEnabled ?? template.selfAssessmentEnabled;
   const validatedAnswers = validateAnswers(template, input.answers, submit, selfAssessmentEnabled);
+
+  // Separate authored answers (open-assessment sections) from normal answers.
+  const authoredInputs = input.answers.filter(
+    (a) => a.openSectionId != null && a.questionId === 0,
+  );
+  const openSections = template.sections.filter((s) => s.isOpenAssessment);
 
   await withTransaction(async () => {
     const client = getDbClient() as PoolClient;
@@ -854,8 +934,70 @@ export async function saveEmployeeForm(
       );
     }
 
+    // Save authored answers for open-assessment sections.
+    // Strategy: delete existing authored rows for this appraisal + user +
+    // open sections, then insert the new set. This handles add/remove/edit
+    // cleanly without needing stable client-side IDs.
+    if (openSections.length > 0) {
+      const openSectionIds = openSections.map((s) => s.id);
+      await client.query(
+        `DELETE FROM appraisal_answers
+         WHERE appraisal_id = $1
+           AND filled_by_id = $2
+           AND open_section_id = ANY($3::bigint[])`,
+        [appraisal.id, userId, openSectionIds],
+      );
+
+      for (const authored of authoredInputs) {
+        const sectionId = authored.openSectionId!;
+        const section = openSections.find((s) => s.id === sectionId);
+        if (!section) {
+          continue;
+        }
+
+        const questionText = (authored.authoredQuestionText ?? "").trim();
+        const totalMarks = Number(authored.authoredTotalMarks) || 0;
+        const pointsEarned = Number(authored.pointsEarned) || 0;
+        const remarks = authored.remarks?.trim() || null;
+
+        if (!questionText && !totalMarks && !pointsEarned && !remarks) {
+          continue;
+        }
+
+        await client.query(
+          `INSERT INTO appraisal_answers (
+             appraisal_id,
+             question_id,
+             filled_by_id,
+             text_response,
+             selected_option_id,
+             points_earned,
+             rating_value,
+             remarks,
+             authored_question_text,
+             authored_total_marks,
+             open_section_id
+           ) VALUES ($1, NULL, $2, NULL, NULL, $3, NULL, $4, $5, $6, $7)`,
+          [
+            appraisal.id,
+            userId,
+            pointsEarned,
+            remarks,
+            questionText,
+            totalMarks,
+            sectionId,
+          ],
+        );
+      }
+    }
+
     if (submit) {
       const savedAnswers = await getAnswersForAppraisal(
+        Number(appraisal.id),
+        userId,
+        client,
+      );
+      const savedAuthored = await getAuthoredAnswersForAppraisal(
         Number(appraisal.id),
         userId,
         client,
@@ -889,12 +1031,53 @@ export async function saveEmployeeForm(
         }
       }
 
+      // Validate open-assessment sections: budget must be fully allocated
+      // and each question's score must be within its authored total marks.
+      for (const section of openSections) {
+        const sectionAuthored = savedAuthored.filter(
+          (a) => a.openSectionId === section.id,
+        );
+        const budget = section.openAssessmentTotalMarks ?? 0;
+        const allocated = sectionAuthored.reduce(
+          (sum, a) => sum + Number(a.authoredTotalMarks || 0),
+          0,
+        );
+
+        if (sectionAuthored.length === 0) {
+          throw new EmployeeFormError(
+            `Section "${section.title}": add at least one question to the open-assessment section.`,
+          );
+        }
+
+        if (allocated !== budget) {
+          throw new EmployeeFormError(
+            `Section "${section.title}": total marks allocated (${allocated}) must equal the budget (${budget}).`,
+          );
+        }
+
+        for (const authored of sectionAuthored) {
+          if (!authored.authoredQuestionText?.trim()) {
+            throw new EmployeeFormError(
+              `Section "${section.title}": every question must have text.`,
+            );
+          }
+          const score = Number(authored.pointsEarned);
+          const max = Number(authored.authoredTotalMarks);
+          if (Number.isNaN(score) || score < 0 || score > max) {
+            throw new EmployeeFormError(
+              `Section "${section.title}": score must be between 0 and ${max} for each question.`,
+            );
+          }
+        }
+      }
+
       const rawScore = calculateRawScore(
         template,
         savedAnswers.map((answer) => ({
           questionId: answer.questionId,
           pointsEarned: answer.pointsEarned,
         })),
+        savedAuthored,
       );
 
       // Fetch the employee's manager assignments to determine the correct

@@ -21,6 +21,10 @@ export interface FormTableRow {
   sectionTotalMarks: number;
   /** Sum of totalMarks for all questions in this subsection (0 if no subsection). */
   subsectionTotalMarks: number;
+  /** True when this row represents an open-assessment section (no fixed questions). */
+  isOpenAssessment: boolean;
+  /** HR's marks budget for the open-assessment section. */
+  openAssessmentTotalMarks: number;
 }
 
 /**
@@ -35,6 +39,9 @@ export interface FormTableRow {
  * `sectionTotalMarks` and `subsectionTotalMarks` are computed for every row
  * in a section/subsection so that the header row (which is the first row)
  * can display the aggregate marks alongside the title.
+ *
+ * Open-assessment sections emit a single row with `isOpenAssessment: true`
+ * and no question — the UI renders a dynamic authored-question list instead.
  */
 export function buildFormTableRows(
   sections: FormSectionRecord[],
@@ -73,6 +80,8 @@ export function buildFormTableRows(
         isHeaderOnly: true,
         sectionTotalMarks: 0,
         subsectionTotalMarks,
+        isOpenAssessment: false,
+        openAssessmentTotalMarks: 0,
       });
       return;
     }
@@ -92,6 +101,8 @@ export function buildFormTableRows(
         isHeaderOnly: false,
         sectionTotalMarks: 0,
         subsectionTotalMarks,
+        isOpenAssessment: false,
+        openAssessmentTotalMarks: 0,
       });
     });
 
@@ -119,6 +130,8 @@ export function buildFormTableRows(
       isHeaderOnly: false,
       sectionTotalMarks: 0,
       subsectionTotalMarks: 0,
+      isOpenAssessment: false,
+      openAssessmentTotalMarks: 0,
     });
   };
 
@@ -129,6 +142,29 @@ export function buildFormTableRows(
 
       sectionNumber += 1;
       const sectionStartIdx = rows.length;
+
+      // Open-assessment section: emit a single row with no question.
+      if (section.isOpenAssessment) {
+        sr += 1;
+        const openRow: FormTableRow = {
+          sr,
+          sectionTitle: section.title,
+          sectionNumber,
+          subsectionTitle: null,
+          subsectionNumber: null,
+          question: null,
+          isFirstInSection: true,
+          isFirstInSubsection: false,
+          sectionRowCount: 1,
+          isHeaderOnly: false,
+          sectionTotalMarks: section.openAssessmentTotalMarks ?? 0,
+          subsectionTotalMarks: 0,
+          isOpenAssessment: true,
+          openAssessmentTotalMarks: section.openAssessmentTotalMarks ?? 0,
+        };
+        rows.push(openRow);
+        return;
+      }
 
       // Use the section layout to interleave subsections and direct questions
       // in their creation order, instead of grouping subsections first.
@@ -182,6 +218,8 @@ export function buildFormTableRows(
           isHeaderOnly: false,
           sectionTotalMarks: 0,
           subsectionTotalMarks: 0,
+          isOpenAssessment: false,
+          openAssessmentTotalMarks: 0,
         });
       }
     }
@@ -194,12 +232,20 @@ export function buildFormTableRows(
  * Formats a section label as "Section {number}: {title}  (Total: {marks})".
  * Returns just the title if no section number is available.
  * The total marks suffix is only shown when sectionTotalMarks > 0.
+ * For open-assessment sections, appends "Open Assessment" to the label.
  */
 export function formatSectionLabel(row: FormTableRow): string {
   const base =
     row.sectionNumber != null && row.sectionTitle
       ? `Section ${row.sectionNumber}: ${row.sectionTitle}`
       : (row.sectionTitle ?? "");
+
+  if (row.isOpenAssessment) {
+    const budget = row.openAssessmentTotalMarks;
+    return budget > 0
+      ? `${base}  (Open Assessment — Budget: ${budget})`
+      : `${base}  (Open Assessment)`;
+  }
 
   if (row.sectionTotalMarks > 0) {
     return `${base}  (Total: ${row.sectionTotalMarks})`;

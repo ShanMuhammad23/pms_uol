@@ -826,6 +826,48 @@ export default function DirectAssessmentSpreadsheet({
                 const scored = question ? isScoredQuestion(question) : false;
                 const isEvenRow = rowIdx % 2 === 0;
 
+                // Open-assessment section: render a row showing authored
+                // question counts per employee.
+                if (row.isOpenAssessment) {
+                  const section = data?.sections.find(
+                    (s) => s.isOpenAssessment && s.title === row.sectionTitle,
+                  );
+                  const sectionId = section?.id ?? 0;
+                  return (
+                    <Fragment key={`open-${row.sr}`}>
+                      {row.isFirstInSection && row.sectionTitle ? (
+                        <tr className="bg-amber-50/80 dark:bg-amber-950/20">
+                          <td
+                            colSpan={3 + filteredEmployees.length}
+                            className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200"
+                          >
+                            {formatSectionLabel(row)}
+                          </td>
+                        </tr>
+                      ) : null}
+                      <tr
+                        className={cn(
+                          "align-top [&>td]:border-b [&>td]:border-slate-100 dark:[&>td]:border-slate-700/40",
+                          isEvenRow
+                            ? "bg-white dark:bg-slate-900/40"
+                            : "bg-slate-50/60 dark:bg-slate-800/20",
+                        )}
+                      >
+                        <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
+                          {row.sr}
+                        </td>
+                        <td
+                          colSpan={2 + filteredEmployees.length}
+                          className="px-3 py-2.5 text-xs italic text-amber-700 dark:text-amber-300"
+                        >
+                          Open Assessment — each employee/manager authors their own questions
+                          {sectionId ? ` (Section ID: ${sectionId})` : ""}
+                        </td>
+                      </tr>
+                    </Fragment>
+                  );
+                }
+
                 return (
                   <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
                     {row.isFirstInSection && row.sectionTitle ? (

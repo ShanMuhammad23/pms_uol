@@ -57,6 +57,14 @@ export interface DirectAssessmentData {
     EmployeeFormAnswerRecord[]
   >;
   /**
+   * Map of submissionId → authored answers (open-assessment sections) for the
+   * current reviewer. Keyed by submissionId.
+   */
+  managerAuthoredAnswersBySubmission: Record<
+    number,
+    EmployeeFormAnswerRecord[]
+  >;
+  /**
    * Map of submissionId → overall remarks (manager1 / manager2) stored on the
    * appraisal. Reuses the same columns as the standard assessment workflow so
    * Direct Assessment and standard assessment share one data model.
@@ -197,6 +205,10 @@ export async function getDirectAssessmentData(
     number,
     EmployeeFormAnswerRecord[]
   > = {};
+  const managerAuthoredAnswersBySubmission: Record<
+    number,
+    EmployeeFormAnswerRecord[]
+  > = {};
 
   // BATCH: Fetch all answers for all submissions in one query instead of
   // looping per employee. Collect all (submissionId, filledById) pairs we need.
@@ -214,6 +226,7 @@ export async function getDirectAssessmentData(
 
   // Batch query: all answers for all relevant submissions + filled_by combos.
   // Keyed by `${appraisal_id}:${filled_by_id}` → list of answer records.
+  // Only fetches rows with question_id NOT NULL (normal answers).
   const answersByTriple = new Map<
     string,
     Array<{
@@ -242,7 +255,8 @@ export async function getDirectAssessmentData(
               rating_value::text
        FROM appraisal_answers
        WHERE appraisal_id = ANY($1::bigint[])
-         AND filled_by_id = ANY($2::bigint[])`,
+         AND filled_by_id = ANY($2::bigint[])
+         AND question_id IS NOT NULL`,
       [submissionIdsForAnswers, [...filledByIds]],
     );
     for (const row of ansResult.rows) {
@@ -264,6 +278,66 @@ export async function getDirectAssessmentData(
       answersByTriple.set(key, list);
     }
   }
+
+  // Batch query: authored answers (open-assessment sections) for all
+  // relevant submissions + filled_by combos. Keyed by
+  // `${appraisal_id}:${filled_by_id}` → list of authored answer records.
+  const authoredAnswersByTriple = new Map<
+    string,
+    EmployeeFormAnswerRecord[]
+  >();
+
+  if (submissionIdsForAnswers.length > 0 && filledByIds.size > 0) {
+    const authoredResult = await getDbClient().query<{
+      appraisal_id: string;
+      filled_by_id: string;
+      id: string;
+      text_response: string | null;
+      points_earned: string;
+      remarks: string | null;
+      authored_question_text: string | null;
+      authored_total_marks: string;
+      open_section_id: string | null;
+    }>(
+      `SELECT appraisal_id::text, filled_by_id::text, id::text,
+              text_response, points_earned::text, remarks,
+              authored_question_text, authored_total_marks::text,
+              open_section_id::text
+       FROM appraisal_answers
+       WHERE appraisal_id = ANY($1::bigint[])
+         AND filled_by_id = ANY($2::bigint[])
+         AND open_section_id IS NOT NULL
+       ORDER BY id ASC`,
+      [submissionIdsForAnswers, [...filledByIds]],
+    );
+    for (const row of authoredResult.rows) {
+      const key = `${row.appraisal_id}:${row.filled_by_id}`;
+      const list = authoredAnswersByTriple.get(key) ?? [];
+      list.push({
+        questionId: 0,
+        textResponse: row.text_response,
+        selectedOptionId: null,
+        pointsEarned: Number(row.points_earned),
+        ratingValue: null,
+        remarks: row.remarks ?? null,
+        attachments: [],
+        authoredQuestionText: row.authored_question_text,
+        authoredTotalMarks: Number(row.authored_total_marks),
+        openSectionId: row.open_section_id
+          ? Number(row.open_section_id)
+          : null,
+      });
+      authoredAnswersByTriple.set(key, list);
+    }
+  }
+
+  const getAuthoredAnswersForUser = (
+    submissionId: number,
+    filledById: number,
+  ): EmployeeFormAnswerRecord[] => {
+    const key = `${submissionId}:${filledById}`;
+    return authoredAnswersByTriple.get(key) ?? [];
+  };
 
   // Batch query: all attachments for all relevant submissions.
   const attachmentsByQuestionKey = new Map<
@@ -363,6 +437,22 @@ export async function getDirectAssessmentData(
         emp.manager1UserId,
       );
     }
+
+    // Authored answers for the current reviewer.
+    const authoredReviewerId =
+      emp.canEdit
+        ? ((emp.managerLevel ?? 1) === 2
+            ? emp.manager2UserId ?? emp.manager1UserId
+            : emp.manager1UserId)
+        : ((emp.managerLevel ?? 1) === 2
+            ? emp.manager2UserId ?? emp.manager1UserId
+            : emp.manager1UserId);
+    if (authoredReviewerId != null) {
+      managerAuthoredAnswersBySubmission[emp.submissionId] =
+        getAuthoredAnswersForUser(emp.submissionId, authoredReviewerId);
+    } else {
+      managerAuthoredAnswersBySubmission[emp.submissionId] = [];
+    }
   }
 
   // Fetch overall remarks for every submission. Reuses the same
@@ -412,6 +502,7 @@ export async function getDirectAssessmentData(
     employees,
     managerAnswersBySubmission,
     manager1AnswersBySubmission,
+    managerAuthoredAnswersBySubmission,
     overallRemarksBySubmission,
   };
 }

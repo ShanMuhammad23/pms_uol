@@ -23,6 +23,7 @@ export default function FormSectionEditor({
   formSelfAssessmentEnabled = true,
 }: FormSectionEditorProps) {
   const titleErrorKey = `section-${sectionIndex}-title`;
+  const isOpenAssessment = Boolean(section.isOpenAssessment);
 
   const updateQuestion = (index: number, question: QuestionInput) => {
     onChange({
@@ -67,6 +68,25 @@ export default function FormSectionEditor({
     });
   };
 
+  const toggleOpenAssessment = (enabled: boolean) => {
+    if (enabled) {
+      onChange({
+        ...section,
+        isOpenAssessment: true,
+        questions: [],
+        subsections: [],
+        layout: [],
+        openAssessmentTotalMarks: section.openAssessmentTotalMarks ?? 100,
+      });
+    } else {
+      onChange({
+        ...section,
+        isOpenAssessment: false,
+        openAssessmentTotalMarks: 0,
+      });
+    }
+  };
+
   return (
     <div className="rounded-md border border-slate-300/80 bg-surface p-4 dark:border-white/15">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -97,47 +117,104 @@ export default function FormSectionEditor({
         </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={addQuestion}
-          className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90"
-        >
-          <Plus className="size-3.5" />
-          Add Question
-        </button>
+      {/* Open Assessment toggle */}
+      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 dark:border-white/10 dark:bg-slate-800/30">
+        <label className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+          <input
+            type="checkbox"
+            checked={isOpenAssessment}
+            onChange={(e) => toggleOpenAssessment(e.target.checked)}
+            className="size-4 rounded border-slate-300 text-primary focus-visible:ring-2 focus-visible:ring-primary dark:border-white/20 dark:bg-slate-800"
+          />
+          Open Assessment Section
+          <span className="font-normal text-foreground/50">
+            (employee/manager writes the questions at fill time)
+          </span>
+        </label>
+        {isOpenAssessment ? (
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-medium text-foreground/70">
+              Total Marks Budget
+            </label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={section.openAssessmentTotalMarks ?? 0}
+              onChange={(e) =>
+                onChange({
+                  ...section,
+                  openAssessmentTotalMarks: Number(e.target.value) || 0,
+                })
+              }
+              className="h-9 w-32 rounded-lg border border-slate-300 bg-background px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
+              placeholder="e.g. 100"
+            />
+            <p className="mt-1.5 text-xs text-foreground/50">
+              The employee or manager will split this budget across their own
+              questions. The sum of all question marks must equal this budget.
+            </p>
+            {errors[`section-${sectionIndex}-open-budget`] ? (
+              <p className="mt-1 text-xs text-red-600">
+                {errors[`section-${sectionIndex}-open-budget`]}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
-      {section.questions.length > 0 ? (
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold text-text-primary">
-            Section Questions
-          </h4>
-          {section.questions.map((question, questionIndex) => (
-            <QuestionEditor
-              key={questionIndex}
-              question={question}
-              index={questionIndex}
-              total={section.questions.length}
-              onChange={(value) => updateQuestion(questionIndex, value)}
-              onRemove={() => removeQuestion(questionIndex)}
-              onMoveUp={() => moveQuestion(questionIndex, "up")}
-              onMoveDown={() => moveQuestion(questionIndex, "down")}
-              error={errors[`section-${sectionIndex}-question-${questionIndex}`]}
-              totalMarksError={
-                errors[`section-${sectionIndex}-question-${questionIndex}-marks`]
-              }
-              formSelfAssessmentEnabled={formSelfAssessmentEnabled}
-            />
-          ))}
-        </div>
-      ) : null}
+      {/* Normal section: show question editor */}
+      {!isOpenAssessment ? (
+        <>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={addQuestion}
+              className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90"
+            >
+              <Plus className="size-3.5" />
+              Add Question
+            </button>
+          </div>
 
-      {section.questions.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-300/80 px-4 py-6 text-center text-sm text-foreground/70 dark:border-white/15">
-          Add a question to this section.
+          {section.questions.length > 0 ? (
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold text-text-primary">
+                Section Questions
+              </h4>
+              {section.questions.map((question, questionIndex) => (
+                <QuestionEditor
+                  key={questionIndex}
+                  question={question}
+                  index={questionIndex}
+                  total={section.questions.length}
+                  onChange={(value) => updateQuestion(questionIndex, value)}
+                  onRemove={() => removeQuestion(questionIndex)}
+                  onMoveUp={() => moveQuestion(questionIndex, "up")}
+                  onMoveDown={() => moveQuestion(questionIndex, "down")}
+                  error={errors[`section-${sectionIndex}-question-${questionIndex}`]}
+                  totalMarksError={
+                    errors[`section-${sectionIndex}-question-${questionIndex}-marks`]
+                  }
+                  formSelfAssessmentEnabled={formSelfAssessmentEnabled}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {section.questions.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300/80 px-4 py-6 text-center text-sm text-foreground/70 dark:border-white/15">
+              Add a question to this section.
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="rounded-lg border border-dashed border-amber-300/80 bg-amber-50/40 px-4 py-6 text-center text-sm text-amber-700 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300">
+          This is an open-assessment section. Questions will be authored by the
+          employee (self-assessment) or manager (direct assessment) at fill time.
+          No questions need to be created here.
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

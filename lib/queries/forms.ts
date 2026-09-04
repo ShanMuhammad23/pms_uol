@@ -66,6 +66,8 @@ interface SectionRow {
   parent_section_id: string | null;
   title: string;
   sort_order: number;
+  is_open_assessment: boolean;
+  open_assessment_total_marks: number;
 }
 
 interface QuestionRow {
@@ -167,7 +169,37 @@ async function ensureRatingBasedSchema(client: PoolClient): Promise<void> {
       ALTER COLUMN points_earned TYPE NUMERIC(12, 2)
       USING points_earned::numeric
   `);
+  await ensureOpenAssessmentSchema(client);
   ratingBasedSchemaReady = true;
+}
+
+let openAssessmentSchemaReady = false;
+
+async function ensureOpenAssessmentSchema(client: PoolClient): Promise<void> {
+  if (openAssessmentSchemaReady) {
+    return;
+  }
+
+  await client.query(`
+    ALTER TABLE form_sections
+      ADD COLUMN IF NOT EXISTS is_open_assessment BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS open_assessment_total_marks INT NOT NULL DEFAULT 0
+  `);
+  await client.query(`
+    ALTER TABLE appraisal_answers ALTER COLUMN question_id DROP NOT NULL
+  `);
+  await client.query(`
+    ALTER TABLE appraisal_answers
+      ADD COLUMN IF NOT EXISTS authored_question_text TEXT,
+      ADD COLUMN IF NOT EXISTS authored_total_marks INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS open_section_id BIGINT REFERENCES form_sections(id) ON DELETE CASCADE
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_appraisal_answers_open_section
+      ON appraisal_answers(open_section_id)
+      WHERE open_section_id IS NOT NULL
+  `);
+  openAssessmentSchemaReady = true;
 }
 
 function resolveRatingScaleId(
@@ -646,21 +678,33 @@ async function syncQuestion(
 
 async function upsertSection(
   templateId: number,
-  section: Pick<FormSectionInput, "id" | "title" | "sortOrder">,
+  section: Pick<
+    FormSectionInput,
+    "id" | "title" | "sortOrder" | "isOpenAssessment" | "openAssessmentTotalMarks"
+  >,
   parentSectionId: number | null,
   client: PoolClient,
 ): Promise<number> {
+  const isOpenAssessment = Boolean(section.isOpenAssessment);
+  const openAssessmentTotalMarks = isOpenAssessment
+    ? Number(section.openAssessmentTotalMarks) || 0
+    : 0;
+
   if (section.id !== undefined) {
     await client.query(
       `UPDATE form_sections
        SET title = $1,
            sort_order = $2,
-           parent_section_id = $3
-       WHERE id = $4 AND template_id = $5`,
+           parent_section_id = $3,
+           is_open_assessment = $4,
+           open_assessment_total_marks = $5
+       WHERE id = $6 AND template_id = $7`,
       [
         section.title,
         section.sortOrder,
         parentSectionId,
+        isOpenAssessment,
+        openAssessmentTotalMarks,
         section.id,
         templateId,
       ],
@@ -669,10 +713,20 @@ async function upsertSection(
   }
 
   const sectionResult = await client.query<{ id: string }>(
-    `INSERT INTO form_sections (template_id, parent_section_id, title, sort_order)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO form_sections (
+       template_id, parent_section_id, title, sort_order,
+       is_open_assessment, open_assessment_total_marks
+     )
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id`,
-    [templateId, parentSectionId, section.title, section.sortOrder],
+    [
+      templateId,
+      parentSectionId,
+      section.title,
+      section.sortOrder,
+      isOpenAssessment,
+      openAssessmentTotalMarks,
+    ],
   );
 
   return Number(sectionResult.rows[0].id);
@@ -743,6 +797,11 @@ async function syncFormStructure(
   for (const section of input.sections) {
     const sectionId = await upsertSection(templateId, section, null, client);
     sectionIds.add(sectionId);
+
+    // Open-assessment sections have no questions or subsections.
+    if (section.isOpenAssessment) {
+      continue;
+    }
 
     // Assign shared sort_order to subsections and direct questions based on
     // the section layout. This preserves the interleaved creation order.
@@ -827,14 +886,33 @@ async function insertSectionsAndQuestions(
   client: PoolClient,
 ): Promise<void> {
   for (const section of input.sections) {
+    const isOpenAssessment = Boolean(section.isOpenAssessment);
+    const openAssessmentTotalMarks = isOpenAssessment
+      ? Number(section.openAssessmentTotalMarks) || 0
+      : 0;
+
     const sectionResult = await client.query<{ id: string }>(
-      `INSERT INTO form_sections (template_id, parent_section_id, title, sort_order)
-       VALUES ($1, NULL, $2, $3)
+      `INSERT INTO form_sections (
+         template_id, parent_section_id, title, sort_order,
+         is_open_assessment, open_assessment_total_marks
+       )
+       VALUES ($1, NULL, $2, $3, $4, $5)
        RETURNING id`,
-      [templateId, section.title, section.sortOrder],
+      [
+        templateId,
+        section.title,
+        section.sortOrder,
+        isOpenAssessment,
+        openAssessmentTotalMarks,
+      ],
     );
 
     const sectionId = Number(sectionResult.rows[0].id);
+
+    // Open-assessment sections have no questions or subsections.
+    if (isOpenAssessment) {
+      continue;
+    }
 
     // Assign shared sort_order to subsections and direct questions based on
     // the section layout. This preserves the interleaved creation order.
@@ -957,8 +1035,14 @@ async function getFormStructureForTemplate(
 }> {
   const executor = client ?? getDbClient();
 
+  // Ensure the open-assessment schema columns exist before reading sections.
+  if (!client) {
+    await ensureOpenAssessmentSchema(executor as PoolClient);
+  }
+
   const sectionsResult = await executor.query<SectionRow>(
-    `SELECT id, parent_section_id, title, sort_order
+    `SELECT id, parent_section_id, title, sort_order,
+            is_open_assessment, open_assessment_total_marks
      FROM form_sections
      WHERE template_id = $1
      ORDER BY sort_order ASC`,
@@ -1013,15 +1097,20 @@ async function getFormStructureForTemplate(
 
   for (const section of topLevelSections) {
     const sectionId = Number(section.id);
-    const sectionQuestions = questionsBySectionId.get(sectionId) ?? [];
-    const subsections = sectionsResult.rows
-      .filter((row) => row.parent_section_id === section.id)
-      .map((subsection) => ({
-        id: Number(subsection.id),
-        title: subsection.title,
-        sortOrder: subsection.sort_order,
-        questions: questionsBySectionId.get(Number(subsection.id)) ?? [],
-      }));
+    const isOpenAssessment = Boolean(section.is_open_assessment);
+    const sectionQuestions = isOpenAssessment
+      ? []
+      : (questionsBySectionId.get(sectionId) ?? []);
+    const subsections = isOpenAssessment
+      ? []
+      : sectionsResult.rows
+          .filter((row) => row.parent_section_id === section.id)
+          .map((subsection) => ({
+            id: Number(subsection.id),
+            title: subsection.title,
+            sortOrder: subsection.sort_order,
+            questions: questionsBySectionId.get(Number(subsection.id)) ?? [],
+          }));
 
     // Build the interleaved layout by merging subsections and direct
     // questions by their sort_order values (shared pool). This preserves
@@ -1062,6 +1151,8 @@ async function getFormStructureForTemplate(
       subsections,
       questions: sectionQuestions,
       layout,
+      isOpenAssessment,
+      openAssessmentTotalMarks: Number(section.open_assessment_total_marks) || 0,
     });
   }
 
