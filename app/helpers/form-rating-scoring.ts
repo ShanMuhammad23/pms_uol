@@ -72,6 +72,22 @@ function isPresentRating(rating: unknown): boolean {
   return Number.isFinite(Number(rating));
 }
 
+export function incompleteRequiredReviewMessage(
+  missingCount: number,
+  ratingBased: boolean,
+  action: "save" | "approve",
+): string {
+  const actionLabel = action === "approve" ? "approving" : "saving";
+  if (ratingBased) {
+    return missingCount === 1
+      ? `Select a rating for the highlighted mandatory question before ${actionLabel}.`
+      : `Select a rating for ${missingCount} highlighted mandatory questions before ${actionLabel}.`;
+  }
+  return missingCount === 1
+    ? `Enter a score for the highlighted mandatory question before ${actionLabel}. A mark of 0 is allowed.`
+    : `Enter a score for ${missingCount} highlighted mandatory questions before ${actionLabel}. A mark of 0 is allowed.`;
+}
+
 /** True when a numeric score was entered. Zero is filled; empty is not. */
 export function hasExplicitNumericScore(
   value: number | string | null | undefined,

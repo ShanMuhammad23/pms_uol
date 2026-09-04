@@ -14,10 +14,13 @@ import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   formatScoreValue,
   getQuestionRatingScale,
+  hasProvidedAnswerScore,
+  incompleteRequiredReviewMessage,
   parseDraftScoreAnswer,
   resolveDisplayedAnswerPoints,
   usesRatingScore,
 } from "@/app/helpers/form-rating-scoring";
+import { toast } from "react-hot-toast";
 import {
   AnswerScoreReadout,
   RatingScoreField,
@@ -200,6 +203,27 @@ function overallRemarksForSubmission(
   return value.trim() || null;
 }
 
+function collectIncompleteRequiredQuestionIds(
+  questions: DirectAssessmentData["questions"],
+  empDrafts: Record<number, ScoreDraft> | undefined,
+  ratingBased: boolean,
+  ratingScales: DirectAssessmentData["ratingScales"],
+): number[] {
+  return questions
+    .filter(
+      (question) =>
+        isScoredQuestion(question) &&
+        question.isRequired &&
+        !hasProvidedAnswerScore(
+          question,
+          ratingBased,
+          ratingScales,
+          parseDraftScoreAnswer(empDrafts?.[question.id]),
+        ),
+    )
+    .map((question) => question.id);
+}
+
 function scoreDraftHasInput(draft: ScoreDraft | undefined): boolean {
   if (!draft) return false;
   return (
@@ -244,7 +268,10 @@ export default function DirectAssessmentSpreadsheet({
   scope = "all",
 }: DirectAssessmentSpreadsheetProps) {
   const queryClient = useQueryClient();
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [incompleteCells, setIncompleteCells] = useState<{
+    submissionId: number;
+    questionIds: Set<number>;
+  } | null>(null);
   const [drafts, setDrafts] = useState<
     Record<number, Record<number, ScoreDraft>>
   >({});
@@ -368,13 +395,13 @@ export default function DirectAssessmentSpreadsheet({
       return saveDirectAssessmentScores(submissionId, answers, overallRemarks);
     },
     onSuccess: (_result, submissionId) => {
-      setSaveMessage(`Saved scores for submission #${submissionId}.`);
+      toast.success(`Saved scores for submission ${data?.employees.find((e) => e.submissionId === submissionId)?.employeeName}.`);
       queryClient.invalidateQueries({
         queryKey: ["direct-assessment", templateId],
       });
     },
-    onError: (err: Error) => {
-      setSaveMessage(err.message);
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to save scores.");
     },
   });
 
@@ -402,13 +429,15 @@ export default function DirectAssessmentSpreadsheet({
       return approveDirectAssessment(submissionId);
     },
     onSuccess: (_result, submissionId) => {
-      setSaveMessage(`Approved review for submission #${submissionId}.`);
+      toast.success(`Approved review for submission ${data?.employees.find((e) => e.submissionId === submissionId)?.employeeName}.`);
       queryClient.invalidateQueries({
         queryKey: ["direct-assessment", templateId],
       });
     },
-    onError: (err: Error) => {
-      setSaveMessage(err.message);
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to approve this assessment.",
+      );
     },
   });
 
@@ -417,21 +446,48 @@ export default function DirectAssessmentSpreadsheet({
     questionId: number,
     patch: Partial<ScoreDraft>,
   ) => {
+    const existing = draftsRef.current[submissionId]?.[questionId] ?? {
+      pointsEarned: "",
+      ratingValue: "",
+      remarks: "",
+    };
+    const merged = { ...existing, ...patch };
     setDrafts((current) => {
       const next = { ...current };
       const empDrafts = next[submissionId] ?? {};
-      const existing = empDrafts[questionId] ?? {
-        pointsEarned: "",
-        ratingValue: "",
-        remarks: "",
-      };
       next[submissionId] = {
         ...empDrafts,
-        [questionId]: { ...existing, ...patch },
+        [questionId]: merged,
       };
       return next;
     });
-    setSaveMessage(null);
+    setIncompleteCells((current) => {
+      if (!current || current.submissionId !== submissionId) {
+        return current;
+      }
+      if (!current.questionIds.has(questionId)) {
+        return current;
+      }
+      const assessment = data;
+      const question = assessment?.questions.find((item) => item.id === questionId);
+      if (
+        !assessment ||
+        !question ||
+        !hasProvidedAnswerScore(
+          question,
+          assessment.ratingBased,
+          assessment.ratingScales,
+          parseDraftScoreAnswer(merged),
+        )
+      ) {
+        return current;
+      }
+      const nextIds = new Set(current.questionIds);
+      nextIds.delete(questionId);
+      return nextIds.size === 0
+        ? null
+        : { submissionId, questionIds: nextIds };
+    });
   };
 
   const openRemarksModal = (submissionId: number) => {
@@ -442,6 +498,36 @@ export default function DirectAssessmentSpreadsheet({
   const closeRemarksModal = () => {
     setRemarksModalOpen(false);
     setRemarksModalSubmissionId(null);
+  };
+
+  const assertRequiredScoresFilled = (
+    submissionId: number,
+    action: "save" | "approve",
+  ): boolean => {
+    if (!data) {
+      toast.error("Assessment data is not loaded.");
+      return false;
+    }
+    const missing = collectIncompleteRequiredQuestionIds(
+      data.questions,
+      draftsRef.current[submissionId],
+      data.ratingBased,
+      data.ratingScales,
+    );
+    if (missing.length === 0) {
+      setIncompleteCells((current) =>
+        current?.submissionId === submissionId ? null : current,
+      );
+      return true;
+    }
+    setIncompleteCells({
+      submissionId,
+      questionIds: new Set(missing),
+    });
+    toast.error(
+      incompleteRequiredReviewMessage(missing.length, data.ratingBased, action),
+    );
+    return false;
   };
 
   // Persist remarks from the modal via the same saveDirectAssessmentScores
@@ -475,13 +561,13 @@ export default function DirectAssessmentSpreadsheet({
       );
       await saveDirectAssessmentScores(submissionId, answers, overallRemarks);
       setRemarksDrafts(nextDrafts);
-      setSaveMessage(`Saved remarks for submission #${submissionId}.`);
+      toast.success(`Saved remarks for submission ${data?.employees.find((e) => e.submissionId === submissionId)?.employeeName}.`);
       queryClient.invalidateQueries({
         queryKey: ["direct-assessment", templateId],
       });
       closeRemarksModal();
     } catch (err) {
-      setSaveMessage(
+      toast.error(
         err instanceof Error ? err.message : "Failed to save remarks.",
       );
     } finally {
@@ -608,12 +694,6 @@ export default function DirectAssessmentSpreadsheet({
         </div>
       </div>
       <FormDescription description={data.templateDescription} />
-
-      {saveMessage ? (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
-          {saveMessage}
-        </div>
-      ) : null}
 
       <DirectAssessmentFilterBar
         filterState={filters.filterState}
@@ -872,6 +952,9 @@ export default function DirectAssessmentSpreadsheet({
                         const draft = empDrafts?.[question!.id];
                         const empColId = `emp-${emp.submissionId}`;
                         const empWidth = getColumnWidth(empColId, staffColumnWidth);
+                        const cellInvalid =
+                          incompleteCells?.submissionId === emp.submissionId &&
+                          incompleteCells.questionIds.has(question!.id);
 
                         return (
                           <td
@@ -880,6 +963,7 @@ export default function DirectAssessmentSpreadsheet({
                               "min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40",
                               !isEditable &&
                                 "bg-slate-50/50 dark:bg-slate-800/20",
+                              cellInvalid && "bg-red-50 dark:bg-red-950/30",
                             )}
                             style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
                           >
@@ -899,6 +983,7 @@ export default function DirectAssessmentSpreadsheet({
                                   }
                                   weight={question!.totalMarks}
                                   ratingValue={draft?.ratingValue ?? ""}
+                                  invalid={cellInvalid}
                                   onRatingChange={(ratingValue, pointsEarned) =>
                                     updateDraft(emp.submissionId, question!.id, {
                                       ratingValue,
@@ -921,7 +1006,12 @@ export default function DirectAssessmentSpreadsheet({
                                     ),
                                   })
                                 }
-                                className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
+                                aria-invalid={cellInvalid || undefined}
+                                className={cn(
+                                  "h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300",
+                                  cellInvalid &&
+                                    "border-red-500 ring-2 ring-red-400/80 focus-visible:ring-red-500 dark:border-red-400",
+                                )}
                               />
                               )
                             ) : (
@@ -1084,7 +1174,17 @@ export default function DirectAssessmentSpreadsheet({
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => saveMutation.mutate(emp.submissionId)}
+                            onClick={() => {
+                              if (
+                                !assertRequiredScoresFilled(
+                                  emp.submissionId,
+                                  "save",
+                                )
+                              ) {
+                                return;
+                              }
+                              saveMutation.mutate(emp.submissionId);
+                            }}
                             disabled={actionsBusy}
                             className="inline-flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border border-violet-300 bg-white px-1.5 py-1 text-[11px] font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-violet-700 dark:bg-slate-800 dark:text-violet-200 dark:hover:bg-violet-950/40"
                             aria-label={`Save scores for ${emp.employeeName}`}
@@ -1094,9 +1194,17 @@ export default function DirectAssessmentSpreadsheet({
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
-                              approveMutation.mutate(emp.submissionId)
-                            }
+                            onClick={() => {
+                              if (
+                                !assertRequiredScoresFilled(
+                                  emp.submissionId,
+                                  "approve",
+                                )
+                              ) {
+                                return;
+                              }
+                              approveMutation.mutate(emp.submissionId);
+                            }}
                             disabled={actionsBusy}
                             className="inline-flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md bg-primary px-1.5 py-1 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-60"
                             aria-label={`Approve review for ${emp.employeeName}`}

@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SessionProvider } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { Toaster } from "react-hot-toast";
 import { Provider } from "react-redux";
 import OfflineDialog from "./components/layout/OfflineDialog";
 import { store } from "./store";
@@ -38,6 +39,19 @@ export default function Providers({ children }: ProvidersProps) {
       <Provider store={store}>
         <QueryClientProvider client={queryClient}>
           {children}
+          <Toaster
+            position="top-center"
+            toastOptions={{
+              duration: 5000,
+              success: { duration: 3500 },
+              error: { duration: 7000 },
+              style: {
+                maxWidth: "28rem",
+                fontSize: "13px",
+                lineHeight: "1.4",
+              },
+            }}
+          />
           <OfflineDialog />
         </QueryClientProvider>
       </Provider>
