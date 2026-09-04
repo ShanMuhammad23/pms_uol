@@ -20,4 +20,10 @@ export const queryKeys = {
     ["users", "by-ids", employeeIds] as const,
   securityEvents: (page: number, pageSize: number, eventType: string) =>
     ["security-events", page, pageSize, eventType] as const,
+  assessmentReminders: (
+    page: number,
+    pageSize: number,
+    search: string,
+    role: string,
+  ) => ["assessment-reminders", page, pageSize, search, role] as const,
 };

@@ -30,6 +30,7 @@ import matricesIcon from '@/public/icons8-matrix-60.png';
 import levelsIcon from '@/public/icons8-organization-64.png';
 import reportsIcon from '@/public/icons8-process-48.png';
 import securityIcon from '@/public/icons8-security-shield-64.png';
+import reminderIcon from '@/public/icons8-preview-64.png';
 import dashboardIcon from '@/public/icons8-dashboard-50.png';
 import {
   canAccessDashboardSubmissions,
@@ -81,6 +82,13 @@ const ADMIN_LINKS = [
 ] as const;
 
 const SUPER_ADMIN_ONLY_LINKS = [
+  {
+    href: "/dashboard/assessment-reminders",
+    label: "Assessment Reminders",
+    icon: reminderIcon,
+    match: (pathname: string) =>
+      pathname.startsWith("/dashboard/assessment-reminders"),
+  },
   {
     href: "/dashboard/security-events",
     label: "Security Events",
