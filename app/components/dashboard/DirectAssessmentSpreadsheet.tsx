@@ -132,8 +132,19 @@ function buildInitialAuthoredDrafts(
 
   for (const emp of data.employees) {
     if (emp.submissionId === 0) continue;
-    const authoredAnswers =
+
+    // For Manager 2, seed drafts from their own previously-saved authored
+    // answers first (if any), falling back to Manager 1's authored answers.
+    // This way Manager 2 can edit the obtained marks and their edits persist.
+    const isMgr2 = emp.managerLevel === 2 && emp.canEdit;
+    const ownAuthored =
       data.managerAuthoredAnswersBySubmission[emp.submissionId] ?? [];
+    const mgr1Authored =
+      data.manager1AuthoredAnswersBySubmission[emp.submissionId] ?? [];
+    const authoredAnswers = isMgr2
+      ? (ownAuthored.length > 0 ? ownAuthored : mgr1Authored)
+      : ownAuthored;
+
     const sectionMap: Record<number, AuthoredQuestionDraft[]> = {};
 
     for (const section of openSections) {
@@ -1228,12 +1239,19 @@ export default function DirectAssessmentSpreadsheet({
                                 </td>
                                 {filteredEmployees.map((emp) => {
                                   const isEditable = emp.canEdit;
+                                  const isMgr2 = isEditable && emp.managerLevel === 2;
                                   const empColId = `emp-${emp.submissionId}`;
                                   const empWidth = getColumnWidth(empColId, staffColumnWidth);
+                                  // Manager 2 drafts (seeded from Manager 1's
+                                  // authored answers) — used for editable score.
+                                  const empDrafts =
+                                    authoredDrafts[emp.submissionId]?.[sectionId] ?? [];
+                                  const draft = empDrafts[qIdx];
+                                  const maxMarks = Number(authored.authoredTotalMarks) || 0;
+                                  // For read-only employees, show Manager 1's score.
                                   const empAuthored =
                                     (data.manager1AuthoredAnswersBySubmission?.[emp.submissionId] ?? [])
                                       .filter((a) => a.openSectionId === sectionId);
-                                  // Match by question text (fallback to index).
                                   const matchAnswer =
                                     empAuthored.find(
                                       (a) => a.authoredQuestionText === authored.authoredQuestionText,
@@ -1247,7 +1265,26 @@ export default function DirectAssessmentSpreadsheet({
                                       )}
                                       style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
                                     >
-                                      {matchAnswer ? (
+                                      {isMgr2 && draft ? (
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={maxMarks || undefined}
+                                          step="0.5"
+                                          value={draft.pointsEarned}
+                                          onChange={(e) =>
+                                            updateAuthoredDraft(
+                                              emp.submissionId,
+                                              sectionId,
+                                              draft.clientId,
+                                              "pointsEarned",
+                                              clampScore(e.target.value, maxMarks),
+                                            )
+                                          }
+                                          className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
+                                          placeholder="0"
+                                        />
+                                      ) : matchAnswer ? (
                                         <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
                                           {formatScoreValue(matchAnswer.pointsEarned ?? 0)}
                                         </span>
@@ -1268,18 +1305,26 @@ export default function DirectAssessmentSpreadsheet({
                             colSpan={3}
                             className="border-r border-slate-100 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700/40 dark:text-slate-400"
                           >
-                            M1 Total:
+                            Total:
                           </td>
                           {filteredEmployees.map((emp) => {
                             const isMgr2 = emp.canEdit && emp.managerLevel === 2;
                             const empColId = `emp-${emp.submissionId}`;
                             const empWidth = getColumnWidth(empColId, staffColumnWidth);
+                            // For Manager 2, compute total from drafts (editable).
+                            // For others, compute from Manager 1's answers (read-only).
                             const empAuthored =
                               (data.manager1AuthoredAnswersBySubmission?.[emp.submissionId] ?? [])
                                 .filter((a) => a.openSectionId === sectionId);
-                            const totalScore = empAuthored.reduce(
-                              (sum, a) => sum + (a.pointsEarned ?? 0), 0,
-                            );
+                            const empDrafts =
+                              authoredDrafts[emp.submissionId]?.[sectionId] ?? [];
+                            const totalScore = isMgr2
+                              ? empDrafts.reduce(
+                                  (sum, d) => sum + (d.pointsEarned !== "" ? Number(d.pointsEarned) : 0), 0,
+                                )
+                              : empAuthored.reduce(
+                                  (sum, a) => sum + (a.pointsEarned ?? 0), 0,
+                                );
                             const totalMarks = empAuthored.reduce(
                               (sum, a) => sum + (a.authoredTotalMarks ?? 0), 0,
                             );
