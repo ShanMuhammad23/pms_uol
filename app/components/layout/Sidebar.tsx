@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { signOutAndRedirect } from "@/lib/queries/auth-client";
 import {
   ChevronDown,
+  Eye,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -16,7 +17,9 @@ import {
 } from "lucide-react";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
 import { ViewAsDropdown } from "@/app/components/layout/ViewAsDropdown";
+import { ViewAsUserModal } from "@/app/components/layout/ViewAsUserModal";
 import { SignOutConfirmModal } from "@/app/components/layout/SignOutConfirmModal";
+import { canViewAsUser } from "@/lib/queries/auth-client";
 import {
   SIDEBAR_COLLAPSED_WIDTH,
   SIDEBAR_EXPANDED_WIDTH,
@@ -220,6 +223,7 @@ const Sidebar = () => {
 
   const [adminOpen, setAdminOpen] = useState(isAdminRouteActive);
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const [viewAsUserOpen, setViewAsUserOpen] = useState(false);
   const [wasAdminRouteActive, setWasAdminRouteActive] =
     useState(isAdminRouteActive);
   if (isAdminRouteActive !== wasAdminRouteActive) {
@@ -238,6 +242,9 @@ const Sidebar = () => {
         .join("")
         .toUpperCase()
     : "?";
+
+  const realRole = user?.realRole ?? user?.role;
+  const canViewAs = canViewAsUser(realRole);
 
   const navLinkClass = (active: boolean) =>
     cn(
@@ -496,6 +503,16 @@ const Sidebar = () => {
               <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
                 {initials}
               </div>
+              {canViewAs ? (
+                <button
+                  type="button"
+                  onClick={() => setViewAsUserOpen(true)}
+                  title="View as user"
+                  className="flex size-9 items-center justify-center rounded-lg text-amber-600 transition hover:bg-amber-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:text-amber-400"
+                >
+                  <Eye className="size-4" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setSignOutOpen(true)}
@@ -529,6 +546,17 @@ const Sidebar = () => {
                     >
                       Profile
                     </Link>
+                    {canViewAs ? (
+                      <button
+                        type="button"
+                        onClick={() => setViewAsUserOpen(true)}
+                        title="View as user"
+                        aria-label="View as user"
+                        className="flex size-7 items-center justify-center rounded-md text-amber-600 transition hover:bg-amber-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:text-amber-400"
+                      >
+                        <Eye className="size-3.5" />
+                      </button>
+                    ) : null}
                   </div>
                   <p className="truncate text-xs text-foreground/60">
                     {user?.designation ?? "—"}
@@ -556,6 +584,12 @@ const Sidebar = () => {
         }}
         onClose={() => setSignOutOpen(false)}
       />
+      {canViewAs ? (
+        <ViewAsUserModal
+          open={viewAsUserOpen}
+          onClose={() => setViewAsUserOpen(false)}
+        />
+      ) : null}
     </motion.aside>
   );
 };
