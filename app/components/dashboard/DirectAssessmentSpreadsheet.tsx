@@ -1117,6 +1117,222 @@ export default function DirectAssessmentSpreadsheet({
                   );
                   const sectionId = section?.id ?? 0;
                   const budget = row.openAssessmentTotalMarks ?? section?.openAssessmentTotalMarks ?? 0;
+
+                  // Determine if the current reviewer is Manager 2 for any
+                  // editable employee. If so, render Manager 1's authored
+                  // questions as individual rows (read-only) instead of a
+                  // single badge row.
+                  const isManager2View = filteredEmployees.some(
+                    (emp) => emp.canEdit && emp.managerLevel === 2,
+                  );
+
+                  if (isManager2View) {
+                    // Collect all Manager 1 authored answers for this section
+                    // across all editable employees. Use the first editable
+                    // Manager 2 employee's authored questions as the canonical
+                    // set of rows (Manager 1 typically authors the same
+                    // questions for all direct reports in a section).
+                    const mgr2Employees = filteredEmployees.filter(
+                      (emp) => emp.canEdit && emp.managerLevel === 2,
+                    );
+                    const canonicalEmp = mgr2Employees[0];
+                    const canonicalAuthored =
+                      (data.manager1AuthoredAnswersBySubmission?.[canonicalEmp.submissionId] ?? [])
+                        .filter((a) => a.openSectionId === sectionId);
+
+                    return (
+                      <Fragment key={`open-${row.sr}`}>
+                        {row.isFirstInSection && row.sectionTitle ? (
+                          <tr className="bg-amber-50/80 dark:bg-amber-950/20">
+                            <td
+                              colSpan={3 + filteredEmployees.length}
+                              className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200"
+                            >
+                              {formatSectionLabel(row)}
+                            </td>
+                          </tr>
+                        ) : null}
+
+                        {canonicalAuthored.length === 0 ? (
+                          <tr
+                            className={cn(
+                              "align-top [&>td]:border-b [&>td]:border-slate-100 dark:[&>td]:border-slate-700/40",
+                              isEvenRow
+                                ? "bg-white dark:bg-slate-900/40"
+                                : "bg-slate-50/60 dark:bg-slate-800/20",
+                            )}
+                          >
+                            <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
+                              {row.sr}
+                            </td>
+                            <td
+                              className="overflow-hidden whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-xs italic text-slate-400 dark:border-slate-700/40 dark:text-slate-500"
+                              style={{ width: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), minWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), maxWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH) }}
+                            >
+                              No Manager 1 authored questions
+                            </td>
+                            <td
+                              className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
+                              style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
+                            >
+                              {budget || "—"}
+                            </td>
+                            {filteredEmployees.map((emp) => {
+                              const empColId = `emp-${emp.submissionId}`;
+                              const empWidth = getColumnWidth(empColId, staffColumnWidth);
+                              return (
+                                <td
+                                  key={emp.submissionId}
+                                  className="border-r border-slate-100 px-2 py-2.5 text-center text-[10px] italic text-slate-300 dark:border-slate-700/40 dark:text-slate-600"
+                                  style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
+                                >
+                                  —
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ) : (
+                          canonicalAuthored.map((authored, qIdx) => {
+                            const qRowEven = (rowIdx + qIdx) % 2 === 0;
+                            return (
+                              <tr
+                                key={`open-${row.sr}-${qIdx}`}
+                                className={cn(
+                                  "align-top [&>td]:border-b [&>td]:border-slate-100 dark:[&>td]:border-slate-700/40",
+                                  qRowEven
+                                    ? "bg-white dark:bg-slate-900/40"
+                                    : "bg-slate-50/60 dark:bg-slate-800/20",
+                                )}
+                              >
+                                <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
+                                  {row.sr}.{qIdx + 1}
+                                </td>
+                                <td
+                                  className="overflow-hidden border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40"
+                                  style={{ width: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), minWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), maxWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH) }}
+                                >
+                                  <p className="break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
+                                    {authored.authoredQuestionText || "—"}
+                                  </p>
+                                  {authored.remarks ? (
+                                    <p className="mt-1 text-[10px] italic text-slate-400 dark:text-slate-500">
+                                      Remarks: {authored.remarks}
+                                    </p>
+                                  ) : null}
+                                </td>
+                                <td
+                                  className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
+                                  style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
+                                >
+                                  {authored.authoredTotalMarks ?? "—"}
+                                </td>
+                                {filteredEmployees.map((emp) => {
+                                  const isEditable = emp.canEdit;
+                                  const empColId = `emp-${emp.submissionId}`;
+                                  const empWidth = getColumnWidth(empColId, staffColumnWidth);
+                                  const empAuthored =
+                                    (data.manager1AuthoredAnswersBySubmission?.[emp.submissionId] ?? [])
+                                      .filter((a) => a.openSectionId === sectionId);
+                                  // Match by question text (fallback to index).
+                                  const matchAnswer =
+                                    empAuthored.find(
+                                      (a) => a.authoredQuestionText === authored.authoredQuestionText,
+                                    ) ?? empAuthored[qIdx];
+                                  return (
+                                    <td
+                                      key={emp.submissionId}
+                                      className={cn(
+                                        "min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40",
+                                        !isEditable && "bg-slate-50/50 dark:bg-slate-800/20",
+                                      )}
+                                      style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
+                                    >
+                                      {matchAnswer ? (
+                                        <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                                          {formatScoreValue(matchAnswer.pointsEarned ?? 0)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-400">—</span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })
+                        )}
+
+                        {/* Confirm button row for Manager 2 */}
+                        <tr className="bg-amber-50/40 dark:bg-amber-950/10">
+                          <td
+                            colSpan={3}
+                            className="border-r border-slate-100 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700/40 dark:text-slate-400"
+                          >
+                            M1 Total:
+                          </td>
+                          {filteredEmployees.map((emp) => {
+                            const isMgr2 = emp.canEdit && emp.managerLevel === 2;
+                            const empColId = `emp-${emp.submissionId}`;
+                            const empWidth = getColumnWidth(empColId, staffColumnWidth);
+                            const empAuthored =
+                              (data.manager1AuthoredAnswersBySubmission?.[emp.submissionId] ?? [])
+                                .filter((a) => a.openSectionId === sectionId);
+                            const totalScore = empAuthored.reduce(
+                              (sum, a) => sum + (a.pointsEarned ?? 0), 0,
+                            );
+                            const totalMarks = empAuthored.reduce(
+                              (sum, a) => sum + (a.authoredTotalMarks ?? 0), 0,
+                            );
+                            const mgr2ConfirmedAt =
+                              data.manager2OpenAssessmentConfirmedBySubmission?.[emp.submissionId] ?? null;
+                            return (
+                              <td
+                                key={emp.submissionId}
+                                className={cn(
+                                  "border-r border-slate-100 px-2 py-2 text-center dark:border-slate-700/40",
+                                  !emp.canEdit && "bg-slate-50/50 dark:bg-slate-800/20",
+                                )}
+                                style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
+                              >
+                                {isMgr2 ? (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="text-[10px] font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                                      {totalScore} / {totalMarks}
+                                    </span>
+                                    {mgr2ConfirmedAt ? (
+                                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-[9px] font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                        <CheckCircle className="size-3" />
+                                        Confirmed
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setConfirmModalSubmissionId(emp.submissionId)
+                                        }
+                                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-[9px] font-bold text-white hover:bg-emerald-700"
+                                      >
+                                        <CheckCircle className="size-3" />
+                                        Confirm
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : empAuthored.length > 0 ? (
+                                  <span className="text-[10px] font-bold tabular-nums text-slate-500 dark:text-slate-400">
+                                    {totalScore} / {totalMarks}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] italic text-slate-300 dark:text-slate-600">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </Fragment>
+                    );
+                  }
+
+                  // Non-Manager-2: render the standard badge/button row.
                   return (
                     <Fragment key={`open-${row.sr}`}>
                       {row.isFirstInSection && row.sectionTitle ? (
@@ -1162,22 +1378,6 @@ export default function DirectAssessmentSpreadsheet({
                           const authoredCount = empAuthored.length;
                           const empColId = `emp-${emp.submissionId}`;
                           const empWidth = getColumnWidth(empColId, staffColumnWidth);
-                          // Manager 1 authored answers — shown for Manager 2 so
-                          // they can see Manager 1's complete free assessment.
-                          const mgr1AuthoredAnswers =
-                            (data.manager1AuthoredAnswersBySubmission?.[emp.submissionId] ?? [])
-                              .filter((a) => a.openSectionId === sectionId);
-                          const mgr1AuthoredCount = mgr1AuthoredAnswers.length;
-                          const mgr1TotalMarks = mgr1AuthoredAnswers.reduce(
-                            (sum, a) => sum + (a.authoredTotalMarks ?? 0), 0,
-                          );
-                          const mgr1TotalScore = mgr1AuthoredAnswers.reduce(
-                            (sum, a) => sum + (a.pointsEarned ?? 0), 0,
-                          );
-                          const isMgr2ForThisEmp =
-                            isEditable && emp.managerLevel === 2;
-                          const mgr2ConfirmedAt =
-                            data.manager2OpenAssessmentConfirmedBySubmission?.[emp.submissionId] ?? null;
                           return (
                             <td
                               key={emp.submissionId}
@@ -1189,67 +1389,21 @@ export default function DirectAssessmentSpreadsheet({
                             >
                               {isEditable ? (
                                 <div className="flex flex-col items-center gap-1">
-                                  {!isMgr2ForThisEmp && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        openAuthoredModal(emp.submissionId, sectionId)
-                                      }
-                                      className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white hover:bg-primary/90"
-                                    >
-                                      <Plus className="size-3" />
-                                      {authoredCount > 0
-                                        ? `Edit (${authoredCount})`
-                                        : "Add Question"}
-                                    </button>
-                                  )}
-                                  {!isMgr2ForThisEmp && authoredCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openAuthoredModal(emp.submissionId, sectionId)
+                                    }
+                                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white hover:bg-primary/90"
+                                  >
+                                    <Plus className="size-3" />
+                                    {authoredCount > 0
+                                      ? `Edit (${authoredCount})`
+                                      : "Add Question"}
+                                  </button>
+                                  {authoredCount > 0 && (
                                     <span className="text-[10px] text-slate-400 dark:text-slate-500">
                                       {authoredCount} question{authoredCount !== 1 ? "s" : ""}
-                                    </span>
-                                  )}
-                                  {isMgr2ForThisEmp && mgr1AuthoredCount > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        openAuthoredModal(emp.submissionId, sectionId)
-                                      }
-                                      className="mt-1 w-full rounded border border-violet-200 bg-violet-50/60 px-1.5 py-1 text-[9px] font-medium text-violet-700 hover:bg-violet-100 dark:border-violet-900/30 dark:bg-violet-950/20 dark:text-violet-300 dark:hover:bg-violet-950/40"
-                                      title="View Manager 1's complete free assessment"
-                                    >
-                                      <span className="block font-bold uppercase tracking-wide">
-                                        Manager 1
-                                      </span>
-                                      <span className="block">
-                                        {mgr1AuthoredCount} Q · {mgr1TotalMarks} marks
-                                      </span>
-                                      <span className="block">
-                                        Score: {mgr1TotalScore}
-                                      </span>
-                                    </button>
-                                  )}
-                                  {isMgr2ForThisEmp && mgr1AuthoredCount > 0 && (
-                                    mgr2ConfirmedAt ? (
-                                      <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-[9px] font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-                                        <CheckCircle className="size-3" />
-                                        Confirmed
-                                      </span>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setConfirmModalSubmissionId(emp.submissionId)
-                                        }
-                                        className="mt-1 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-[9px] font-bold text-white hover:bg-emerald-700"
-                                      >
-                                        <CheckCircle className="size-3" />
-                                        Confirm Open Assessment
-                                      </button>
-                                    )
-                                  )}
-                                  {isMgr2ForThisEmp && mgr1AuthoredCount === 0 && (
-                                    <span className="text-[10px] italic text-slate-400 dark:text-slate-500">
-                                      No Manager 1 assessment
                                     </span>
                                   )}
                                 </div>
