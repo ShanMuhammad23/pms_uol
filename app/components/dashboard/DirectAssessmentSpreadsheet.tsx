@@ -6,6 +6,7 @@ import {
   fetchDirectAssessmentData,
   saveDirectAssessmentScores,
   approveDirectAssessment,
+  confirmManager2OpenAssessment,
   type DirectAssessmentData,
   type DirectAssessmentScope,
 } from "@/lib/queries/direct-assessment-client";
@@ -439,6 +440,11 @@ export default function DirectAssessmentSpreadsheet({
     submissionId: number;
     sectionId: number;
   } | null>(null);
+  // Manager 2 open assessment confirmation modal state.
+  const [confirmModalSubmissionId, setConfirmModalSubmissionId] = useState<
+    number | null
+  >(null);
+  const [confirmSaving, setConfirmSaving] = useState(false);
 
   // Column resize state — keyed by column id ("sr", "kpi", "max", or
   // `emp-${submissionId}` for employee columns).
@@ -601,6 +607,25 @@ export default function DirectAssessmentSpreadsheet({
     onError: (err) => {
       toast.error(
         err instanceof Error ? err.message : "Failed to approve this assessment.",
+      );
+    },
+  });
+
+  const confirmOpenAssessmentMutation = useMutation({
+    mutationFn: async (submissionId: number) => {
+      return confirmManager2OpenAssessment(submissionId);
+    },
+    onSuccess: (_result, submissionId) => {
+      toast.success(
+        `Confirmed open assessment for ${data?.employees.find((e) => e.submissionId === submissionId)?.employeeName}.`,
+      );
+      queryClient.invalidateQueries({
+        queryKey: ["direct-assessment", templateId],
+      });
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to confirm open assessment.",
       );
     },
   });
@@ -1151,6 +1176,8 @@ export default function DirectAssessmentSpreadsheet({
                           );
                           const isMgr2ForThisEmp =
                             isEditable && emp.managerLevel === 2;
+                          const mgr2ConfirmedAt =
+                            data.manager2OpenAssessmentConfirmedBySubmission?.[emp.submissionId] ?? null;
                           return (
                             <td
                               key={emp.submissionId}
@@ -1162,19 +1189,21 @@ export default function DirectAssessmentSpreadsheet({
                             >
                               {isEditable ? (
                                 <div className="flex flex-col items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      openAuthoredModal(emp.submissionId, sectionId)
-                                    }
-                                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white hover:bg-primary/90"
-                                  >
-                                    <Plus className="size-3" />
-                                    {authoredCount > 0
-                                      ? `Edit (${authoredCount})`
-                                      : "Add Question"}
-                                  </button>
-                                  {authoredCount > 0 && (
+                                  {!isMgr2ForThisEmp && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openAuthoredModal(emp.submissionId, sectionId)
+                                      }
+                                      className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white hover:bg-primary/90"
+                                    >
+                                      <Plus className="size-3" />
+                                      {authoredCount > 0
+                                        ? `Edit (${authoredCount})`
+                                        : "Add Question"}
+                                    </button>
+                                  )}
+                                  {!isMgr2ForThisEmp && authoredCount > 0 && (
                                     <span className="text-[10px] text-slate-400 dark:text-slate-500">
                                       {authoredCount} question{authoredCount !== 1 ? "s" : ""}
                                     </span>
@@ -1198,6 +1227,30 @@ export default function DirectAssessmentSpreadsheet({
                                         Score: {mgr1TotalScore}
                                       </span>
                                     </button>
+                                  )}
+                                  {isMgr2ForThisEmp && mgr1AuthoredCount > 0 && (
+                                    mgr2ConfirmedAt ? (
+                                      <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-[9px] font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                        <CheckCircle className="size-3" />
+                                        Confirmed
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setConfirmModalSubmissionId(emp.submissionId)
+                                        }
+                                        className="mt-1 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-[9px] font-bold text-white hover:bg-emerald-700"
+                                      >
+                                        <CheckCircle className="size-3" />
+                                        Confirm Open Assessment
+                                      </button>
+                                    )
+                                  )}
+                                  {isMgr2ForThisEmp && mgr1AuthoredCount === 0 && (
+                                    <span className="text-[10px] italic text-slate-400 dark:text-slate-500">
+                                      No Manager 1 assessment
+                                    </span>
                                   )}
                                 </div>
                               ) : authoredCount > 0 ? (
@@ -1671,6 +1724,8 @@ export default function DirectAssessmentSpreadsheet({
           ) ?? [];
         const isManager2 =
           emp?.managerLevel === 2 && emp?.canEdit === true;
+        const mgr2ConfirmedAt =
+          data.manager2OpenAssessmentConfirmedBySubmission?.[submissionId] ?? null;
 
         return (
           <div
@@ -1709,65 +1764,56 @@ export default function DirectAssessmentSpreadsheet({
                 );
                 const m1Budget = section?.openAssessmentTotalMarks ?? 0;
                 return (
-                  <div className="mb-4 rounded-md border border-violet-300 bg-violet-50/50 p-3 dark:border-violet-800/40 dark:bg-violet-950/20">
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-                        Manager 1 — Complete Free Assessment (read-only)
-                      </p>
-                      <span className="text-[10px] text-violet-500 dark:text-violet-400">
+                  <div className="mb-4 overflow-hidden rounded-md border border-slate-100 dark:border-slate-700/40">
+                    {/* Header — matches section header style */}
+                    <div className="flex items-center justify-between bg-violet-50/60 px-3 py-2 text-xs font-bold uppercase tracking-wide text-violet-700 dark:bg-violet-950/20 dark:text-violet-300">
+                      <span>Manager 1 — Complete Free Assessment (read-only)</span>
+                      <span className="text-[10px] font-normal opacity-70">
                         {mgr1AuthoredAnswers.length} question{mgr1AuthoredAnswers.length !== 1 ? "s" : ""}
                       </span>
                     </div>
                     {/* Summary bar */}
-                    <div className="mb-3 flex flex-wrap gap-3 rounded-md bg-violet-100/60 px-3 py-2 dark:bg-violet-900/20">
-                      <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
-                        Budget: <span className="font-bold">{m1Budget}</span>
-                      </span>
-                      <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
-                        Allocated: <span className="font-bold">{m1TotalMarks}</span>
-                      </span>
-                      <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
-                        Total Score: <span className="font-bold">{m1TotalScore}</span>
-                      </span>
+                    <div className="flex flex-wrap gap-3 border-b border-slate-100 bg-slate-50/60 px-3 py-2 text-[10px] font-medium text-slate-500 dark:border-slate-700/40 dark:bg-slate-800/20 dark:text-slate-400">
+                      <span>Budget: <span className="font-bold text-slate-700 dark:text-slate-300">{m1Budget}</span></span>
+                      <span>Allocated: <span className="font-bold text-slate-700 dark:text-slate-300">{m1TotalMarks}</span></span>
+                      <span>Total Score: <span className="font-bold text-violet-700 dark:text-violet-300">{m1TotalScore}</span></span>
                       {authoredRatingBased && (
-                        <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
-                          Avg Rating: <span className="font-bold">
-                            {(mgr1AuthoredAnswers.reduce((s, a) => s + (a.ratingValue ?? 0), 0) / mgr1AuthoredAnswers.length).toFixed(1)}
-                          </span>
-                        </span>
+                        <span>Avg Rating: <span className="font-bold text-slate-700 dark:text-slate-300">
+                          {(mgr1AuthoredAnswers.reduce((s, a) => s + (a.ratingValue ?? 0), 0) / mgr1AuthoredAnswers.length).toFixed(1)}
+                        </span></span>
                       )}
                     </div>
-                    {/* Questions table */}
+                    {/* Questions table — matches regular question table style */}
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse text-xs">
                         <thead>
-                          <tr className="border-b border-violet-200 dark:border-violet-800/40">
-                            <th className="px-2 py-1.5 text-left font-semibold text-violet-700 dark:text-violet-300" style={{ width: "40px" }}>#</th>
-                            <th className="px-2 py-1.5 text-left font-semibold text-violet-700 dark:text-violet-300">Question</th>
-                            <th className="px-2 py-1.5 text-right font-semibold text-violet-700 dark:text-violet-300" style={{ width: "70px" }}>{authoredRatingBased ? "Weight" : "Marks"}</th>
+                          <tr className="border-b border-slate-100 bg-slate-50/60 text-[10px] uppercase tracking-wider text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/20 dark:text-slate-500">
+                            <th className="px-3 py-1.5 text-left font-semibold" style={{ width: 28 }}>#</th>
+                            <th className="px-3 py-1.5 text-left font-semibold">Question</th>
+                            <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 60 }}>{authoredRatingBased ? "Weight" : "Marks"}</th>
                             {authoredRatingBased && (
-                              <th className="px-2 py-1.5 text-right font-semibold text-violet-700 dark:text-violet-300" style={{ width: "60px" }}>Rating</th>
+                              <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 50 }}>Rating</th>
                             )}
-                            <th className="px-2 py-1.5 text-right font-semibold text-violet-700 dark:text-violet-300" style={{ width: "60px" }}>Score</th>
-                            <th className="px-2 py-1.5 text-left font-semibold text-violet-700 dark:text-violet-300" style={{ width: "150px" }}>Remarks</th>
+                            <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 50 }}>Score</th>
+                            <th className="px-3 py-1.5 text-left font-semibold" style={{ width: 150 }}>Remarks</th>
                           </tr>
                         </thead>
                         <tbody>
                           {mgr1AuthoredAnswers.map((a, idx) => (
                             <tr
                               key={idx}
-                              className="border-b border-violet-100 dark:border-violet-900/20"
+                              className="border-b border-slate-100 align-top dark:border-slate-700/40"
                             >
-                              <td className="px-2 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">{idx + 1}</td>
-                              <td className="px-2 py-2 text-slate-800 dark:text-slate-200">
-                                <p className="whitespace-pre-wrap wrap-break-word">{a.authoredQuestionText}</p>
+                              <td className="px-3 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">{idx + 1}</td>
+                              <td className="px-3 py-2 text-slate-800 dark:text-slate-200">
+                                <p className="whitespace-pre-wrap wrap-break-word leading-snug">{a.authoredQuestionText}</p>
                               </td>
-                              <td className="px-2 py-2 text-right tabular-nums font-bold text-amber-700 dark:text-amber-300">{a.authoredTotalMarks}</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-700 dark:text-slate-300">{a.authoredTotalMarks}</td>
                               {authoredRatingBased && (
-                                <td className="px-2 py-2 text-right tabular-nums font-bold text-slate-700 dark:text-slate-300">{a.ratingValue ?? "—"}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-700 dark:text-slate-300">{a.ratingValue ?? "—"}</td>
                               )}
-                              <td className="px-2 py-2 text-right tabular-nums font-bold text-teal-700 dark:text-teal-300">{a.pointsEarned}</td>
-                              <td className="px-2 py-2 text-slate-500 dark:text-slate-400">
+                              <td className="px-3 py-2 text-right tabular-nums font-bold text-violet-700 dark:text-violet-300">{a.pointsEarned}</td>
+                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                                 {a.remarks ? (
                                   <p className="whitespace-pre-wrap wrap-break-word">{a.remarks}</p>
                                 ) : (
@@ -1778,14 +1824,12 @@ export default function DirectAssessmentSpreadsheet({
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="border-t-2 border-violet-300 dark:border-violet-700/40">
-                            <td colSpan={authoredRatingBased ? 3 : 2} className="px-2 py-2 text-right font-bold text-violet-700 dark:text-violet-300">Total</td>
-                            <td className="px-2 py-2 text-right tabular-nums font-bold text-amber-700 dark:text-amber-300">{m1TotalMarks}</td>
-                            {authoredRatingBased && (
-                              <td className="px-2 py-2"></td>
-                            )}
-                            <td className="px-2 py-2 text-right tabular-nums font-bold text-teal-700 dark:text-teal-300">{m1TotalScore}</td>
-                            <td></td>
+                          <tr className="border-t-2 border-slate-200 bg-slate-50/40 dark:border-slate-700 dark:bg-slate-800/20">
+                            <td colSpan={authoredRatingBased ? 3 : 2} className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-300">Total</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-bold text-slate-700 dark:text-slate-300">{m1TotalMarks}</td>
+                            {authoredRatingBased && <td />}
+                            <td className="px-3 py-2 text-right tabular-nums font-bold text-violet-700 dark:text-violet-300">{m1TotalScore}</td>
+                            <td />
                           </tr>
                         </tfoot>
                       </table>
@@ -1794,7 +1838,40 @@ export default function DirectAssessmentSpreadsheet({
                 );
               })() : null}
 
-              {/* Manager 2's own authored questions editor */}
+              {/* Manager 2 confirm button — shown in the modal after viewing
+                  Manager 1's assessment. Confirmation is per-employee. */}
+              {isManager2 && mgr1AuthoredAnswers.length > 0 && (
+                <div className="mb-4 flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50/40 px-3 py-2 dark:border-emerald-800/40 dark:bg-emerald-950/20">
+                  {mgr2ConfirmedAt ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                      <CheckCircle className="size-4" />
+                      Open assessment confirmed
+                      <span className="font-normal text-emerald-600/70 dark:text-emerald-400/70">
+                        ({new Date(mgr2ConfirmedAt).toLocaleString()})
+                      </span>
+                    </span>
+                  ) : (
+                    <>
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                        Review the assessment above, then confirm you have read it.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmModalSubmissionId(submissionId)}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                      >
+                        <CheckCircle className="size-3.5" />
+                        Confirm
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Manager 2's own authored questions editor — hidden for
+                  Manager 2 since they only review Manager 1's assessment. */}
+              {!isManager2 && (
+              <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-slate-600 dark:text-slate-400">
                   Budget: <span className="font-bold text-amber-700 dark:text-amber-300">{budget}</span>
@@ -1826,7 +1903,7 @@ export default function DirectAssessmentSpreadsheet({
               </div>
 
               {drafts.length === 0 ? (
-                <div className="rounded-md border border-dashed border-amber-300/80 px-4 py-6 text-center text-xs text-slate-500 dark:border-amber-700/40 dark:text-slate-400">
+                <div className="rounded-md border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400 dark:border-slate-700/40 dark:text-slate-500">
                   {authoredRatingBased
                     ? 'Click "Add Question" to write a question, assign a weight from the budget, and select a rating.'
                     : 'Click "Add Question" to write a question and assign marks from the budget.'}
@@ -1845,7 +1922,7 @@ export default function DirectAssessmentSpreadsheet({
                     return (
                       <div
                         key={draft.clientId}
-                        className="rounded-md border border-slate-200 bg-slate-50/40 p-3 dark:border-white/10 dark:bg-slate-800/20"
+                        className="rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-700/40 dark:bg-slate-800/20"
                       >
                         <div className="flex items-start gap-2">
                           <span className="mt-1.5 text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400">
@@ -1894,7 +1971,7 @@ export default function DirectAssessmentSpreadsheet({
                                     type="number"
                                     min={0}
                                     max={totalMarks || undefined}
-                                    step={0.5}
+                                    step="0.5"
                                     value={draft.pointsEarned}
                                     onChange={(e) =>
                                       updateAuthoredDraft(submissionId, sectionId, draft.clientId, "pointsEarned", e.target.value)
@@ -1929,6 +2006,8 @@ export default function DirectAssessmentSpreadsheet({
                   })}
                 </div>
               )}
+              </>
+              )}
 
               <div className="mt-4 flex justify-end gap-2">
                 <button
@@ -1937,6 +2016,96 @@ export default function DirectAssessmentSpreadsheet({
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
+
+      {/* Manager 2 — Confirm open assessment modal */}
+      {confirmModalSubmissionId != null && data ? (() => {
+        const emp = data.employees.find(
+          (e) => e.submissionId === confirmModalSubmissionId,
+        );
+        const empName = emp?.employeeName ?? "this employee";
+        const openSections = data.sections.filter((s) => s.isOpenAssessment);
+        const totalMgr1Questions = openSections.reduce((sum, s) => {
+          const answers =
+            data.manager1AuthoredAnswersBySubmission?.[confirmModalSubmissionId] ?? [];
+          return sum + answers.filter((a) => a.openSectionId === s.id).length;
+        }, 0);
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 dark:bg-black/60"
+            onClick={() => !confirmSaving && setConfirmModalSubmissionId(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-white/15 dark:bg-slate-900"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Confirm Open Assessment
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => !confirmSaving && setConfirmModalSubmissionId(null)}
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  You are about to confirm that you have reviewed the open/free
+                  assessment for <span className="font-bold">{empName}</span>.
+                </p>
+                {totalMgr1Questions > 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Manager 1 authored{" "}
+                    <span className="font-bold">{totalMgr1Questions}</span>{" "}
+                    question{totalMgr1Questions !== 1 ? "s" : ""} across{" "}
+                    {openSections.length} open section{openSections.length !== 1 ? "s" : ""}.
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    No Manager 1 open assessment questions found.
+                  </p>
+                )}
+                <div className="rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-300">
+                  Once confirmed, this action is recorded with a timestamp.
+                  You can still edit your own assessment scores after confirming.
+                </div>
+              </div>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmModalSubmissionId(null)}
+                  disabled={confirmSaving}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmSaving(true);
+                    confirmOpenAssessmentMutation.mutate(confirmModalSubmissionId, {
+                      onSuccess: () => {
+                        setConfirmSaving(false);
+                        setConfirmModalSubmissionId(null);
+                      },
+                      onError: () => {
+                        setConfirmSaving(false);
+                      },
+                    });
+                  }}
+                  disabled={confirmSaving}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <CheckCircle className="size-3.5" />
+                  {confirmSaving ? "Confirming..." : "Confirm"}
                 </button>
               </div>
             </div>

@@ -14,6 +14,14 @@ declare module "next-auth" {
       viewAsRole?: string | null;
       /** The user's real DB role (unchanged by view-as). */
       realRole?: string | null;
+      /**
+       * When set, the admin (HR/Board/Super Admin) is viewing the dashboard
+       * as this user. The session user fields (id, name, role, etc.) are
+       * overridden with the target user's info.
+       */
+      viewAsUserId?: string | null;
+      /** The real logged-in user's ID (preserved during view-as-user). */
+      realId?: string | null;
     };
   }
 
@@ -34,6 +42,17 @@ declare module "next-auth/jwt" {
     error?: "InactiveOrMissingUser" | string;
     /** View-as role (EMPLOYEE or MANAGER). Cleared to return to original role. */
     viewAsRole?: string | null;
+    /**
+     * View-as user ID — when set by an admin (HR/Board/Super Admin), the
+     * session is overridden to show the target user's dashboard.
+     */
+    viewAsUserId?: string | null;
+    /** Cached target user info (avoids extra DB query on every session read). */
+    viewAsUserName?: string | null;
+    viewAsUserEmail?: string | null;
+    viewAsUserRole?: string | null;
+    viewAsUserDesignation?: string | null;
+    viewAsUserEntityId?: number | null;
   }
 }
 

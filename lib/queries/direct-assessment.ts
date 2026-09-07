@@ -79,6 +79,11 @@ export interface DirectAssessmentData {
    * Direct Assessment and standard assessment share one data model.
    */
   overallRemarksBySubmission: Record<number, DirectAssessmentOverallRemarks>;
+  /**
+   * Map of submissionId → ISO timestamp when Manager 2 confirmed they reviewed
+   * the open/free assessment sections. null = not yet confirmed.
+   */
+  manager2OpenAssessmentConfirmedBySubmission: Record<number, string | null>;
 }
 
 interface AssignmentRow {
@@ -492,15 +497,22 @@ export async function getDirectAssessmentData(
     .map((e) => e.submissionId)
     .filter((id) => id !== 0);
 
+  const manager2OpenAssessmentConfirmedBySubmission: Record<
+    number,
+    string | null
+  > = {};
+
   if (submissionIds.length > 0) {
     const remarksRows = await getDbClient().query<{
       id: string;
       manager1_overall_remarks: string | null;
       manager2_overall_remarks: string | null;
+      manager2_open_assessment_confirmed_at: string | null;
     }>(
       `SELECT id::text,
               manager1_overall_remarks,
-              manager2_overall_remarks
+              manager2_overall_remarks,
+              manager2_open_assessment_confirmed_at
        FROM appraisals
        WHERE id = ANY($1::bigint[])`,
       [submissionIds],
@@ -511,6 +523,8 @@ export async function getDirectAssessmentData(
         manager1: row.manager1_overall_remarks ?? null,
         manager2: row.manager2_overall_remarks ?? null,
       };
+      manager2OpenAssessmentConfirmedBySubmission[id] =
+        row.manager2_open_assessment_confirmed_at ?? null;
     }
   }
 
@@ -531,5 +545,6 @@ export async function getDirectAssessmentData(
     managerAuthoredAnswersBySubmission,
     manager1AuthoredAnswersBySubmission,
     overallRemarksBySubmission,
+    manager2OpenAssessmentConfirmedBySubmission,
   };
 }

@@ -1577,48 +1577,95 @@ export default function SubmissionDetailView({
                     label: string,
                     authored: EmployeeFormAnswerRecord[],
                     labelColor: string,
+                    scoreColor: string,
                   ) => {
                     if (authored.length === 0) return null;
+                    const totalMarks = authored.reduce(
+                      (sum, a) => sum + (a.authoredTotalMarks ?? 0), 0,
+                    );
+                    const totalScore = authored.reduce(
+                      (sum, a) => sum + (a.pointsEarned ?? 0), 0,
+                    );
                     return (
-                      <div className="space-y-1.5">
-                        <p className={cn("text-[11px] font-bold uppercase tracking-wide", labelColor)}>
-                          {label}
-                        </p>
-                        <div className="space-y-2">
-                          {authored.map((a, idx) => (
-                            <div
-                              key={idx}
-                              className="rounded-md border border-slate-200 bg-slate-50/40 p-2.5 dark:border-white/10 dark:bg-slate-800/20"
-                            >
-                              <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                                {idx + 1}. {a.authoredQuestionText}
-                              </p>
-                              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                {data.ratingBased
-                                  ? `Weight: ${a.authoredTotalMarks} · Rating: ${a.ratingValue ?? "—"} · Score: ${a.pointsEarned}`
-                                  : `Marks: ${a.authoredTotalMarks} · Score: ${a.pointsEarned}`}
-                                {a.remarks ? ` · Remarks: ${a.remarks}` : ""}
-                              </p>
-                            </div>
-                          ))}
+                      <div className="overflow-hidden rounded-md border border-slate-100 dark:border-slate-700/40">
+                        {/* Reviewer header — matches section header style */}
+                        <div className={cn(
+                          "flex items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-wide",
+                          labelColor,
+                        )}>
+                          <span>{label}</span>
+                          <span className="text-[10px] font-normal opacity-70">
+                            {authored.length} question{authored.length !== 1 ? "s" : ""}
+                          </span>
                         </div>
+                        {/* Mini-table matching regular question columns */}
+                        <table className="w-full border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-100 bg-slate-50/60 text-[10px] uppercase tracking-wider text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/20 dark:text-slate-500">
+                              <th className="px-3 py-1.5 text-left font-semibold" style={{ width: 28 }}>#</th>
+                              <th className="px-3 py-1.5 text-left font-semibold">Question</th>
+                              <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 60 }}>{data.ratingBased ? "Weight" : "Marks"}</th>
+                              {data.ratingBased && (
+                                <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 50 }}>Rating</th>
+                              )}
+                              <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 50 }}>Score</th>
+                              <th className="px-3 py-1.5 text-left font-semibold" style={{ width: 160 }}>Remarks</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {authored.map((a, idx) => (
+                              <tr
+                                key={idx}
+                                className="border-b border-slate-100 align-top dark:border-slate-700/40"
+                              >
+                                <td className="px-3 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">{idx + 1}</td>
+                                <td className="px-3 py-2 text-slate-800 dark:text-slate-200">
+                                  <p className="whitespace-pre-wrap wrap-break-word leading-snug">{a.authoredQuestionText}</p>
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-700 dark:text-slate-300">{a.authoredTotalMarks}</td>
+                                {data.ratingBased && (
+                                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-700 dark:text-slate-300">{a.ratingValue ?? "—"}</td>
+                                )}
+                                <td className={cn("px-3 py-2 text-right tabular-nums font-bold", scoreColor)}>{a.pointsEarned}</td>
+                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                                  {a.remarks ? (
+                                    <p className="whitespace-pre-wrap wrap-break-word">{a.remarks}</p>
+                                  ) : (
+                                    <span className="text-slate-300 dark:text-slate-600">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 border-slate-200 bg-slate-50/40 dark:border-slate-700 dark:bg-slate-800/20">
+                              <td colSpan={data.ratingBased ? 3 : 2} className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-300">Total</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-bold text-slate-700 dark:text-slate-300">{totalMarks}</td>
+                              {data.ratingBased && <td />}
+                              <td className={cn("px-3 py-2 text-right tabular-nums font-bold", scoreColor)}>{totalScore}</td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
                       </div>
                     );
                   };
 
                   const selfBlock = selfAssessmentEnabled
-                    ? renderAuthoredBlock("Self Assessment", employeeAuthored, "text-teal-600 dark:text-teal-400")
+                    ? renderAuthoredBlock("Self Assessment", employeeAuthored, "bg-teal-50/60 text-teal-700 dark:bg-teal-950/20 dark:text-teal-300", "text-teal-700 dark:text-teal-300")
                     : null;
                   const m1Block = renderAuthoredBlock(
                     `Manager 1${data.manager1Name ? ` (${data.manager1Name})` : ""}`,
                     mgr1Authored,
-                    "text-violet-600 dark:text-violet-400",
+                    "bg-violet-50/60 text-violet-700 dark:bg-violet-950/20 dark:text-violet-300",
+                    "text-violet-700 dark:text-violet-300",
                   );
                   const m2Block = (hasManager2 && showManager2Data)
                     ? renderAuthoredBlock(
                         `Manager 2${data.manager2Name ? ` (${data.manager2Name})` : ""}`,
                         mgr2Authored,
-                        "text-blue-600 dark:text-blue-400",
+                        "bg-indigo-50/60 text-indigo-700 dark:bg-indigo-950/20 dark:text-indigo-300",
+                        "text-indigo-700 dark:text-indigo-300",
                       )
                     : null;
 

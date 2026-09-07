@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { EmployeeAccessGuard } from "@/app/components/layout/EmployeeAccessGuard";
 import GlobalAskHrButton from "@/app/components/layout/GlobalAskHrButton";
 import Sidebar from "@/app/components/layout/Sidebar";
+import { ViewModeBanner } from "@/app/components/layout/ViewModeBanner";
 import { useIsClient } from "@/app/hooks/use-is-client";
 import {
   SIDEBAR_COLLAPSED_WIDTH,
@@ -49,7 +50,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           }}
           transition={SIDEBAR_LAYOUT_TRANSITION}
         >
-          <EmployeeAccessGuard>{children}</EmployeeAccessGuard>
+          <EmployeeAccessGuard>
+            <ViewModeBanner />
+            {children}
+          </EmployeeAccessGuard>
         </motion.main>
         <GlobalAskHrButton />
       </div>

@@ -1003,7 +1003,7 @@ export default function EmployeeFormFill({
                               </div>
 
                               {drafts.length === 0 ? (
-                                <div className="rounded-md border border-dashed border-amber-300/80 px-4 py-4 text-center text-xs text-foreground/60 dark:border-amber-700/40">
+                                <div className="rounded-md border border-dashed border-slate-200 px-4 py-4 text-center text-xs text-slate-400 dark:border-slate-700/40 dark:text-slate-500">
                                   {isReadOnly
                                     ? "No questions were authored for this section."
                                     : authoredRatingBased
@@ -1035,7 +1035,7 @@ export default function EmployeeFormFill({
                                     return (
                                       <div
                                         key={draft.clientId}
-                                        className="rounded-md border border-slate-200 bg-slate-50/40 p-3 dark:border-white/10 dark:bg-slate-800/20"
+                                        className="rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-700/40 dark:bg-slate-800/20"
                                       >
                                         <div className="flex items-start gap-2">
                                           <span className="mt-1.5 text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400">

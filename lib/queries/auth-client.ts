@@ -73,3 +73,17 @@ export async function fetchViewAsOptions(): Promise<ViewAsOptionsResponse> {
   }
   return response.json();
 }
+
+/**
+ * Check if the current user can use "View As User" (HR / Board / Super Admin).
+ * Uses the session data already available on the client — no API call.
+ */
+export function canViewAsUser(
+  realRole: string | null | undefined,
+): boolean {
+  return (
+    realRole === "HR" ||
+    realRole === "BOARD" ||
+    realRole === "SUPER_ADMIN"
+  );
+}

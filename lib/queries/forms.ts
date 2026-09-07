@@ -203,6 +203,10 @@ async function ensureOpenAssessmentSchema(client: PoolClient): Promise<void> {
       ON appraisal_answers(open_section_id)
       WHERE open_section_id IS NOT NULL
   `);
+  await client.query(`
+    ALTER TABLE appraisals
+      ADD COLUMN IF NOT EXISTS manager2_open_assessment_confirmed_at TIMESTAMPTZ
+  `);
   openAssessmentSchemaReady = true;
 }
 

@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { ElementType, ReactNode } from "react";
 import {
   Briefcase,
   Building2,
   CalendarDays,
+  Eye,
   Globe,
   GraduationCap,
   Hash,
@@ -20,10 +23,12 @@ import {
   itemVariants,
 } from "@/app/helpers/dashboard-animations";
 import { cn } from "@/lib/utils";
+import { canViewAsUser } from "@/lib/queries/auth-client";
 import type { UserProfile } from "@/lib/types/user-profile";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
 import PrintButton from "@/app/components/forms/PrintButton";
+import { ViewAsUserModal } from "@/app/components/layout/ViewAsUserModal";
 
 type ProfileViewClientProps = {
   profile: UserProfile;
@@ -206,6 +211,10 @@ function StatusBadge({
 
 export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
   const reduceMotion = useReducedMotion();
+  const { data: session } = useSession();
+  const [viewAsModalOpen, setViewAsModalOpen] = useState(false);
+  const realRole = session?.user?.realRole ?? session?.user?.role;
+  const canViewAs = canViewAsUser(realRole);
   const fullName =
     [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "—";
   const initials = getInitials(fullName === "—" ? "" : fullName);
@@ -251,7 +260,19 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
             Your employment record in the Performance Management System.
           </p>
         </div>
-        <PrintButton className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15" />
+        <div className="no-print flex items-center gap-2">
+          {canViewAs ? (
+            <button
+              type="button"
+              onClick={() => setViewAsModalOpen(true)}
+              className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/40"
+            >
+              <Eye className="size-4" />
+              View As User
+            </button>
+          ) : null}
+          <PrintButton className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15" />
+        </div>
       </div>
 
       <motion.section
@@ -414,6 +435,13 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
         Data sourced from the PMS database. Contact HR for corrections.
       </p>
       <PrintFooter />
+
+      {canViewAs ? (
+        <ViewAsUserModal
+          open={viewAsModalOpen}
+          onClose={() => setViewAsModalOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
