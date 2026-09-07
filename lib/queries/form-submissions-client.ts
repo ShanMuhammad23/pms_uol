@@ -168,6 +168,9 @@ export async function saveManagerReview(
     pointsEarned?: number;
     ratingValue?: number | null;
     remarks?: string | null;
+    authoredQuestionText?: string | null;
+    authoredTotalMarks?: number;
+    openSectionId?: number | null;
   }>,
   overallRemarks?: string | null,
 ): Promise<{

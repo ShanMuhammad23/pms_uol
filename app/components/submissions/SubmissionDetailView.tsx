@@ -80,8 +80,101 @@ type ManagerDraft = {
   remarks: string;
 };
 
+type AuthoredDraft = {
+  clientId: string;
+  authoredQuestionText: string;
+  authoredTotalMarks: string;
+  pointsEarned: string;
+  ratingValue: string;
+  remarks: string;
+};
+
+type AuthoredDraftState = Record<number, AuthoredDraft[]>;
+
+let authoredClientIdCounter = 0;
+function nextAuthoredClientId(): string {
+  authoredClientIdCounter += 1;
+  return `sd-authored-${Date.now()}-${authoredClientIdCounter}`;
+}
+
 function emptyManagerDraft(): ManagerDraft {
   return { pointsEarned: "", ratingValue: "", remarks: "" };
+}
+
+function buildInitialAuthoredDrafts(
+  data: FormSubmissionDetail,
+): AuthoredDraftState {
+  const state: AuthoredDraftState = {};
+  const openSections = data.sections.filter((s) => s.isOpenAssessment);
+  const currentLevel = data.managerLevel ?? 1;
+
+  for (const section of openSections) {
+    // For the current reviewer, seed from their own previously-saved authored
+    // answers first, falling back to the prior manager's answers.
+    const ownAuthored = (data.managerAuthoredAnswers ?? []).filter(
+      (a) => a.openSectionId === section.id,
+    );
+    const priorAuthored =
+      currentLevel === 2
+        ? (data.manager1AuthoredAnswers ?? []).filter(
+            (a) => a.openSectionId === section.id,
+          )
+        : [];
+    const source = ownAuthored.length > 0 ? ownAuthored : priorAuthored;
+
+    state[section.id] = source.map((a) => ({
+      clientId: nextAuthoredClientId(),
+      authoredQuestionText: a.authoredQuestionText ?? "",
+      authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
+      pointsEarned: String(a.pointsEarned ?? 0),
+      ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
+      remarks: a.remarks ?? "",
+    }));
+  }
+
+  return state;
+}
+
+function authoredDraftsToSaveAnswers(
+  authored: AuthoredDraftState,
+): Array<{
+  questionId: number;
+  pointsEarned?: number;
+  ratingValue?: number | null;
+  remarks?: string | null;
+  authoredQuestionText?: string | null;
+  authoredTotalMarks?: number;
+  openSectionId?: number | null;
+}> {
+  const result: Array<{
+    questionId: number;
+    pointsEarned?: number;
+    ratingValue?: number | null;
+    remarks?: string | null;
+    authoredQuestionText?: string | null;
+    authoredTotalMarks?: number;
+    openSectionId?: number | null;
+  }> = [];
+
+  for (const [sectionIdStr, drafts] of Object.entries(authored)) {
+    const openSectionId = Number(sectionIdStr);
+    for (const draft of drafts) {
+      const text = draft.authoredQuestionText.trim();
+      const totalMarks = Number(draft.authoredTotalMarks) || 0;
+      const points = draft.pointsEarned !== "" ? Number(draft.pointsEarned) : 0;
+      if (!text && !totalMarks && !points && !draft.remarks.trim()) continue;
+      result.push({
+        questionId: 0,
+        openSectionId,
+        authoredQuestionText: text || null,
+        authoredTotalMarks: totalMarks,
+        pointsEarned: points || undefined,
+        remarks: draft.remarks.trim() || null,
+      });
+    }
+  }
+
+  return result;
 }
 
 function managerDraftHasInput(draft: ManagerDraft): boolean {
@@ -620,6 +713,9 @@ export default function SubmissionDetailView({
   const [managerDrafts, setManagerDrafts] = useState<Map<number, ManagerDraft>>(
     new Map(),
   );
+  const [authoredDrafts, setAuthoredDrafts] = useState<AuthoredDraftState>({});
+  const authoredDraftsRef = useRef(authoredDrafts);
+  authoredDraftsRef.current = authoredDrafts;
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -669,6 +765,8 @@ export default function SubmissionDetailView({
           ]),
         ),
       );
+      // Initialize authored drafts for open-assessment sections.
+      setAuthoredDrafts(buildInitialAuthoredDrafts(data));
       const m1Remarks = data.manager1OverallRemarks ?? "";
       const m2Remarks = data.manager2OverallRemarks ?? "";
       setManager1OverallRemarks(m1Remarks);
@@ -687,13 +785,18 @@ export default function SubmissionDetailView({
         data.questions,
         managerDraftsRef.current,
       );
+      // Append authored answers for open-assessment sections.
+      const authoredAnswers = authoredDraftsToSaveAnswers(
+        authoredDraftsRef.current,
+      );
+      const allAnswers = [...answers, ...authoredAnswers];
 
       const overallRemarks =
         (data.managerLevel ?? 1) === 2
           ? manager2OverallRemarksRef.current
           : manager1OverallRemarksRef.current;
 
-      return saveManagerReview(submissionId, answers, overallRemarks);
+      return saveManagerReview(submissionId, allAnswers, overallRemarks);
     },
     onSuccess: (result) => {
       toast.success("Manager review saved.");
@@ -745,11 +848,15 @@ export default function SubmissionDetailView({
           data.questions,
           managerDraftsRef.current,
         );
+        const authoredAnswers = authoredDraftsToSaveAnswers(
+          authoredDraftsRef.current,
+        );
+        const allAnswers = [...answers, ...authoredAnswers];
         const overallRemarks =
           (data.managerLevel ?? 1) === 2
             ? manager2OverallRemarksRef.current
             : manager1OverallRemarksRef.current;
-        await saveManagerReview(submissionId, answers, overallRemarks);
+        await saveManagerReview(submissionId, allAnswers, overallRemarks);
       }
 
       return approveManagerReview(submissionId);
@@ -1101,18 +1208,43 @@ export default function SubmissionDetailView({
     );
   }, 0);
 
+  // Open-assessment section totals (authored questions).
+  const openSections = data.sections.filter((s) => s.isOpenAssessment);
+  const openAssessmentMaxMarks = openSections.reduce(
+    (sum, s) => sum + (s.openAssessmentTotalMarks ?? 0), 0,
+  );
+  const openSelfTotal = (data.authoredAnswers ?? []).reduce(
+    (sum, a) => sum + (a.pointsEarned ?? 0), 0,
+  );
+  const openMgr1Total = (data.manager1AuthoredAnswers ?? []).reduce(
+    (sum, a) => sum + (a.pointsEarned ?? 0), 0,
+  );
+  const openMgr2Total = (data.manager2AuthoredAnswers ?? []).reduce(
+    (sum, a) => sum + (a.pointsEarned ?? 0), 0,
+  );
+  // For the current reviewer's draft total, sum authored draft points.
+  const openMgrDraftTotal = Object.values(authoredDrafts).reduce(
+    (sum, drafts) =>
+      sum +
+      drafts.reduce(
+        (s, d) => s + (d.pointsEarned !== "" ? Number(d.pointsEarned) : 0), 0,
+      ),
+    0,
+  );
+
   const displayedFormScore = editingManager2
-    ? managerDraftTotal
+    ? managerDraftTotal + openMgrDraftTotal
     : editingManager1
-      ? managerDraftTotal
+      ? managerDraftTotal + openMgrDraftTotal
       : currentManagerLevel > 1 && manager2Total != null
-        ? manager2Total
-        : manager1Total > 0
-          ? manager1Total
-          : selfTotal;
+        ? manager2Total + openMgr2Total
+        : manager1Total + openMgr1Total > 0
+          ? manager1Total + openMgr1Total
+          : selfTotal + openSelfTotal;
+  const totalMaxScore = data.maxRawScore + openAssessmentMaxMarks;
   const displayedFormPercent =
-    data.maxRawScore > 0
-      ? Math.round((displayedFormScore / data.maxRawScore) * 1000) / 10
+    totalMaxScore > 0
+      ? Math.round((displayedFormScore / totalMaxScore) * 1000) / 10
       : 0;
 
   const updateManagerDraft = (
@@ -1145,6 +1277,23 @@ export default function SubmissionDetailView({
       const next = new Set(current);
       next.delete(questionId);
       return next;
+    });
+  };
+
+  const updateAuthoredDraft = (
+    sectionId: number,
+    clientId: string,
+    field: keyof AuthoredDraft,
+    value: string,
+  ) => {
+    setAuthoredDrafts((current) => {
+      const existing = current[sectionId] ?? [];
+      return {
+        ...current,
+        [sectionId]: existing.map((d) =>
+          d.clientId === clientId ? { ...d, [field]: value } : d,
+        ),
+      };
     });
   };
 
@@ -1197,7 +1346,7 @@ export default function SubmissionDetailView({
           { label: "ORG Level 2", value: displayOrgValue(data.orgLevel2Name) },
           { label: "Form", value: data.templateTitle },
           { label: "Status", value: statusLabel },
-          { label: "Score", value: `${formatScoreValue(displayedFormScore)}/${data.maxRawScore} (${displayedFormPercent}%)` },
+          { label: "Score", value: `${formatScoreValue(displayedFormScore)}/${totalMaxScore} (${displayedFormPercent}%)` },
           {
             label: "Manager 1",
             value: formatNameWithSap(data.manager1Name, data.manager1EmployeeId),
@@ -1248,7 +1397,7 @@ export default function SubmissionDetailView({
 
           <div
             className="flex shrink-0 items-baseline gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 dark:bg-primary/15"
-            aria-label={`Score ${formatScoreValue(displayedFormScore)} out of ${data.maxRawScore}, ${displayedFormPercent} percent`}
+            aria-label={`Score ${formatScoreValue(displayedFormScore)} out of ${totalMaxScore}, ${displayedFormPercent} percent`}
           >
             <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
               Score
@@ -1257,7 +1406,7 @@ export default function SubmissionDetailView({
               {formatScoreValue(displayedFormScore)}
             </span>
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              / {data.maxRawScore}
+              / {totalMaxScore}
             </span>
             <span className="text-sm font-semibold tabular-nums text-primary">
               {displayedFormPercent}%
@@ -1554,7 +1703,10 @@ export default function SubmissionDetailView({
                 const { question } = row;
                 const isEvenRow = rowIdx % 2 === 0;
 
-                // Open-assessment section: render authored questions display.
+                // Open-assessment section: render authored questions as
+                // regular table rows — one row per question — matching the
+                // same column layout as normal questions. The current
+                // reviewer's score column is editable; others are read-only.
                 if (row.isOpenAssessment) {
                   const section = data.sections.find(
                     (s) => s.isOpenAssessment && s.title === row.sectionTitle,
@@ -1573,106 +1725,44 @@ export default function SubmissionDetailView({
                     ? ((hasManager2 && showManager2Data) ? 10 : 8)
                     : ((hasManager2 && showManager2Data) ? 8 : 6);
 
-                  const renderAuthoredBlock = (
-                    label: string,
-                    authored: EmployeeFormAnswerRecord[],
-                    labelColor: string,
-                    scoreColor: string,
-                  ) => {
-                    if (authored.length === 0) return null;
-                    const totalMarks = authored.reduce(
-                      (sum, a) => sum + (a.authoredTotalMarks ?? 0), 0,
-                    );
-                    const totalScore = authored.reduce(
-                      (sum, a) => sum + (a.pointsEarned ?? 0), 0,
-                    );
-                    return (
-                      <div className="overflow-hidden rounded-md border border-slate-100 dark:border-slate-700/40">
-                        {/* Reviewer header — matches section header style */}
-                        <div className={cn(
-                          "flex items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-wide",
-                          labelColor,
-                        )}>
-                          <span>{label}</span>
-                          <span className="text-[10px] font-normal opacity-70">
-                            {authored.length} question{authored.length !== 1 ? "s" : ""}
-                          </span>
-                        </div>
-                        {/* Mini-table matching regular question columns */}
-                        <table className="w-full border-collapse text-xs">
-                          <thead>
-                            <tr className="border-b border-slate-100 bg-slate-50/60 text-[10px] uppercase tracking-wider text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/20 dark:text-slate-500">
-                              <th className="px-3 py-1.5 text-left font-semibold" style={{ width: 28 }}>#</th>
-                              <th className="px-3 py-1.5 text-left font-semibold">Question</th>
-                              <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 60 }}>{data.ratingBased ? "Weight" : "Marks"}</th>
-                              {data.ratingBased && (
-                                <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 50 }}>Rating</th>
-                              )}
-                              <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 50 }}>Score</th>
-                              <th className="px-3 py-1.5 text-left font-semibold" style={{ width: 160 }}>Remarks</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {authored.map((a, idx) => (
-                              <tr
-                                key={idx}
-                                className="border-b border-slate-100 align-top dark:border-slate-700/40"
-                              >
-                                <td className="px-3 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">{idx + 1}</td>
-                                <td className="px-3 py-2 text-slate-800 dark:text-slate-200">
-                                  <p className="whitespace-pre-wrap wrap-break-word leading-snug">{a.authoredQuestionText}</p>
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-700 dark:text-slate-300">{a.authoredTotalMarks}</td>
-                                {data.ratingBased && (
-                                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-700 dark:text-slate-300">{a.ratingValue ?? "—"}</td>
-                                )}
-                                <td className={cn("px-3 py-2 text-right tabular-nums font-bold", scoreColor)}>{a.pointsEarned}</td>
-                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                                  {a.remarks ? (
-                                    <p className="whitespace-pre-wrap wrap-break-word">{a.remarks}</p>
-                                  ) : (
-                                    <span className="text-slate-300 dark:text-slate-600">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t-2 border-slate-200 bg-slate-50/40 dark:border-slate-700 dark:bg-slate-800/20">
-                              <td colSpan={data.ratingBased ? 3 : 2} className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-300">Total</td>
-                              <td className="px-3 py-2 text-right tabular-nums font-bold text-slate-700 dark:text-slate-300">{totalMarks}</td>
-                              {data.ratingBased && <td />}
-                              <td className={cn("px-3 py-2 text-right tabular-nums font-bold", scoreColor)}>{totalScore}</td>
-                              <td />
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    );
-                  };
+                  // Use the authored drafts for the current reviewer (seeded
+                  // from their own or the prior manager's answers).
+                  const sectionDrafts = authoredDrafts[sectionId] ?? [];
 
-                  const selfBlock = selfAssessmentEnabled
-                    ? renderAuthoredBlock("Self Assessment", employeeAuthored, "bg-teal-50/60 text-teal-700 dark:bg-teal-950/20 dark:text-teal-300", "text-teal-700 dark:text-teal-300")
-                    : null;
-                  const m1Block = renderAuthoredBlock(
-                    `Manager 1${data.manager1Name ? ` (${data.manager1Name})` : ""}`,
-                    mgr1Authored,
-                    "bg-violet-50/60 text-violet-700 dark:bg-violet-950/20 dark:text-violet-300",
-                    "text-violet-700 dark:text-violet-300",
-                  );
-                  const m2Block = (hasManager2 && showManager2Data)
-                    ? renderAuthoredBlock(
-                        `Manager 2${data.manager2Name ? ` (${data.manager2Name})` : ""}`,
-                        mgr2Authored,
-                        "bg-indigo-50/60 text-indigo-700 dark:bg-indigo-950/20 dark:text-indigo-300",
-                        "text-indigo-700 dark:text-indigo-300",
-                      )
-                    : null;
+                  // Canonical question list — prefer the current reviewer's
+                  // drafts, fall back to Manager 1, then employee.
+                  const canonicalQuestions: { text: string; totalMarks: number; remarks: string | null }[] =
+                    sectionDrafts.length > 0
+                      ? sectionDrafts.map((d) => ({
+                          text: d.authoredQuestionText,
+                          totalMarks: Number(d.authoredTotalMarks) || 0,
+                          remarks: d.remarks || null,
+                        }))
+                      : mgr1Authored.length > 0
+                        ? mgr1Authored.map((a) => ({
+                            text: a.authoredQuestionText ?? "",
+                            totalMarks: a.authoredTotalMarks ?? 0,
+                            remarks: a.remarks,
+                          }))
+                        : employeeAuthored.map((a) => ({
+                            text: a.authoredQuestionText ?? "",
+                            totalMarks: a.authoredTotalMarks ?? 0,
+                            remarks: a.remarks,
+                          }));
 
-                  const hasAnyAuthored =
-                    employeeAuthored.length > 0 ||
-                    mgr1Authored.length > 0 ||
-                    mgr2Authored.length > 0;
+                  // Helper to find a matching answer by question text.
+                  const findMatch = (
+                    list: EmployeeFormAnswerRecord[],
+                    text: string,
+                    idx: number,
+                  ) =>
+                    list.find((a) => a.authoredQuestionText === text) ??
+                    list[idx];
+
+                  // Determine if the current reviewer can edit scores.
+                  const canEdit =
+                    (editingManager1 || editingManager2 || editingHr) &&
+                    (data.canEditManagerReview || editingHr);
 
                   return (
                     <Fragment key={`open-${row.sr}`}>
@@ -1683,26 +1773,147 @@ export default function SubmissionDetailView({
                           </td>
                         </tr>
                       ) : null}
-                      <tr className={cn(
-                        "align-top border-b border-slate-100 dark:border-slate-700/40",
-                        isEvenRow
-                          ? "bg-white dark:bg-slate-900/40"
-                          : "bg-slate-50/60 dark:bg-slate-800/20"
-                      )}>
-                        <td colSpan={colSpan} className="px-4 py-3">
-                          {!hasAnyAuthored ? (
-                            <p className="text-xs italic text-slate-400">
-                              No questions were authored for this section.
-                            </p>
-                          ) : (
-                            <div className="space-y-3">
-                              {selfBlock}
-                              {m1Block}
-                              {m2Block}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
+                      {canonicalQuestions.length === 0 ? (
+                        <tr className={cn(
+                          "align-top border-b border-slate-100 dark:border-slate-700/40",
+                          isEvenRow
+                            ? "bg-white dark:bg-slate-900/40"
+                            : "bg-slate-50/60 dark:bg-slate-800/20"
+                        )}>
+                          <td colSpan={colSpan} className="px-4 py-3 text-xs italic text-slate-400">
+                            No questions were authored for this section.
+                          </td>
+                        </tr>
+                      ) : (
+                        canonicalQuestions.map((q, qIdx) => {
+                          const qRowEven = (rowIdx + qIdx) % 2 === 0;
+                          const draft = sectionDrafts[qIdx];
+                          const maxMarks = q.totalMarks;
+                          const selfAns = findMatch(employeeAuthored, q.text, qIdx);
+                          const m1Ans = findMatch(mgr1Authored, q.text, qIdx);
+                          const m2Ans = findMatch(mgr2Authored, q.text, qIdx);
+                          return (
+                            <tr
+                              key={`open-${row.sr}-${qIdx}`}
+                              className={cn(
+                                "align-top border-b border-slate-100 dark:border-slate-700/40",
+                                qRowEven
+                                  ? "bg-white dark:bg-slate-900/40"
+                                  : "bg-slate-50/60 dark:bg-slate-800/20"
+                              )}
+                            >
+                              <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
+                                {row.sr}.{qIdx + 1}
+                              </td>
+                              <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
+                                <p className="max-w-112.5 wrap-break-word whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
+                                  {q.text || "—"}
+                                </p>
+                              </td>
+                              <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
+                                {maxMarks || "—"}
+                              </td>
+                              {/* Self Assessment columns */}
+                              {selfAssessmentEnabled ? (
+                                <>
+                                  <td className="min-w-0 overflow-hidden border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-bold text-teal-700 dark:border-slate-700/40 dark:text-teal-300">
+                                    {selfAns ? formatScoreValue(selfAns.pointsEarned ?? 0) : "—"}
+                                  </td>
+                                  <td className="border-r border-slate-100 px-3 py-2.5 text-xs text-slate-600 dark:border-slate-700/40 dark:text-slate-300">
+                                    {selfAns?.remarks?.trim() ? (
+                                      <p className="whitespace-pre-wrap wrap-break-word">{selfAns.remarks}</p>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )}
+                                  </td>
+                                </>
+                              ) : null}
+                              {/* Manager 1 Score + Remarks */}
+                              <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                                {editingManager1 && canEdit && draft ? (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={maxMarks || undefined}
+                                    step="0.5"
+                                    value={draft.pointsEarned}
+                                    onChange={(e) =>
+                                      updateAuthoredDraft(
+                                        sectionId,
+                                        draft.clientId,
+                                        "pointsEarned",
+                                        clampScore(e.target.value, maxMarks),
+                                      )
+                                    }
+                                    className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
+                                    placeholder="0"
+                                  />
+                                ) : m1Ans ? (
+                                  <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                                    {formatScoreValue(m1Ans.pointsEarned ?? 0)}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                              <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
+                                {m1Ans?.remarks?.trim() ? (
+                                  <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
+                                    {m1Ans.remarks}
+                                  </p>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                              {/* Manager 2 Score + Remarks */}
+                              {hasManager2 && showManager2Data ? (
+                                <>
+                                  <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
+                                    {editingManager2 && canEdit && draft ? (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={maxMarks || undefined}
+                                        step="0.5"
+                                        value={draft.pointsEarned}
+                                        onChange={(e) =>
+                                          updateAuthoredDraft(
+                                            sectionId,
+                                            draft.clientId,
+                                            "pointsEarned",
+                                            clampScore(e.target.value, maxMarks),
+                                          )
+                                        }
+                                        className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-indigo-300"
+                                        placeholder="0"
+                                      />
+                                    ) : m2Ans ? (
+                                      <span className="font-bold tabular-nums text-indigo-700 dark:text-indigo-300">
+                                        {formatScoreValue(m2Ans.pointsEarned ?? 0)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2.5">
+                                    {m2Ans?.remarks?.trim() ? (
+                                      <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
+                                        {m2Ans.remarks}
+                                      </p>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )}
+                                  </td>
+                                </>
+                              ) : null}
+                              {/* Attachments — none for authored questions */}
+                              <td className="px-2 py-2.5 align-top">
+                                <span className="text-slate-400">—</span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </Fragment>
                   );
                 }
@@ -1964,24 +2175,32 @@ export default function SubmissionDetailView({
                   Total
                 </td>
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-100">
-                  {data.maxRawScore}
+                  {data.maxRawScore + openAssessmentMaxMarks}
                 </td>
                 {selfAssessmentEnabled ? (
                   <>
                     <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-teal-300">
-                      {formatScoreValue(selfTotal)}
+                      {formatScoreValue(selfTotal + openSelfTotal)}
                     </td>
                     <td className="border-r border-slate-700 px-3 py-2.5" />
                   </>
                 ) : null}
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-violet-300">
-                  {formatScoreValue(editingManager1 ? managerDraftTotal : manager1Total)}
+                  {formatScoreValue(
+                    editingManager1
+                      ? managerDraftTotal + openMgrDraftTotal
+                      : manager1Total + openMgr1Total,
+                  )}
                 </td>
                 <td className="border-r border-slate-700 px-3 py-2.5" />
                 {hasManager2 && showManager2Data ? (
                   <>
                     <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-indigo-300">
-                      {formatScoreValue(editingManager2 ? managerDraftTotal : (manager2Total ?? 0))}
+                      {formatScoreValue(
+                        editingManager2
+                          ? managerDraftTotal + openMgrDraftTotal
+                          : (manager2Total ?? 0) + openMgr2Total,
+                      )}
                     </td>
                     <td className="border-r border-slate-700 px-3 py-2.5" />
                   </>
@@ -2000,8 +2219,8 @@ export default function SubmissionDetailView({
               ? [
                 {
                   label: "Self Assessment",
-                  awardedMarks: selfTotal,
-                  totalMarks: data.maxRawScore,
+                  awardedMarks: selfTotal + openSelfTotal,
+                  totalMarks: data.maxRawScore + openAssessmentMaxMarks,
                   accentClass:
                     "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
                   completed: selfAssessmentComplete,
@@ -2010,8 +2229,10 @@ export default function SubmissionDetailView({
               : []),
             {
               label: "Manager 1 Assessment",
-              awardedMarks: editingManager1 ? managerDraftTotal : manager1Total,
-              totalMarks: data.maxRawScore,
+              awardedMarks: editingManager1
+                ? managerDraftTotal + openMgrDraftTotal
+                : manager1Total + openMgr1Total,
+              totalMarks: data.maxRawScore + openAssessmentMaxMarks,
               accentClass:
                 "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
               personLabel: formatNameWithSap(
@@ -2025,9 +2246,9 @@ export default function SubmissionDetailView({
                 {
                   label: "Manager 2 Assessment",
                   awardedMarks: editingManager2
-                    ? managerDraftTotal
-                    : (manager2Total ?? 0),
-                  totalMarks: data.maxRawScore,
+                    ? managerDraftTotal + openMgrDraftTotal
+                    : (manager2Total ?? 0) + openMgr2Total,
+                  totalMarks: data.maxRawScore + openAssessmentMaxMarks,
                   accentClass:
                     "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
                   personLabel: formatNameWithSap(
@@ -2059,7 +2280,7 @@ export default function SubmissionDetailView({
         <ScoreAdjustmentsPanel
           submissionId={data.id}
           scoreO={data.initialScoreNumeric ?? data.rawScore}
-          maxRawScore={data.maxRawScore}
+          maxRawScore={totalMaxScore}
           creditHrsErpScoreAdj={data.creditHrsErpScoreAdj}
           pubOricScoreAdj={data.pubOricScoreAdj}
           qecScoreAdj={data.qecScoreAdj}

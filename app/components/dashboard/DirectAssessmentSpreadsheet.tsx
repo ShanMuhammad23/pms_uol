@@ -959,6 +959,12 @@ export default function DirectAssessmentSpreadsheet({
     (sum, q) => sum + q.totalMarks,
     0,
   );
+  // Open-assessment section marks budget.
+  const openSections = data.sections.filter((s) => s.isOpenAssessment);
+  const openAssessmentMaxMarks = openSections.reduce(
+    (sum, s) => sum + (s.openAssessmentTotalMarks ?? 0), 0,
+  );
+  const totalMaxScore = maxRawScore + openAssessmentMaxMarks;
   const staffColumnWidth = data.ratingBased
     ? RATING_EMPLOYEE_WIDTH
     : DEFAULT_EMPLOYEE_WIDTH;
@@ -1058,7 +1064,7 @@ export default function DirectAssessmentSpreadsheet({
                 onResize={handleColumnResize}
                 className="whitespace-nowrap border-r border-slate-700 px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-200"
               >
-                Weightage
+                Wtg
               </ResizableHeader>
               {filteredEmployees.map((emp) => {
                 const isEditable = emp.canEdit;
@@ -1670,12 +1676,12 @@ export default function DirectAssessmentSpreadsheet({
                   className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-100"
                   style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                 >
-                  {maxRawScore}
+                  {totalMaxScore}
                 </td>
                 {filteredEmployees.map((emp) => {
                   const isEditable = emp.canEdit;
                   const empDrafts = drafts[emp.submissionId];
-                  const total = scoredQuestions.reduce((sum, q) => {
+                  const regularTotal = scoredQuestions.reduce((sum, q) => {
                     return (
                       sum +
                       resolveDisplayedAnswerPoints(
@@ -1686,6 +1692,28 @@ export default function DirectAssessmentSpreadsheet({
                       )
                     );
                   }, 0);
+                  // Add authored answer scores (current reviewer's drafts or
+                  // Manager 1's saved answers for read-only employees).
+                  const empAuthoredDrafts =
+                    authoredDrafts[emp.submissionId] ?? {};
+                  const authoredDraftTotal = Object.values(
+                    empAuthoredDrafts,
+                  ).reduce(
+                    (sum, drafts) =>
+                      sum +
+                      drafts.reduce(
+                        (s, d) =>
+                          s + (d.pointsEarned !== "" ? Number(d.pointsEarned) : 0), 0,
+                      ),
+                    0,
+                  );
+                  const mgr1AuthoredTotal = (
+                    data.manager1AuthoredAnswersBySubmission?.[emp.submissionId] ?? []
+                  ).reduce((sum, a) => sum + (a.pointsEarned ?? 0), 0);
+                  const authoredTotal = isEditable
+                    ? authoredDraftTotal
+                    : mgr1AuthoredTotal;
+                  const total = regularTotal + authoredTotal;
                   const empColId = `emp-${emp.submissionId}`;
                   const empWidth = getColumnWidth(empColId, staffColumnWidth);
 
