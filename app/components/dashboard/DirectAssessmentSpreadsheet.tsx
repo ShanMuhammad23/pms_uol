@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Fragment, useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,7 +14,6 @@ import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   formatScoreValue,
-  getAuthoredRatingScale,
   getQuestionRatingScale,
   hasProvidedAnswerScore,
   incompleteRequiredReviewMessage,
@@ -115,7 +114,7 @@ interface AuthoredQuestionDraft {
   remarks: string;
 }
 
-/** submissionId → sectionId → drafts */
+/** submissionId â†’ sectionId â†’ drafts */
 type AuthoredDraftState = Record<number, Record<number, AuthoredQuestionDraft[]>>;
 
 let authoredClientIdCounter = 0;
@@ -291,12 +290,13 @@ function buildInitialDrafts(
       const my = myMap.get(question.id);
       const mgr1 = mgr1Map.get(question.id);
 
-      // For Manager 2, fall back to Manager 1's answers
+      // For Manager 2, fall back to Manager 1's score/rating only.
+      // Remarks are NOT copied â€” each manager writes their own.
       const fallback =
         (emp.managerLevel ?? 1) === 2 ? mgr1 : null;
       const source = my ?? fallback;
       const ratingValue = my?.ratingValue ?? fallback?.ratingValue ?? null;
-      const remarks = my?.remarks ?? fallback?.remarks ?? "";
+      const remarks = my?.remarks ?? "";
       const computedPoints = source
         ? resolveDisplayedAnswerPoints(
             question,
@@ -445,19 +445,13 @@ export default function DirectAssessmentSpreadsheet({
   >(null);
   // Tracks whether the modal is currently saving (separate from score save).
   const [remarksSaving, setRemarksSaving] = useState(false);
-  // Authored questions modal state: identifies which employee + section
-  // is currently being edited.
-  const [authoredModalState, setAuthoredModalState] = useState<{
-    submissionId: number;
-    sectionId: number;
-  } | null>(null);
   // Manager 2 open assessment confirmation modal state.
   const [confirmModalSubmissionId, setConfirmModalSubmissionId] = useState<
     number | null
   >(null);
   const [confirmSaving, setConfirmSaving] = useState(false);
 
-  // Column resize state — keyed by column id ("sr", "kpi", "max", or
+  // Column resize state â€” keyed by column id ("sr", "kpi", "max", or
   // `emp-${submissionId}` for employee columns).
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
@@ -740,6 +734,36 @@ export default function DirectAssessmentSpreadsheet({
     });
   };
 
+  /** Add an empty authored question row for every editable employee. */
+  const addAuthoredQuestionAllEmployees = (sectionId: number) => {
+    if (!data) return;
+    const editableEmps = data.employees.filter(
+      (e) => e.canEdit && e.submissionId !== 0,
+    );
+    if (editableEmps.length === 0) return;
+    let skipped = 0;
+    for (const emp of editableEmps) {
+      const section = data.sections.find((s) => s.id === sectionId);
+      const budget = section?.openAssessmentTotalMarks ?? 0;
+      const existing =
+        authoredDraftsRef.current[emp.submissionId]?.[sectionId] ?? [];
+      const allocated = existing.reduce(
+        (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+        0,
+      );
+      if (budget - allocated <= 0) {
+        skipped += 1;
+        continue;
+      }
+      addAuthoredQuestion(emp.submissionId, sectionId);
+    }
+    if (skipped > 0) {
+      toast(
+        `${skipped} employee(s) skipped â€” section budget fully allocated.`,
+      );
+    }
+  };
+
   const updateAuthoredDraft = (
     submissionId: number,
     sectionId: number,
@@ -778,14 +802,6 @@ export default function DirectAssessmentSpreadsheet({
         },
       };
     });
-  };
-
-  const openAuthoredModal = (submissionId: number, sectionId: number) => {
-    setAuthoredModalState({ submissionId, sectionId });
-  };
-
-  const closeAuthoredModal = () => {
-    setAuthoredModalState(null);
   };
 
   const assertRequiredScoresFilled = (
@@ -914,7 +930,7 @@ export default function DirectAssessmentSpreadsheet({
           Back to templates
         </button>
         <h2 className="text-lg font-semibold text-text-primary">
-          Direct Assessment — {data.templateTitle}
+          Direct Assessment â€” {data.templateTitle}
         </h2>
         <DirectAssessmentFilterBar
           filterState={filters.filterState}
@@ -983,7 +999,7 @@ export default function DirectAssessmentSpreadsheet({
         </button>
         <div className="text-right">
           <h2 className="text-lg font-semibold text-text-primary">
-            Direct Assessment — {data.templateTitle}
+            Direct Assessment â€” {data.templateTitle}
           </h2>
           {scope === "managed" ? (
             <p className="text-xs text-foreground/60">
@@ -1028,7 +1044,7 @@ export default function DirectAssessmentSpreadsheet({
 
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
         Showing {filteredEmployees.length} of {data.employees.length} employees
-        — drag column borders to resize
+        â€” drag column borders to resize
       </div>
 
       <div className="overflow-auto max-h-[75vh] rounded-md border border-slate-300 dark:border-slate-700">
@@ -1192,7 +1208,7 @@ export default function DirectAssessmentSpreadsheet({
                               className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                               style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                             >
-                              {budget || "—"}
+                              {budget || "â€”"}
                             </td>
                             {filteredEmployees.map((emp) => {
                               const empColId = `emp-${emp.submissionId}`;
@@ -1203,7 +1219,7 @@ export default function DirectAssessmentSpreadsheet({
                                   className="border-r border-slate-100 px-2 py-2.5 text-center text-[10px] italic text-slate-300 dark:border-slate-700/40 dark:text-slate-600"
                                   style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
                                 >
-                                  —
+                                  â€”
                                 </td>
                               );
                             })}
@@ -1229,7 +1245,7 @@ export default function DirectAssessmentSpreadsheet({
                                   style={{ width: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), minWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), maxWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH) }}
                                 >
                                   <p className="break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
-                                    {authored.authoredQuestionText || "—"}
+                                    {authored.authoredQuestionText || "â€”"}
                                   </p>
                                   {authored.remarks ? (
                                     <p className="mt-1 text-[10px] italic text-slate-400 dark:text-slate-500">
@@ -1241,7 +1257,7 @@ export default function DirectAssessmentSpreadsheet({
                                   className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                                   style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                                 >
-                                  {authored.authoredTotalMarks ?? "—"}
+                                  {authored.authoredTotalMarks ?? "â€”"}
                                 </td>
                                 {filteredEmployees.map((emp) => {
                                   const isEditable = emp.canEdit;
@@ -1249,7 +1265,7 @@ export default function DirectAssessmentSpreadsheet({
                                   const empColId = `emp-${emp.submissionId}`;
                                   const empWidth = getColumnWidth(empColId, staffColumnWidth);
                                   // Manager 2 drafts (seeded from Manager 1's
-                                  // authored answers) — used for editable score.
+                                  // authored answers) â€” used for editable score.
                                   const empDrafts =
                                     authoredDrafts[emp.submissionId]?.[sectionId] ?? [];
                                   const draft = empDrafts[qIdx];
@@ -1295,7 +1311,7 @@ export default function DirectAssessmentSpreadsheet({
                                           {formatScoreValue(matchAnswer.pointsEarned ?? 0)}
                                         </span>
                                       ) : (
-                                        <span className="text-slate-400">—</span>
+                                        <span className="text-slate-400">â€”</span>
                                       )}
                                     </td>
                                   );
@@ -1373,7 +1389,7 @@ export default function DirectAssessmentSpreadsheet({
                                     {totalScore} / {totalMarks}
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] italic text-slate-300 dark:text-slate-600">—</span>
+                                  <span className="text-[10px] italic text-slate-300 dark:text-slate-600">â€”</span>
                                 )}
                               </td>
                             );
@@ -1383,7 +1399,7 @@ export default function DirectAssessmentSpreadsheet({
                     );
                   }
 
-                  // Non-Manager-2: render the standard badge/button row.
+                  // Non-Manager-2: render inline editable open assessment rows.
                   return (
                     <Fragment key={`open-${row.sr}`}>
                       {row.isFirstInSection && row.sectionTitle ? (
@@ -1396,6 +1412,7 @@ export default function DirectAssessmentSpreadsheet({
                           </td>
                         </tr>
                       ) : null}
+                      {/* Controls row â€” "Open Objectives Row" (all) + per-employee "Open Objective" */}
                       <tr
                         className={cn(
                           "align-top [&>td]:border-b [&>td]:border-slate-100 dark:[&>td]:border-slate-700/40",
@@ -1404,8 +1421,15 @@ export default function DirectAssessmentSpreadsheet({
                             : "bg-slate-50/60 dark:bg-slate-800/20",
                         )}
                       >
-                        <td className="border-r border-slate-100 px-3 py-2.5 text-center tabular-nums text-slate-500 dark:border-slate-700/40 dark:text-slate-400">
-                          {row.sr}
+                        <td className="border-r border-slate-100 px-3 py-2.5 text-center dark:border-slate-700/40">
+                          <button
+                            type="button"
+                            onClick={() => addAuthoredQuestionAllEmployees(sectionId)}
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-amber-700"
+                          >
+                            <Plus className="size-3" />
+                            Open Objectives
+                          </button>
                         </td>
                         <td
                           className="overflow-hidden whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-xs text-amber-700 dark:border-slate-700/40 dark:text-amber-300"
@@ -1420,13 +1444,10 @@ export default function DirectAssessmentSpreadsheet({
                           className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                           style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                         >
-                          {budget || "—"}
+                          {budget || "â€”"}
                         </td>
                         {filteredEmployees.map((emp) => {
                           const isEditable = emp.canEdit;
-                          const empAuthored =
-                            authoredDrafts[emp.submissionId]?.[sectionId] ?? [];
-                          const authoredCount = empAuthored.length;
                           const empColId = `emp-${emp.submissionId}`;
                           const empWidth = getColumnWidth(empColId, staffColumnWidth);
                           return (
@@ -1439,37 +1460,195 @@ export default function DirectAssessmentSpreadsheet({
                               style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
                             >
                               {isEditable ? (
-                                <div className="flex flex-col items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      openAuthoredModal(emp.submissionId, sectionId)
-                                    }
-                                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white hover:bg-primary/90"
-                                  >
-                                    <Plus className="size-3" />
-                                    {authoredCount > 0
-                                      ? `Edit (${authoredCount})`
-                                      : "Add Question"}
-                                  </button>
-                                  {authoredCount > 0 && (
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                      {authoredCount} question{authoredCount !== 1 ? "s" : ""}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : authoredCount > 0 ? (
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                  {authoredCount} question{authoredCount !== 1 ? "s" : ""}
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => addAuthoredQuestion(emp.submissionId, sectionId)}
+                                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white hover:bg-primary/90"
+                                >
+                                  <Plus className="size-3" />
+                                  Open Objective
+                                </button>
                               ) : (
                                 <span className="text-[10px] italic text-slate-300 dark:text-slate-600">
-                                  —
+                                  â€”
                                 </span>
                               )}
                             </td>
                           );
                         })}
+                      </tr>
+                      {/* Inline question rows â€” full-width with per-employee mini-tables */}
+                      <tr className="bg-amber-50/30 dark:bg-amber-950/5">
+                        <td
+                          colSpan={3 + filteredEmployees.length}
+                          className="p-0"
+                        >
+                          <div className="flex gap-3 overflow-x-auto border-b border-slate-100 p-3 dark:border-slate-700/40">
+                            {filteredEmployees.map((emp) => {
+                              const isEditable = emp.canEdit;
+                              const empDrafts =
+                                authoredDrafts[emp.submissionId]?.[sectionId] ?? [];
+                              const allocated = empDrafts.reduce(
+                                (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+                                0,
+                              );
+                              const remaining = budget - allocated;
+                              const totalScore = empDrafts.reduce(
+                                (sum, d) =>
+                                  sum + (d.pointsEarned !== "" ? Number(d.pointsEarned) : 0),
+                                0,
+                              );
+                              return (
+                                <div
+                                  key={emp.submissionId}
+                                  className={cn(
+                                    "min-w-[280px] flex-1 rounded-md border",
+                                    isEditable
+                                      ? "border-amber-200 bg-white dark:border-amber-800/40 dark:bg-slate-900/60"
+                                      : "border-slate-200 bg-slate-50/60 dark:border-slate-700/40 dark:bg-slate-800/20",
+                                  )}
+                                >
+                                  {/* Employee header */}
+                                  <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-700/40">
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-bold text-slate-700 dark:text-slate-200">
+                                        {emp.employeeName}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                                        {emp.employeeId}
+                                      </p>
+                                    </div>
+                                    {isEditable && empDrafts.length > 0 ? (
+                                      <span className="shrink-0 text-[10px] font-medium tabular-nums text-amber-600 dark:text-amber-400">
+                                        {totalScore}/{allocated}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {/* Column headers */}
+                                  {isEditable && empDrafts.length > 0 ? (
+                                    <div className="flex items-center gap-1 border-b border-slate-100 bg-slate-50/60 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/30 dark:text-slate-500">
+                                      <span className="flex-1">Question</span>
+                                      <span className="w-14 text-center">Marks</span>
+                                      <span className="w-14 text-center">Score</span>
+                                      <span className="w-6" />
+                                    </div>
+                                  ) : null}
+                                  {/* Question rows */}
+                                  <div className="max-h-[300px] overflow-y-auto">
+                                    {empDrafts.length === 0 ? (
+                                      <div className="px-3 py-4 text-center text-[10px] text-slate-400 dark:text-slate-500">
+                                        {isEditable
+                                          ? 'Click "Open Objective" to add a question.'
+                                          : "No questions."}
+                                      </div>
+                                    ) : (
+                                      empDrafts.map((draft, qIdx) => {
+                                        const maxMarks = Number(draft.authoredTotalMarks) || 0;
+                                        return (
+                                          <div
+                                            key={draft.clientId}
+                                            className="flex items-start gap-1 border-b border-slate-50 px-2 py-1.5 dark:border-slate-700/30"
+                                          >
+                                            <span className="mt-1.5 w-4 shrink-0 text-[10px] font-bold tabular-nums text-slate-400 dark:text-slate-500">
+                                              {qIdx + 1}
+                                            </span>
+                                            <textarea
+                                              value={draft.authoredQuestionText}
+                                              onChange={(e) =>
+                                                updateAuthoredDraft(
+                                                  emp.submissionId,
+                                                  sectionId,
+                                                  draft.clientId,
+                                                  "authoredQuestionText",
+                                                  e.target.value,
+                                                )
+                                              }
+                                              rows={2}
+                                              disabled={!isEditable}
+                                              className="min-w-0 flex-1 resize-y rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-default disabled:bg-transparent disabled:text-slate-600 dark:border-white/15 dark:bg-slate-800 dark:text-slate-200 dark:disabled:bg-transparent"
+                                              placeholder="Question..."
+                                            />
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              step={1}
+                                              value={draft.authoredTotalMarks}
+                                              onChange={(e) =>
+                                                updateAuthoredDraft(
+                                                  emp.submissionId,
+                                                  sectionId,
+                                                  draft.clientId,
+                                                  "authoredTotalMarks",
+                                                  e.target.value,
+                                                )
+                                              }
+                                              disabled={!isEditable}
+                                              className="h-7 w-14 shrink-0 rounded border border-slate-200 bg-white px-1 text-right text-[11px] tabular-nums font-bold text-amber-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-default disabled:bg-transparent disabled:text-slate-500 dark:border-white/15 dark:bg-slate-800 dark:text-amber-300 dark:disabled:bg-transparent"
+                                              placeholder="0"
+                                            />
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              max={maxMarks || undefined}
+                                              step="0.5"
+                                              value={draft.pointsEarned}
+                                              onChange={(e) =>
+                                                updateAuthoredDraft(
+                                                  emp.submissionId,
+                                                  sectionId,
+                                                  draft.clientId,
+                                                  "pointsEarned",
+                                                  clampScore(e.target.value, maxMarks),
+                                                )
+                                              }
+                                              disabled={!isEditable}
+                                              className="h-7 w-14 shrink-0 rounded border border-slate-200 bg-white px-1 text-right text-[11px] tabular-nums font-bold text-teal-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400 disabled:cursor-default disabled:bg-transparent disabled:text-slate-500 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300 dark:disabled:bg-transparent"
+                                              placeholder="0"
+                                            />
+                                            {isEditable ? (
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  removeAuthoredDraft(
+                                                    emp.submissionId,
+                                                    sectionId,
+                                                    draft.clientId,
+                                                  )
+                                                }
+                                                className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                                title="Remove question"
+                                              >
+                                                <Trash2 className="size-3" />
+                                              </button>
+                                            ) : (
+                                              <span className="w-6 shrink-0" />
+                                            )}
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                  {/* Footer â€” allocated/remaining */}
+                                  {isEditable && empDrafts.length > 0 ? (
+                                    <div className="border-t border-slate-100 px-2 py-1 text-[10px] dark:border-slate-700/40">
+                                      <span className="text-slate-500 dark:text-slate-400">
+                                        Allocated:{" "}
+                                        <span className={cn("font-bold", remaining < 0 ? "text-red-600" : "text-slate-700 dark:text-slate-300")}>
+                                          {allocated}
+                                        </span>
+                                        {" / "}
+                                        <span className="font-bold text-slate-700 dark:text-slate-300">{budget}</span>
+                                        {remaining < 0 ? (
+                                          <span className="ml-1 text-red-600">(over budget)</span>
+                                        ) : null}
+                                      </span>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </td>
                       </tr>
                     </Fragment>
                   );
@@ -1551,7 +1730,7 @@ export default function DirectAssessmentSpreadsheet({
                         className="overflow-hidden whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                         style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                       >
-                        {scored ? question!.totalMarks : "—"}
+                        {scored ? question!.totalMarks : "â€”"}
                       </td>
                       {filteredEmployees.map((emp) => {
                         const isEditable = emp.canEdit;
@@ -1644,7 +1823,7 @@ export default function DirectAssessmentSpreadsheet({
                               />
                             )
                           ) : (
-                            <span className="text-slate-400">—</span>
+                            <span className="text-slate-400">â€”</span>
                           )}
                         </td>
                       );
@@ -1857,7 +2036,7 @@ export default function DirectAssessmentSpreadsheet({
                         </div>
                       ) : (
                         <span className="block text-center text-xs text-slate-400 dark:text-slate-500">
-                          —
+                          â€”
                         </span>
                       )}
                     </td>
@@ -1926,331 +2105,7 @@ export default function DirectAssessmentSpreadsheet({
         }}
       />
 
-      {/* Authored questions modal for open-assessment sections */}
-      {authoredModalState && data ? (() => {
-        const { submissionId, sectionId } = authoredModalState;
-        const emp = data.employees.find((e) => e.submissionId === submissionId);
-        const section = data.sections.find((s) => s.id === sectionId);
-        const budget = section?.openAssessmentTotalMarks ?? 0;
-        const drafts = authoredDrafts[submissionId]?.[sectionId] ?? [];
-        const allocated = drafts.reduce(
-          (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
-          0,
-        );
-        const remaining = budget - allocated;
-        const authoredRatingBased = data.ratingBased;
-        const authoredScale = getAuthoredRatingScale(data.ratingScales);
-        const empName = emp?.employeeName ?? "";
-        const sectionTitle = section?.title ?? "Open Assessment";
-
-        // Manager 1's authored answers (read-only) — shown when the current
-        // reviewer is Manager 2 so they can see Manager 1's questions.
-        const mgr1AuthoredAnswers =
-          data.manager1AuthoredAnswersBySubmission?.[submissionId]?.filter(
-            (a) => a.openSectionId === sectionId,
-          ) ?? [];
-        const isManager2 =
-          emp?.managerLevel === 2 && emp?.canEdit === true;
-        const mgr2ConfirmedAt =
-          data.manager2OpenAssessmentConfirmedBySubmission?.[submissionId] ?? null;
-
-        return (
-          <div
-            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 dark:bg-black/60"
-            onClick={closeAuthoredModal}
-          >
-            <div
-              className="mt-8 w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-white/15 dark:bg-slate-900"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                    Open Assessment — {sectionTitle}
-                  </h3>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Employee: {empName}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeAuthoredModal}
-                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-
-              {/* Manager 1 authored questions — read-only for Manager 2 */}
-              {isManager2 && mgr1AuthoredAnswers.length > 0 ? (() => {
-                const m1TotalMarks = mgr1AuthoredAnswers.reduce(
-                  (sum, a) => sum + (a.authoredTotalMarks ?? 0), 0,
-                );
-                const m1TotalScore = mgr1AuthoredAnswers.reduce(
-                  (sum, a) => sum + (a.pointsEarned ?? 0), 0,
-                );
-                const m1Budget = section?.openAssessmentTotalMarks ?? 0;
-                return (
-                  <div className="mb-4 overflow-hidden rounded-md border border-slate-100 dark:border-slate-700/40">
-                    {/* Header — matches section header style */}
-                    <div className="flex items-center justify-between bg-violet-50/60 px-3 py-2 text-xs font-bold uppercase tracking-wide text-violet-700 dark:bg-violet-950/20 dark:text-violet-300">
-                      <span>Manager 1 — Complete Free Assessment (read-only)</span>
-                      <span className="text-[10px] font-normal opacity-70">
-                        {mgr1AuthoredAnswers.length} question{mgr1AuthoredAnswers.length !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    {/* Summary bar */}
-                    <div className="flex flex-wrap gap-3 border-b border-slate-100 bg-slate-50/60 px-3 py-2 text-[10px] font-medium text-slate-500 dark:border-slate-700/40 dark:bg-slate-800/20 dark:text-slate-400">
-                      <span>Budget: <span className="font-bold text-slate-700 dark:text-slate-300">{m1Budget}</span></span>
-                      <span>Allocated: <span className="font-bold text-slate-700 dark:text-slate-300">{m1TotalMarks}</span></span>
-                      <span>Total Score: <span className="font-bold text-violet-700 dark:text-violet-300">{m1TotalScore}</span></span>
-                      {authoredRatingBased && (
-                        <span>Avg Rating: <span className="font-bold text-slate-700 dark:text-slate-300">
-                          {(mgr1AuthoredAnswers.reduce((s, a) => s + (a.ratingValue ?? 0), 0) / mgr1AuthoredAnswers.length).toFixed(1)}
-                        </span></span>
-                      )}
-                    </div>
-                    {/* Questions table — matches regular question table style */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50/60 text-[10px] uppercase tracking-wider text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/20 dark:text-slate-500">
-                            <th className="px-3 py-1.5 text-left font-semibold" style={{ width: 28 }}>#</th>
-                            <th className="px-3 py-1.5 text-left font-semibold">Question</th>
-                            <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 60 }}>{authoredRatingBased ? "Weight" : "Marks"}</th>
-                            {authoredRatingBased && (
-                              <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 50 }}>Rating</th>
-                            )}
-                            <th className="px-3 py-1.5 text-right font-semibold" style={{ width: 50 }}>Score</th>
-                            <th className="px-3 py-1.5 text-left font-semibold" style={{ width: 150 }}>Remarks</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {mgr1AuthoredAnswers.map((a, idx) => (
-                            <tr
-                              key={idx}
-                              className="border-b border-slate-100 align-top dark:border-slate-700/40"
-                            >
-                              <td className="px-3 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400">{idx + 1}</td>
-                              <td className="px-3 py-2 text-slate-800 dark:text-slate-200">
-                                <p className="whitespace-pre-wrap wrap-break-word leading-snug">{a.authoredQuestionText}</p>
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-700 dark:text-slate-300">{a.authoredTotalMarks}</td>
-                              {authoredRatingBased && (
-                                <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-700 dark:text-slate-300">{a.ratingValue ?? "—"}</td>
-                              )}
-                              <td className="px-3 py-2 text-right tabular-nums font-bold text-violet-700 dark:text-violet-300">{a.pointsEarned}</td>
-                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                                {a.remarks ? (
-                                  <p className="whitespace-pre-wrap wrap-break-word">{a.remarks}</p>
-                                ) : (
-                                  <span className="text-slate-300 dark:text-slate-600">—</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t-2 border-slate-200 bg-slate-50/40 dark:border-slate-700 dark:bg-slate-800/20">
-                            <td colSpan={authoredRatingBased ? 3 : 2} className="px-3 py-2 text-right font-bold text-slate-600 dark:text-slate-300">Total</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-bold text-slate-700 dark:text-slate-300">{m1TotalMarks}</td>
-                            {authoredRatingBased && <td />}
-                            <td className="px-3 py-2 text-right tabular-nums font-bold text-violet-700 dark:text-violet-300">{m1TotalScore}</td>
-                            <td />
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })() : null}
-
-              {/* Manager 2 confirm button — shown in the modal after viewing
-                  Manager 1's assessment. Confirmation is per-employee. */}
-              {isManager2 && mgr1AuthoredAnswers.length > 0 && (
-                <div className="mb-4 flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50/40 px-3 py-2 dark:border-emerald-800/40 dark:bg-emerald-950/20">
-                  {mgr2ConfirmedAt ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                      <CheckCircle className="size-4" />
-                      Open assessment confirmed
-                      <span className="font-normal text-emerald-600/70 dark:text-emerald-400/70">
-                        ({new Date(mgr2ConfirmedAt).toLocaleString()})
-                      </span>
-                    </span>
-                  ) : (
-                    <>
-                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                        Review the assessment above, then confirm you have read it.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmModalSubmissionId(submissionId)}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
-                      >
-                        <CheckCircle className="size-3.5" />
-                        Confirm
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Manager 2's own authored questions editor — hidden for
-                  Manager 2 since they only review Manager 1's assessment. */}
-              {!isManager2 && (
-              <>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Budget: <span className="font-bold text-amber-700 dark:text-amber-300">{budget}</span>
-                  {" — "}
-                  Allocated: <span className={cn("font-bold", remaining < 0 ? "text-red-600" : remaining === 0 ? "text-emerald-600" : "text-amber-700 dark:text-amber-300")}>{allocated}</span>
-                  {" / "}
-                  Remaining: <span className={cn("font-bold", remaining < 0 ? "text-red-600" : "text-emerald-600")}>{remaining}</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => addAuthoredQuestion(submissionId, sectionId)}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-white",
-                      remaining <= 0
-                        ? "bg-slate-400 cursor-not-allowed hover:bg-slate-400"
-                        : "bg-primary hover:bg-primary/90",
-                    )}
-                  >
-                    <Plus className="size-3" />
-                    Add Question
-                  </button>
-                  {remaining <= 0 && drafts.length > 0 ? (
-                    <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                      Budget fully allocated — reduce marks on existing questions to add more
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              {drafts.length === 0 ? (
-                <div className="rounded-md border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400 dark:border-slate-700/40 dark:text-slate-500">
-                  {authoredRatingBased
-                    ? 'Click "Add Question" to write a question, assign a weight from the budget, and select a rating.'
-                    : 'Click "Add Question" to write a question and assign marks from the budget.'}
-                </div>
-              ) : (
-                <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-                  {drafts.map((draft, draftIdx) => {
-                    const totalMarks = Number(draft.authoredTotalMarks) || 0;
-                    const updateAuthoredRating = (
-                      ratingValue: string,
-                      pointsEarned: string,
-                    ) => {
-                      updateAuthoredDraft(submissionId, sectionId, draft.clientId, "ratingValue", ratingValue);
-                      updateAuthoredDraft(submissionId, sectionId, draft.clientId, "pointsEarned", pointsEarned);
-                    };
-                    return (
-                      <div
-                        key={draft.clientId}
-                        className="rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-700/40 dark:bg-slate-800/20"
-                      >
-                        <div className="flex items-start gap-2">
-                          <span className="mt-1.5 text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400">
-                            {draftIdx + 1}.
-                          </span>
-                          <div className="min-w-0 flex-1 space-y-2">
-                            <textarea
-                              value={draft.authoredQuestionText}
-                              onChange={(e) =>
-                                updateAuthoredDraft(submissionId, sectionId, draft.clientId, "authoredQuestionText", e.target.value)
-                              }
-                              rows={2}
-                              className="w-full resize-y rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
-                              placeholder="Type the question here..."
-                            />
-                            <div className="flex flex-wrap items-center gap-3">
-                              <label className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
-                                {authoredRatingBased ? "Weight:" : "Marks:"}
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step={1}
-                                  value={draft.authoredTotalMarks}
-                                  onChange={(e) =>
-                                    updateAuthoredDraft(submissionId, sectionId, draft.clientId, "authoredTotalMarks", e.target.value)
-                                  }
-                                  className="ml-1 h-7 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums font-bold text-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-amber-300"
-                                  placeholder="0"
-                                />
-                              </label>
-                              {authoredRatingBased && authoredScale ? (
-                                <div className="flex min-w-[180px] flex-col gap-0.5">
-                                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">Rating:</span>
-                                  <RatingScoreField
-                                    scale={authoredScale}
-                                    weight={totalMarks}
-                                    ratingValue={draft.ratingValue}
-                                    onRatingChange={updateAuthoredRating}
-                                    fallbackPoints={draft.pointsEarned !== "" ? Number(draft.pointsEarned) : null}
-                                  />
-                                </div>
-                              ) : (
-                                <label className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
-                                  Score:
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={totalMarks || undefined}
-                                    step="0.5"
-                                    value={draft.pointsEarned}
-                                    onChange={(e) =>
-                                      updateAuthoredDraft(submissionId, sectionId, draft.clientId, "pointsEarned", e.target.value)
-                                    }
-                                    className="ml-1 h-7 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs tabular-nums font-bold text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
-                                    placeholder="0"
-                                  />
-                                </label>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => removeAuthoredDraft(submissionId, sectionId, draft.clientId)}
-                                className="ml-auto inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-950/30"
-                              >
-                                <Trash2 className="size-3" />
-                                Remove
-                              </button>
-                            </div>
-                            <textarea
-                              value={draft.remarks}
-                              onChange={(e) =>
-                                updateAuthoredDraft(submissionId, sectionId, draft.clientId, "remarks", e.target.value)
-                              }
-                              rows={2}
-                              className="w-full resize-y rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                              placeholder="Remarks (optional)..."
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              </>
-              )}
-
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeAuthoredModal}
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-white/15 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })() : null}
-
-      {/* Manager 2 — Confirm open assessment modal */}
+      {/* Manager 2 â€” Confirm open assessment modal */}
       {confirmModalSubmissionId != null && data ? (() => {
         const emp = data.employees.find(
           (e) => e.submissionId === confirmModalSubmissionId,

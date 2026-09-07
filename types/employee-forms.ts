@@ -18,6 +18,12 @@ export interface AssignedFormListItem {
   /** Workflow status from appraisals.status (dashboard-aligned). */
   status: AppraisalStatus;
   selfAssessmentEnabled: boolean;
+  /** Manager review level: 1 = Manager 1, 2 = Manager 2. */
+  managerLevel: number | null;
+  /** True when this employee is marked for direct score entry (no form assignment). */
+  directScoreEntry: boolean;
+  /** True when this employee has an individual row in employee_form_assignments. */
+  formAssigned: boolean;
   submittedAt: string | null;
   updatedAt: string | null;
   eligibilityStatus: EmployeeAssessmentEligibilityStatus;

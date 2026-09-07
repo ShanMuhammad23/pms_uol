@@ -34,7 +34,7 @@ import {
 } from "@/app/components/dashboard/StaffListingMasterFilter";
 import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
 import { TopHorizontalScrollbar } from "@/app/components/common/TopHorizontalScrollbar";
-import { getSubmissionStatusConfig } from "@/app/helpers/dashboard-form-state";
+import { getSubmissionStatusConfig, isPendingDirectAssessment } from "@/app/helpers/dashboard-form-state";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
 import {
@@ -176,7 +176,13 @@ function stickyHeaderClassName() {
 }
 
 function canOpenSubmission(submission: FormSubmissionListItem) {
-  return submission.id > 0 && submission.status !== "PENDING_SELF_ASSESSMENT";
+  if (submission.id <= 0) return false;
+  if (submission.status === "PENDING_SELF_ASSESSMENT") return false;
+  // Disable the Eye icon while the submission is in the "Direct Assessment"
+  // stage — those are scored via the Direct Assessment spreadsheet, not the
+  // submission detail view.
+  if (isPendingDirectAssessment(submission)) return false;
+  return true;
 }
 
 const EMPTY_SUBMISSIONS: FormSubmissionListItem[] = [];
@@ -227,11 +233,14 @@ function SubmissionViewControl({
   submission: FormSubmissionListItem;
 }) {
   if (!canOpenSubmission(submission)) {
+    const reason = isPendingDirectAssessment(submission)
+      ? "Direct assessment in progress — use the Direct Assessment tab"
+      : "Self assessment not yet submitted";
     return (
       <button
         type="button"
         disabled
-        title="Self assessment not yet submitted"
+        title={reason}
         aria-label="View submission unavailable"
         className="inline-flex size-6 shrink-0 cursor-not-allowed items-center justify-center rounded-md text-slate-300 dark:text-slate-600"
       >

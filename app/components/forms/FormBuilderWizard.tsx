@@ -1913,7 +1913,7 @@ function SectionCard({
                       disabled={!formSelfAssessmentEnabled}
                       className="size-4 rounded border-slate-300 text-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40 dark:border-white/20 dark:bg-slate-800"
                     />
-                    Self Assessment
+                    Self
                   </label>
                   <label className="flex items-center gap-2 text-xs font-medium text-foreground/80">
                     <input
@@ -1926,7 +1926,7 @@ function SectionCard({
                       }
                       className="size-4 rounded border-slate-300 text-primary focus-visible:ring-2 focus-visible:ring-primary dark:border-white/20 dark:bg-slate-800"
                     />
-                    HOD Assessment
+                    HOD
                   </label>
                 </div>
               </div>

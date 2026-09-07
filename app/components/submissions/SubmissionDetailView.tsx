@@ -449,13 +449,15 @@ function buildManagerDraftMap(
     const employee = employeeMap.get(question.id);
     const manager1 = manager1Map.get(question.id);
 
-    // Prefill from the previous stage so the manager only changes scores
-    // they disagree with: Manager 1 ? self-assessment; Manager 2 ? Manager 1,
-    // then self-assessment. HOD-only questions have no employee answer.
+    // Prefill score/rating from the previous stage so the manager only
+    // changes scores they disagree with: Manager 1 ? self-assessment;
+    // Manager 2 ? Manager 1, then self-assessment. HOD-only questions have
+    // no employee answer. Remarks are NOT copied — each manager writes
+    // their own remarks.
     const fallbackSource =
       managerLevel === 2 ? (manager1 ?? employee) : (employee ?? manager1);
     const source = manager ?? fallbackSource;
-    const remarks = manager?.remarks ?? fallbackSource?.remarks ?? "";
+    const remarks = manager?.remarks ?? "";
     const displayedRating = source
       ? resolveDisplayedRatingValue(
         question,
@@ -1057,6 +1059,11 @@ export default function SubmissionDetailView({
   const editingHr = isEligible && (data?.canEditHrReview ?? false);
   const isAssignedManagerForCurrentLevel =
     data?.isAssignedManagerForCurrentLevel ?? false;
+  // Hide previous-stage remarks from the next reviewer. Admin/HR roles
+  // always see all remarks. Managers don't see the prior stage's remarks.
+  const hideSelfRemarks =
+    (editingManager1 || editingManager2) && !isAdminRole;
+  const hideMgr1Remarks = editingManager2 && !isAdminRole;
 
   const hasUnsavedChanges = useMemo(() => {
     if (!editingHr && !data?.canEditManagerReview) return false;
@@ -2016,7 +2023,9 @@ export default function SubmissionDetailView({
                             <td className="border-r border-slate-100 px-3 py-2.5 text-xs text-slate-600 dark:border-slate-700/40 dark:text-slate-300">
                               {scored ? (
                                 questionSelfAssessmentEnabled ? (
-                                  answer?.remarks?.trim() ? (
+                                  hideSelfRemarks ? (
+                                    <span className="text-slate-400" title="Remarks not shared with managers">—</span>
+                                  ) : answer?.remarks?.trim() ? (
                                     <p className="whitespace-pre-wrap wrap-break-word">
                                       {answer.remarks}
                                     </p>
@@ -2076,6 +2085,8 @@ export default function SubmissionDetailView({
                                 className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                                 placeholder="Optional remarks"
                               />
+                            ) : hideMgr1Remarks ? (
+                              <span className="text-slate-400" title="Remarks not shared with next reviewer">—</span>
                             ) : mgr1Display?.remarks?.trim() ? (
                               <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                 {mgr1Display.remarks}
