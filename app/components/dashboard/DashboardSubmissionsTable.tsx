@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, Upload, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, EyeClosed, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
@@ -235,7 +235,7 @@ function SubmissionViewControl({
         aria-label="View submission unavailable"
         className="inline-flex size-6 shrink-0 cursor-not-allowed items-center justify-center rounded-md text-slate-300 dark:text-slate-600"
       >
-        <Eye className="h-3.5 w-3.5" />
+       <Image src="/system-solid-69-eye-morph-cross.svg" alt="View submission" width={20} height={20} />
       </button>
     );
   }
@@ -247,7 +247,7 @@ function SubmissionViewControl({
       aria-label={`View submission for ${submission.employeeName}`}
       className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
     >
-      <Eye className="h-3.5 w-3.5" />
+      <Image src="/system-solid-69-eye.svg" alt="View submission" width={20} height={20} />
     </Link>
   );
 }
