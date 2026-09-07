@@ -62,3 +62,55 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
     isActive: row.is_active,
   };
 }
+
+/**
+ * Lightweight user lookup by ID — used by the auth JWT callback for the
+ * "view as user" feature. Returns the same minimal fields as getUserByEmail.
+ */
+export async function getUserByIdForAuth(id: number): Promise<AuthUser | null> {
+  const result = await getDbClient().query<{
+    id: string;
+    email: string;
+    password_hash: string;
+    first_name: string;
+    last_name: string;
+    system_role: string;
+    designation: string | null;
+    entity_id: string | null;
+    is_active: boolean;
+  }>(
+    `
+      SELECT
+        id,
+        email,
+        password_hash,
+        first_name,
+        last_name,
+        system_role,
+        designation,
+        entity_id,
+        is_active
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [id],
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: row.password_hash,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    systemRole: row.system_role,
+    designation: row.designation,
+    entityId: row.entity_id ? Number(row.entity_id) : null,
+    isActive: row.is_active,
+  };
+}

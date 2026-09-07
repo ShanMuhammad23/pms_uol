@@ -1,6 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import Google from "next-auth/providers/google";
-import { getUserByEmail } from "./lib/queries/auth";
+import { getUserByEmail, getUserByIdForAuth } from "./lib/queries/auth";
 import { getAuthCookieSecure } from "./lib/env";
 import { isSystemRole } from "./lib/auth/roles";
 import { logSecurityEvent } from "./lib/auth/security-events";
@@ -100,6 +100,22 @@ export const authOptions: NextAuthOptions = {
           // We'll validate after the DB refresh.
           token.viewAsRole = requested;
         }
+
+        // Handle "view as user" — admin can view the dashboard as any user.
+        const requestedUserId = (updateData as { viewAsUserId?: string | null }).viewAsUserId;
+        if (requestedUserId === null || requestedUserId === undefined) {
+          // Clearing view-as-user.
+          token.viewAsUserId = undefined;
+          token.viewAsUserName = undefined;
+          token.viewAsUserEmail = undefined;
+          token.viewAsUserRole = undefined;
+          token.viewAsUserDesignation = undefined;
+          token.viewAsUserEntityId = undefined;
+        } else {
+          // Only set the flag here; validation + user info fetch happens below
+          // after the DB refresh confirms the real user is an admin.
+          token.viewAsUserId = requestedUserId;
+        }
       }
 
       if (user) {
@@ -174,6 +190,49 @@ export const authOptions: NextAuthOptions = {
             token.viewAsRole = undefined;
           }
         }
+
+        // Validate + refresh viewAsUserId after DB refresh.
+        // Only HR / BOARD / SUPER_ADMIN may view as another user.
+        if (token.viewAsUserId) {
+          const realRole = dbUser.systemRole;
+          if (
+            realRole === "HR" ||
+            realRole === "BOARD" ||
+            realRole === "SUPER_ADMIN"
+          ) {
+            const targetId = Number(token.viewAsUserId);
+            if (Number.isFinite(targetId)) {
+              const targetUser = await getUserByIdForAuth(targetId);
+              if (targetUser?.isActive && isSystemRole(targetUser.systemRole)) {
+                token.viewAsUserId = String(targetUser.id);
+                token.viewAsUserName =
+                  `${targetUser.firstName} ${targetUser.lastName}`.trim();
+                token.viewAsUserEmail = targetUser.email;
+                token.viewAsUserRole = targetUser.systemRole;
+                token.viewAsUserDesignation = targetUser.designation ?? null;
+                token.viewAsUserEntityId = targetUser.entityId ?? null;
+              } else {
+                // Target user not found or inactive — clear view-as.
+                token.viewAsUserId = undefined;
+                token.viewAsUserName = undefined;
+                token.viewAsUserEmail = undefined;
+                token.viewAsUserRole = undefined;
+                token.viewAsUserDesignation = undefined;
+                token.viewAsUserEntityId = undefined;
+              }
+            } else {
+              token.viewAsUserId = undefined;
+            }
+          } else {
+            // Not an admin — clear view-as-user.
+            token.viewAsUserId = undefined;
+            token.viewAsUserName = undefined;
+            token.viewAsUserEmail = undefined;
+            token.viewAsUserRole = undefined;
+            token.viewAsUserDesignation = undefined;
+            token.viewAsUserEntityId = undefined;
+          }
+        }
       }
 
       return token;
@@ -215,6 +274,28 @@ export const authOptions: NextAuthOptions = {
         session.user.realRole = token.role as string | undefined ?? null;
         if (token.viewAsRole) {
           session.user.role = token.viewAsRole;
+        }
+
+        // Apply "view as user" override — when an admin is viewing the
+        // dashboard as another user, override all identity fields with the
+        // target user's info. The real user's ID/role are preserved in
+        // realId / realRole for authorization checks.
+        session.user.viewAsUserId = token.viewAsUserId ?? null;
+        session.user.realId = token.id as string | undefined ?? null;
+        if (token.viewAsUserId) {
+          session.user.id = token.viewAsUserId;
+          session.user.name = token.viewAsUserName ?? undefined;
+          session.user.email = token.viewAsUserEmail ?? undefined;
+          session.user.role = token.viewAsUserRole ?? undefined;
+          session.user.designation = token.viewAsUserDesignation ?? null;
+          session.user.entityId =
+            token.viewAsUserEntityId === null ||
+            token.viewAsUserEntityId === undefined
+              ? null
+              : Number(token.viewAsUserEntityId);
+          // Clear viewAsRole when viewing as a specific user — the target
+          // user's actual role is used instead.
+          session.user.viewAsRole = null;
         }
       }
 

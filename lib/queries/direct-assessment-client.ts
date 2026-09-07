@@ -74,6 +74,11 @@ export interface DirectAssessmentData {
    * same data model as the standard assessment workflow.
    */
   overallRemarksBySubmission: Record<number, DirectAssessmentOverallRemarks>;
+  /**
+   * Map of submissionId → ISO timestamp when Manager 2 confirmed they
+   * reviewed the open/free assessment sections. null = not yet confirmed.
+   */
+  manager2OpenAssessmentConfirmedBySubmission: Record<number, string | null>;
 }
 
 export type DirectAssessmentScope = "all" | "managed";
@@ -140,4 +145,14 @@ export async function approveDirectAssessment(
     { method: "POST" },
   );
   return parseResponse<{ managerLevel: number; status: string }>(response);
+}
+
+export async function confirmManager2OpenAssessment(
+  submissionId: number,
+): Promise<{ confirmedAt: string }> {
+  const response = await fetch(
+    `/api/submissions/${submissionId}/confirm-open-assessment`,
+    { method: "POST" },
+  );
+  return parseResponse<{ confirmedAt: string }>(response);
 }

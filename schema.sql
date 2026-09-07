@@ -281,7 +281,11 @@ CREATE TABLE appraisals (
     -- has additional_remarks_enabled = TRUE.
     manager1_overall_remarks TEXT,
     manager2_overall_remarks TEXT,
-    
+
+    -- When Manager 2 confirms they have reviewed the open/free assessment
+    -- sections authored by Manager 1 and/or the employee. NULL = not confirmed.
+    manager2_open_assessment_confirmed_at TIMESTAMPTZ,
+
     submitted_at TIMESTAMP WITH TIME ZONE,
     -- Last pending-self-assessment reminder email (cron cooldown: 48h)
     last_self_assessment_reminder_at TIMESTAMPTZ,

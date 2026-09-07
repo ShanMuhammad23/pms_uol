@@ -251,7 +251,9 @@ export default function ProfileViewClient({ profile }: ProfileViewClientProps) {
             Your employment record in the Performance Management System.
           </p>
         </div>
-        <PrintButton className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15" />
+        <div className="no-print flex items-center gap-2">
+          <PrintButton className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15" />
+        </div>
       </div>
 
       <motion.section
