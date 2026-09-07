@@ -64,7 +64,7 @@ export function getSubmissionApplicableDurationFactor(
     submission.applicableDurationFactor !== null &&
     submission.applicableDurationFactor !== undefined
   ) {
-    return Math.round(submission.applicableDurationFactor * 10) / 10;
+    return submission.applicableDurationFactor;
   }
 
   const computed = computeAppraisalEligibility(submission.dateOfJoining, {

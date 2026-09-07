@@ -58,7 +58,12 @@ async function ensureEligibilityColumns(client) {
   await client.query(
     `ALTER TABLE appraisals
      ADD COLUMN IF NOT EXISTS eligibility_status VARCHAR(30),
-     ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(3, 1)`,
+     ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(8, 6)`,
+  );
+  // Existing DBs may still have NUMERIC(3, 1); widen so partial factors are not rounded.
+  await client.query(
+    `ALTER TABLE appraisals
+     ALTER COLUMN applicable_duration_factor TYPE NUMERIC(8, 6)`,
   );
 }
 

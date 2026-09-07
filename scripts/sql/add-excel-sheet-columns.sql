@@ -20,7 +20,7 @@ ALTER TABLE appraisals
     ADD COLUMN IF NOT EXISTS is_eligible BOOLEAN,
     ADD COLUMN IF NOT EXISTS eligibility_status VARCHAR(30),
     ADD COLUMN IF NOT EXISTS applicable_duration VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(3, 1),
+    ADD COLUMN IF NOT EXISTS applicable_duration_factor NUMERIC(8, 6),
     ADD COLUMN IF NOT EXISTS remarks_evaluation TEXT,
     ADD COLUMN IF NOT EXISTS current_salary NUMERIC(14, 2),
     ADD COLUMN IF NOT EXISTS previous_salary NUMERIC(14, 2),

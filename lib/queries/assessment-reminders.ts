@@ -1,6 +1,10 @@
 import "server-only";
 
 import { getDbClient } from "@/lib/db-context";
+import {
+  managerPendingWorkReminderTemplate,
+  selfAssessmentReminderTemplate,
+} from "@/lib/mail/notifications/templates";
 
 /** Employee self-assessment reminder cooldown. */
 export const EMPLOYEE_REMINDER_INTERVAL = "48 hours";
@@ -178,13 +182,16 @@ export async function listPendingManagerReminders(
 export async function markSelfAssessmentReminderSent(params: {
   assignmentId: number;
   appraisalId: number | null;
+  emailHtml: string;
 }): Promise<void> {
   await getDbClient().query(
     `UPDATE employee_form_assignments
      SET last_self_assessment_reminder_at = CURRENT_TIMESTAMP,
+         self_assessment_reminder_count = self_assessment_reminder_count + 1,
+         last_self_assessment_reminder_html = $2,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1`,
-    [params.assignmentId],
+    [params.assignmentId, params.emailHtml],
   );
 
   if (params.appraisalId != null) {
@@ -198,14 +205,17 @@ export async function markSelfAssessmentReminderSent(params: {
   }
 }
 
-export async function markManagerReminderSent(
-  managerUserId: number,
-): Promise<void> {
+export async function markManagerReminderSent(params: {
+  managerUserId: number;
+  emailHtml: string;
+}): Promise<void> {
   await getDbClient().query(
     `UPDATE users
-     SET last_manager_reminder_at = CURRENT_TIMESTAMP
+     SET last_manager_reminder_at = CURRENT_TIMESTAMP,
+         manager_reminder_count = manager_reminder_count + 1,
+         last_manager_reminder_html = $2
      WHERE id = $1`,
-    [managerUserId],
+    [params.managerUserId, params.emailHtml],
   );
 }
 
@@ -221,6 +231,12 @@ export interface SentSelfAssessmentReminderRow {
 
 export type ReminderAudienceRole = "EMPLOYEE" | "MANAGER";
 
+/** Stable email-template labels shown in the Super Admin reminders UI. */
+export const REMINDER_EMAIL_TEMPLATES = {
+  EMPLOYEE: "Self-Assessment Reminder",
+  MANAGER: "Manager Pending Work Reminder",
+} as const;
+
 export interface SentAssessmentReminderRow {
   /** Stable UI key: `employee:{assignmentId}` or `manager:{userId}` */
   id: string;
@@ -231,6 +247,12 @@ export interface SentAssessmentReminderRow {
   formTitle: string | null;
   cycleFiscalYear: number | null;
   lastReminderAt: string;
+  /** Successful sends for this assignment / manager digest. */
+  reminderCount: number;
+  /** Distinct email templates sent (no per-template counts). */
+  templates: string[];
+  /** Full HTML of the last reminder email (stored, or regenerated fallback). */
+  emailHtml: string | null;
 }
 
 /**
@@ -288,7 +310,11 @@ export async function listSentAssessmentReminders(options?: {
         u.email AS employee_email,
         ft.title AS form_title,
         ac.fiscal_year,
-        efa.last_self_assessment_reminder_at AS last_reminder_at
+        efa.last_self_assessment_reminder_at AS last_reminder_at,
+        GREATEST(efa.self_assessment_reminder_count, 1)::int AS reminder_count,
+        efa.last_self_assessment_reminder_html AS email_html,
+        0::int AS direct_assessment_count,
+        0::int AS pending_review_count
       FROM employee_form_assignments efa
       INNER JOIN users u ON u.id = efa.employee_id
       INNER JOIN form_templates ft ON ft.id = efa.template_id
@@ -307,8 +333,17 @@ export async function listSentAssessmentReminders(options?: {
         CONCAT(m.first_name, ' ', m.last_name) AS employee_name,
         m.email AS employee_email,
         NULL::text AS form_title,
-        NULL::int AS fiscal_year,
-        m.last_manager_reminder_at AS last_reminder_at
+        (
+          SELECT ac.fiscal_year
+          FROM appraisal_cycles ac
+          ORDER BY ac.is_active DESC, ac.fiscal_year DESC
+          LIMIT 1
+        ) AS fiscal_year,
+        m.last_manager_reminder_at AS last_reminder_at,
+        GREATEST(m.manager_reminder_count, 1)::int AS reminder_count,
+        m.last_manager_reminder_html AS email_html,
+        0::int AS direct_assessment_count,
+        0::int AS pending_review_count
       FROM users m
       WHERE m.last_manager_reminder_at IS NOT NULL
         ${searchClauseManager}
@@ -329,6 +364,10 @@ export async function listSentAssessmentReminders(options?: {
     form_title: string | null;
     fiscal_year: number | null;
     last_reminder_at: string;
+    reminder_count: number;
+    email_html: string | null;
+    direct_assessment_count: number;
+    pending_review_count: number;
     total_count: string;
   }>(
     `WITH combined AS (
@@ -343,6 +382,10 @@ export async function listSentAssessmentReminders(options?: {
        form_title,
        fiscal_year,
        last_reminder_at::text AS last_reminder_at,
+       reminder_count,
+       email_html,
+       direct_assessment_count,
+       pending_review_count,
        COUNT(*) OVER()::text AS total_count
      FROM combined
      ORDER BY last_reminder_at DESC, employee_id ASC
@@ -356,17 +399,44 @@ export async function listSentAssessmentReminders(options?: {
 
   return {
     total,
-    items: result.rows.map((row) => ({
-      id: row.id,
-      role: row.role,
-      employeeId: row.employee_id,
-      employeeName: row.employee_name,
-      employeeEmail: row.employee_email,
-      formTitle: row.form_title,
-      cycleFiscalYear:
-        row.fiscal_year != null ? Number(row.fiscal_year) : null,
-      lastReminderAt: row.last_reminder_at,
-    })),
+    items: result.rows.map((row) => {
+      const cycleFiscalYear =
+        row.fiscal_year != null ? Number(row.fiscal_year) : null;
+      const templates = [REMINDER_EMAIL_TEMPLATES[row.role]];
+      let emailHtml = row.email_html;
+
+      // Older rows predate HTML storage — regenerate a preview from the same templates.
+      if (!emailHtml) {
+        if (row.role === "EMPLOYEE") {
+          emailHtml = selfAssessmentReminderTemplate({
+            employeeName: row.employee_name,
+            formTitle: row.form_title ?? "Assigned form",
+            cycleFiscalYear: cycleFiscalYear ?? new Date().getFullYear(),
+          }).html;
+        } else {
+          emailHtml = managerPendingWorkReminderTemplate({
+            managerName: row.employee_name,
+            directAssessmentCount: Number(row.direct_assessment_count),
+            pendingReviewCount: Number(row.pending_review_count),
+            cycleFiscalYear: cycleFiscalYear ?? new Date().getFullYear(),
+          }).html;
+        }
+      }
+
+      return {
+        id: row.id,
+        role: row.role,
+        employeeId: row.employee_id,
+        employeeName: row.employee_name,
+        employeeEmail: row.employee_email,
+        formTitle: row.form_title,
+        cycleFiscalYear,
+        lastReminderAt: row.last_reminder_at,
+        reminderCount: Number(row.reminder_count),
+        templates,
+        emailHtml,
+      };
+    }),
   };
 }
 

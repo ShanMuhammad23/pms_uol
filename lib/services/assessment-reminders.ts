@@ -78,6 +78,7 @@ async function sendEmployeeReminder(
     await markSelfAssessmentReminderSent({
       assignmentId: item.assignmentId,
       appraisalId: item.appraisalId,
+      emailHtml: content.html,
     });
   }
 
@@ -103,7 +104,10 @@ async function sendManagerReminder(
   );
 
   if (sent) {
-    await markManagerReminderSent(item.managerUserId);
+    await markManagerReminderSent({
+      managerUserId: item.managerUserId,
+      emailHtml: content.html,
+    });
   }
 
   return sent;
