@@ -27,6 +27,9 @@ interface ReminderItem {
   formTitle: string | null;
   cycleFiscalYear: number | null;
   lastReminderAt: string;
+  reminderCount: number;
+  templates: string[];
+  emailHtml: string | null;
 }
 
 interface TodayStats {
@@ -95,6 +98,49 @@ function RoleBadge({ role }: { role: ReminderRole }) {
       )}
     >
       {isManager ? "Manager" : "Employee"}
+    </span>
+  );
+}
+
+function ReminderCountBadge({
+  count,
+  templates,
+  emailHtml,
+}: {
+  count: number;
+  templates: string[];
+  emailHtml: string | null;
+}) {
+  const templateLabel = [...new Set(templates.filter(Boolean))].join(", ");
+
+  return (
+    <span className="group relative inline-flex">
+      <span
+        className="inline-flex min-w-7 cursor-default items-center justify-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-violet-800 dark:bg-violet-950/50 dark:text-violet-200"
+        aria-label={`${count} reminder${count === 1 ? "" : "s"} sent${templateLabel ? `: ${templateLabel}` : ""}`}
+      >
+        {count.toLocaleString()}
+      </span>
+      {emailHtml ? (
+        <span className="absolute top-full left-0 z-30 hidden pt-2 group-hover:block">
+          <span
+            role="tooltip"
+            className="block w-[min(28rem,70vw)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-white/15 dark:bg-slate-950"
+          >
+            {templateLabel ? (
+              <span className="block border-b border-slate-100 px-3 py-2 text-[10px] font-semibold tracking-wide text-slate-500 uppercase dark:border-white/10 dark:text-slate-400">
+                {templateLabel}
+              </span>
+            ) : null}
+            <iframe
+              title="Reminder email preview"
+              sandbox=""
+              srcDoc={emailHtml}
+              className="h-80 w-full bg-white"
+            />
+          </span>
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -314,59 +360,83 @@ export default function AssessmentRemindersManager() {
       ) : null}
 
       {items.length > 0 ? (
-        <div className="overflow-x-auto rounded-md border border-slate-200 bg-white dark:border-neutral-700 dark:bg-slate-900">
-          <table className="min-w-full">
-            <thead className="bg-primary text-left text-sm font-semibold whitespace-nowrap text-white">
-              <tr className="divide-x divide-white/15">
-                <th className="px-4 py-3.5">Employee ID</th>
-                <th className="px-4 py-3.5">Name</th>
-                <th className="px-4 py-3.5">Role</th>
-                <th className="px-4 py-3.5">Email</th>
-                <th className="px-4 py-3.5">Form</th>
-                <th className="px-4 py-3.5">Last Reminder Sent</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 text-sm dark:divide-neutral-700">
-              {items.map((item) => (
-                <tr
-                  key={item.id}
-                  className="divide-x divide-slate-200 dark:divide-neutral-700"
-                >
-                  <td className="px-4 py-4 font-medium whitespace-nowrap text-slate-900 dark:text-slate-50">
-                    {item.employeeId}
-                  </td>
-                  <td className="px-4 py-4 text-slate-900 dark:text-slate-50">
-                    {item.employeeName}
-                  </td>
-                  <td className="px-4 py-4">
-                    <RoleBadge role={item.role} />
-                  </td>
-                  <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
-                    {item.employeeEmail}
-                  </td>
-                  <td className="px-4 py-4 text-slate-700 dark:text-slate-300">
-                    {item.role === "MANAGER" ? (
-                      <span className="text-slate-400 dark:text-slate-500">
-                        Manager digest
-                      </span>
-                    ) : (
-                      <>
-                        {item.formTitle ?? "—"}
-                        {item.cycleFiscalYear != null ? (
-                          <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
-                            FY {item.cycleFiscalYear}
-                          </span>
-                        ) : null}
-                      </>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
-                    {formatWhen(item.lastReminderAt)}
-                  </td>
+        <div className="overflow-hidden rounded-md border border-slate-200 bg-white dark:border-neutral-700 dark:bg-slate-900">
+          <div className="max-h-[calc(100vh-18rem)] overflow-auto overscroll-contain">
+            <table className="min-w-full border-separate border-spacing-0">
+              <thead className="bg-primary text-left text-sm font-semibold whitespace-nowrap text-white">
+                <tr className="divide-x divide-white/15">
+                  <th className="sticky top-0 z-20 border-b border-primary/80 bg-primary px-4 py-3.5">
+                    Employee ID
+                  </th>
+                  <th className="sticky top-0 z-20 border-b border-primary/80 bg-primary px-4 py-3.5">
+                    Name
+                  </th>
+                  <th className="sticky top-0 z-20 border-b border-primary/80 bg-primary px-4 py-3.5">
+                    Role
+                  </th>
+                  <th className="sticky top-0 z-20 border-b border-primary/80 bg-primary px-4 py-3.5">
+                    Email
+                  </th>
+                  <th className="sticky top-0 z-20 border-b border-primary/80 bg-primary px-4 py-3.5">
+                    Form
+                  </th>
+                  <th className="sticky top-0 z-20 border-b border-primary/80 bg-primary px-4 py-3.5">
+                    Reminders Sent
+                  </th>
+                  <th className="sticky top-0 z-20 border-b border-primary/80 bg-primary px-4 py-3.5">
+                    Last Reminder Sent
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200 text-sm dark:divide-neutral-700">
+                {items.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="divide-x divide-slate-200 dark:divide-neutral-700"
+                  >
+                    <td className="border-b border-slate-200 px-4 py-4 font-medium whitespace-nowrap text-slate-900 dark:border-neutral-700 dark:text-slate-50">
+                      {item.employeeId}
+                    </td>
+                    <td className="border-b border-slate-200 px-4 py-4 text-slate-900 dark:border-neutral-700 dark:text-slate-50">
+                      {item.employeeName}
+                    </td>
+                    <td className="border-b border-slate-200 px-4 py-4 dark:border-neutral-700">
+                      <RoleBadge role={item.role} />
+                    </td>
+                    <td className="border-b border-slate-200 px-4 py-4 text-slate-700 dark:border-neutral-700 dark:text-slate-300">
+                      {item.employeeEmail}
+                    </td>
+                    <td className="border-b border-slate-200 px-4 py-4 text-slate-700 dark:border-neutral-700 dark:text-slate-300">
+                      {item.role === "MANAGER" ? (
+                        <span className="text-slate-400 dark:text-slate-500">
+                          Manager digest
+                        </span>
+                      ) : (
+                        <>
+                          {item.formTitle ?? "—"}
+                          {item.cycleFiscalYear != null ? (
+                            <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                              FY {item.cycleFiscalYear}
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
+                    <td className="border-b border-slate-200 px-4 py-4 dark:border-neutral-700">
+                      <ReminderCountBadge
+                        count={item.reminderCount ?? 1}
+                        templates={item.templates ?? []}
+                        emailHtml={item.emailHtml ?? null}
+                      />
+                    </td>
+                    <td className="border-b border-slate-200 px-4 py-4 whitespace-nowrap text-slate-700 dark:border-neutral-700 dark:text-slate-300">
+                      {formatWhen(item.lastReminderAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
 

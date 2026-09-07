@@ -19,6 +19,8 @@
     "db:migrate:return-submission": "node scripts/migrate-return-submission.mjs",
     "db:migrate:assessment-reminders": "node scripts/migrate-assessment-reminders.mjs",
     "db:migrate:assignment-self-assessment-reminder": "node scripts/migrate-assignment-self-assessment-reminder.mjs",
+    "db:migrate:assessment-reminder-counts": "node scripts/migrate-assessment-reminder-counts.mjs",
+    "db:migrate:assessment-reminder-email-html": "node scripts/migrate-assessment-reminder-email-html.mjs",
     "db:list:assessment-reminders": "node --env-file=.env scripts/list-assessment-reminders.mjs",
     "cron:assessment-reminders": "bash scripts/run-assessment-reminders.sh",
     "db:migrate:section-title-length": "node scripts/migrate-section-title-length.mjs",

@@ -7,17 +7,7 @@ export const runtime = "nodejs";
 /** Allow long SMTP batches when the caller awaits completion (?await=1). */
 export const maxDuration = 600;
 
-/**
- * GET/POST /api/cron/assessment-reminders
- *
- * Default: returns HTTP 202 immediately and sends emails in `after()` so the
- * cron shell script does not time out on large batches (~300 recipients).
- *
- * Optional: `?await=1` waits for the full run and returns the result JSON
- * (useful for debugging; needs a long curl --max-time).
- *
- * Auth: `Authorization: Bearer <CRON_SECRET>`
- */
+
 
 function authorizeCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET;

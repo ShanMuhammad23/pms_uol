@@ -8,7 +8,7 @@ export type AppraisalEligibilityResult = {
   uolExperienceYears: number | null;
   isEligible: boolean;
   applicableDuration: string | null;
-  /** 1 = full, 0 = not eligible, otherwise months-to-FY-end / 12 (1 decimal). */
+  /** 1 = full, 0 = not eligible, otherwise months-to-FY-end / 12 (exact, not rounded). */
   applicableDurationFactor: number;
 };
 

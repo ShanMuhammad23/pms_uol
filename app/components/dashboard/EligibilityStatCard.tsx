@@ -7,6 +7,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { CustomTooltip } from "@/app/components/dashboard/CustomTooltip";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 interface EligibilityStatCardProps {
   data: Array<{ name: string; value: number; color: string }>;
@@ -158,9 +159,7 @@ export function EligibilityStatCard({ data, delay, onCategoryClick, activeCatego
           </ul>
         </div>
       ) : (
-        <p className="mt-3 text-[10px] text-slate-500 sm:mt-4 sm:text-xs dark:text-slate-400">
-          No employees match the current filters
-        </p>
+       <Image src="/stats-card-spinner.svg" alt="No data" width={160} height={100} className="invert"/>
       )}
     </motion.div>
   );

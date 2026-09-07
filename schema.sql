@@ -58,6 +58,8 @@ CREATE TABLE users (
     is_active BOOLEAN DEFAULT TRUE,
     -- Last manager pending-work reminder digest (cron cooldown: 3 days)
     last_manager_reminder_at TIMESTAMPTZ,
+    manager_reminder_count INT NOT NULL DEFAULT 0,
+    last_manager_reminder_html TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -178,6 +180,8 @@ CREATE TABLE employee_form_assignments (
     self_assessment_disabled BOOLEAN NOT NULL DEFAULT FALSE,
     -- Last pending-self-assessment reminder email (cron cooldown: 48h)
     last_self_assessment_reminder_at TIMESTAMPTZ,
+    self_assessment_reminder_count INT NOT NULL DEFAULT 0,
+    last_self_assessment_reminder_html TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_employee_template_assignment UNIQUE (employee_id, template_id)
@@ -240,7 +244,7 @@ CREATE TABLE appraisals (
     is_eligible BOOLEAN,
     eligibility_status VARCHAR(30), -- Fully Eligible | Partially Eligible | Not Eligible
     applicable_duration VARCHAR(100),
-    applicable_duration_factor NUMERIC(3, 1), -- 1 = full, 0 = none, else months/12
+    applicable_duration_factor NUMERIC(8, 6), -- 1 = full, 0 = none, else months/12 (exact)
     remarks_evaluation TEXT,
     hr_approval_status VARCHAR(20) DEFAULT 'pending', -- pending | approved | review_required (independent of remarks_evaluation)
 
