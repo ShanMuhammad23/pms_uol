@@ -15,7 +15,8 @@ export interface OrgReportNode {
   performanceMatrixAssigned: number;
   incrementMatrixAssigned: number;
   selfAssessed: number;
-  assessedByManagers: number;
+  assessedByManager1: number;
+  assessedByManager2: number;
   hrAlignment: number;
   boardApproval: number;
   children: OrgReportNode[];

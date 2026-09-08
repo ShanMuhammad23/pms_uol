@@ -71,7 +71,8 @@ type ReportColumnId =
   | "performanceMatrixAssigned"
   | "incrementMatrixAssigned"
   | "selfAssessed"
-  | "assessedByManagers"
+  | "assessedByManager1"
+  | "assessedByManager2"
   | "hrAlignment"
   | "boardApproval";
 
@@ -83,7 +84,8 @@ const REPORT_COLUMNS: ColumnDef[] = [
   { id: "performanceMatrixAssigned", label: "Perf. Matrix", width: 120 },
   { id: "incrementMatrixAssigned", label: "Incr. Matrix", width: 120 },
   { id: "selfAssessed", label: "Assessed", width: 130 },
-  { id: "assessedByManagers", label: "Manager Assessment", width: 160 },
+  { id: "assessedByManager1", label: "Manager 1 Review", width: 150 },
+  { id: "assessedByManager2", label: "Manager 2 Review", width: 150 },
   { id: "hrAlignment", label: "HR Alignment", width: 130 },
   { id: "boardApproval", label: "Board Approval", width: 130 },
 ];
@@ -102,7 +104,8 @@ type CountVariant =
   | "perfMatrix"
   | "incrMatrix"
   | "self"
-  | "manager"
+  | "manager1"
+  | "manager2"
   | "hr"
   | "board";
 
@@ -118,7 +121,8 @@ const COLUMN_VARIANT: Record<ReportColumnId, CountVariant> = {
   performanceMatrixAssigned: "perfMatrix",
   incrementMatrixAssigned: "incrMatrix",
   selfAssessed: "self",
-  assessedByManagers: "manager",
+  assessedByManager1: "manager1",
+  assessedByManager2: "manager2",
   hrAlignment: "hr",
   boardApproval: "board",
 };
@@ -138,7 +142,8 @@ function getNodeValue(
     case "performanceMatrixAssigned": return node.performanceMatrixAssigned;
     case "incrementMatrixAssigned": return node.incrementMatrixAssigned;
     case "selfAssessed": return node.selfAssessed;
-    case "assessedByManagers": return node.assessedByManagers;
+    case "assessedByManager1": return node.assessedByManager1;
+    case "assessedByManager2": return node.assessedByManager2;
     case "hrAlignment": return node.hrAlignment;
     case "boardApproval": return node.boardApproval;
     default: return 0;
@@ -309,7 +314,8 @@ function CountBadge({
     perfMatrix: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200",
     incrMatrix: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950/60 dark:text-fuchsia-200",
     self: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200",
-    manager: "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200",
+    manager1: "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200",
+    manager2: "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-200",
     hr: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200",
     board: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
   };

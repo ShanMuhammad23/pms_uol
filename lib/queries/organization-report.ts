@@ -31,8 +31,10 @@ export interface OrgReportNode {
   incrementMatrixAssigned: number;
   /** Employees who have submitted self-assessment (status >= PENDING_HEAD_REVIEW). */
   selfAssessed: number;
-  /** Employees past manager review (status >= PENDING_HR_CALIBRATION). */
-  assessedByManagers: number;
+  /** Employees currently in Manager 1 review (status = PENDING_HEAD_REVIEW, manager_level = 1). */
+  assessedByManager1: number;
+  /** Employees currently in Manager 2 review (status = PENDING_HEAD_REVIEW, manager_level = 2). */
+  assessedByManager2: number;
   /** Employees past HR alignment (status >= PENDING_BOARD_APPROVAL). */
   hrAlignment: number;
   /** Employees with board approval (status >= APPROVED). */
@@ -53,7 +55,8 @@ interface EntityCountRow {
   performance_matrix_assigned: string;
   increment_matrix_assigned: string;
   self_assessed: string;
-  assessed_by_managers: string;
+  assessed_by_manager1: string;
+  assessed_by_manager2: string;
   hr_alignment: string;
   board_approval: string;
 }
@@ -88,53 +91,73 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   // recursive CTE (`subtree`) to walk the entity tree downward from each
   // entity. Joining the recursive CTE with `direct_counts` and summing gives
   // rolled-up subtree counts per root entity directly in SQL.
+  // Eligibility condition — an employee is eligible when:
+  //   1. HR has not disabled assessment_eligibility on their user record
+  //      (defaults to TRUE), AND
+  //   2. Either the appraisal record marks them as eligible, OR their tenure
+  //      from date_of_joining to the FY end date is >= 3 months.
+  // This mirrors the dashboard's eligibility logic and is applied to every
+  // count column except total_employees and eligible.
+  const eligibleCond = `(
+    COALESCE(u.assessment_eligibility, TRUE) = TRUE
+    AND (
+      COALESCE(ap.is_eligible, FALSE) = TRUE
+      OR (
+        u.date_of_joining IS NOT NULL
+        AND $2::text IS NOT NULL
+        AND u.date_of_joining::date <= $2::date
+        AND (
+          (EXTRACT(YEAR FROM $2::date) - EXTRACT(YEAR FROM u.date_of_joining::date)) * 12
+          + (EXTRACT(MONTH FROM $2::date) - EXTRACT(MONTH FROM u.date_of_joining::date))
+          + CASE WHEN EXTRACT(DAY FROM $2::date) >= EXTRACT(DAY FROM u.date_of_joining::date) THEN 1 ELSE 0 END
+          >= 3
+        )
+      )
+    )
+  )`;
+
   const countRows = await getDbClient().query<EntityCountRow>(
     `WITH RECURSIVE direct_counts AS (
        SELECT
          u.entity_id,
          COUNT(DISTINCT u.id) AS total_employees,
          COUNT(DISTINCT u.id) FILTER (
-           WHERE COALESCE(ap.is_eligible, FALSE) = TRUE
-              OR (
-                u.date_of_joining IS NOT NULL
-                AND $2::text IS NOT NULL
-                AND u.date_of_joining::date <= $2::date
-                AND (
-                  -- months between date_of_joining and FY end >= 3
-                  (EXTRACT(YEAR FROM $2::date) - EXTRACT(YEAR FROM u.date_of_joining::date)) * 12
-                  + (EXTRACT(MONTH FROM $2::date) - EXTRACT(MONTH FROM u.date_of_joining::date))
-                  + CASE WHEN EXTRACT(DAY FROM $2::date) >= EXTRACT(DAY FROM u.date_of_joining::date) THEN 1 ELSE 0 END
-                  >= 3
-                )
-              )
+           WHERE ${eligibleCond}
          ) AS eligible,
          COUNT(DISTINCT u.id) FILTER (
-           WHERE efa.template_id IS NOT NULL
+           WHERE ${eligibleCond}
+             AND efa.template_id IS NOT NULL
          ) AS forms_assigned,
          -- Forms not assigned = no form assignment AND no direct score entry
          COUNT(DISTINCT u.id) FILTER (
-           WHERE efa.template_id IS NULL
+           WHERE ${eligibleCond}
+             AND efa.template_id IS NULL
              AND dsea.employee_id IS NULL
          ) AS forms_not_assigned,
          -- Direct score entry assignment for the cycle
          COUNT(DISTINCT u.id) FILTER (
-           WHERE dsea.employee_id IS NOT NULL
+           WHERE ${eligibleCond}
+             AND dsea.employee_id IS NOT NULL
          ) AS direct_score_entry,
          -- Manager direct assessment (self-assessment disabled on form assignment)
          COUNT(DISTINCT u.id) FILTER (
-           WHERE efa.template_id IS NOT NULL
+           WHERE ${eligibleCond}
+             AND efa.template_id IS NOT NULL
              AND efa.self_assessment_disabled = TRUE
          ) AS manager_direct_assessment,
          -- Performance matrix assigned for active FY
          COUNT(DISTINCT u.id) FILTER (
-           WHERE epma.employee_id IS NOT NULL
+           WHERE ${eligibleCond}
+             AND epma.employee_id IS NOT NULL
          ) AS performance_matrix_assigned,
          -- Increment matrix assigned for active FY
          COUNT(DISTINCT u.id) FILTER (
-           WHERE eima.employee_id IS NOT NULL
+           WHERE ${eligibleCond}
+             AND eima.employee_id IS NOT NULL
          ) AS increment_matrix_assigned,
-         COUNT(DISTINCT ap.id) FILTER (
-           WHERE ap.status IN (
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE ${eligibleCond}
+             AND ap.status IN (
              'PENDING_HEAD_REVIEW',
              'PENDING_HR_CALIBRATION',
              'PENDING_BOARD_APPROVAL',
@@ -142,29 +165,45 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
              'COMPLETED'
            )
          ) AS self_assessed,
-         COUNT(DISTINCT ap.id) FILTER (
-           WHERE ap.status IN (
-             'PENDING_HR_CALIBRATION',
-             'PENDING_BOARD_APPROVAL',
-             'APPROVED',
-             'COMPLETED'
-           )
-         ) AS assessed_by_managers,
-         COUNT(DISTINCT ap.id) FILTER (
-           WHERE ap.status IN (
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE ${eligibleCond}
+             AND ap.status = 'PENDING_HEAD_REVIEW'
+             AND ap.manager_level = 1
+         ) AS assessed_by_manager1,
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE ${eligibleCond}
+             AND ap.status = 'PENDING_HEAD_REVIEW'
+             AND ap.manager_level = 2
+         ) AS assessed_by_manager2,
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE ${eligibleCond}
+             AND ap.status IN (
              'PENDING_BOARD_APPROVAL',
              'APPROVED',
              'COMPLETED'
            )
          ) AS hr_alignment,
-         COUNT(DISTINCT ap.id) FILTER (
-           WHERE ap.status IN ('APPROVED', 'COMPLETED')
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE ${eligibleCond}
+             AND ap.status IN ('APPROVED', 'COMPLETED')
          ) AS board_approval
        FROM users u
-       LEFT JOIN appraisals ap ON ap.employee_id = u.id
-         AND ($1::int IS NULL
-           OR ap.cycle_id = $1
-           OR ($1::int IS NULL AND ap.cycle_id IS NULL))
+       LEFT JOIN LATERAL (
+         SELECT ap_inner.*
+         FROM appraisals ap_inner
+         WHERE ap_inner.employee_id = u.id
+           AND (
+             ap_inner.cycle_id = $1
+             OR ($1::int IS NULL AND ap_inner.cycle_id IS NULL)
+             OR ap_inner.cycle_id IS NULL
+           )
+         ORDER BY
+           (ap_inner.template_id IS NULL)::int,
+           CASE WHEN ap_inner.cycle_id = $1 THEN 0 ELSE 1 END,
+           ap_inner.updated_at DESC NULLS LAST,
+           ap_inner.id DESC
+         LIMIT 1
+       ) ap ON TRUE
        LEFT JOIN employee_form_assignments efa ON efa.employee_id = u.id
        LEFT JOIN direct_score_entry_assignments dsea
          ON dsea.employee_id = u.id
@@ -204,7 +243,8 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
        COALESCE(SUM(dc.performance_matrix_assigned), 0)::text AS performance_matrix_assigned,
        COALESCE(SUM(dc.increment_matrix_assigned), 0)::text AS increment_matrix_assigned,
        COALESCE(SUM(dc.self_assessed), 0)::text AS self_assessed,
-       COALESCE(SUM(dc.assessed_by_managers), 0)::text AS assessed_by_managers,
+       COALESCE(SUM(dc.assessed_by_manager1), 0)::text AS assessed_by_manager1,
+      COALESCE(SUM(dc.assessed_by_manager2), 0)::text AS assessed_by_manager2,
        COALESCE(SUM(dc.hr_alignment), 0)::text AS hr_alignment,
        COALESCE(SUM(dc.board_approval), 0)::text AS board_approval
      FROM subtree s
@@ -229,7 +269,8 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       performanceMatrixAssigned: number;
       incrementMatrixAssigned: number;
       selfAssessed: number;
-      assessedByManagers: number;
+      assessedByManager1: number;
+      assessedByManager2: number;
       hrAlignment: number;
       boardApproval: number;
     }
@@ -248,7 +289,8 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       performanceMatrixAssigned: Number(row.performance_matrix_assigned ?? 0),
       incrementMatrixAssigned: Number(row.increment_matrix_assigned ?? 0),
       selfAssessed: Number(row.self_assessed ?? 0),
-      assessedByManagers: Number(row.assessed_by_managers ?? 0),
+      assessedByManager1: Number(row.assessed_by_manager1 ?? 0),
+      assessedByManager2: Number(row.assessed_by_manager2 ?? 0),
       hrAlignment: Number(row.hr_alignment ?? 0),
       boardApproval: Number(row.board_approval ?? 0),
     });
@@ -273,7 +315,8 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       performanceMatrixAssigned: counts?.performanceMatrixAssigned ?? 0,
       incrementMatrixAssigned: counts?.incrementMatrixAssigned ?? 0,
       selfAssessed: counts?.selfAssessed ?? 0,
-      assessedByManagers: counts?.assessedByManagers ?? 0,
+      assessedByManager1: counts?.assessedByManager1 ?? 0,
+      assessedByManager2: counts?.assessedByManager2 ?? 0,
       hrAlignment: counts?.hrAlignment ?? 0,
       boardApproval: counts?.boardApproval ?? 0,
       children: [],
