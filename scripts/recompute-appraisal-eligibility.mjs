@@ -65,6 +65,21 @@ async function ensureEligibilityColumns(client) {
     `ALTER TABLE appraisals
      ALTER COLUMN applicable_duration_factor TYPE NUMERIC(8, 6)`,
   );
+
+  console.log("Ensuring financial year cycle date columns exist...");
+  await client.query(
+    `ALTER TABLE financial_years
+     ADD COLUMN IF NOT EXISTS cycle_start_date DATE,
+     ADD COLUMN IF NOT EXISTS ineligibility_date DATE`,
+  );
+  await client.query(
+    `UPDATE financial_years
+     SET
+       cycle_start_date = COALESCE(cycle_start_date, make_date(year - 1, 7, 1)),
+       ineligibility_date = COALESCE(ineligibility_date, make_date(year, 4, 1))
+     WHERE cycle_start_date IS NULL
+        OR ineligibility_date IS NULL`,
+  );
 }
 
 async function getActiveCycle(client) {
@@ -80,14 +95,25 @@ async function getActiveCycle(client) {
 
 async function getActiveFinancialYear(client) {
   const result = await client.query(
-    `SELECT year
+    `SELECT year,
+            cycle_start_date::text,
+            ineligibility_date::text
      FROM financial_years
      WHERE is_active = TRUE
      ORDER BY year DESC
      LIMIT 1`,
   );
 
-  return result.rows[0]?.year ?? null;
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    year: row.year,
+    cycleStartDate: row.cycle_start_date?.slice(0, 10) ?? null,
+    ineligibilityDate: row.ineligibility_date?.slice(0, 10) ?? null,
+  };
 }
 
 /**
@@ -272,13 +298,20 @@ async function main() {
       throw new Error("No appraisal cycle found. Create an active cycle first.");
     }
 
+    const activeFinancialYear = await getActiveFinancialYear(client);
     const financialYear =
-      (await getActiveFinancialYear(client)) ?? cycle.fiscal_year ?? null;
+      activeFinancialYear?.year ?? cycle.fiscal_year ?? null;
     const referenceEndDate = resolveReferenceEndDate({ financialYear });
 
     console.log(`Cycle id: ${cycle.id}`);
     console.log(`Financial year: ${financialYear}`);
     console.log(`Reference end date: ${formatLocalDate(referenceEndDate)}`);
+    console.log(
+      `Cycle start date: ${activeFinancialYear?.cycleStartDate ?? "(default)"}`,
+    );
+    console.log(
+      `Ineligibility date: ${activeFinancialYear?.ineligibilityDate ?? "(default)"}`,
+    );
 
     console.log("Loading form templates...");
     const templateMap = await loadTemplateMap(client);
@@ -325,6 +358,8 @@ async function main() {
 
       const eligibility = computeAppraisalEligibility(user.date_of_joining, {
         financialYear,
+        cycleStartDate: activeFinancialYear?.cycleStartDate ?? null,
+        ineligibilityDate: activeFinancialYear?.ineligibilityDate ?? null,
       });
       statusCounts[eligibility.status] += 1;
 

@@ -128,6 +128,10 @@ export interface FormSubmissionListItem {
   eligibilityStatus?: "Fully Eligible" | "Partially Eligible" | "Not Eligible";
   eligibilityReferenceYear?: number | null;
   eligibilityReferenceEndDate?: string | null;
+  /** Active FY cycle start (YYYY-MM-DD) used for eligibility fallbacks. */
+  eligibilityCycleStartDate?: string | null;
+  /** Active FY ineligibility cutoff (YYYY-MM-DD); DOJ after this → Not Eligible. */
+  eligibilityIneligibilityDate?: string | null;
   submittedAt: string | null;
   selfAssessmentEnabled: boolean;
   /** Manual toggle: when false, all score editing is disabled for this employee. */

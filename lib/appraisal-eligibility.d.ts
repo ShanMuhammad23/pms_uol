@@ -34,6 +34,8 @@ export function computeAppraisalEligibility(
     referenceEndDate?: Date;
     financialYear?: number | null;
     cycleEndDate?: string | Date | null;
+    cycleStartDate?: string | Date | null;
+    ineligibilityDate?: string | Date | null;
     minimumPartialMonths?: number;
     fullEligibilityMonths?: number;
   },

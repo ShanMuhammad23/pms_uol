@@ -378,6 +378,8 @@ CREATE TABLE financial_years (
     year INT NOT NULL UNIQUE,
     label VARCHAR(20) NOT NULL UNIQUE,       -- e.g. 'FY 2024-25'
     is_active BOOLEAN NOT NULL DEFAULT FALSE,
+    cycle_start_date DATE NOT NULL,          -- start of appraisal cycle window
+    ineligibility_date DATE NOT NULL,       -- DOJ after this date → Not Eligible
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

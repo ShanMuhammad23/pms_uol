@@ -108,6 +108,10 @@ async function getUserAssessmentEligibilityContext(
 function resolveEmployeeAssessmentEligibility(
   ctx: UserAssessmentEligibilityContext,
   financialYear: number | null | undefined,
+  cycleDates?: {
+    cycleStartDate?: string | null;
+    ineligibilityDate?: string | null;
+  },
 ): ResolvedAssessmentEligibility {
   if (!ctx.assessmentEligibility) {
     return {
@@ -120,6 +124,8 @@ function resolveEmployeeAssessmentEligibility(
 
   const computed = computeAppraisalEligibility(ctx.dateOfJoining, {
     financialYear: financialYear ?? undefined,
+    cycleStartDate: cycleDates?.cycleStartDate ?? undefined,
+    ineligibilityDate: cycleDates?.ineligibilityDate ?? undefined,
   });
 
   return {
@@ -130,13 +136,45 @@ function resolveEmployeeAssessmentEligibility(
   };
 }
 
+async function getActiveFinancialYearCycleDates(
+  client?: PoolClient,
+): Promise<{
+  cycleStartDate: string | null;
+  ineligibilityDate: string | null;
+}> {
+  const executor = client ?? getDbClient();
+  const result = await executor.query<{
+    cycle_start_date: string | null;
+    ineligibility_date: string | null;
+  }>(
+    `SELECT cycle_start_date::text, ineligibility_date::text
+     FROM financial_years
+     WHERE is_active = TRUE
+     ORDER BY year DESC
+     LIMIT 1`,
+  );
+
+  const row = result.rows[0];
+  return {
+    cycleStartDate: row?.cycle_start_date?.slice(0, 10) ?? null,
+    ineligibilityDate: row?.ineligibility_date?.slice(0, 10) ?? null,
+  };
+}
+
 async function assertUserCanFillAssessment(
   userId: number,
   fiscalYear: number,
   client?: PoolClient,
 ): Promise<void> {
-  const ctx = await getUserAssessmentEligibilityContext(userId, client);
-  const resolved = resolveEmployeeAssessmentEligibility(ctx, fiscalYear);
+  const [ctx, cycleDates] = await Promise.all([
+    getUserAssessmentEligibilityContext(userId, client),
+    getActiveFinancialYearCycleDates(client),
+  ]);
+  const resolved = resolveEmployeeAssessmentEligibility(
+    ctx,
+    fiscalYear,
+    cycleDates,
+  );
   if (!resolved.canFillAssessment) {
     const message =
       resolved.eligibilityStatus === "Ineligible"
@@ -733,7 +771,10 @@ export async function listAssignedFormsForUser(
   userId: number,
 ): Promise<AssignedFormListItem[]> {
   const explicitAssignments = await listExplicitlyAssignedTemplatesForUser(userId);
-  const eligibilityCtx = await getUserAssessmentEligibilityContext(userId);
+  const [eligibilityCtx, cycleDates] = await Promise.all([
+    getUserAssessmentEligibilityContext(userId),
+    getActiveFinancialYearCycleDates(),
+  ]);
 
   return Promise.all(
     explicitAssignments.map(async (assigned) => {
@@ -741,6 +782,7 @@ export async function listAssignedFormsForUser(
       const eligibility = resolveEmployeeAssessmentEligibility(
         eligibilityCtx,
         assigned.fiscalYear,
+        cycleDates,
       );
 
       return {
@@ -804,10 +846,14 @@ export async function getEmployeeFormDetail(
   );
   const maxRawScore = calculateMaxRawScore(template, authoredAnswers);
 
-  const eligibilityCtx = await getUserAssessmentEligibilityContext(userId);
+  const [eligibilityCtx, cycleDates] = await Promise.all([
+    getUserAssessmentEligibilityContext(userId),
+    getActiveFinancialYearCycleDates(),
+  ]);
   const eligibility = resolveEmployeeAssessmentEligibility(
     eligibilityCtx,
     template.fiscalYear,
+    cycleDates,
   );
 
   const managerResult = await getDbClient().query<{
