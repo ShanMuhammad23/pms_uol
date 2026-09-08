@@ -244,7 +244,7 @@ CREATE TABLE appraisals (
     is_eligible BOOLEAN,
     eligibility_status VARCHAR(30), -- Fully Eligible | Partially Eligible | Not Eligible
     applicable_duration VARCHAR(100),
-    applicable_duration_factor NUMERIC(8, 6), -- 1 = full, 0 = none, else months/12 (exact)
+    applicable_duration_factor NUMERIC(8, 6), -- 1 = full, 0 = none, else days/365 (exact)
     remarks_evaluation TEXT,
     hr_approval_status VARCHAR(20) DEFAULT 'pending', -- pending | approved | review_required (independent of remarks_evaluation)
 

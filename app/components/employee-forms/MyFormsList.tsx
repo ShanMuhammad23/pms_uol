@@ -1,11 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Briefcase,
   Building2,
+  Check,
   ClipboardList,
   Eye,
+  GraduationCap,
   Hash,
   Inbox,
   Layers,
@@ -67,7 +70,28 @@ const STATUS_PHASE: Record<AppraisalStatus, number> = {
   COMPLETED: 5,
 };
 
-const TOTAL_PHASES = 5;
+const WORKFLOW_STEPS = [
+  { id: 1, label: "Self", fullLabel: "Self Assessment" },
+  { id: 2, label: "Manager", fullLabel: "Manager Review" },
+  { id: 3, label: "HR", fullLabel: "HR Alignment" },
+  { id: 4, label: "Board", fullLabel: "Board Approval" },
+  { id: 5, label: "Done", fullLabel: "Approved" },
+] as const;
+
+const easeOut = [0.23, 1, 0.32, 1] as const;
+
+type WorkflowStepState = "complete" | "current" | "upcoming";
+
+function getWorkflowStepState(
+  stepId: number,
+  phase: number,
+  status: AppraisalStatus,
+): WorkflowStepState {
+  const allComplete = status === "APPROVED" || status === "COMPLETED";
+  if (allComplete || stepId < phase) return "complete";
+  if (stepId === phase) return "current";
+  return "upcoming";
+}
 
 function isFillable(
   status: AppraisalStatus,
@@ -116,6 +140,7 @@ export default function MyFormsList({
   userEmail,
   userInfo = null,
 }: MyFormsListProps) {
+  const reduceMotion = useReducedMotion();
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["my-forms"],
     queryFn: fetchAssignedForms,
@@ -209,42 +234,36 @@ export default function MyFormsList({
     data?.find((form) => form.eligibilityStatus === "Not Eligible");
   const showEligibilityBanner = blockedEligibility != null;
 
+  const pageShellClass =
+    "relative isolate min-w-0 space-y-6 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-[#eef2f8] to-[#f7efe9]  dark:from-slate-950 dark:via-slate-900 dark:to-[#1a1512]";
+
 
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-xl border border-slate-200 bg-surface p-6 shadow-sm dark:border-white/10">
+      <div className={pageShellClass}>
+        <div className="rounded-2xl border border-primary/10 bg-surface/90 p-6 shadow-[0_8px_30px_rgb(15,44,89,0.06)] backdrop-blur-sm dark:border-white/10 dark:bg-surface/80">
           <div className="flex items-center gap-4">
-            <div className="size-14 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
+            <div className="size-14 animate-pulse rounded-2xl bg-primary/15 dark:bg-primary/25" />
             <div className="space-y-2">
-              <div className="h-5 w-48 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
-              <div className="h-3 w-64 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="h-5 w-48 animate-pulse rounded bg-primary/10 dark:bg-white/10" />
+              <div className="h-3 w-64 animate-pulse rounded bg-primary/10 dark:bg-white/10" />
             </div>
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-5 sm:grid-cols-4 dark:border-white/6">
-            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-              <div key={i} className="space-y-2">
-                <div className="h-3 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
-                <div className="h-4 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
-              </div>
-            ))}
-          </div>
-          <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-10 border-t border-slate-100 pt-6 sm:grid-cols-4 dark:border-white/6">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="flex flex-col items-center gap-3">
-                <div className="size-8 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
-                <div className="h-7 w-10 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
-                <div className="h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-primary/8 pt-5 sm:grid-cols-3 lg:grid-cols-6 dark:border-white/6">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="space-y-2 rounded-xl bg-primary/[0.03] p-3 dark:bg-white/[0.03]">
+                <div className="h-3 w-16 animate-pulse rounded bg-primary/10 dark:bg-white/10" />
+                <div className="h-4 w-24 animate-pulse rounded bg-primary/10 dark:bg-white/10" />
               </div>
             ))}
           </div>
         </div>
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {[0, 1].map((i) => (
             <div
               key={i}
-              className="h-32 animate-pulse rounded-md border border-slate-200 bg-surface dark:border-white/10"
+              className="h-40 animate-pulse rounded-2xl border border-primary/10 bg-surface/80 dark:border-white/10"
             />
           ))}
         </div>
@@ -259,8 +278,9 @@ export default function MyFormsList({
 
   if (error) {
     return (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className={pageShellClass}>
+        
+        <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           <p className="font-medium">Failed to load assigned forms.</p>
           <p className="mt-1 text-red-600/90 dark:text-red-300/80">
             The server may be busy. Wait a moment and try again, or refresh the
@@ -272,14 +292,14 @@ export default function MyFormsList({
               onClick={() => {
                 void refetch();
               }}
-              className="inline-flex items-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900"
+              className="inline-flex cursor-pointer items-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={handleRefreshPage}
-              className="inline-flex items-center rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800"
+              className="inline-flex cursor-pointer items-center rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800"
             >
               Refresh page
             </button>
@@ -290,7 +310,16 @@ export default function MyFormsList({
   }
 
   return (
-    <div className="space-y-6">
+    <div className={pageShellClass}>
+      <div
+        className="pointer-events-none absolute -left-24 top-40 h-64 w-64 rounded-full bg-primary/[0.07] blur-3xl dark:bg-primary/10"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute -right-16 bottom-10 h-56 w-56 rounded-full bg-secondary/[0.12] blur-3xl dark:bg-secondary/10"
+        aria-hidden="true"
+      />
+
       {showEligibilityBanner ? (
         <IneligibilityBanner
           role="self"
@@ -309,179 +338,268 @@ export default function MyFormsList({
         onRefresh={handleRefreshPage}
       />
 
-      {/* Profile Hero + Basic Info + Form Status Stats */}
-      <div className="rounded-xl border border-slate-200 bg-surface p-6 shadow-sm dark:border-white/10">
-        <div className="flex items-center gap-4">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-bold text-white shadow-sm">
-            {initials}
+      <motion.div
+        initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: easeOut }}
+      >
+        
+      </motion.div>
+
+      {/* Welcome + profile */}
+      <motion.section
+        initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: reduceMotion ? 0 : 0.06, ease: easeOut }}
+        className="relative overflow-hidden rounded-2xl border border-primary/10 bg-surface/95 shadow-[0_8px_30px_rgb(15,44,89,0.06)] backdrop-blur-sm dark:border-white/10 dark:bg-surface/90 dark:shadow-[0_8px_30px_rgb(0,0,0,0.25)]"
+      >
+        <div
+          className="h-1 w-full bg-gradient-to-r from-primary via-secondary to-amber-400"
+          aria-hidden="true"
+        />
+        <div className="p-5 sm:p-6">
+          <div className="flex items-center gap-4">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[#1a3f73] text-lg font-bold text-white shadow-[0_8px_20px_-6px_rgba(15,44,89,0.55)] ring-2 ring-primary/20 ring-offset-2 ring-offset-surface dark:from-primary dark:to-primary/70 dark:ring-offset-surface">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl font-bold tracking-tight text-text-primary sm:text-2xl">
+                Welcome, {userName ?? "User"}
+              </h2>
+              <p className="mt-0.5 truncate text-sm text-foreground/60">
+                {subtitleParts.length > 0 ? subtitleParts.join(" · ") : "—"}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold text-text-primary sm:text-2xl">
-              Welcome !, {userName ?? "User"}
-            </h1>
-            <p className="mt-0.5 truncate text-sm text-foreground/60">
-              {subtitleParts.length > 0 ? subtitleParts.join(" · ") : "—"}
+
+          {infoFields.length > 0 ? (
+            <div className="mt-5 grid grid-cols-1 gap-3 border-t border-primary/8 pt-5 sm:grid-cols-2 lg:grid-cols-3 dark:border-white/8">
+              {infoFields.map(({ icon: Icon, label, value }) => (
+                <div
+                  key={label}
+                  className="min-w-0 rounded-xl border border-primary/[0.06] bg-gradient-to-br from-primary/[0.04] to-transparent px-3.5 py-3 dark:border-white/8 dark:from-white/[0.04]"
+                >
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary/70 dark:text-primary/80">
+                    <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                    {label}
+                  </p>
+                  <p
+                    className="mt-1.5 truncate text-sm font-semibold text-text-primary"
+                    title={value}
+                  >
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </motion.section>
+
+      {/* Assigned Forms */}
+      <section className="relative space-y-4 p-4 sm:p-6">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-text-primary sm:text-xl">
+              Assigned Forms
+            </h2>
+            {data && data.length > 0 ? (
+              <p className="mt-0.5 text-sm text-foreground/55">
+                {data.length} form{data.length > 1 ? "s" : ""} ready for this
+                cycle
+              </p>
+            ) : (
+              <p className="mt-0.5 text-sm text-foreground/55">
+                Your appraisal assignments appear here
+              </p>
+            )}
+          </div>
+        </div>
+
+        {!data || data.length === 0 ? (
+          <div className="flex w-full flex-col items-center justify-center rounded-2xl border border-dashed border-primary/25 bg-surface/80 px-6 py-16 text-center shadow-[0_8px_30px_rgb(15,44,89,0.04)] dark:border-white/15 dark:bg-surface/70">
+            <div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 dark:bg-primary/20">
+              <Inbox className="size-8 text-primary dark:text-primary" aria-hidden="true" />
+            </div>
+            <p className="mt-4 text-base font-semibold text-text-primary">
+              No forms assigned yet
+            </p>
+            <p className="mt-1.5 max-w-sm text-sm text-foreground/60">
+              Appraisal forms will appear here once they are assigned to you by
+              your administrator. You&apos;ll be able to view and complete them
+              from this page.
             </p>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {data.map((form, index) => {
+              const statusConfig = APPRAISAL_STATE_CONFIG[form.status];
+              const canFill = isFillable(
+                form.status,
+                form.submittedAt,
+                form.selfAssessmentEnabled,
+                form.canFillAssessment,
+              );
+              const phase = STATUS_PHASE[form.status];
+              const relativeDate = formatRelativeDate(
+                form.updatedAt ?? form.submittedAt,
+              );
+              const StatusIcon = statusConfig.icon;
 
-        {infoFields.length > 0 ? (
-          <div className="mt-5 grid grid-cols-1 gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-4 dark:border-white/6">
-            {infoFields.map(({ icon: Icon, label, value }) => (
-              <div key={label} className="min-w-0">
-                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
-                  <Icon className="size-3.5 shrink-0" />
-                  {label}
-                </p>
-                <p
-                  className="mt-1 truncate text-sm font-medium text-text-primary"
-                  title={value}
+              return (
+                <motion.div
+                  key={form.templateId}
+                  initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{
+                    duration: 0.35,
+                    delay: reduceMotion ? 0 : 0.08 + index * 0.05,
+                    ease: easeOut,
+                  }}
+                  className={cn(
+                    "group flex flex-col rounded-2xl border border-primary/10 border-l-4 bg-surface/95 p-5 shadow-[0_6px_24px_-8px_rgba(15,44,89,0.12)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_36px_-12px_rgba(15,44,89,0.22)] dark:border-white/10 dark:bg-surface/90 dark:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.4)]",
+                    STATUS_ACCENT[form.status],
+                  )}
                 >
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-
-      {/* Section Title */}
-      <div className="flex flex-col mt-10 items-start justify-start">
-        <h2 className="text-lg font-semibold text-text-primary">Assigned Forms</h2>
-        {data && data.length > 0 ? (
-          <span className="text-sm text-foreground/50">
-            {data.length} form{data.length > 1 ? "s" : ""}
-          </span>
-        ) : null}
-        {/* Empty State */}
-      {!data || data.length === 0 ? (
-        <div className="flex w-full flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-surface px-6 py-16 text-center dark:border-white/10">
-          <div className="flex size-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-            <Inbox className="size-8 text-slate-400 dark:text-slate-500" />
-          </div>
-          <p className="mt-4 text-base font-semibold text-text-primary">
-            No forms assigned yet
-          </p>
-          <p className="mt-1.5 max-w-sm text-sm text-foreground/60">
-            Appraisal forms will appear here once they are assigned to you by
-            your administrator. You&apos;ll be able to view and complete them
-            from this page.
-          </p>
-        </div>
-      ) : (
-        /* Form Cards Grid */
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {data.map((form) => {
-            const statusConfig = APPRAISAL_STATE_CONFIG[form.status];
-            const canFill = isFillable(
-              form.status,
-              form.submittedAt,
-              form.selfAssessmentEnabled,
-              form.canFillAssessment,
-            );
-            const phase = STATUS_PHASE[form.status];
-            const relativeDate = formatRelativeDate(
-              form.updatedAt ?? form.submittedAt,
-            );
-            const StatusIcon = statusConfig.icon;
-
-            return (
-              <div
-                key={form.templateId}
-                className={cn(
-                  "group flex flex-col rounded-md border border-slate-200 border-l-4 bg-surface p-5 shadow-sm transition-all hover:shadow-md dark:border-white/10",
-                  STATUS_ACCENT[form.status],
-                )}
-              >
-                {/* Title + Status */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate font-semibold text-text-primary">
-                      {form.title}
-                    </h3>
-                    {form.description ? (
-                      <p className="mt-1 line-clamp-2 text-xs text-foreground/60">
-                        {form.description}
-                      </p>
-                    ) : null}
-                  </div>
-                  <span
-                    className={cn(
-                      "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium",
-                      statusConfig.bg,
-                      statusConfig.color,
-                      statusConfig.border,
-                    )}
-                  >
-                    <StatusIcon className="size-3" />
-                    {statusConfig.label}
-                  </span>
-                </div>
-
-                {/* Meta row */}
-                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-foreground/60">
-                  <span className="inline-flex items-center gap-1">
-                    <ClipboardList className="size-3.5" />
-                    {form.questionCount} questions
-                  </span>
-                </div>
-
-                {/* Progress bar */}
-                <div className="mt-4">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-foreground/50">Workflow Progress</span>
-                    <span className="font-medium text-foreground/70">
-                      {phase}/{TOTAL_PHASES}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className=" font-semibold text-text-primary">
+                        {form.title}
+                      </h3>
+                      {form.description ? (
+                        <p className="mt-1 line-clamp-2 text-xs text-foreground/60">
+                          {form.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium",
+                        statusConfig.bg,
+                        statusConfig.color,
+                        statusConfig.border,
+                      )}
+                    >
+                      <StatusIcon className="size-3" aria-hidden="true" />
+                      {statusConfig.label}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{
-                        width: `${(phase / TOTAL_PHASES) * 100}%`,
-                      }}
-                    />
+
+                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-foreground/60">
+                    <span className="inline-flex items-center gap-1">
+                      <ClipboardList className="size-3.5" aria-hidden="true" />
+                      {form.questionCount} questions
+                    </span>
                   </div>
-                </div>
 
-                {/* Footer: date + action */}
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-white/[0.06]">
-                  <span className="text-xs text-foreground/50">
-                    {relativeDate ? `Updated ${relativeDate}` : "Not started"}
-                  </span>
-                  <Link
-                    href={`/dashboard/my-forms/${form.templateId}`}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                      canFill
-                        ? "bg-primary text-white hover:bg-primary/90"
-                        : "border border-slate-300 text-slate-700 hover:bg-primary/10 dark:border-white/15 dark:text-slate-300",
-                    )}
-                  >
-                    <Eye className="size-3.5" />
-                    {canFill ? "Fill Form" : "View"}
-                  </Link>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  <div className="mt-4">
+                    <p className="mb-3 text-xs font-medium text-foreground/50">
+                      Workflow Progress
+                    </p>
+                    <ol
+                      className="flex w-full items-start"
+                      aria-label="Appraisal workflow progress"
+                    >
+                      {WORKFLOW_STEPS.map((step, stepIndex) => {
+                        const state = getWorkflowStepState(
+                          step.id,
+                          phase,
+                          form.status,
+                        );
+                        const isLast = stepIndex === WORKFLOW_STEPS.length - 1;
 
-      {/* Hint when only 1 form exists */}
-      {data && data.length === 1 ? (
-        <p className="text-center text-xs text-foreground/40">
-          More forms will appear here as they are assigned to you.
-        </p>
-      ) : null}
-      </div>
+                        return (
+                          <li
+                            key={step.id}
+                            className={cn(
+                              "relative flex flex-1 flex-col items-center",
+                              !isLast &&
+                                "after:absolute after:top-3.5 after:left-[calc(50%+14px)] after:right-0 after:h-0.5 after:content-['']",
+                              !isLast &&
+                                (state === "complete"
+                                  ? "after:bg-primary dark:after:bg-primary"
+                                  : "after:bg-primary/15 dark:after:bg-white/15"),
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "relative z-10 flex size-7 items-center justify-center rounded-full border-2 text-[11px] font-bold transition-colors",
+                                state === "complete" &&
+                                  "border-primary bg-primary text-white",
+                                state === "current" &&
+                                  "border-secondary bg-secondary/15 text-secondary ring-2 ring-secondary/25",
+                                state === "upcoming" &&
+                                  "border-primary/20 bg-surface text-foreground/40 dark:border-white/20",
+                              )}
+                              title={step.fullLabel}
+                              aria-current={
+                                state === "current" ? "step" : undefined
+                              }
+                            >
+                              {state === "complete" ? (
+                                <Check
+                                  className="size-3.5"
+                                  strokeWidth={3}
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                step.id
+                              )}
+                            </span>
+                            <span
+                              className={cn(
+                                "mt-1.5 max-w-full truncate px-0.5 text-center text-[10px] font-semibold leading-tight",
+                                state === "complete" && "text-primary",
+                                state === "current" && "text-secondary",
+                                state === "upcoming" && "text-foreground/40",
+                              )}
+                              title={step.fullLabel}
+                            >
+                              {step.label}
+                            </span>
+                            <span className="sr-only">
+                              {step.fullLabel}
+                              {state === "complete"
+                                ? ", completed"
+                                : state === "current"
+                                  ? ", current step"
+                                  : ", upcoming"}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
 
-      </div>
+                  <div className="mt-4 flex items-center justify-between border-t border-primary/8 pt-4 dark:border-white/[0.06]">
+                    <span className="text-xs text-foreground/50">
+                      {relativeDate ? `Updated ${relativeDate}` : "Not started"}
+                    </span>
+                    <Link
+                      href={`/dashboard/my-forms/${form.templateId}`}
+                      className={cn(
+                        "inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                        canFill
+                          ? "bg-primary text-white hover:bg-primary/90"
+                          : "border border-primary/20 text-primary hover:bg-primary/10 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/10",
+                      )}
+                    >
+                      <Eye className="size-3.5" aria-hidden="true" />
+                      {canFill ? "Fill Form" : "View"}
+                    </Link>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
 
-
-
-
+        {data && data.length === 1 ? (
+          <p className="text-center text-xs text-foreground/45">
+            More forms will appear here as they are assigned to you.
+          </p>
+        ) : null}
+      </section>
     </div>
   );
 }
-
