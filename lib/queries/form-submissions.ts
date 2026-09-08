@@ -848,6 +848,8 @@ export async function listFormSubmissions(
       {
         financialYear: eligibilityContext.financialYear,
         cycleEndDate: eligibilityContext.cycleEndDate,
+        cycleStartDate: eligibilityContext.cycleStartDate,
+        ineligibilityDate: eligibilityContext.ineligibilityDate,
       },
       bandsByMatrixLabel,
     );
