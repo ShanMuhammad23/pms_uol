@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { APPRAISAL_STATE_CONFIG } from "@/app/helpers/dashboard-form-state";
+import { getSubmissionStatusConfig } from "@/app/helpers/dashboard-form-state";
 import IneligibilityBanner from "@/app/components/forms/EligibilityStatusBanner";
 import { SlowRequestBanner } from "@/app/components/employee-forms/SlowRequestBanner";
 import { fetchAssignedForms } from "@/lib/queries/employee-forms-client";
@@ -433,7 +433,7 @@ export default function MyFormsList({
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {data.map((form, index) => {
-              const statusConfig = APPRAISAL_STATE_CONFIG[form.status];
+              const statusConfig = getSubmissionStatusConfig(form);
               const canFill = isFillable(
                 form.status,
                 form.submittedAt,

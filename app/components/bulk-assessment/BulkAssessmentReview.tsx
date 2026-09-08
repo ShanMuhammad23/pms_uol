@@ -324,13 +324,11 @@ export default function BulkAssessmentReview({
           managerLevel === 2
             ? (row.manager1Rating ?? row.selfRating)
             : row.selfRating;
-        const fallbackRemarks =
-          managerLevel === 2
-            ? (row.manager1Remarks ?? row.selfRemarks)
-            : row.selfRemarks;
+        // Remarks are NOT copied from the previous stage — each manager
+        // writes their own remarks.
         const points = row.managerScore ?? fallbackScore;
         const rating = row.managerRating ?? fallbackRating;
-        const remarks = row.managerRemarks ?? fallbackRemarks;
+        const remarks = row.managerRemarks ?? "";
         const computedPoints =
           points == null && rating == null
             ? null

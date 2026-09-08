@@ -735,8 +735,20 @@ export async function listFormSubmissions(
          AND (
            ap_inner.cycle_id = $1
            OR ($1::int IS NULL AND ap_inner.cycle_id IS NULL)
+           -- Also include legacy appraisals that have no cycle_id, so the
+           -- dashboard can still show their status when the current cycle
+           -- only has spurious placeholder appraisals (template_id IS NULL).
+           OR ap_inner.cycle_id IS NULL
          )
-       ORDER BY ap_inner.updated_at DESC NULLS LAST, ap_inner.id DESC
+       ORDER BY
+         -- Prefer appraisals linked to a specific form template. Spurious
+         -- placeholder appraisals with template_id=NULL should only be used
+         -- as a last resort.
+         (ap_inner.template_id IS NULL)::int,
+         -- Then prefer appraisals in the current cycle.
+         CASE WHEN ap_inner.cycle_id = $1 THEN 0 ELSE 1 END,
+         ap_inner.updated_at DESC NULLS LAST,
+         ap_inner.id DESC
        LIMIT 1
      ) ap ON TRUE
      LEFT JOIN LATERAL (

@@ -51,6 +51,7 @@ interface AppraisalRow {
   submitted_at: string | null;
   updated_at: string;
   system_raw_score: string;
+  manager_level: string | null;
 }
 
 export class EmployeeFormError extends Error {
@@ -257,7 +258,8 @@ async function getAppraisalForUserTemplate(
        status,
        submitted_at::text,
        updated_at::text,
-       system_raw_score
+       system_raw_score,
+       manager_level::text
      FROM appraisals
      WHERE employee_id = $1
        AND template_id = $2
@@ -748,6 +750,9 @@ export async function listAssignedFormsForUser(
         questionCount: assigned.questionCount,
         status: resolveAppraisalWorkflowStatus(appraisal, assigned.selfAssessmentEnabled),
         selfAssessmentEnabled: assigned.selfAssessmentEnabled,
+        managerLevel: appraisal?.manager_level ? Number(appraisal.manager_level) : null,
+        directScoreEntry: false,
+        formAssigned: true,
         submittedAt: appraisal?.submitted_at ?? null,
         updatedAt: appraisal?.updated_at ?? null,
         eligibilityStatus: eligibility.eligibilityStatus,
