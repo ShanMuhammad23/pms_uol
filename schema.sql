@@ -244,7 +244,7 @@ CREATE TABLE appraisals (
     is_eligible BOOLEAN,
     eligibility_status VARCHAR(30), -- Fully Eligible | Partially Eligible | Not Eligible
     applicable_duration VARCHAR(100),
-    applicable_duration_factor NUMERIC(8, 6), -- 1 = full, 0 = none, else months/12 (exact)
+    applicable_duration_factor NUMERIC(8, 6), -- 1 = full, 0 = none, else days/365 (exact)
     remarks_evaluation TEXT,
     hr_approval_status VARCHAR(20) DEFAULT 'pending', -- pending | approved | review_required (independent of remarks_evaluation)
 
@@ -378,6 +378,8 @@ CREATE TABLE financial_years (
     year INT NOT NULL UNIQUE,
     label VARCHAR(20) NOT NULL UNIQUE,       -- e.g. 'FY 2024-25'
     is_active BOOLEAN NOT NULL DEFAULT FALSE,
+    cycle_start_date DATE NOT NULL,          -- start of appraisal cycle window
+    ineligibility_date DATE NOT NULL,       -- DOJ after this date → Not Eligible
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

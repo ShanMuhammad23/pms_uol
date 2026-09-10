@@ -233,15 +233,7 @@ const Sidebar = () => {
     }
   }
 
-  const initials = user?.name
-    ? user.name
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((p) => p[0])
-        .join("")
-        .toUpperCase()
-    : "?";
+
 
   const realRole = user?.realRole ?? user?.role;
   const canViewAs = canViewAsUser(realRole);
@@ -500,9 +492,7 @@ const Sidebar = () => {
               transition={{ duration: 0.16 }}
               className="flex flex-col items-center gap-2"
             >
-              <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                {initials}
-              </div>
+             
               {canViewAs ? (
                 <button
                   type="button"
@@ -532,9 +522,7 @@ const Sidebar = () => {
               className="space-y-3"
             >
               <div className="flex items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                  {initials}
-                </div>
+              
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-semibold text-text-primary">

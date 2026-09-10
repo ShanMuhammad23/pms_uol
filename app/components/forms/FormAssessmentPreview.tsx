@@ -8,10 +8,9 @@ import type {
 import { flattenAllQuestions } from "@/types/forms";
 import {
   buildFormTableRows,
-  formatSectionLabel,
-  formatSubsectionLabel,
   type FormTableRow,
 } from "@/app/helpers/form-table-rows";
+import { FormHtmlSectionLabel, FormHtmlSubsectionLabel } from "@/app/components/forms/HtmlTitle";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   getQuestionRatingScale,
@@ -401,9 +400,9 @@ export default function FormAssessmentPreview({
                         <tr className="bg-slate-100 dark:bg-slate-800/60">
                           <td
                             colSpan={headerColSpan}
-                            className="px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-200"
+                            className="form-section-header-cell text-sm font-bold text-slate-700 dark:text-slate-200"
                           >
-                            {formatSectionLabel(row)}
+                            <FormHtmlSectionLabel row={row} />
                           </td>
                         </tr>
                       ) : null}
@@ -411,9 +410,9 @@ export default function FormAssessmentPreview({
                         <tr className="bg-teal-50/60 dark:bg-teal-950/20">
                           <td
                             colSpan={headerColSpan}
-                            className="px-3 py-2 pl-8 text-xs font-bold text-teal-700 dark:text-teal-300"
+                            className="form-section-header-cell pl-8 text-xs font-bold text-teal-700 dark:text-teal-300"
                           >
-                            {formatSubsectionLabel(row)}
+                            <FormHtmlSubsectionLabel row={row} />
                           </td>
                         </tr>
                       ) : null}

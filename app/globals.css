@@ -9,7 +9,72 @@
   padding-left: 1rem;
   padding-right: 1rem;
   vertical-align: middle;
-  white-space: pre-wrap;
+  white-space: normal;
+}
+
+.form-html-title-wrap,
+.form-html-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.form-html-title b,
+.form-html-title strong {
+  font-weight: 700;
+}
+
+.form-html-title i,
+.form-html-title em {
+  font-style: italic;
+}
+
+.form-html-title u {
+  text-decoration: underline;
+}
+
+.form-html-title s,
+.form-html-title strike {
+  text-decoration: line-through;
+}
+
+.form-html-title p,
+.form-html-title div {
+  display: block;
+  margin: 0;
+}
+
+.form-html-title p + p,
+.form-html-title div + div {
+  margin-top: 0.2em;
+}
+
+.form-html-title ul,
+.form-html-title ol {
+  margin: 0.15em 0;
+  padding-left: 1.25rem;
+}
+
+.form-html-title h1,
+.form-html-title h2,
+.form-html-title h3,
+.form-html-title h4 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 700;
+}
+
+.form-html-editor-content.is-empty::before {
+  content: attr(data-placeholder);
+  color: rgb(148 163 184);
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+}
+
+.dark .form-html-editor-content.is-empty::before {
+  color: rgb(100 116 139);
 }
 
 :root {
@@ -519,10 +584,13 @@ html::-webkit-scrollbar {
     font-size: 8px !important;
   }
 
-  .print-content .form-template-table td,
-  .print-content .form-template-table p,
-  .print-content .form-template-table li,
-  .print-content .form-template-table span {
+  .print-content .form-template-table td {
+    font-size: inherit !important;
+  }
+
+  .print-content .form-template-table tbody tr:not(:has(.form-html-title)) p,
+  .print-content .form-template-table tbody tr:not(:has(.form-html-title)) li,
+  .print-content .form-template-table tbody tr:not(:has(.form-html-title)) span {
     font-size: inherit !important;
   }
 

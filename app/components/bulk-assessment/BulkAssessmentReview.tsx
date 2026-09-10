@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { useIsClient } from "@/app/hooks/use-is-client";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import { FormDescription } from "@/app/components/forms/FormDescription";
+import { HtmlTitle } from "@/app/components/forms/HtmlTitle";
 import { RatingScoreField, AnswerScoreReadout } from "@/app/components/forms/RatingScoreField";
 import {
   formatScoreValue,
@@ -1426,9 +1427,9 @@ function WorkspaceView({
           {/* Question header */}
           <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
             {currentQuestion.sectionTitle ? (
-              <p className="whitespace-pre-wrap text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                {currentQuestion.sectionTitle}
-              </p>
+              <div className="text-xs font-semibold tracking-wide text-amber-600 dark:text-amber-400">
+                <HtmlTitle html={currentQuestion.sectionTitle} />
+              </div>
             ) : null}
             <h2 className="mt-1 whitespace-pre-wrap text-base font-semibold text-slate-900 dark:text-white">
               Question {currentQuestionIdx + 1}: {currentQuestion.questionText}

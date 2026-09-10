@@ -5,6 +5,7 @@ import {
   type FormSubsectionRecord,
   type QuestionRecord,
 } from "@/types/forms";
+import { htmlTitlePlainText } from "@/lib/html-title";
 
 export interface FormTableRow {
   sr: number;
@@ -228,46 +229,50 @@ export function buildFormTableRows(
   return rows;
 }
 
-/**
- * Formats a section label as "Section {number}: {title}  (Total: {marks})".
- * Returns just the title if no section number is available.
- * The total marks suffix is only shown when sectionTotalMarks > 0.
- * For open-assessment sections, appends "Open Assessment" to the label.
- */
-export function formatSectionLabel(row: FormTableRow): string {
-  const base =
-    row.sectionNumber != null && row.sectionTitle
-      ? `Section ${row.sectionNumber}: ${row.sectionTitle}`
-      : (row.sectionTitle ?? "");
-
+export function getSectionLabelSuffix(row: FormTableRow): string {
   if (row.isOpenAssessment) {
-    const budget = row.openAssessmentTotalMarks;
-    return budget > 0
-      ? `${base} `
-      : `${base}  (Open Assessment)`;
+    return row.openAssessmentTotalMarks > 0 ? " " : "  (Open Assessment)";
   }
 
   if (row.sectionTotalMarks > 0) {
-    return `${base}  (Total: ${row.sectionTotalMarks})`;
+    return `  (Total: ${row.sectionTotalMarks})`;
   }
 
-  return base;
+  return "";
+}
+
+export function getSubsectionLabelSuffix(row: FormTableRow): string {
+  if (row.subsectionTotalMarks > 0) {
+    return `  (Total: ${row.subsectionTotalMarks})`;
+  }
+
+  return "";
+}
+
+/**
+ * Formats a section label as "Section {number}: {title}  (Total: {marks})".
+ * HTML in titles is stripped so this stays usable in plain-text contexts.
+ */
+export function formatSectionLabel(row: FormTableRow): string {
+  const title = htmlTitlePlainText(row.sectionTitle);
+  const base =
+    row.sectionNumber != null && title
+      ? `Section ${row.sectionNumber}: ${title}`
+      : title;
+
+  return `${base}${getSectionLabelSuffix(row)}`;
 }
 
 /**
  * Formats a subsection label as "{number} {title}  (Total: {marks})".
- * Returns just the title if no subsection number is available.
- * The total marks suffix is only shown when subsectionTotalMarks > 0.
+ * HTML in titles is stripped so this stays usable in plain-text contexts.
  */
 export function formatSubsectionLabel(row: FormTableRow): string {
+  const title = htmlTitlePlainText(row.subsectionTitle);
   const base =
-    row.subsectionNumber && row.subsectionTitle
-      ? `${row.subsectionNumber} ${row.subsectionTitle}`
-      : (row.subsectionTitle ?? "");
+    row.subsectionNumber && title
+      ? `${row.subsectionNumber} ${title}`
+      : title;
 
-  if (row.subsectionTotalMarks > 0) {
-    return `${base}  (Total: ${row.subsectionTotalMarks})`;
-  }
-
-  return base;
+  return `${base}${getSubsectionLabelSuffix(row)}`;
 }

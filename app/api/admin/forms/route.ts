@@ -10,6 +10,7 @@ import {
   listFormTemplates,
 } from "@/lib/queries/forms";
 import { validateFormTemplateInput } from "@/lib/validation/forms";
+import { sanitizeFormTemplateHtmlTitles } from "@/lib/html-title";
 import type { FormTemplateInput } from "@/types/forms";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
@@ -53,7 +54,9 @@ export const POST = apiHandler(async (request: Request) => {
   }
 
   try {
-    const body = (await request.json()) as FormTemplateInput;
+    const body = sanitizeFormTemplateHtmlTitles(
+      (await request.json()) as FormTemplateInput,
+    );
     const validationError = validateFormTemplateInput(body);
 
     if (validationError) {

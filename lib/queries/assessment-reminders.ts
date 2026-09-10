@@ -36,10 +36,14 @@ export interface PendingManagerReminder {
  * Employees who have a form assigned in the active cycle with self-assessment
  * enabled and have not completed self-assessment yet.
  *
- * Source of truth is the assignment (same as the dashboard), not whether an
- * appraisal row already exists. Incomplete means:
- * - no appraisal for this cycle, OR
- * - appraisal still PENDING_SELF_ASSESSMENT / not submitted
+ * Source of truth is the assignment (same as the dashboard). The appraisal is
+ * resolved by template_id (same as My Forms / submission detail), not cycle_id
+ * alone — otherwise a submitted appraisal with a null/mismatched cycle_id is
+ * treated as missing and keeps getting reminders.
+ *
+ * Incomplete means:
+ * - no appraisal for this assigned template, OR
+ * - appraisal still PENDING_SELF_ASSESSMENT and not submitted
  */
 export async function listPendingSelfAssessmentReminders(
   cycleId: number,
@@ -67,7 +71,7 @@ export async function listPendingSelfAssessmentReminders(
      INNER JOIN users u ON u.id = efa.employee_id
      LEFT JOIN appraisals ap
        ON ap.employee_id = u.id
-      AND ap.cycle_id = ft.cycle_id
+      AND ap.template_id = efa.template_id
      WHERE ft.cycle_id = $1
        AND efa.self_assessment_disabled = FALSE
        AND u.is_active = TRUE

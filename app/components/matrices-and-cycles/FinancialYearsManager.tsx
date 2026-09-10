@@ -21,10 +21,35 @@ interface FormMessage {
 
 type FinancialYearSectionTab = "list" | "add";
 
+function toIsoDateInput(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.slice(0, 10);
+}
+
+function defaultCycleStartDate(year: number): string {
+  return `${year - 1}-07-01`;
+}
+
+function defaultIneligibilityDate(year: number): string {
+  return `${year}-04-01`;
+}
+
+function formatDisplayDate(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default function FinancialYearsManager() {
   const queryClient = useQueryClient();
   const [year, setYear] = useState("");
   const [label, setLabel] = useState("");
+  const [cycleStartDate, setCycleStartDate] = useState("");
+  const [ineligibilityDate, setIneligibilityDate] = useState("");
   const [isActive, setIsActive] = useState(false);
   const [editingYear, setEditingYear] = useState<FinancialYearRecord | null>(
     null,
@@ -40,6 +65,8 @@ export default function FinancialYearsManager() {
   const resetForm = () => {
     setYear("");
     setLabel("");
+    setCycleStartDate("");
+    setIneligibilityDate("");
     setIsActive(false);
     setEditingYear(null);
   };
@@ -70,7 +97,13 @@ export default function FinancialYearsManager() {
       input,
     }: {
       id: number;
-      input: { year: number; label: string; isActive: boolean };
+      input: {
+        year: number;
+        label: string;
+        isActive: boolean;
+        cycleStartDate: string;
+        ineligibilityDate: string;
+      };
     }) => updateFinancialYear(id, input),
     onSuccess: (record) => {
       setFormMessage({
@@ -105,6 +138,20 @@ export default function FinancialYearsManager() {
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
+  const applyYearDefaults = (yearValue: string) => {
+    setYear(yearValue);
+    const parsedYear = Number(yearValue);
+    if (!Number.isInteger(parsedYear) || parsedYear < 2000) {
+      return;
+    }
+
+    // Only auto-fill dates when creating (or fields still empty) so edits keep custom values.
+    if (!editingYear) {
+      setCycleStartDate(defaultCycleStartDate(parsedYear));
+      setIneligibilityDate(defaultIneligibilityDate(parsedYear));
+    }
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormMessage(null);
@@ -121,10 +168,30 @@ export default function FinancialYearsManager() {
       return;
     }
 
+    if (!cycleStartDate) {
+      setFormMessage({ tone: "error", text: "Cycle start date is required." });
+      return;
+    }
+
+    if (!ineligibilityDate) {
+      setFormMessage({ tone: "error", text: "Ineligibility date is required." });
+      return;
+    }
+
+    if (ineligibilityDate < cycleStartDate) {
+      setFormMessage({
+        tone: "error",
+        text: "Ineligibility date cannot be earlier than cycle start date.",
+      });
+      return;
+    }
+
     const payload = {
       year: parsedYear,
       label: label.trim(),
       isActive,
+      cycleStartDate,
+      ineligibilityDate,
     };
 
     if (editingYear) {
@@ -139,6 +206,8 @@ export default function FinancialYearsManager() {
     setEditingYear(record);
     setYear(String(record.year));
     setLabel(record.label);
+    setCycleStartDate(toIsoDateInput(record.cycleStartDate));
+    setIneligibilityDate(toIsoDateInput(record.ineligibilityDate));
     setIsActive(record.isActive);
     setFormMessage(null);
     setActiveTab("add");
@@ -179,8 +248,8 @@ export default function FinancialYearsManager() {
             {editingYear ? "Edit Financial Year" : "Add Financial Year"}
           </h2>
           <p className="mt-1 text-sm text-foreground/70">
-            Define financial years used to scope performance levels and
-            quartile matrices.
+            Define financial years used to scope performance levels, quartile
+            matrices, and appraisal eligibility windows.
           </p>
         </div>
 
@@ -227,7 +296,7 @@ export default function FinancialYearsManager() {
             min={2000}
             max={2100}
             value={year}
-            onChange={(event) => setYear(event.target.value)}
+            onChange={(event) => applyYearDefaults(event.target.value)}
             required
             className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
             placeholder="2025"
@@ -251,6 +320,46 @@ export default function FinancialYearsManager() {
             className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
             placeholder="FY 2024-25"
           />
+        </div>
+
+        <div>
+          <label
+            htmlFor="cycle-start-date"
+            className="mb-1.5 block text-sm font-medium text-text-primary"
+          >
+            Cycle Start Date
+          </label>
+          <input
+            id="cycle-start-date"
+            type="date"
+            value={cycleStartDate}
+            onChange={(event) => setCycleStartDate(event.target.value)}
+            required
+            className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+          />
+          <p className="mt-1 text-xs text-foreground/55">
+            Start of the appraisal cycle window for this financial year.
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="ineligibility-date"
+            className="mb-1.5 block text-sm font-medium text-text-primary"
+          >
+            Ineligibility Date
+          </label>
+          <input
+            id="ineligibility-date"
+            type="date"
+            value={ineligibilityDate}
+            onChange={(event) => setIneligibilityDate(event.target.value)}
+            required
+            className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+          />
+          <p className="mt-1 text-xs text-foreground/55">
+            Employees whose joining date is after this date are Not Eligible.
+          </p>
         </div>
 
         <div className="sm:col-span-2">
@@ -302,16 +411,16 @@ export default function FinancialYearsManager() {
             ] as const
           ).map((tab) => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            const isActiveTab = activeTab === tab.id;
 
             return (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => handleSwitchTab(tab.id)}
-                aria-current={isActive ? "page" : undefined}
+                aria-current={isActiveTab ? "page" : undefined}
                 className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                  isActive
+                  isActiveTab
                     ? "border-primary text-primary"
                     : "border-transparent text-foreground/70 hover:border-primary/40 hover:text-text-primary"
                 }`}
@@ -358,21 +467,17 @@ export default function FinancialYearsManager() {
           <table className="min-w-full text-sm">
             <thead className="bg-primary text-white">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold ">
-                  Year
+                <th className="px-4 py-3 text-left font-semibold">Year</th>
+                <th className="px-4 py-3 text-left font-semibold">Label</th>
+                <th className="px-4 py-3 text-left font-semibold">
+                  Cycle Start
                 </th>
-                <th className="px-4 py-3 text-left font-semibold ">
-                  Label
+                <th className="px-4 py-3 text-left font-semibold">
+                  Ineligibility Date
                 </th>
-                <th className="px-4 py-3 text-left font-semibold ">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left font-semibold ">
-                  Created
-                </th>
-                <th className="px-4 py-3 text-right font-semibold ">
-                  Actions
-                </th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">Created</th>
+                <th className="px-4 py-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -385,6 +490,12 @@ export default function FinancialYearsManager() {
                     {record.year}
                   </td>
                   <td className="px-4 py-3 text-text-primary">{record.label}</td>
+                  <td className="px-4 py-3 text-text-primary">
+                    {formatDisplayDate(record.cycleStartDate)}
+                  </td>
+                  <td className="px-4 py-3 text-text-primary">
+                    {formatDisplayDate(record.ineligibilityDate)}
+                  </td>
                   <td className="px-4 py-3">
                     {record.isActive ? (
                       <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">

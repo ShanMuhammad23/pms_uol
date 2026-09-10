@@ -81,7 +81,7 @@ export interface FormSubmissionListItem {
   uolExperienceYears: number | null;
   isEligible: boolean | null;
   applicableDuration: string | null;
-  /** 1 = full, 0 = not eligible, otherwise months-to-FY-end / 12 (exact, not rounded). */
+  /** 1 = full, 0 = not eligible, otherwise inclusive days DOJ→FY-end / 365 (exact, not rounded). */
   applicableDurationFactor: number | null;
   remarksEvaluation: string | null;
   /** Dedicated HR approval status — independent of remarks_evaluation. */
@@ -128,6 +128,10 @@ export interface FormSubmissionListItem {
   eligibilityStatus?: "Fully Eligible" | "Partially Eligible" | "Not Eligible";
   eligibilityReferenceYear?: number | null;
   eligibilityReferenceEndDate?: string | null;
+  /** Active FY cycle start (YYYY-MM-DD) used for eligibility fallbacks. */
+  eligibilityCycleStartDate?: string | null;
+  /** Active FY ineligibility cutoff (YYYY-MM-DD); DOJ after this → Not Eligible. */
+  eligibilityIneligibilityDate?: string | null;
   submittedAt: string | null;
   selfAssessmentEnabled: boolean;
   /** Manual toggle: when false, all score editing is disabled for this employee. */

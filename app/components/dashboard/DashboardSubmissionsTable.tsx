@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, EyeClosed, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, Upload, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, EyeClosed, FileSpreadsheet, List, Pencil, RotateCcw, Search, ShieldCheck, ShieldOff, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
@@ -1540,10 +1540,10 @@ export function DashboardSubmissionsTable({
             <button
               type="button"
               onClick={() => setBulkUploadOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.04]"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#185C37]/30 bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#185C37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346]/40 dark:border-[#3f9c6b]/40 dark:bg-[#217346] dark:hover:bg-[#185C37]"
             >
-              <Upload className="h-3.5 w-3.5" />
-              Bulk Upload
+              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+              Bulk Excel Ops
             </button>
           ) : null}
           {hasActiveFilters ? (

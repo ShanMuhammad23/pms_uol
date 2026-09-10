@@ -67,12 +67,20 @@ export type ExcelSheetColumn = {
 export type ExcelStaffRow = {
   sap: string;
   values: string[];
+  /** 0-based row index in the sheet grid (header is 0). */
+  sheetRowIndex: number;
 };
 
 export type ParsedExcelStaffSheet = {
   columns: ExcelSheetColumn[];
   sapColumnIndex: number;
   rows: ExcelStaffRow[];
+};
+
+export type ParsedExcelWorkbook = ParsedExcelStaffSheet & {
+  workbook: XLSX.WorkBook;
+  sheetName: string;
+  fileName: string;
 };
 
 export type ExcelColumnMapping = Record<number, BulkUploadColumnId | "">;
@@ -85,14 +93,31 @@ export function normalizeSapId(value: unknown): string {
   if (text === "") {
     return "";
   }
+  // Excel often emits numeric SAPs as "13808.0"
   if (/^\d+\.0+$/.test(text)) {
     text = text.replace(/\.0+$/, "");
+  }
+  // Scientific notation from Excel numeric cells (rare for SAP, but safe)
+  if (/^\d+(\.\d+)?e[+-]?\d+$/i.test(text)) {
+    const asNumber = Number(text);
+    if (Number.isFinite(asNumber)) {
+      text = String(Math.trunc(asNumber));
+    }
   }
   return text;
 }
 
+/**
+ * Canonical lookup key for matching sheet SAP IDs to PMS employee IDs.
+ * Numeric SAPs ignore leading zeros so "0013808" and "13808" match.
+ */
 export function sapLookupKey(value: unknown): string {
-  return normalizeSapId(value).toLowerCase();
+  const normalized = normalizeSapId(value).toLowerCase();
+  if (!normalized) return "";
+  if (/^\d+$/.test(normalized)) {
+    return normalized.replace(/^0+/, "") || "0";
+  }
+  return normalized;
 }
 
 export function normalizeExcelHeader(value: unknown): string {
@@ -186,6 +211,17 @@ export function normalizeMappedExcelValue(
 export async function parseExcelStaffSheet(
   file: File,
 ): Promise<ParsedExcelStaffSheet> {
+  const parsed = await parseExcelWorkbook(file);
+  return {
+    columns: parsed.columns,
+    sapColumnIndex: parsed.sapColumnIndex,
+    rows: parsed.rows,
+  };
+}
+
+export async function parseExcelWorkbook(
+  file: File,
+): Promise<ParsedExcelWorkbook> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
   const sheetName = workbook.SheetNames[0];
@@ -238,7 +274,18 @@ export async function parseExcelStaffSheet(
   const seenSaps = new Set<string>();
   for (let index = 1; index < rows.length; index += 1) {
     const row = rows[index] ?? [];
-    const sap = normalizeSapId(row[sapColumnIndex]);
+    // Prefer the sheet cell's display text so leading zeros in SAP IDs survive
+    // when Excel stored the value as a number with a custom format.
+    const sapAddress = XLSX.utils.encode_cell({
+      r: index,
+      c: sapColumnIndex,
+    });
+    const sapCell = sheet[sapAddress];
+    const sapRaw =
+      sapCell?.w != null && String(sapCell.w).trim() !== ""
+        ? String(sapCell.w).trim()
+        : row[sapColumnIndex];
+    const sap = normalizeSapId(sapRaw);
     if (!sap) continue;
     const key = sapLookupKey(sap);
     if (seenSaps.has(key)) continue;
@@ -246,6 +293,7 @@ export async function parseExcelStaffSheet(
     staffRows.push({
       sap,
       values: columns.map((column) => cellToString(row[column.index])),
+      sheetRowIndex: index,
     });
   }
 
@@ -257,6 +305,9 @@ export async function parseExcelStaffSheet(
     columns,
     sapColumnIndex,
     rows: staffRows,
+    workbook,
+    sheetName,
+    fileName: file.name,
   };
 }
 
@@ -290,4 +341,166 @@ export function suggestExcelColumnMapping(
   }
 
   return mapping;
+}
+
+export const EXPORT_INSERT_AS_NEW = "new" as const;
+
+export type ExportColumnTarget = number | "" | typeof EXPORT_INSERT_AS_NEW;
+
+export type ExportColumnMapping = Partial<Record<string, ExportColumnTarget>>;
+
+export function suggestExportColumnMapping(
+  sheetColumns: ExcelSheetColumn[],
+  dashboardColumns: readonly { id: string; label: string }[],
+): ExportColumnMapping {
+  const mapping: ExportColumnMapping = {};
+  const usedSheetIndexes = new Set<number>();
+
+  for (const column of dashboardColumns) {
+    mapping[column.id] = "";
+    if (column.id === "sapCode") continue;
+
+    const labelKey = normalizeExcelHeader(column.label);
+    const aliases = COLUMN_HEADER_ALIASES[column.id as BulkUploadColumnId] ?? [];
+    const match = sheetColumns.find((sheetCol) => {
+      if (sheetCol.isSap || usedSheetIndexes.has(sheetCol.index)) return false;
+      const header = normalizeExcelHeader(
+        sheetCol.header.replace(/ \(\d+\)$/, ""),
+      );
+      return header === labelKey || aliases.includes(header);
+    });
+    if (!match) continue;
+    mapping[column.id] = match.index;
+    usedSheetIndexes.add(match.index);
+  }
+
+  return mapping;
+}
+
+function ensureSheetRange(
+  sheet: XLSX.WorkSheet,
+  rowIndex: number,
+  colIndex: number,
+): void {
+  const encoded = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+  if (!sheet["!ref"]) {
+    sheet["!ref"] = encoded;
+    return;
+  }
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  if (rowIndex > range.e.r) range.e.r = rowIndex;
+  if (colIndex > range.e.c) range.e.c = colIndex;
+  if (rowIndex < range.s.r) range.s.r = rowIndex;
+  if (colIndex < range.s.c) range.s.c = colIndex;
+  sheet["!ref"] = XLSX.utils.encode_range(range);
+}
+
+function writeSheetCell(
+  sheet: XLSX.WorkSheet,
+  rowIndex: number,
+  colIndex: number,
+  value: string,
+): void {
+  const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+  sheet[cellAddress] = {
+    t: "s",
+    v: value,
+    w: value,
+  };
+  ensureSheetRange(sheet, rowIndex, colIndex);
+}
+
+function nextSheetColumnIndex(
+  sheet: XLSX.WorkSheet,
+  existingColumns: readonly ExcelSheetColumn[],
+): number {
+  let maxIndex = existingColumns.reduce(
+    (max, column) => Math.max(max, column.index),
+    -1,
+  );
+  if (sheet["!ref"]) {
+    const range = XLSX.utils.decode_range(sheet["!ref"]);
+    maxIndex = Math.max(maxIndex, range.e.c);
+  }
+  return maxIndex + 1;
+}
+
+export function applyDashboardExportToWorkbook(options: {
+  workbook: XLSX.WorkBook;
+  sheetName: string;
+  sheetRows: ExcelStaffRow[];
+  /** Existing parsed sheet columns — used to allocate new column indexes. */
+  sheetColumns: readonly ExcelSheetColumn[];
+  mapping: ExportColumnMapping;
+  /** Labels used as headers when inserting new columns. */
+  columnLabels: Record<string, string>;
+  employeesBySap: Map<string, { getValue: (columnId: string) => string }>;
+}): {
+  matched: number;
+  unmatched: number;
+  writtenCells: number;
+  insertedColumns: number;
+} {
+  const sheet = options.workbook.Sheets[options.sheetName];
+  if (!sheet) {
+    throw new Error("Workbook sheet was not found.");
+  }
+
+  let matched = 0;
+  let unmatched = 0;
+  let writtenCells = 0;
+  let insertedColumns = 0;
+  let nextNewCol = nextSheetColumnIndex(sheet, options.sheetColumns);
+
+  const resolvedTargets = new Map<string, number>();
+
+  for (const [columnId, target] of Object.entries(options.mapping)) {
+    if (target === "" || target == null) continue;
+
+    if (target === EXPORT_INSERT_AS_NEW) {
+      const colIndex = nextNewCol;
+      nextNewCol += 1;
+      insertedColumns += 1;
+      const header =
+        options.columnLabels[columnId]?.trim() || columnId;
+      writeSheetCell(sheet, 0, colIndex, header);
+      resolvedTargets.set(columnId, colIndex);
+      continue;
+    }
+
+    if (Number.isInteger(target)) {
+      resolvedTargets.set(columnId, target);
+    }
+  }
+
+  for (const sheetRow of options.sheetRows) {
+    const employee = options.employeesBySap.get(sapLookupKey(sheetRow.sap));
+    if (!employee) {
+      unmatched += 1;
+      continue;
+    }
+    matched += 1;
+
+    for (const [columnId, sheetColIndex] of resolvedTargets) {
+      const value = employee.getValue(columnId);
+      const cellValue = value === "—" ? "" : value;
+      writeSheetCell(sheet, sheetRow.sheetRowIndex, sheetColIndex, cellValue);
+      writtenCells += 1;
+    }
+  }
+
+  return { matched, unmatched, writtenCells, insertedColumns };
+}
+
+export function downloadWorkbook(
+  workbook: XLSX.WorkBook,
+  fileName: string,
+): void {
+  const safeName = fileName.replace(/\.(xlsx|xls|csv)$/i, "");
+  XLSX.writeFile(workbook, `${safeName}.xlsx`, { bookType: "xlsx" });
+}
+
+export function buildFilledExportFileName(originalName: string): string {
+  const base = originalName.replace(/\.(xlsx|xls|csv)$/i, "").trim() || "staff-export";
+  return `${base}-filled`;
 }

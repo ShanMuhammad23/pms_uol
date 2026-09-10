@@ -12,4 +12,4 @@ COMMENT ON COLUMN appraisals.eligibility_status IS
   'Fully Eligible | Partially Eligible | Not Eligible — computed for the appraisal cycle financial year';
 
 COMMENT ON COLUMN appraisals.applicable_duration_factor IS
-  '1 = full year, 0 = not eligible, otherwise months-to-FY-end / 12 (exact, not rounded)';
+  '1 = full year, 0 = not eligible, otherwise inclusive days DOJ to FY-end / 365 (exact, not rounded)';

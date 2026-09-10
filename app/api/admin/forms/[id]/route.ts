@@ -11,6 +11,7 @@ import {
   updateFormTemplate,
 } from "@/lib/queries/forms";
 import { validateFormTemplateInput } from "@/lib/validation/forms";
+import { sanitizeFormTemplateHtmlTitles } from "@/lib/html-title";
 import type { FormTemplateInput } from "@/types/forms";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
@@ -82,7 +83,9 @@ export const PUT = apiHandler(async (request: Request, context: RouteContext) =>
   }
 
   try {
-    const body = (await request.json()) as FormTemplateInput;
+    const body = sanitizeFormTemplateHtmlTitles(
+      (await request.json()) as FormTemplateInput,
+    );
     const validationError = validateFormTemplateInput(body);
 
     if (validationError) {

@@ -3,8 +3,10 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
+  ArrowLeft,
   Check,
   CheckCircle2,
+  Download,
   FileSpreadsheet,
   Loader2,
   ShieldAlert,
@@ -14,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BulkExcelExportPanel } from "@/app/components/dashboard/BulkExcelExportPanel";
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import {
@@ -75,6 +78,8 @@ import {
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
 
+type ExcelOpsMode = "choose" | "import" | "export";
+
 const EMPTY_SUBMISSIONS: FormSubmissionListItem[] = [];
 
 type RowValues = Record<BulkUploadColumnId, string>;
@@ -131,6 +136,7 @@ export function BulkUploadStaffModal({
   onSuccess,
 }: BulkUploadStaffModalProps) {
   const queryClient = useQueryClient();
+  const [mode, setMode] = useState<ExcelOpsMode>("choose");
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [excelSheet, setExcelSheet] = useState<ParsedExcelStaffSheet | null>(null);
   const [columnMapping, setColumnMapping] = useState<ExcelColumnMapping>({});
@@ -163,25 +169,25 @@ export function BulkUploadStaffModal({
         filters: filterParams,
         masterFilters,
       }),
-    enabled: open,
+    enabled: open && mode === "import",
   });
 
   const { data: entities } = useQuery({
     queryKey: queryKeys.entities,
     queryFn: fetchDashboardEntities,
-    enabled: open,
+    enabled: open && mode === "import",
   });
 
   const { data: users } = useQuery({
     queryKey: queryKeys.usersOverview,
     queryFn: fetchUsersOverview,
-    enabled: open,
+    enabled: open && mode === "import",
   });
 
   const { data: formTemplates } = useQuery({
     queryKey: ["form-templates"],
     queryFn: fetchFormTemplatesForDashboard,
-    enabled: open,
+    enabled: open && mode === "import",
   });
 
   const employees = pageData?.items ?? EMPTY_SUBMISSIONS;
@@ -190,6 +196,7 @@ export function BulkUploadStaffModal({
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
+      setMode("choose");
       setImportFileName(null);
       setExcelSheet(null);
       setColumnMapping({});
@@ -202,6 +209,7 @@ export function BulkUploadStaffModal({
       setSheetRows([]);
       setError(null);
       setCheckOpen(false);
+      setCheckStep("collect");
       setCheckFailedStep(null);
       setCheckResult(null);
       checkRunId.current += 1;
@@ -709,6 +717,13 @@ export function BulkUploadStaffModal({
 
   if (!open) return null;
 
+  const headerTitle =
+    mode === "export"
+      ? "Bulk Excel Ops · Export to Sheet"
+      : mode === "import"
+        ? "Bulk Excel Ops · Import From Sheet"
+        : "Bulk Excel Ops";
+
   return (
     <AnimatePresence>
       <motion.div
@@ -721,76 +736,152 @@ export function BulkUploadStaffModal({
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-100 flex flex-col bg-white dark:bg-slate-950"
       >
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-primary px-4 py-2 text-white dark:border-slate-800">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[#185C37]/40 bg-[#217346] px-4 py-2 text-white">
           <div className="flex min-w-0 items-center gap-2.5">
-            <Upload className="size-4 shrink-0" aria-hidden="true" />
+            {mode !== "choose" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("choose");
+                  setError(null);
+                }}
+                className="inline-flex size-7 items-center justify-center rounded text-white hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                aria-label="Back to Excel ops options"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+            ) : (
+              <FileSpreadsheet className="size-4 shrink-0" aria-hidden="true" />
+            )}
             <h2
               id="bulk-upload-staff-modal-title"
-              className="text-sm font-semibold"
+              className="truncate text-sm font-semibold"
             >
-              Bulk update &amp; upload
+              {headerTitle}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="inline-flex size-7 items-center justify-center rounded text-white hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            aria-label="Close bulk upload"
+            aria-label="Close bulk Excel ops"
           >
             <X className="size-4" />
           </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto p-3">
-          <div className="space-y-3">
-            <section className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-              <EmployeeStep
-                fileName={importFileName}
-                parsing={importParsing}
-                loadingStaff={employeesLoading}
-                dragOver={importDragOver}
-                matchedPeople={matchedPeople}
-                unmatchedSaps={importUnmatched}
-                onDragOverChange={setImportDragOver}
-                onFile={handleExcelFile}
-              />
-            </section>
-            {hasImportedSheet ? (
-              <>
-                <div className="grid items-start gap-3 lg:grid-cols-2">
-                  <ColumnStep
-                    selectedIds={selectedColumnIds}
-                    onToggle={toggleColumn}
-                    onSelectAll={selectAllColumns}
-                    onClearAll={clearAllColumns}
-                    onToggleGroup={toggleColumnGroup}
-                  />
-                  <MappingStep
-                    columns={excelSheet?.columns ?? []}
-                    mapping={columnMapping}
-                    targets={selectedColumns}
-                    onChange={setExcelTargetMapping}
-                  />
-                </div>
-                <SheetStep
-                  rows={sheetRows}
-                  columns={selectedColumns}
-                  org1Options={org1Options}
-                  org2OptionsFor={org2OptionsFor}
-                  managerOptions={managerSelectOptions}
-                  formOptions={formSelectOptions}
-                  onChange={updateCell}
-                  disabled={saveMutation.isPending || checkOpen}
+          {mode === "choose" ? (
+            <div className="mx-auto grid max-w-3xl gap-4 py-8 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setMode("import");
+                }}
+                className="group flex flex-col items-start gap-3 rounded-xl border border-[#217346]/25 bg-[#217346]/[0.04] p-5 text-left transition-colors hover:border-[#217346] hover:bg-[#217346]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] dark:border-[#3f9c6b]/30 dark:bg-[#217346]/10"
+              >
+                <span className="inline-flex size-10 items-center justify-center rounded-lg bg-[#217346] text-white">
+                  <Upload className="size-5" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block text-base font-semibold text-slate-900 dark:text-white">
+                    Import From Sheet
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-600 dark:text-slate-300">
+                    Upload Excel, map sheet columns into PMS fields, review
+                    changes, and save staff updates.
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setMode("export");
+                }}
+                className="group flex flex-col items-start gap-3 rounded-xl border border-[#217346]/25 bg-[#217346]/[0.04] p-5 text-left transition-colors hover:border-[#217346] hover:bg-[#217346]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] dark:border-[#3f9c6b]/30 dark:bg-[#217346]/10"
+              >
+                <span className="inline-flex size-10 items-center justify-center rounded-lg bg-[#217346] text-white">
+                  <Download className="size-5" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block text-base font-semibold text-slate-900 dark:text-white">
+                    Export to Sheet
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-600 dark:text-slate-300">
+                    Upload Excel, map Staff Listing columns onto sheet columns,
+                    fill matched SAP rows, and download.
+                  </span>
+                </span>
+              </button>
+            </div>
+          ) : null}
+
+          {mode === "import" ? (
+            <div className="space-y-3">
+              <section className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                <EmployeeStep
+                  fileName={importFileName}
+                  parsing={importParsing}
+                  loadingStaff={employeesLoading}
+                  dragOver={importDragOver}
+                  matchedPeople={matchedPeople}
+                  unmatchedSaps={importUnmatched}
+                  onDragOverChange={setImportDragOver}
+                  onFile={handleExcelFile}
                 />
-              </>
-            ) : null}
-          </div>
+              </section>
+              {hasImportedSheet ? (
+                <>
+                  <div className="grid items-start gap-3 lg:grid-cols-2">
+                    <ColumnStep
+                      selectedIds={selectedColumnIds}
+                      onToggle={toggleColumn}
+                      onSelectAll={selectAllColumns}
+                      onClearAll={clearAllColumns}
+                      onToggleGroup={toggleColumnGroup}
+                    />
+                    <MappingStep
+                      columns={excelSheet?.columns ?? []}
+                      mapping={columnMapping}
+                      targets={selectedColumns}
+                      onChange={setExcelTargetMapping}
+                    />
+                  </div>
+                  <SheetStep
+                    rows={sheetRows}
+                    columns={selectedColumns}
+                    org1Options={org1Options}
+                    org2OptionsFor={org2OptionsFor}
+                    managerOptions={managerSelectOptions}
+                    formOptions={formSelectOptions}
+                    onChange={updateCell}
+                    disabled={saveMutation.isPending || checkOpen}
+                  />
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          {mode === "export" ? (
+            <BulkExcelExportPanel
+              filterParams={filterParams}
+              masterFilters={masterFilters}
+              onError={setError}
+            />
+          ) : null}
         </div>
 
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-2 dark:border-slate-800">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {error ? (
               <span className="font-medium text-red-600 dark:text-red-400">{error}</span>
+            ) : mode === "choose" ? (
+              "Choose whether to import PMS updates from Excel or export PMS values into an existing sheet"
+            ) : mode === "export" ? (
+              "Map Staff Listing columns to sheet columns, then download the filled workbook"
             ) : hasImportedSheet ? (
               `${matchedPeople.length} matched · ${importUnmatched.length} not found · ${selectedColumnIds.size} columns · ${
                 Object.values(columnMapping).filter(Boolean).length
@@ -803,25 +894,27 @@ export function BulkUploadStaffModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
             >
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                void startSaveChecks();
-              }}
-              disabled={
-                !hasImportedSheet ||
-                sheetRows.length === 0 ||
-                saveMutation.isPending ||
-                checkOpen
-              }
-              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:bg-amber-600 dark:hover:bg-amber-500"
-            >
-              Next
-            </button>
+            {mode === "import" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void startSaveChecks();
+                }}
+                disabled={
+                  !hasImportedSheet ||
+                  sheetRows.length === 0 ||
+                  saveMutation.isPending ||
+                  checkOpen
+                }
+                className="rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#185C37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] disabled:opacity-60"
+              >
+                Next
+              </button>
+            ) : null}
           </div>
         </footer>
 

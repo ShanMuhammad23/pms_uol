@@ -39,7 +39,7 @@ export default async function MyFormsPage() {
       : null;
 
     return (
-      <div className="space-y-6 text-text-primary">
+      <div className="min-w-0 text-text-primary ">
         <MyFormsList
           userName={userName}
           userRole={session.user?.role ?? null}

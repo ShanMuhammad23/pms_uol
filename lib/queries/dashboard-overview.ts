@@ -97,11 +97,19 @@ async function getEligibilityContext(): Promise<{
   cycleId: number | null;
   financialYear: number | null;
   cycleEndDate: string | null;
+  cycleStartDate: string | null;
+  ineligibilityDate: string | null;
 }> {
   const [cycleResult, financialYearResult] = await Promise.all([
     getDefaultAppraisalCycle(),
-    getDbClient().query<{ year: number }>(
-      `SELECT year
+    getDbClient().query<{
+      year: number;
+      cycle_start_date: string | null;
+      ineligibility_date: string | null;
+    }>(
+      `SELECT year,
+              cycle_start_date::text,
+              ineligibility_date::text
        FROM financial_years
        WHERE is_active = TRUE
        ORDER BY year DESC
@@ -109,15 +117,17 @@ async function getEligibilityContext(): Promise<{
     ),
   ]);
 
-  // Eligibility is FY-scoped only (30 Jun of active financial year).
+  const activeFy = financialYearResult.rows[0] ?? null;
   const financialYear =
-    financialYearResult.rows[0]?.year ?? cycleResult?.fiscalYear ?? null;
+    activeFy?.year ?? cycleResult?.fiscalYear ?? null;
   const referenceEndDate = resolveReferenceEndDate({ financialYear });
 
   return {
     cycleId: cycleResult?.id ?? null,
     financialYear,
     cycleEndDate: formatReferenceDate(referenceEndDate),
+    cycleStartDate: activeFy?.cycle_start_date?.slice(0, 10) ?? null,
+    ineligibilityDate: activeFy?.ineligibility_date?.slice(0, 10) ?? null,
   };
 }
 
@@ -126,10 +136,14 @@ function mapOverviewRow(
   eligibilityContext: {
     financialYear: number | null;
     cycleEndDate: string | null;
+    cycleStartDate: string | null;
+    ineligibilityDate: string | null;
   },
 ): FormSubmissionListItem {
   const computed = computeAppraisalEligibility(row.date_of_joining, {
     financialYear: eligibilityContext.financialYear,
+    cycleStartDate: eligibilityContext.cycleStartDate,
+    ineligibilityDate: eligibilityContext.ineligibilityDate,
   });
   const storedFactor = toNumber(row.applicable_duration_factor);
   const rawScore =
@@ -194,6 +208,8 @@ function mapOverviewRow(
     eligibilityStatus: row.eligibility_status ?? computed.status,
     eligibilityReferenceYear: eligibilityContext.financialYear,
     eligibilityReferenceEndDate: eligibilityContext.cycleEndDate,
+    eligibilityCycleStartDate: eligibilityContext.cycleStartDate,
+    eligibilityIneligibilityDate: eligibilityContext.ineligibilityDate,
     remarksEvaluation: null,
     hrApprovalStatus: (row.hr_approval_status as "pending" | "approved" | "review_required" | null) ?? null,
     manager1OverallRemarks: null,
@@ -391,6 +407,8 @@ export async function listDashboardOverview(
     mapOverviewRow(row, {
       financialYear: eligibilityContext.financialYear,
       cycleEndDate: eligibilityContext.cycleEndDate,
+      cycleStartDate: eligibilityContext.cycleStartDate,
+      ineligibilityDate: eligibilityContext.ineligibilityDate,
     }),
   );
 }
