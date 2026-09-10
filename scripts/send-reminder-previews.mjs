@@ -188,7 +188,7 @@ async function loadSampleRecipients(pool) {
        INNER JOIN form_templates ft ON ft.id = efa.template_id
        INNER JOIN users u ON u.id = efa.employee_id
        LEFT JOIN appraisals ap
-         ON ap.employee_id = u.id AND ap.cycle_id = ft.cycle_id
+         ON ap.employee_id = u.id AND ap.template_id = efa.template_id
        WHERE ft.cycle_id = $1
          AND efa.self_assessment_disabled = FALSE
          AND u.is_active = TRUE
