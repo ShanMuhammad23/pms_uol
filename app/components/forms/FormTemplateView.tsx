@@ -11,9 +11,8 @@ import { Fragment, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   buildFormTableRows,
-  formatSectionLabel,
-  formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
+import { FormHtmlSectionLabel, FormHtmlSubsectionLabel } from "@/app/components/forms/HtmlTitle";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import { FormDescription } from "@/app/components/forms/FormDescription";
 
@@ -126,14 +125,14 @@ export default function FormTemplateView({ template, headerActions }: FormTempla
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-indigo-100/70 dark:bg-indigo-900/30">
                           <td colSpan={7} className="form-section-header-cell text-sm font-bold text-indigo-800 dark:text-indigo-200">
-                            {formatSectionLabel(row)}
+                            <FormHtmlSectionLabel row={row} />
                           </td>
                         </tr>
                       ) : null}
                       {row.isFirstInSubsection && row.subsectionTitle ? (
                         <tr className="bg-teal-50/60 dark:bg-teal-950/20">
                           <td colSpan={7} className="form-section-header-cell pl-8 text-xs font-bold text-teal-700 dark:text-teal-300">
-                            {formatSubsectionLabel(row)}
+                            <FormHtmlSubsectionLabel row={row} />
                           </td>
                         </tr>
                       ) : null}

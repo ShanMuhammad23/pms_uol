@@ -202,6 +202,7 @@ export function applyQuestionInputTypeChange(
 export interface FormSubsectionInput {
   id?: number;
   clientId: string;
+  /** Subsection heading. May contain sanitized HTML from the title editor. */
   title: string;
   sortOrder: number;
   questions: QuestionInput[];
@@ -238,6 +239,7 @@ export type FormSectionLayoutInputItem =
 export interface FormSectionInput {
   id?: number;
   clientId: string;
+  /** Section heading. May contain sanitized HTML from the title editor. */
   title: string;
   sortOrder: number;
   subsections: FormSubsectionInput[];

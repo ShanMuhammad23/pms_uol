@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import QuestionEditor from "./QuestionEditor";
+import HtmlTitleEditor from "./HtmlTitleEditor";
 import type { FormSubsectionInput, QuestionInput } from "@/types/forms";
 import { createEmptyQuestion } from "@/types/forms";
 
@@ -75,14 +76,14 @@ export default function FormSubsectionEditor({
           <label className="mb-1.5 block text-xs font-medium text-foreground/70">
             Subsection Name
           </label>
-          <textarea
+          <HtmlTitleEditor
             value={subsection.title}
-            onChange={(event) =>
-              onChange({ ...subsection, title: event.target.value })
-            }
-            rows={2}
-            className="w-full resize-y rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
-            placeholder="Subsection title (Press Enter for new line)"
+            onChange={(title) => onChange({ ...subsection, title })}
+            placeholder="Subsection title"
+            aria-label="Subsection title"
+            variant="boxed"
+            tone="teal"
+            error={Boolean(errors[titleErrorKey])}
           />
           {errors[titleErrorKey] ? (
             <p className="mt-1 text-xs text-red-600">{errors[titleErrorKey]}</p>

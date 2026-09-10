@@ -5,6 +5,7 @@ import { db } from "../db";
 import { getDbClient, withTransaction } from "@/lib/db-context";
 import { upsertIncrementMatrices } from "./increment-matrices";
 import { getAppraisalCycleById, getDefaultAppraisalCycle, ensureDefaultAppraisalCycle } from "./appraisal-cycles";
+import { sanitizeFormTemplateHtmlTitles } from "@/lib/html-title";
 import type {
   EmployeeCategory,
   FieldType,
@@ -1485,6 +1486,7 @@ export async function createFormTemplate(
   return withTransaction(async () => {
     const client = getDbClient() as PoolClient;
     await ensureRatingBasedSchema(client);
+    input = sanitizeFormTemplateHtmlTitles(input);
 
     const cycleId = await resolveCycleId(input.cycleId);
 
@@ -1553,6 +1555,7 @@ export async function updateFormTemplate(
   return withTransaction(async () => {
     const client = getDbClient() as PoolClient;
     await ensureRatingBasedSchema(client);
+    input = sanitizeFormTemplateHtmlTitles(input);
 
     const existing = await client.query<{ id: string; cycle_id: number }>(
       `SELECT id, cycle_id FROM form_templates WHERE id = $1`,

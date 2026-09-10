@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import QuestionEditor from "./QuestionEditor";
+import HtmlTitleEditor from "./HtmlTitleEditor";
 import type { FormSectionInput, QuestionInput } from "@/types/forms";
 import { createEmptyQuestion } from "@/types/forms";
 
@@ -94,14 +95,13 @@ export default function FormSectionEditor({
           <label className="mb-1.5 block text-xs font-medium text-foreground/70">
             Section Name
           </label>
-          <textarea
+          <HtmlTitleEditor
             value={section.title}
-            onChange={(event) =>
-              onChange({ ...section, title: event.target.value })
-            }
-            rows={2}
-            className="w-full resize-y rounded-lg border border-slate-300 bg-background px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15"
-            placeholder="Section title (Press Enter for new line)"
+            onChange={(title) => onChange({ ...section, title })}
+            placeholder="Section title"
+            aria-label="Section title"
+            variant="boxed"
+            error={Boolean(errors[titleErrorKey])}
           />
           {errors[titleErrorKey] ? (
             <p className="mt-1 text-xs text-red-600">{errors[titleErrorKey]}</p>

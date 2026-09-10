@@ -31,10 +31,9 @@ import { FormDescription } from "@/app/components/forms/FormDescription";
 import { cn } from "@/lib/utils";
 import {
   buildFormTableRows,
-  formatSectionLabel,
-  formatSubsectionLabel,
   type FormTableRow,
 } from "@/app/helpers/form-table-rows";
+import { FormHtmlSectionLabel, FormHtmlSubsectionLabel } from "@/app/components/forms/HtmlTitle";
 import { ArrowLeft, Save, CheckCircle, MessageSquareText, Plus, Trash2, X } from "lucide-react";
 import { DirectAssessmentFilterBar } from "@/app/components/dashboard/DirectAssessmentFilterBar";
 import {
@@ -1181,7 +1180,7 @@ export default function DirectAssessmentSpreadsheet({
                               colSpan={3 + filteredEmployees.length}
                               className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200"
                             >
-                              {formatSectionLabel(row)}
+                              <FormHtmlSectionLabel row={row} />
                             </td>
                           </tr>
                         ) : null}
@@ -1408,7 +1407,7 @@ export default function DirectAssessmentSpreadsheet({
                             colSpan={3 + filteredEmployees.length}
                             className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200"
                           >
-                            {formatSectionLabel(row)}
+                            <FormHtmlSectionLabel row={row} />
                           </td>
                         </tr>
                       ) : null}
@@ -1662,7 +1661,7 @@ export default function DirectAssessmentSpreadsheet({
                           colSpan={3 + filteredEmployees.length}
                           className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200"
                         >
-                          {formatSectionLabel(row)}
+                          <FormHtmlSectionLabel row={row} />
                         </td>
                       </tr>
                     ) : null}
@@ -1672,7 +1671,7 @@ export default function DirectAssessmentSpreadsheet({
                           colSpan={3 + filteredEmployees.length}
                           className="form-section-header-cell pl-8 text-xs font-bold text-teal-700 dark:text-teal-300"
                         >
-                          {formatSubsectionLabel(row)}
+                          <FormHtmlSubsectionLabel row={row} />
                         </td>
                       </tr>
                     ) : null}

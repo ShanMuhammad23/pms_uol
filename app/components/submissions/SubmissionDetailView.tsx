@@ -46,9 +46,8 @@ import type { FormSubmissionDetail } from "@/types/form-submissions";
 import { cn } from "@/lib/utils";
 import {
   buildFormTableRows,
-  formatSectionLabel,
-  formatSubsectionLabel,
 } from "@/app/helpers/form-table-rows";
+import { FormHtmlSectionLabel, FormHtmlSubsectionLabel } from "@/app/components/forms/HtmlTitle";
 import AssessmentSummaryFooter from "@/app/components/forms/AssessmentSummaryFooter";
 import { FormDescription } from "@/app/components/forms/FormDescription";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
@@ -1776,7 +1775,7 @@ export default function SubmissionDetailView({
                       {row.isFirstInSection && row.sectionTitle ? (
                         <tr className="bg-amber-50/80 dark:bg-amber-950/20">
                           <td colSpan={colSpan} className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200">
-                            {formatSectionLabel(row)}
+                            <FormHtmlSectionLabel row={row} />
                           </td>
                         </tr>
                       ) : null}
@@ -1955,14 +1954,14 @@ export default function SubmissionDetailView({
                     {row.isFirstInSection && row.sectionTitle ? (
                       <tr className="bg-amber-50/80 dark:bg-amber-950/20">
                         <td colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 10 : 8) : ((hasManager2 && showManager2Data) ? 8 : 6)} className="form-section-header-cell text-sm font-bold text-amber-800 dark:text-amber-200">
-                          {formatSectionLabel(row)}
+                          <FormHtmlSectionLabel row={row} />
                         </td>
                       </tr>
                     ) : null}
                     {row.isFirstInSubsection && row.subsectionTitle ? (
                       <tr className="bg-teal-50/60 dark:bg-teal-950/20">
                         <td colSpan={selfAssessmentEnabled ? ((hasManager2 && showManager2Data) ? 10 : 8) : ((hasManager2 && showManager2Data) ? 8 : 6)} className="form-section-header-cell pl-8 text-xs font-bold text-teal-700 dark:text-teal-300">
-                          {formatSubsectionLabel(row)}
+                          <FormHtmlSubsectionLabel row={row} />
                         </td>
                       </tr>
                     ) : null}

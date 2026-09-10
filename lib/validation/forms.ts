@@ -11,6 +11,7 @@ import {
   FIELD_TYPES,
   PERFORMANCE_RATINGS,
 } from "@/types/forms";
+import { isHtmlTitleEmpty } from "@/lib/html-title";
 
 /** Titles are free text (TEXT columns) — no length limit enforced. */
 
@@ -182,7 +183,7 @@ export function validateFormTemplateInput(
   for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex += 1) {
     const section = sections[sectionIndex];
 
-    if (!section.title?.trim()) {
+    if (isHtmlTitleEmpty(section.title)) {
       return `Section ${sectionIndex + 1}: title is required.`;
     }
 
@@ -216,7 +217,7 @@ export function validateFormTemplateInput(
     ) {
       const subsection = section.subsections[subsectionIndex];
 
-      if (!subsection.title?.trim()) {
+      if (isHtmlTitleEmpty(subsection.title)) {
         return `Section ${sectionIndex + 1}, subsection ${subsectionIndex + 1}: title is required.`;
       }
 

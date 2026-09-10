@@ -10,6 +10,7 @@ import {
 } from "@/app/helpers/manager-review";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import { getReturnHistory } from "@/lib/queries/form-submissions";
+import { htmlTitlePlainText } from "@/lib/html-title";
 import {
   deleteFormAttachmentFile,
   resolveFormAttachmentAbsolutePath,
@@ -1130,20 +1131,20 @@ export async function saveEmployeeForm(
 
         if (sectionAuthored.length === 0) {
           throw new EmployeeFormError(
-            `Section "${section.title}": add at least one question to the open-assessment section.`,
+            `Section "${htmlTitlePlainText(section.title)}": add at least one question to the open-assessment section.`,
           );
         }
 
         if (allocated !== budget) {
           throw new EmployeeFormError(
-            `Section "${section.title}": total marks allocated (${allocated}) must equal the budget (${budget}).`,
+            `Section "${htmlTitlePlainText(section.title)}": total marks allocated (${allocated}) must equal the budget (${budget}).`,
           );
         }
 
         for (const authored of sectionAuthored) {
           if (!authored.authoredQuestionText?.trim()) {
             throw new EmployeeFormError(
-              `Section "${section.title}": every question must have text.`,
+              `Section "${htmlTitlePlainText(section.title)}": every question must have text.`,
             );
           }
           if (formRatingBased) {
@@ -1155,7 +1156,7 @@ export async function saveEmployeeForm(
               !isValidAuthoredRating(Number(rating), template.ratingScales)
             ) {
               throw new EmployeeFormError(
-                `Section "${section.title}": select a valid rating for each question.`,
+                `Section "${htmlTitlePlainText(section.title)}": select a valid rating for each question.`,
               );
             }
           } else {
@@ -1163,7 +1164,7 @@ export async function saveEmployeeForm(
             const max = Number(authored.authoredTotalMarks);
             if (Number.isNaN(score) || score < 0 || score > max) {
               throw new EmployeeFormError(
-                `Section "${section.title}": score must be between 0 and ${max} for each question.`,
+                `Section "${htmlTitlePlainText(section.title)}": score must be between 0 and ${max} for each question.`,
               );
             }
           }

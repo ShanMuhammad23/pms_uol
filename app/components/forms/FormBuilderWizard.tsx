@@ -16,6 +16,8 @@ import { Button } from "@/app/components/auth/Button";
 import FormEmployeeAssignment from "./FormEmployeeAssignment";
 import FormTemplateView from "./FormTemplateView";
 import { FormRatingScalesEditor } from "./FormRatingScalesEditor";
+import HtmlTitleEditor from "./HtmlTitleEditor";
+import { HtmlTitle } from "./HtmlTitle";
 import {
   createFormTemplate,
   FormTemplateRequestError,
@@ -55,6 +57,7 @@ import {
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
 import { deriveRatingScaleMaxValue } from "@/app/helpers/form-rating-scoring";
+import { isHtmlTitleEmpty, sanitizeFormTemplateHtmlTitles } from "@/lib/html-title";
 import {
   LayoutTemplate,
   Users,
@@ -1526,21 +1529,17 @@ function SubsectionCard({
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-teal-100 text-[10px] font-bold text-teal-700 dark:bg-teal-800/50 dark:text-teal-200">
           {sectionIndex + 1}.{subsectionIndex + 1}
         </div>
-        <textarea
-          value={subsection.title}
-          onChange={(e) => onUpdate({ title: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.stopPropagation();
-            }
-          }}
-          placeholder="Subsection Title (Press Enter for new line)"
-          rows={1}
-          className={cn(
-            "min-w-0 flex-1 resize-y bg-transparent text-sm font-semibold outline-none whitespace-pre-wrap",
-            titleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400" : "text-teal-900 placeholder:text-teal-400 dark:text-teal-100"
-          )}
-        />
+        <div className="min-w-0 flex-1">
+          <HtmlTitleEditor
+            value={subsection.title}
+            onChange={(title) => onUpdate({ title })}
+            placeholder="Subsection title"
+            aria-label="Subsection title"
+            variant="inline"
+            tone="teal"
+            error={Boolean(titleError)}
+          />
+        </div>
         <div className="flex items-center gap-1">
           <button
             onClick={onAddQuestion}
@@ -1775,29 +1774,26 @@ function SectionCard({
         
         <div className="flex-1 min-w-0">
           {isExpanded ? (
-            <textarea
+            <HtmlTitleEditor
               value={section.title}
-              onChange={(e) => onUpdate({ title: e.target.value })}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.stopPropagation();
-                }
-              }}
-              placeholder="Section Title (Press Enter for new line)"
-              rows={1}
-              className={cn(
-                "w-full resize-y bg-transparent text-sm font-semibold outline-none whitespace-pre-wrap",
-                hasTitleError ? "text-red-700 placeholder:text-red-400 dark:text-red-400 dark:placeholder:text-red-500" : "text-indigo-900 placeholder:text-indigo-400 dark:text-indigo-100 dark:placeholder:text-indigo-400"
-              )}
+              onChange={(title) => onUpdate({ title })}
+              placeholder="Section title"
+              aria-label="Section title"
+              variant="inline"
+              tone="indigo"
+              error={Boolean(hasTitleError)}
             />
           ) : (
-            <h4 className={cn(
-              "truncate text-sm font-semibold",
+            <div className={cn(
+              "text-sm font-semibold",
               hasTitleError ? "text-red-700 dark:text-red-400" : "text-indigo-900 dark:text-indigo-100"
             )}>
-              {section.title || `Section ${index + 1}`}
-            </h4>
+              {isHtmlTitleEmpty(section.title) ? (
+                `Section ${index + 1}`
+              ) : (
+                <HtmlTitle html={section.title} />
+              )}
+            </div>
           )}
           <p className="text-xs text-indigo-600/70 dark:text-indigo-300/70">
             {section.isOpenAssessment
@@ -2546,7 +2542,7 @@ export default function FormBuilderWizard({
   const payload = useMemo<FormTemplateInput | null>(() => {
     const normalized = normalizeRootFormStructure(sections, questions);
 
-    return {
+    return sanitizeFormTemplateHtmlTitles({
       title: title.trim(),
       code: code.trim(),
       description: description.trim(),
@@ -2562,7 +2558,7 @@ export default function FormBuilderWizard({
       sections: normalized.sections,
       questions: normalized.questions,
       ...(cycleId ? { cycleId } : {}),
-    };
+    });
   }, [
     title,
     code,
@@ -2621,12 +2617,12 @@ export default function FormBuilderWizard({
     }
 
     sections.forEach((section, sectionIndex) => {
-      if (!section.title.trim()) {
+      if (isHtmlTitleEmpty(section.title)) {
         nextErrors[`section-${sectionIndex}-title`] = "Section title is required.";
       }
 
       section.subsections.forEach((subsection, subsectionIndex) => {
-        if (!subsection.title.trim()) {
+        if (isHtmlTitleEmpty(subsection.title)) {
           nextErrors[`section-${sectionIndex}-sub-${subsectionIndex}-title`] = "Subsection title is required.";
         }
 
