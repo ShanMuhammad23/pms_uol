@@ -972,7 +972,7 @@ export default function EmployeeFormFill({
                             <div className="space-y-3">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-xs text-foreground/70">
-                                  Budget: <span className="font-bold text-amber-700 dark:text-amber-300">{budget}</span> marks
+                                  Total: <span className="font-bold text-amber-700 dark:text-amber-300">{budget}</span> marks
                                   {" — "}
                                   Allocated: <span className={cn("font-bold", remaining < 0 ? "text-red-600" : remaining === 0 ? "text-emerald-600" : "text-amber-700 dark:text-amber-300")}>{allocated}</span>
                                   {" / "}

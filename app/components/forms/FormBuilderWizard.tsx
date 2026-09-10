@@ -1801,7 +1801,7 @@ function SectionCard({
           )}
           <p className="text-xs text-indigo-600/70 dark:text-indigo-300/70">
             {section.isOpenAssessment
-              ? `Open Assessment · Budget: ${section.openAssessmentTotalMarks ?? 0} marks`
+              ? `Open Assessment · Total: ${section.openAssessmentTotalMarks ?? 0} marks`
               : `${totalQuestions} question${totalQuestions !== 1 ? "s" : ""}${section.subsections.length > 0 ? ` · ${section.subsections.length} subsection${section.subsections.length !== 1 ? "s" : ""}` : ""}`}
           </p>
         </div>
