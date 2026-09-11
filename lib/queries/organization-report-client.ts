@@ -23,7 +23,8 @@ export interface OrgReportNode {
 }
 
 export async function fetchOrganizationReport(): Promise<OrgReportNode[]> {
-  const response = await fetch("/api/reports/organization-hierarchy");
+  const url = "/api/reports/organization-hierarchy";
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to load organization report.");
   }

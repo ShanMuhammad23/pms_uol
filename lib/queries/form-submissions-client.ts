@@ -41,6 +41,7 @@ export async function fetchFormSubmissions(): Promise<FormSubmissionListItem[]> 
     pageSize: 5000,
     filters: {
       searchQuery: "",
+      campusId: null,
       category0EntityIds: null,
       category1EntityIds: null,
       category2EntityIds: null,

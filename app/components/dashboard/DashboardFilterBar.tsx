@@ -28,6 +28,9 @@ export interface ActiveFilter {
 }
 
 interface DashboardFilterBarProps {
+  selectedCampusId?: string[] | null;
+  onCampusChange?: (value: string[] | null) => void;
+  campusOptions?: MultiSelectOption[];
   selectedCategory0EntityIds: string[] | null;
   onCategory0EntityChange: (value: string[] | null) => void;
   selectedCategory1EntityIds: string[] | null;
@@ -67,6 +70,9 @@ interface DashboardFilterBarProps {
 }
 
 export function DashboardFilterBar({
+  selectedCampusId = null,
+  onCampusChange,
+  campusOptions = [],
   selectedCategory0EntityIds,
   onCategory0EntityChange,
   selectedCategory1EntityIds,
@@ -166,10 +172,22 @@ export function DashboardFilterBar({
                   className={cn(
                     "grid gap-3",
                     showFormStatus && onFormStateChange
-                      ? "grid-cols-[repeat(6,minmax(0,1fr))]"
-                      : "grid-cols-[repeat(5,minmax(0,1fr))]",
+                      ? "grid-cols-[repeat(7,minmax(0,1fr))]"
+                      : "grid-cols-[repeat(6,minmax(0,1fr))]",
                   )}
                 >
+                  {campusOptions.length > 1 && onCampusChange ? (
+                    <MultiSelectFilterDropdown
+                      label="Campus"
+                      icon={Building2}
+                      options={campusOptions}
+                      selectedValues={selectedCampusId}
+                      onChange={onCampusChange}
+                      placeholder="All"
+                      searchable={campusOptions.length > 8}
+                    />
+                  ) : null}
+
                   {ENTITY_FILTER_LEVELS.map((level, index) => (
                     <MultiSelectFilterDropdown
                       key={level.label}

@@ -15,6 +15,8 @@ interface EntityRow {
   name: string;
   entity_category_id: number;
   category_code: string;
+  campus_id: number | null;
+  campus_name: string | null;
   parent_entity_id: string | null;
   parent_name: string | null;
   parent_category_code: string | null;
@@ -24,6 +26,7 @@ interface EntityRow {
 }
 
 let cachedUsersEntityColumn: boolean | null = null;
+let cachedEntitiesCampusColumn: boolean | null = null;
 
 async function hasUsersEntityColumn(): Promise<boolean> {
   if (cachedUsersEntityColumn !== null) {
@@ -44,6 +47,25 @@ async function hasUsersEntityColumn(): Promise<boolean> {
   return cachedUsersEntityColumn;
 }
 
+async function hasEntitiesCampusColumn(): Promise<boolean> {
+  if (cachedEntitiesCampusColumn !== null) {
+    return cachedEntitiesCampusColumn;
+  }
+
+  const result = await getDbClient().query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'entities'
+         AND column_name = 'campus_id'
+     ) AS exists`,
+  );
+
+  cachedEntitiesCampusColumn = Boolean(result.rows[0]?.exists);
+  return cachedEntitiesCampusColumn;
+}
+
 async function buildEntitySelect(): Promise<string> {
   const staffCountSelect = (await hasUsersEntityColumn())
     ? `(
@@ -53,12 +75,23 @@ async function buildEntitySelect(): Promise<string> {
        ) AS staff_count`
     : `0 AS staff_count`;
 
+  const campusReady = await hasEntitiesCampusColumn();
+  const campusSelect = campusReady
+    ? `e.campus_id,
+       cmp.name AS campus_name,`
+    : `NULL::int AS campus_id,
+       NULL::text AS campus_name,`;
+  const campusJoin = campusReady
+    ? "LEFT JOIN campuses cmp ON cmp.id = e.campus_id"
+    : "";
+
   return `
   SELECT
     e.id,
     e.name,
     e.entity_category_id,
     ec.code AS category_code,
+    ${campusSelect}
     e.parent_entity_id,
     p.name AS parent_name,
     pc.code AS parent_category_code,
@@ -67,6 +100,7 @@ async function buildEntitySelect(): Promise<string> {
     e.updated_at::text
   FROM entities e
   JOIN entity_categories ec ON ec.id = e.entity_category_id
+  ${campusJoin}
   LEFT JOIN entities p ON p.id = e.parent_entity_id
   LEFT JOIN entity_categories pc ON pc.id = p.entity_category_id
 `;
@@ -88,6 +122,8 @@ function mapEntityRow(row: EntityRow): EntityRecord {
     name: row.name,
     entityCategoryId: row.entity_category_id,
     categoryCode: row.category_code,
+    campusId: row.campus_id != null ? Number(row.campus_id) : null,
+    campusName: row.campus_name,
     parentEntityId: row.parent_entity_id ? Number(row.parent_entity_id) : null,
     parentName: row.parent_name,
     parentCategoryCode: row.parent_category_code,
@@ -228,6 +264,7 @@ export async function createEntity(
   input: CreateEntityInput,
 ): Promise<EntityRecord> {
   const normalized = normalizeEntityInput(input);
+  const campusReady = await hasEntitiesCampusColumn();
 
   await assertCategoryExists(normalized.entityCategoryId);
   await assertValidParent(null, normalized.parentEntityId);
@@ -239,15 +276,27 @@ export async function createEntity(
   );
 
   try {
+    const columns = ["name", "entity_category_id", "parent_entity_id"];
+    const values: unknown[] = [
+      normalized.name,
+      normalized.entityCategoryId,
+      normalized.parentEntityId,
+    ];
+
+    if (campusReady) {
+      columns.push("campus_id");
+      values.push(normalized.campusId ?? 1);
+    }
+
+    const placeholders = values
+      .map((_, index) => `$${index + 1}`)
+      .join(", ");
+
     const result = await getDbClient().query<{ id: string }>(
-      `INSERT INTO entities (name, entity_category_id, parent_entity_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO entities (${columns.join(", ")})
+       VALUES (${placeholders})
        RETURNING id`,
-      [
-        normalized.name,
-        normalized.entityCategoryId,
-        normalized.parentEntityId,
-      ],
+      values,
     );
 
     const created = await getEntityById(Number(result.rows[0].id));
@@ -275,6 +324,7 @@ export async function updateEntity(
   input: UpdateEntityInput,
 ): Promise<EntityRecord> {
   const normalized = normalizeEntityInput(input);
+  const campusReady = await hasEntitiesCampusColumn();
 
   await assertCategoryExists(normalized.entityCategoryId);
   await assertValidParent(id, normalized.parentEntityId);
@@ -286,19 +336,31 @@ export async function updateEntity(
   );
 
   try {
+    const setClauses = [
+      "name = $1",
+      "entity_category_id = $2",
+      "parent_entity_id = $3",
+    ];
+    const values: unknown[] = [
+      normalized.name,
+      normalized.entityCategoryId,
+      normalized.parentEntityId,
+    ];
+
+    if (campusReady && normalized.campusId !== undefined) {
+      values.push(normalized.campusId ?? 1);
+      setClauses.push(`campus_id = $${values.length}`);
+    }
+
+    values.push(id);
+    const whereParam = `$${values.length}`;
+
     const result = await getDbClient().query(
       `UPDATE entities
-       SET name = $1,
-           entity_category_id = $2,
-           parent_entity_id = $3,
+       SET ${setClauses.join(", ")},
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4`,
-      [
-        normalized.name,
-        normalized.entityCategoryId,
-        normalized.parentEntityId,
-        id,
-      ],
+       WHERE id = ${whereParam}`,
+      values,
     );
 
     if (result.rowCount === 0) {

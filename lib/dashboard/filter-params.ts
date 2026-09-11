@@ -75,6 +75,7 @@ function parseMasterMultiSelection(raw: string | null): string[] | null {
 export function emptyDashboardFilterParams(): DashboardFilterParams {
   return {
     searchQuery: "",
+    campusId: null,
     category0EntityIds: null,
     category1EntityIds: null,
     category2EntityIds: null,
@@ -96,6 +97,7 @@ export function parseDashboardFilterParams(
 
   return {
     searchQuery: searchParams.get("search")?.trim() ?? "",
+    campusId: parseNumberCsv(searchParams.get("campus"))?.[0] ?? null,
     category0EntityIds: parseNumberCsv(searchParams.get("c0")),
     category1EntityIds: parseNumberCsv(searchParams.get("c1")),
     category2EntityIds: parseNumberCsv(searchParams.get("c2")),
@@ -112,6 +114,10 @@ export function appendDashboardFilterParams(
 ) {
   if (filters.searchQuery.trim()) {
     params.set("search", filters.searchQuery.trim());
+  }
+
+  if (filters.campusId !== null) {
+    params.set("campus", String(filters.campusId));
   }
 
   const c0 = serializeCsv(filters.category0EntityIds);

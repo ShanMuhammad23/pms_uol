@@ -18,6 +18,8 @@ import {
 import type { CardFilterId, FormState } from "@/app/helpers/dashboard-types";
 import type { DashboardFilterParams } from "@/types/dashboard-api";
 import type { EntityRecord } from "@/types/entities";
+import type { CampusRecord } from "@/types/campuses";
+import { useCampusesQuery } from "@/app/queries/users";
 import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
 
 interface UseDashboardFiltersParams {
@@ -117,6 +119,12 @@ export function useDashboardFilters({
     "pms:dashboard-filters:searchQuery",
     "",
   );
+  const [selectedCampusId, setSelectedCampusId] =
+    useSessionStorageState<number | null>(
+      "pms:dashboard-filters:campus",
+      null,
+    );
+  const { data: campuses = [] } = useCampusesQuery();
   const [selectedCategory0EntityIds, setSelectedCategory0EntityIds] =
     useSessionStorageState<MultiFilterSelection<number>>(
       "pms:dashboard-filters:category0",
@@ -168,8 +176,12 @@ export function useDashboardFilters({
     );
 
   const category0Entities = useMemo(
-    () => getEntitiesForFilterLevels(entities, 0, null),
-    [entities],
+    () =>
+      getEntitiesForFilterLevels(entities, 0, null).filter(
+        (entity) =>
+          selectedCampusId === null || entity.campusId === selectedCampusId,
+      ),
+    [entities, selectedCampusId],
   );
 
   const category1Entities = useMemo(
@@ -181,6 +193,13 @@ export function useDashboardFilters({
     () => getEntitiesForFilterLevels(entities, 2, selectedCategory1EntityIds),
     [entities, selectedCategory1EntityIds],
   );
+
+  useEffect(() => {
+    setPrunedSelection(
+      setSelectedCategory0EntityIds,
+      category0Entities.map((entity) => entity.id),
+    );
+  }, [category0Entities]);
 
   useEffect(() => {
     setPrunedSelection(
@@ -199,6 +218,7 @@ export function useDashboardFilters({
   const filterParams = useMemo<DashboardFilterParams>(
     () => ({
       searchQuery,
+      campusId: selectedCampusId,
       category0EntityIds: selectedCategory0EntityIds,
       category1EntityIds: selectedCategory1EntityIds,
       category2EntityIds: selectedCategory2EntityIds,
@@ -209,6 +229,7 @@ export function useDashboardFilters({
     }),
     [
       searchQuery,
+      selectedCampusId,
       selectedCategory0EntityIds,
       selectedCategory1EntityIds,
       selectedCategory2EntityIds,
@@ -217,6 +238,16 @@ export function useDashboardFilters({
       selectedFormStates,
       selectedCardFilter,
     ],
+  );
+
+  const campusOptions = useMemo<MultiSelectOption[]>(
+    () =>
+      campuses.map((campus) => ({
+        value: String(campus.id),
+        label: campus.name,
+        count: 0,
+      })),
+    [campuses],
   );
 
   const category0Options = useMemo<MultiSelectOption[]>(
@@ -294,6 +325,14 @@ export function useDashboardFilters({
     [],
   );
 
+  const handleCampusChange = useCallback((values: string[] | null) => {
+    if (values === null || values.length === 0) {
+      setSelectedCampusId(null);
+    } else {
+      setSelectedCampusId(Number(values[0]));
+    }
+  }, []);
+
   const handleCategory0EntityChange = useCallback((values: string[] | null) => {
     setSelectedCategory0EntityIds(fromStringIds(values));
   }, []);
@@ -335,6 +374,15 @@ export function useDashboardFilters({
 
   const activeFilters = useMemo(() => {
     const filters: ActiveFilter[] = [];
+
+    if (selectedCampusId !== null) {
+      const campus = campuses.find((c) => c.id === selectedCampusId);
+      filters.push({
+        label: `Campus: ${campus?.name ?? selectedCampusId}`,
+        onRemove: () => setSelectedCampusId(null),
+        color: "amber",
+      });
+    }
 
     if (selectedCategory0EntityIds !== null) {
       filters.push({
@@ -429,6 +477,7 @@ export function useDashboardFilters({
 
     return filters;
   }, [
+    selectedCampusId,
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
@@ -438,10 +487,12 @@ export function useDashboardFilters({
     selectedCardFilter,
     searchQuery,
     entities,
+    campuses,
   ]);
 
   const clearAllFilters = useCallback(() => {
     setSearchQuery("");
+    setSelectedCampusId(null);
     setSelectedCategory0EntityIds(null);
     setSelectedCategory1EntityIds(null);
     setSelectedCategory2EntityIds(null);
@@ -482,6 +533,7 @@ export function useDashboardFilters({
   return {
     searchQuery,
     setSearchQuery,
+    selectedCampusId,
     selectedCategory0EntityIds: toStringSelection(selectedCategory0EntityIds),
     selectedCategory1EntityIds: toStringSelection(selectedCategory1EntityIds),
     selectedCategory2EntityIds: toStringSelection(selectedCategory2EntityIds),
@@ -490,6 +542,7 @@ export function useDashboardFilters({
     selectedFormStates:
       selectedFormStates === null ? null : selectedFormStates.map(String),
     selectedCardFilter,
+    campusOptions,
     category0Options,
     category0DistributionOptions,
     category1Options,
@@ -499,6 +552,7 @@ export function useDashboardFilters({
     formStateOptions,
     filterParams,
     activeFilters,
+    handleCampusChange,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,
     handleCategory1EntityChange,

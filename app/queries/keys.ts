@@ -7,6 +7,7 @@ export const queryKeys = {
   institutionalQuotaChart: (financialYearId: number | null) =>
     ["institutional-quota-chart", financialYearId] as const,
   entities: ["entities"] as const,
+  campuses: ["campuses"] as const,
   designations: ["designations"] as const,
   formSubmissions: ["form-submissions"] as const,
   formSubmissionsPage: (paramsKey: string) =>

@@ -14,6 +14,7 @@ import {
 } from "@/app/helpers/dashboard-workflow-stats";
 import {
   getEntityDescendantIds,
+  getEntitySelfAndAncestorIds,
   isEntityInCachedSubtree,
   type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
@@ -36,6 +37,7 @@ export function formatRoleCategoryValue(
 
 export type SubmissionFilterState = {
   searchQuery: string;
+  selectedCampusId: number | null;
   selectedCategory0EntityIds: MultiFilterSelection<number>;
   selectedCategory1EntityIds: MultiFilterSelection<number>;
   selectedCategory2EntityIds: MultiFilterSelection<number>;
@@ -184,6 +186,36 @@ export function matchesAppraisalFormState(
   return matchesAppraisalFormStates(submission, [selectedFormState]);
 }
 
+/**
+ * True when the submission's entity belongs to the given campus.
+ * Since campus is stored on every entity, we resolve the entity and check
+ * its `campusId`. Falls back to checking ancestor entities if the direct
+ * entity has no campus (defensive — all entities should have campusId).
+ */
+function matchesSubmissionCampus(
+  submission: FormSubmissionListItem,
+  campusId: number | null,
+  entities: EntityRecord[],
+): boolean {
+  if (campusId === null) {
+    return true;
+  }
+
+  if (submission.entityId == null) {
+    return false;
+  }
+
+  const ancestorIds = getEntitySelfAndAncestorIds(submission.entityId, entities);
+  for (const entityId of ancestorIds) {
+    const entity = entities.find((e) => e.id === entityId);
+    if (entity?.campusId === campusId) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function matchesSubmissionFilters(
   submission: FormSubmissionListItem,
   filters: SubmissionFilterState,
@@ -194,6 +226,12 @@ export function matchesSubmissionFilters(
     submission.employeeName.toLowerCase().includes(query) ||
     submission.employeeId.toLowerCase().includes(query) ||
     submission.employeeEmail.toLowerCase().includes(query);
+
+  const matchesCampus = matchesSubmissionCampus(
+    submission,
+    filters.selectedCampusId,
+    filters.entities,
+  );
 
   const matchesEntity0 = matchesSubmissionEntityMultiFilter(
     submission,
@@ -231,6 +269,7 @@ export function matchesSubmissionFilters(
 
   return (
     matchesSearch &&
+    matchesCampus &&
     matchesEntity0 &&
     matchesEntity1 &&
     matchesEntity2 &&
@@ -242,6 +281,7 @@ export function matchesSubmissionFilters(
 }
 
 export type FilterDimension =
+  | "campus"
   | "category0"
   | "category1"
   | "category2"
@@ -257,6 +297,8 @@ export function matchesSubmissionFiltersExcluding(
 ): boolean {
   return matchesSubmissionFilters(submission, {
     ...filters,
+    selectedCampusId:
+      exclude === "campus" ? null : filters.selectedCampusId,
     selectedCategory0EntityIds:
       exclude === "category0" ? null : filters.selectedCategory0EntityIds,
     selectedCategory1EntityIds:

@@ -3,6 +3,8 @@ export interface EntityRecord {
   name: string;
   entityCategoryId: number;
   categoryCode: string;
+  campusId: number | null;
+  campusName: string | null;
   parentEntityId: number | null;
   parentName: string | null;
   /** Category code of the parent entity, when a parent exists. */
@@ -16,11 +18,13 @@ export interface EntityRecord {
 export interface CreateEntityInput {
   name: string;
   entityCategoryId: number;
+  campusId?: number | null;
   parentEntityId?: number | null;
 }
 
 export interface UpdateEntityInput {
   name: string;
   entityCategoryId: number;
+  campusId?: number | null;
   parentEntityId?: number | null;
 }

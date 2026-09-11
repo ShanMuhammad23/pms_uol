@@ -42,6 +42,7 @@ export function toSubmissionFilterState(
 ): SubmissionFilterState {
   return {
     searchQuery: filters.searchQuery,
+    selectedCampusId: filters.campusId,
     selectedCategory0EntityIds: filters.category0EntityIds,
     selectedCategory1EntityIds: filters.category1EntityIds,
     selectedCategory2EntityIds: filters.category2EntityIds,

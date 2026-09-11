@@ -49,6 +49,7 @@ export function cloneDashboardFilterParams(
   const source = filters ?? emptyDashboardFilterParams();
   return {
     searchQuery: source.searchQuery,
+    campusId: source.campusId,
     category0EntityIds: source.category0EntityIds
       ? [...source.category0EntityIds]
       : null,

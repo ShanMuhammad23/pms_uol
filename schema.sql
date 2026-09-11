@@ -38,6 +38,16 @@ CREATE TABLE departments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Campuses (multi-campus support: Lahore, Sargodha, etc.)
+CREATE TABLE campuses (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL UNIQUE,
+    code VARCHAR(10) NOT NULL UNIQUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     employee_id VARCHAR(30) UNIQUE NOT NULL, -- SAP Code
@@ -367,12 +377,14 @@ CREATE TABLE entities (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
     entity_category_id INT NOT NULL REFERENCES entity_categories(id) ON DELETE RESTRICT,
+    campus_id INT REFERENCES campuses(id) ON DELETE SET NULL DEFAULT 1,
     parent_entity_id BIGINT REFERENCES entities(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_entities_parent ON entities(parent_entity_id);
+CREATE INDEX idx_entities_campus ON entities(campus_id);
 CREATE TABLE financial_years (
     id SERIAL PRIMARY KEY,
     year INT NOT NULL UNIQUE,

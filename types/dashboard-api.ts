@@ -11,6 +11,7 @@ export type CountOption = {
 
 export type DashboardFilterParams = {
   searchQuery: string;
+  campusId: number | null;
   category0EntityIds: number[] | null;
   category1EntityIds: number[] | null;
   category2EntityIds: number[] | null;

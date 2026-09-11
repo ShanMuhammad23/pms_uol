@@ -8,6 +8,7 @@ import {
   fetchUsersByEmployeeIds,
   fetchUsersOverview,
 } from "@/lib/queries/users-client";
+import { fetchCampuses } from "@/lib/queries/campuses-client";
 
 export function useUsersQuery() {
   return useQuery({
@@ -32,6 +33,14 @@ export function useUsersByEmployeeIdsQuery(employeeIds: string[]) {
     queryKey: queryKeys.usersByEmployeeIds(stableIds),
     queryFn: () => fetchUsersByEmployeeIds(stableIds),
     enabled: stableIds.length > 0,
+    ...DASHBOARD_QUERY_CACHE,
+  });
+}
+
+export function useCampusesQuery() {
+  return useQuery({
+    queryKey: queryKeys.campuses,
+    queryFn: fetchCampuses,
     ...DASHBOARD_QUERY_CACHE,
   });
 }

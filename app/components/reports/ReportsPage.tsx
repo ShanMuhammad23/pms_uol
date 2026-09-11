@@ -522,7 +522,7 @@ function ReportRow({
 export default function ReportsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["organization-report"],
-    queryFn: fetchOrganizationReport,
+    queryFn: () => fetchOrganizationReport(),
   });
 
   const { data: entities } = useDashboardEntitiesQuery();
@@ -757,7 +757,9 @@ export default function ReportsPage() {
         {hasActiveFilters ? (
           <button
             type="button"
-            onClick={clearFilters}
+            onClick={() => {
+              clearFilters();
+            }}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 dark:border-white/15"
           >
             <X className="size-3" />

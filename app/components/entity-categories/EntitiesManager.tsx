@@ -28,6 +28,7 @@ import {
   fetchEntities,
   updateEntity,
 } from "@/lib/queries/entities-client";
+import { useCampusesQuery } from "@/app/queries/users";
 import type { EntityRecord } from "@/types/entities";
 
 type MessageTone = "success" | "error";
@@ -40,6 +41,7 @@ interface FormMessage {
 interface EntityFormState {
   name: string;
   entityCategoryId: string;
+  campusId: string;
   parentEntityId: string;
 }
 
@@ -48,6 +50,7 @@ type EntitySectionTab = "list" | "add";
 const emptyForm: EntityFormState = {
   name: "",
   entityCategoryId: "",
+  campusId: "1",
   parentEntityId: "",
 };
 
@@ -75,6 +78,8 @@ export default function EntitiesManager() {
     queryKey: ["entities"],
     queryFn: fetchEntities,
   });
+
+  const { data: campuses = [] } = useCampusesQuery();
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -109,6 +114,7 @@ export default function EntitiesManager() {
       input: {
         name: string;
         entityCategoryId: number;
+        campusId: number | null;
         parentEntityId: number | null;
       };
     }) => updateEntity(id, input),
@@ -258,6 +264,7 @@ export default function EntitiesManager() {
     const payload = {
       name: form.name.trim(),
       entityCategoryId: Number(form.entityCategoryId),
+      campusId: form.campusId ? Number(form.campusId) : null,
       parentEntityId: form.parentEntityId ? Number(form.parentEntityId) : null,
     };
 
@@ -275,6 +282,7 @@ export default function EntitiesManager() {
     setForm({
       name: entity.name,
       entityCategoryId: String(entity.entityCategoryId),
+      campusId: entity.campusId ? String(entity.campusId) : "1",
       parentEntityId: entity.parentEntityId ? String(entity.parentEntityId) : "",
     });
     setFormMessage(null);
@@ -382,6 +390,36 @@ export default function EntitiesManager() {
                   {category.code}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="entity-campus"
+              className="mb-1.5 block text-sm font-medium text-text-primary"
+            >
+              Campus
+            </label>
+            <select
+              id="entity-campus"
+              value={form.campusId}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  campusId: event.target.value,
+                }))
+              }
+              className="w-full rounded-lg border border-slate-300 bg-background px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+            >
+              {campuses.length === 0 ? (
+                <option value="1">Lahore</option>
+              ) : (
+                campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>
+                    {campus.name}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

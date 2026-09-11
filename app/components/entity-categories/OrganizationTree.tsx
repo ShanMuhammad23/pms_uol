@@ -19,15 +19,22 @@ import {
   type MultiFilterSelection,
 } from "@/app/helpers/dashboard-entity-filters";
 import { queryKeys } from "@/app/queries/keys";
+import { useCampusesQuery } from "@/app/queries/users";
 import { fetchEntityCategories } from "@/lib/queries/entity-categories-client";
 import { fetchEntities } from "@/lib/queries/entities-client";
 import { cn } from "@/lib/utils";
+import type { CampusRecord } from "@/types/campuses";
 import type { EntityRecord } from "@/types/entities";
 import type { EntityCategoryCode } from "@/types/entity-categories";
 
 type EntityTreeNode = EntityRecord & {
   children: EntityTreeNode[];
 };
+
+interface CampusTreeNode {
+  campus: CampusRecord;
+  entities: EntityTreeNode[];
+}
 
 /** Org levels flow top-down: C0 → C1 → C2 → C3 */
 const CATEGORY_RANK: Record<string, number> = {
@@ -64,6 +71,12 @@ const CATEGORY_COLORS: Record<
 };
 
 const LINE = "border-slate-300 dark:border-slate-600";
+
+const CAMPUS_COLORS = {
+  fill: "bg-amber-100 dark:bg-amber-950/50",
+  text: "text-amber-900 dark:text-amber-100",
+  ring: "ring-amber-300/60 dark:ring-amber-700/40",
+};
 
 function compareEntityNodes(a: EntityTreeNode, b: EntityTreeNode): number {
   const rankA = CATEGORY_RANK[a.categoryCode] ?? 99;
@@ -217,6 +230,49 @@ function EntityCard({
   );
 }
 
+function CampusCard({
+  campus,
+  entityCount,
+  expanded,
+  onToggle,
+}: {
+  campus: CampusRecord;
+  entityCount: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={campus.name}
+      className={cn(
+        "relative z-10 flex w-44 shrink-0 items-start gap-1 rounded-md px-2.5 py-2 text-left ring-1 transition-colors",
+        CAMPUS_COLORS.fill,
+        CAMPUS_COLORS.text,
+        CAMPUS_COLORS.ring,
+        "cursor-pointer hover:brightness-[0.98] dark:hover:brightness-110",
+      )}
+    >
+      <span className="mt-0.5 shrink-0 opacity-80">
+        {expanded ? (
+          <ChevronDown className="size-3" />
+        ) : (
+          <ChevronRight className="size-3" />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-semibold leading-tight">
+          {campus.name}
+        </span>
+        <span className="mt-px block text-[9px] font-medium leading-tight opacity-80">
+          Campus · {entityCount} {entityCount === 1 ? "entity" : "entities"}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 /**
  * Classic org-chart branch: parent on top, children below joined by
  * vertical + horizontal connector lines.
@@ -333,10 +389,62 @@ function OrgTreeRoot({
   );
 }
 
+function CampusTreeBranch({
+  campus,
+  entityTree,
+  expandedIds,
+  onToggle,
+  isCampusExpanded,
+  onToggleCampus,
+}: {
+  campus: CampusRecord;
+  entityTree: EntityTreeNode[];
+  expandedIds: Set<number>;
+  onToggle: (id: number) => void;
+  isCampusExpanded: boolean;
+  onToggleCampus: () => void;
+}) {
+  return (
+    <li className="relative flex list-none flex-col items-center px-2">
+      <CampusCard
+        campus={campus}
+        entityCount={entityTree.length}
+        expanded={isCampusExpanded}
+        onToggle={onToggleCampus}
+      />
+
+      {isCampusExpanded ? (
+        <>
+          <span
+            aria-hidden
+            className={cn("mt-0 block h-4 w-px border-l", LINE)}
+          />
+          <ul
+            className="relative flex list-none flex-wrap items-start justify-center gap-x-10 gap-y-12 p-0"
+            role="group"
+          >
+            {entityTree.map((root) => (
+              <OrgTreeRoot
+                key={root.id}
+                root={root}
+                expandedIds={expandedIds}
+                onToggle={onToggle}
+              />
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </li>
+  );
+}
+
 export default function OrganizationTree() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
+  const [expandedCampusIds, setExpandedCampusIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const treeSignatureRef = useRef<string>("");
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -359,6 +467,8 @@ export default function OrganizationTree() {
     queryKey: queryKeys.entities,
     queryFn: fetchEntities,
   });
+
+  const { data: campuses = [] } = useCampusesQuery();
 
   const categoryEntities = useMemo(
     () => getEntitiesForCategoryCode(entities ?? [], selectedCategoryCode),
@@ -480,6 +590,22 @@ export default function OrganizationTree() {
 
   const tree = useMemo(() => buildEntityTree(treeEntities), [treeEntities]);
 
+  // Group entity tree roots by campus
+  const campusTree = useMemo<CampusTreeNode[]>(() => {
+    if (campuses.length === 0) return [];
+    const byCampusId = new Map<number, EntityTreeNode[]>();
+    for (const node of tree) {
+      const campusId = node.campusId ?? 1;
+      const list = byCampusId.get(campusId) ?? [];
+      list.push(node);
+      byCampusId.set(campusId, list);
+    }
+    return campuses.map((campus) => ({
+      campus,
+      entities: byCampusId.get(campus.id) ?? [],
+    }));
+  }, [tree, campuses]);
+
   // Expand the visible forest when it changes. With filters active, expand every
   // ancestor path so matches stay linked under their parents up to C0.
   useEffect(() => {
@@ -493,10 +619,20 @@ export default function OrganizationTree() {
         ? collectExpandableIds(tree)
         : new Set(tree.map((root) => root.id)),
     );
-  }, [tree, treeEntities.length, hasActiveFilters]);
+    setExpandedCampusIds(new Set(campuses.map((c) => c.id)));
+  }, [tree, treeEntities.length, hasActiveFilters, campuses]);
 
   const handleToggle = useCallback((id: number) => {
     setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleToggleCampus = useCallback((id: number) => {
+    setExpandedCampusIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -643,14 +779,31 @@ export default function OrganizationTree() {
             }}
           >
             <div className="flex flex-wrap items-start justify-center gap-x-10 gap-y-12">
-              {tree.map((root) => (
-                <OrgTreeRoot
-                  key={root.id}
-                  root={root}
-                  expandedIds={expandedIds}
-                  onToggle={handleToggle}
-                />
-              ))}
+              {campusTree.length > 0
+                ? campusTree.map(({ campus, entities: campusEntities }) => (
+                    <ul
+                      key={campus.id}
+                      className="m-0 flex list-none justify-center p-0"
+                      role="tree"
+                    >
+                      <CampusTreeBranch
+                        campus={campus}
+                        entityTree={campusEntities}
+                        expandedIds={expandedIds}
+                        onToggle={handleToggle}
+                        isCampusExpanded={expandedCampusIds.has(campus.id)}
+                        onToggleCampus={() => handleToggleCampus(campus.id)}
+                      />
+                    </ul>
+                  ))
+                : tree.map((root) => (
+                    <OrgTreeRoot
+                      key={root.id}
+                      root={root}
+                      expandedIds={expandedIds}
+                      onToggle={handleToggle}
+                    />
+                  ))}
             </div>
           </div>
         ) : null}

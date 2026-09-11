@@ -70,7 +70,6 @@ interface EntityCountRow {
  */
 export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   const entities = await listEntities();
-
   // Get the default appraisal cycle id and active financial year.
   const defaultCycle = await getDefaultAppraisalCycle();
   const cycleId = defaultCycle?.id ?? null;

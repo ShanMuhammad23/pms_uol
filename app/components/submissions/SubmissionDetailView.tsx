@@ -66,7 +66,7 @@ import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScor
 import QuartileBadge from "@/app/components/dashboard/QuartileBadge";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
-import { AlertTriangle, ArrowLeft, RotateCcw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 interface SubmissionDetailViewProps {
@@ -723,6 +723,8 @@ export default function SubmissionDetailView({
   const [initialDraftsSnapshot, setInitialDraftsSnapshot] = useState<
     Map<number, ManagerDraft>
   >(new Map());
+  const [initialAuthoredDraftsSnapshot, setInitialAuthoredDraftsSnapshot] =
+    useState<AuthoredDraftState>({});
   const [manager1OverallRemarks, setManager1OverallRemarks] = useState<string>("");
   const [manager2OverallRemarks, setManager2OverallRemarks] = useState<string>("");
   const [initialOverallRemarks, setInitialOverallRemarks] = useState<{
@@ -767,7 +769,9 @@ export default function SubmissionDetailView({
         ),
       );
       // Initialize authored drafts for open-assessment sections.
-      setAuthoredDrafts(buildInitialAuthoredDrafts(data));
+      const initialAuthored = buildInitialAuthoredDrafts(data);
+      setAuthoredDrafts(initialAuthored);
+      setInitialAuthoredDraftsSnapshot(initialAuthored);
       const m1Remarks = data.manager1OverallRemarks ?? "";
       const m2Remarks = data.manager2OverallRemarks ?? "";
       setManager1OverallRemarks(m1Remarks);
@@ -802,6 +806,9 @@ export default function SubmissionDetailView({
     onSuccess: (result) => {
       toast.success("Manager review saved.");
       setIncompleteQuestionIds(new Set());
+      // Snapshot the authored drafts as the new "initial" state so
+      // hasUnsavedChanges doesn't keep reporting after a save.
+      setInitialAuthoredDraftsSnapshot(authoredDraftsRef.current);
       queryClient.setQueryData<FormSubmissionDetail>(["form-submission", submissionId], (current) => {
         if (!current || typeof current !== "object") return current;
         const managerLevel =
@@ -1073,6 +1080,24 @@ export default function SubmissionDetailView({
       if (initial.ratingValue !== draft.ratingValue) return true;
       if (initial.remarks !== draft.remarks) return true;
     }
+    // Check authored drafts for open-assessment sections.
+    const authoredKeys = new Set<string>([
+      ...Object.keys(authoredDrafts),
+      ...Object.keys(initialAuthoredDraftsSnapshot),
+    ]);
+    for (const key of authoredKeys) {
+      const numKey = Number(key);
+      const current = authoredDrafts[numKey] ?? [];
+      const initial = initialAuthoredDraftsSnapshot[numKey] ?? [];
+      if (current.length !== initial.length) return true;
+      for (let i = 0; i < current.length; i++) {
+        if (current[i].authoredQuestionText !== initial[i].authoredQuestionText) return true;
+        if (current[i].authoredTotalMarks !== initial[i].authoredTotalMarks) return true;
+        if (current[i].pointsEarned !== initial[i].pointsEarned) return true;
+        if (current[i].ratingValue !== initial[i].ratingValue) return true;
+        if (current[i].remarks !== initial[i].remarks) return true;
+      }
+    }
     // Check overall remarks for unsaved changes
     if ((data?.additionalRemarksEnabled ?? false) && data?.canEditManagerReview) {
       if (currentManagerLevel === 1 && manager1OverallRemarks !== initialOverallRemarks.manager1) {
@@ -1083,7 +1108,7 @@ export default function SubmissionDetailView({
       }
     }
     return false;
-  }, [editingHr, data?.canEditManagerReview, managerDrafts, initialDraftsSnapshot, data?.additionalRemarksEnabled, currentManagerLevel, manager1OverallRemarks, manager2OverallRemarks, initialOverallRemarks]);
+  }, [editingHr, data?.canEditManagerReview, managerDrafts, initialDraftsSnapshot, authoredDrafts, initialAuthoredDraftsSnapshot, data?.additionalRemarksEnabled, currentManagerLevel, manager1OverallRemarks, manager2OverallRemarks, initialOverallRemarks]);
 
   const cancelEditing = useCallback(() => {
     setManagerDrafts(
@@ -1094,10 +1119,11 @@ export default function SubmissionDetailView({
         ]),
       ),
     );
+    setAuthoredDrafts(initialAuthoredDraftsSnapshot);
     setManager1OverallRemarks(initialOverallRemarks.manager1);
     setManager2OverallRemarks(initialOverallRemarks.manager2);
     setIncompleteQuestionIds(new Set());
-  }, [initialDraftsSnapshot, initialOverallRemarks]);
+  }, [initialDraftsSnapshot, initialAuthoredDraftsSnapshot, initialOverallRemarks]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -1299,6 +1325,36 @@ export default function SubmissionDetailView({
         [sectionId]: existing.map((d) =>
           d.clientId === clientId ? { ...d, [field]: value } : d,
         ),
+      };
+    });
+  };
+
+  const addAuthoredRow = (sectionId: number) => {
+    setAuthoredDrafts((current) => {
+      const existing = current[sectionId] ?? [];
+      return {
+        ...current,
+        [sectionId]: [
+          ...existing,
+          {
+            clientId: nextAuthoredClientId(),
+            authoredQuestionText: "",
+            authoredTotalMarks: "",
+            pointsEarned: "",
+            ratingValue: "",
+            remarks: "",
+          },
+        ],
+      };
+    });
+  };
+
+  const removeAuthoredRow = (sectionId: number, clientId: string) => {
+    setAuthoredDrafts((current) => {
+      const existing = current[sectionId] ?? [];
+      return {
+        ...current,
+        [sectionId]: existing.filter((d) => d.clientId !== clientId),
       };
     });
   };
@@ -1786,8 +1842,26 @@ export default function SubmissionDetailView({
                             ? "bg-white dark:bg-slate-900/40"
                             : "bg-slate-50/60 dark:bg-slate-800/20"
                         )}>
-                          <td colSpan={colSpan} className="px-4 py-3 text-xs italic text-slate-400">
-                            No questions were authored for this section.
+                          <td colSpan={colSpan} className="px-4 py-3">
+                            {canEdit ? (
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => addAuthoredRow(sectionId)}
+                                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-primary/90"
+                                >
+                                  <Plus className="size-3" />
+                                  Add Question
+                                </button>
+                                <span className="text-xs text-slate-400">
+                                  Click "Add Question" to author a question for this open assessment section.
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs italic text-slate-400">
+                                No questions were authored for this section.
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ) : (
@@ -1798,6 +1872,7 @@ export default function SubmissionDetailView({
                           const selfAns = findMatch(employeeAuthored, q.text, qIdx);
                           const m1Ans = findMatch(mgr1Authored, q.text, qIdx);
                           const m2Ans = findMatch(mgr2Authored, q.text, qIdx);
+                          const isNewDraft = canEdit && draft && !draft.authoredQuestionText && !draft.authoredTotalMarks;
                           return (
                             <tr
                               key={`open-${row.sr}-${qIdx}`}
@@ -1812,12 +1887,58 @@ export default function SubmissionDetailView({
                                 {row.sr}.{qIdx + 1}
                               </td>
                               <td className="border-r border-slate-100 px-3 py-2.5 dark:border-slate-700/40">
-                                <p className="max-w-112.5 wrap-break-word whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
-                                  {q.text || "—"}
-                                </p>
+                                {canEdit && draft ? (
+                                  <div className="flex items-start gap-1.5">
+                                    <textarea
+                                      value={draft.authoredQuestionText}
+                                      rows={2}
+                                      onChange={(e) =>
+                                        updateAuthoredDraft(
+                                          sectionId,
+                                          draft.clientId,
+                                          "authoredQuestionText",
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="Enter question text..."
+                                      className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => removeAuthoredRow(sectionId, draft.clientId)}
+                                      className="mt-0.5 inline-flex shrink-0 items-center justify-center rounded border border-red-300 px-1.5 py-1 text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+                                      title="Remove question"
+                                    >
+                                      <Trash2 className="size-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <p className="max-w-112.5 wrap-break-word whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
+                                    {q.text || "—"}
+                                  </p>
+                                )}
                               </td>
                               <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300">
-                                {maxMarks || "—"}
+                                {canEdit && draft ? (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step="0.5"
+                                    value={draft.authoredTotalMarks}
+                                    onChange={(e) =>
+                                      updateAuthoredDraft(
+                                        sectionId,
+                                        draft.clientId,
+                                        "authoredTotalMarks",
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-semibold tabular-nums text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                    placeholder="0"
+                                  />
+                                ) : (
+                                  maxMarks || "—"
+                                )}
                               </td>
                               {/* Self Assessment columns */}
                               {selfAssessmentEnabled ? (
@@ -1920,6 +2041,20 @@ export default function SubmissionDetailView({
                           );
                         })
                       )}
+                      {canEdit && canonicalQuestions.length > 0 ? (
+                        <tr className="border-b border-slate-100 dark:border-slate-700/40">
+                          <td colSpan={colSpan} className="px-4 py-2">
+                            <button
+                              type="button"
+                              onClick={() => addAuthoredRow(sectionId)}
+                              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-primary/90"
+                            >
+                              <Plus className="size-3" />
+                              Add Question
+                            </button>
+                          </td>
+                        </tr>
+                      ) : null}
                     </Fragment>
                   );
                 }

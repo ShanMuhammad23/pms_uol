@@ -1,16 +1,18 @@
 "use client";
 
-import { Building2, List, Network } from "lucide-react";
+import { Building2, List, Network, Plus } from "lucide-react";
 import { useState } from "react";
+import CampusesManager from "./CampusesManager";
 import EntitiesManager from "./EntitiesManager";
 import EntityCategoriesManager from "./EntityCategoriesManager";
 import OrganizationTree from "./OrganizationTree";
 
-type TabId = "categories" | "entities" | "tree";
+type TabId = "categories" | "entities" | "tree" | "campuses";
 
 const tabs: Array<{ id: TabId; label: string; icon: typeof List }> = [
   { id: "categories", label: "Level Categories", icon: List },
   { id: "entities", label: "Organization Levels", icon: Building2 },
+  { id: "campuses", label: "Campuses", icon: Plus },
   { id: "tree", label: "Organization Tree", icon: Network },
 ];
 
@@ -50,6 +52,7 @@ export default function EntityStructureTabs() {
 
       {activeTab === "categories" ? <EntityCategoriesManager /> : null}
       {activeTab === "entities" ? <EntitiesManager /> : null}
+      {activeTab === "campuses" ? <CampusesManager /> : null}
       {activeTab === "tree" ? <OrganizationTree /> : null}
     </div>
   );

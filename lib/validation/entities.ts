@@ -20,6 +20,24 @@ function parseOptionalParentId(value: unknown): number | null | undefined {
   return parentId;
 }
 
+function parseOptionalCampusId(value: unknown): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  const campusId = Number(value);
+
+  if (!Number.isInteger(campusId) || campusId <= 0) {
+    return Number.NaN;
+  }
+
+  return campusId;
+}
+
 export function validateCreateEntityInput(body: unknown): string | null {
   if (!body || typeof body !== "object") {
     return "Request body is required.";
@@ -47,6 +65,12 @@ export function validateCreateEntityInput(body: unknown): string | null {
     return "Parent entity id must be a positive integer or null.";
   }
 
+  const campusId = parseOptionalCampusId(input.campusId);
+
+  if (campusId !== undefined && Number.isNaN(campusId)) {
+    return "Campus id must be a positive integer or null.";
+  }
+
   return null;
 }
 
@@ -57,13 +81,16 @@ export function validateUpdateEntityInput(body: unknown): string | null {
 export function normalizeEntityInput(body: CreateEntityInput): {
   name: string;
   entityCategoryId: number;
+  campusId: number | null;
   parentEntityId: number | null;
 } {
   const parentEntityId = parseOptionalParentId(body.parentEntityId);
+  const campusId = parseOptionalCampusId(body.campusId);
 
   return {
     name: body.name.trim(),
     entityCategoryId: Number(body.entityCategoryId),
+    campusId: campusId ?? null,
     parentEntityId: parentEntityId ?? null,
   };
 }

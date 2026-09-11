@@ -62,6 +62,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   const [chartsVisible, setChartsVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const {
+    selectedCampusId,
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
@@ -69,6 +70,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     selectedDesignations,
     selectedFormStates,
     selectedCardFilter,
+    campusOptions,
     category0Options,
     category0DistributionOptions,
     category1Options,
@@ -82,6 +84,7 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
     filterParams,
     performanceMatrixLoading,
     activeFilters,
+    handleCampusChange,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,
     handleCategory1EntityChange,
@@ -173,6 +176,11 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
 
       <div className="mx-auto w-full max-w-full min-w-0">
         <DashboardFilterBar
+          selectedCampusId={
+            selectedCampusId != null ? [String(selectedCampusId)] : null
+          }
+          onCampusChange={handleCampusChange}
+          campusOptions={campusOptions}
           selectedCategory0EntityIds={selectedCategory0EntityIds}
           onCategory0EntityChange={handleCategory0EntityChange}
           selectedCategory1EntityIds={selectedCategory1EntityIds}
