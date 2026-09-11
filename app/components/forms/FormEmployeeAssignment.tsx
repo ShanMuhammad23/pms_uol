@@ -46,7 +46,8 @@ type MultiFilterId =
   | "manager2Name"
   | "assignmentStatus"
   | "assessmentEligibility"
-  | "selfAssessment";
+  | "selfAssessment"
+  | "assignedForm";
 
 type TextFilterId = "employeeId" | "name";
 
@@ -59,6 +60,7 @@ type FilterState = {
 
 const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
   { id: "assignmentStatus", label: "Assignment Status" },
+  { id: "assignedForm", label: "Assigned Form" },
   { id: "assessmentEligibility", label: "Eligibility" },
   { id: "entityName", label: "Org Level" },
   { id: "designation", label: "Designation" },
@@ -72,6 +74,7 @@ const EMPTY_FILTERS: FilterState = {
   text: {},
   multi: {
     assignmentStatus: null,
+    assignedForm: null,
     assessmentEligibility: null,
     entityName: null,
     designation: null,
@@ -126,16 +129,30 @@ function getSelfAssessmentLabel(
   return disabledMap.get(user.employeeId) ? "Disabled" : "Enabled";
 }
 
+/**
+ * Returns the title of the form currently assigned to the employee — whether
+ * it's the current template or a different one. Combines the assignment list
+ * (for the current form) with submissions data (for other forms).
+ */
+function getAssignedFormLabel(
+  user: UserRecord,
+  assignedFormMap: Map<string, string>,
+): string {
+  return assignedFormMap.get(user.employeeId) ?? "None";
+}
+
 function getFilterValue(
   user: UserRecord,
   field: UserColumnId,
   assignedIds: Set<string>,
   eligibilityOverride: Map<string, string>,
   disabledMap: Map<string, boolean>,
+  assignedFormMap: Map<string, string>,
 ): string {
   if (field === "assignmentStatus") return getAssignmentStatus(user, assignedIds);
   if (field === "assessmentEligibility") return getEligibilityLabel(user, eligibilityOverride);
   if (field === "selfAssessment") return getSelfAssessmentLabel(user, assignedIds, disabledMap);
+  if (field === "assignedForm") return getAssignedFormLabel(user, assignedFormMap);
   if (field === "employeeId") return user.employeeId;
   if (field === "name") return `${user.firstName} ${user.lastName}`.trim();
   return String(user[field] ?? "—");
@@ -154,6 +171,7 @@ function userMatchesFiltersExcluding(
   assignedEmployeeIds: Set<string>,
   eligibilityOverride: Map<string, string>,
   disabledMap: Map<string, boolean>,
+  assignedFormMap: Map<string, string>,
   excludeField: UserColumnId | null,
 ): boolean {
   for (const id of ["employeeId", "name"] as const) {
@@ -166,6 +184,7 @@ function userMatchesFiltersExcluding(
       assignedEmployeeIds,
       eligibilityOverride,
       disabledMap,
+      assignedFormMap,
     );
     if (!matchesTextQuery(value, query)) return false;
   }
@@ -181,6 +200,7 @@ function userMatchesFiltersExcluding(
       assignedEmployeeIds,
       eligibilityOverride,
       disabledMap,
+      assignedFormMap,
     );
     if (!sel.includes(val)) return false;
   }
@@ -195,6 +215,7 @@ function buildOptions(
   assignedEmployeeIds: Set<string>,
   eligibilityOverride: Map<string, string>,
   disabledMap: Map<string, boolean>,
+  assignedFormMap: Map<string, string>,
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 
@@ -206,6 +227,7 @@ function buildOptions(
         assignedEmployeeIds,
         eligibilityOverride,
         disabledMap,
+        assignedFormMap,
         field,
       )
     ) {
@@ -218,6 +240,7 @@ function buildOptions(
       assignedEmployeeIds,
       eligibilityOverride,
       disabledMap,
+      assignedFormMap,
     );
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
@@ -245,6 +268,7 @@ function userMatchesFilters(
   assignedEmployeeIds: Set<string>,
   eligibilityOverride: Map<string, string>,
   disabledMap: Map<string, boolean>,
+  assignedFormMap: Map<string, string>,
 ): boolean {
   return userMatchesFiltersExcluding(
     user,
@@ -252,6 +276,7 @@ function userMatchesFilters(
     assignedEmployeeIds,
     eligibilityOverride,
     disabledMap,
+    assignedFormMap,
     null,
   );
 }
@@ -335,6 +360,25 @@ export default function FormEmployeeAssignment({
     return map;
   }, [assignedEmployees]);
 
+  // Build employeeId → assigned form title map. Shows the actual form each
+  // employee is assigned to — whether it's the current template (from the
+  // assignment list) or a different one (from submissions). Employees with no
+  // form at all get "None".
+  const assignedFormMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const sub of submissions ?? []) {
+      if (sub.templateId != null) {
+        map.set(sub.employeeId, sub.templateTitle?.trim() || `Form #${sub.templateId}`);
+      }
+    }
+    for (const e of assignedEmployees ?? []) {
+      if (!map.has(e.employeeId)) {
+        map.set(e.employeeId, templateTitle);
+      }
+    }
+    return map;
+  }, [submissions, assignedEmployees, templateTitle]);
+
   const optionsByFilter = useMemo(() => {
     const map = new Map<MultiFilterId, MultiSelectOption[]>();
     for (const f of FILTER_CONFIG) {
@@ -348,6 +392,7 @@ export default function FormEmployeeAssignment({
           assignedEmployeeIds,
           eligibilityOverride,
           assignedSelfAssessmentDisabled,
+          assignedFormMap,
         ),
       );
     }
@@ -358,6 +403,7 @@ export default function FormEmployeeAssignment({
     assignedEmployeeIds,
     eligibilityOverride,
     assignedSelfAssessmentDisabled,
+    assignedFormMap,
   ]);
 
   const filteredUsers = useMemo(() => {
@@ -370,6 +416,7 @@ export default function FormEmployeeAssignment({
           assignedEmployeeIds,
           eligibilityOverride,
           assignedSelfAssessmentDisabled,
+          assignedFormMap,
         )
       ) {
         return false;
@@ -388,6 +435,7 @@ export default function FormEmployeeAssignment({
     assignedEmployeeIds,
     eligibilityOverride,
     assignedSelfAssessmentDisabled,
+    assignedFormMap,
   ]);
 
   const filteredAssignedEmployeeIds = useMemo(
@@ -665,6 +713,13 @@ export default function FormEmployeeAssignment({
       width: 110,
       mode: "multi",
       getValue: (u) => getEligibilityLabel(u, eligibilityOverride),
+    },
+    {
+      id: "assignedForm",
+      label: "Assigned Form",
+      width: 200,
+      mode: "multi",
+      getValue: (u) => getAssignedFormLabel(u, assignedFormMap),
     },
     {
       id: "assignmentStatus",
