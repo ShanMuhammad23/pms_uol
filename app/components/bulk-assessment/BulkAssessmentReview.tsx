@@ -531,15 +531,26 @@ export default function BulkAssessmentReview({
     totalQuestions,
   ]);
 
-  const handleFinishClick = useCallback(() => {
+  const handleFinishClick = useCallback(async () => {
     if (currentQuestion?.isRequired && missingScores.size > 0) {
       toast.error(
         missingBulkScoreMessage(missingScores.size, currentQuestionIsRating),
       );
       return;
     }
+    // Save the current question's scores before opening the finish dialog.
+    // Without this, the last question's scores are never persisted and the
+    // server-side approval validation rejects the submission as incomplete.
+    if (modifiedRows.size > 0) {
+      try {
+        await saveMutation.mutateAsync();
+      } catch {
+        // Error toast is already shown by the mutation's onError handler.
+        return;
+      }
+    }
     setFinishDialogOpen(true);
-  }, [currentQuestion, currentQuestionIsRating, missingScores.size]);
+  }, [currentQuestion, currentQuestionIsRating, missingScores.size, modifiedRows.size, saveMutation]);
 
   /* -------------------------------------------------------------------------- */
   /* Render                                                                      */
