@@ -109,7 +109,8 @@ function buildInitialAuthoredDrafts(
 
   for (const section of openSections) {
     // For the current reviewer, seed from their own previously-saved authored
-    // answers first, falling back to the prior manager's answers.
+    // answers first, falling back to the prior manager's answers for question
+    // text/marks/scores only — remarks are never copied from the prior stage.
     const ownAuthored = (data.managerAuthoredAnswers ?? []).filter(
       (a) => a.openSectionId === section.id,
     );
@@ -119,6 +120,7 @@ function buildInitialAuthoredDrafts(
             (a) => a.openSectionId === section.id,
           )
         : [];
+    const usingPrior = ownAuthored.length === 0 && priorAuthored.length > 0;
     const source = ownAuthored.length > 0 ? ownAuthored : priorAuthored;
 
     state[section.id] = source.map((a) => ({
@@ -127,7 +129,9 @@ function buildInitialAuthoredDrafts(
       authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
       pointsEarned: String(a.pointsEarned ?? 0),
       ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
-      remarks: a.remarks ?? "",
+      // Never copy remarks from the prior manager — each reviewer writes
+      // their own remarks.
+      remarks: usingPrior ? "" : (a.remarks ?? ""),
     }));
   }
 
@@ -2221,9 +2225,9 @@ export default function SubmissionDetailView({
                               />
                             ) : hideMgr1Remarks ? (
                               <span className="text-slate-400" title="Remarks not shared with next reviewer">—</span>
-                            ) : mgr1Display?.remarks?.trim() ? (
+                            ) : mgr1Answer?.remarks?.trim() ? (
                               <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
-                                {mgr1Display.remarks}
+                                {mgr1Answer.remarks}
                               </p>
                             ) : (
                               <span className="text-slate-400">—</span>
@@ -2277,9 +2281,9 @@ export default function SubmissionDetailView({
                                     className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                                     placeholder="Optional remarks"
                                   />
-                                ) : mgr2Display?.remarks?.trim() ? (
+                                ) : mgr2Answer?.remarks?.trim() ? (
                                   <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
-                                    {mgr2Display.remarks}
+                                    {mgr2Answer.remarks}
                                   </p>
                                 ) : (
                                   <span className="text-slate-400">—</span>
