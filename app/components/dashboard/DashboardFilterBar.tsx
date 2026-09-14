@@ -178,7 +178,7 @@ export function DashboardFilterBar({
                 >
                   {campusOptions.length > 1 && onCampusChange ? (
                     <MultiSelectFilterDropdown
-                      label="Campus"
+                      label="Site"
                       icon={Building2}
                       options={campusOptions}
                       selectedValues={selectedCampusId}

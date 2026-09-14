@@ -17,7 +17,7 @@ export const GET = apiHandler(async () => {
   } catch (error) {
     console.error("Failed to list campuses:", error);
     return NextResponse.json(
-      { error: "Failed to load campuses." },
+      { error: "Failed to load sites." },
       { status: 500 },
     );
   }
@@ -36,14 +36,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
     if (!name) {
       return NextResponse.json(
-        { error: "Campus name is required." },
+        { error: "Site name is required." },
         { status: 400 },
       );
     }
 
     if (!code) {
       return NextResponse.json(
-        { error: "Campus code is required." },
+        { error: "Site code is required." },
         { status: 400 },
       );
     }
@@ -59,7 +59,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
     console.error("Failed to create campus:", error);
     return NextResponse.json(
-      { error: "Failed to create campus." },
+      { error: "Failed to create site." },
       { status: 500 },
     );
   }

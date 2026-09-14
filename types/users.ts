@@ -41,6 +41,8 @@ export interface UserRecord {
   entityId: number | null;
   entityName: string | null;
   parentEntityName: string | null;
+  /** Site/campus name derived from the user's entity's campus_id. */
+  campusName: string | null;
   headId: number | null;
   headName: string | null;
   /** Manager 2 — second-level appraisal reviewer (editable per user). */

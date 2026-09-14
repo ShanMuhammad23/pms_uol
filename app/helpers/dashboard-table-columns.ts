@@ -62,6 +62,7 @@ export type DashboardTableColumnId =
   | "formAssignment"
   | "designation"
   | "roleCategory"
+  | "site"
   | "facultyName"
   | "deptGroupName"
   | "dateOfJoining"
@@ -134,6 +135,7 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
       "formAssignment",
       "designation",
       "roleCategory",
+      "site",
       "facultyName",
       "deptGroupName",
       "dateOfJoining",
@@ -295,6 +297,13 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     width: 100,
     wrap: true,
     getValue: (row) => formatNullable(row.roleCategory),
+  },
+  site: {
+    id: "site",
+    label: "Site",
+    width: 100,
+    wrap: true,
+    getValue: (row) => formatNullable(row.campusName),
   },
   facultyName: {
     id: "facultyName",

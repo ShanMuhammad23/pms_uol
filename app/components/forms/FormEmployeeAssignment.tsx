@@ -40,6 +40,7 @@ interface FormEmployeeAssignmentProps {
 
 type MultiFilterId =
   | "entityName"
+  | "site"
   | "designation"
   | "roleCategory"
   | "headName"
@@ -63,6 +64,7 @@ const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
   { id: "assignedForm", label: "Assigned Form" },
   { id: "assessmentEligibility", label: "Eligibility" },
   { id: "entityName", label: "Org Level" },
+  { id: "site", label: "Site" },
   { id: "designation", label: "Designation" },
   { id: "roleCategory", label: "Role Category" },
   { id: "headName", label: "Manager 1" },
@@ -77,6 +79,7 @@ const EMPTY_FILTERS: FilterState = {
     assignedForm: null,
     assessmentEligibility: null,
     entityName: null,
+    site: null,
     designation: null,
     roleCategory: null,
     headName: null,
@@ -155,6 +158,7 @@ function getFilterValue(
   if (field === "assignedForm") return getAssignedFormLabel(user, assignedFormMap);
   if (field === "employeeId") return user.employeeId;
   if (field === "name") return `${user.firstName} ${user.lastName}`.trim();
+  if (field === "site") return user.campusName ?? "—";
   return String(user[field] ?? "—");
 }
 
@@ -704,6 +708,7 @@ export default function FormEmployeeAssignment({
     { id: "name", label: "Employee Name", width: 200, mode: "text", getValue: (u) => `${u.firstName} ${u.lastName}`.trim() },
     { id: "designation", label: "Designation", width: 180, mode: "multi", getValue: (u) => u.designation ?? "—" },
     { id: "entityName", label: "Org Level", width: 160, mode: "multi", getValue: (u) => u.entityName ?? "—" },
+    { id: "site", label: "Site", width: 120, mode: "multi", getValue: (u) => u.campusName ?? "—" },
     { id: "roleCategory", label: "Role Category", width: 150, mode: "multi", getValue: (u) => u.roleCategory ?? "—" },
     { id: "headName", label: "Manager 1", width: 160, mode: "multi", getValue: (u) => u.headName ?? "—" },
     { id: "manager2Name", label: "Manager 2", width: 160, mode: "multi", getValue: (u) => u.manager2Name ?? "—" },

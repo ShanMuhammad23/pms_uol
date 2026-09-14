@@ -47,7 +47,7 @@ async function hasUsersEntityColumn(): Promise<boolean> {
   return cachedUsersEntityColumn;
 }
 
-async function hasEntitiesCampusColumn(): Promise<boolean> {
+export async function hasEntitiesCampusColumn(): Promise<boolean> {
   if (cachedEntitiesCampusColumn !== null) {
     return cachedEntitiesCampusColumn;
   }

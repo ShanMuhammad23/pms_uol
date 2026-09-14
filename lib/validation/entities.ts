@@ -68,7 +68,7 @@ export function validateCreateEntityInput(body: unknown): string | null {
   const campusId = parseOptionalCampusId(input.campusId);
 
   if (campusId !== undefined && Number.isNaN(campusId)) {
-    return "Campus id must be a positive integer or null.";
+    return "Site id must be a positive integer or null.";
   }
 
   return null;

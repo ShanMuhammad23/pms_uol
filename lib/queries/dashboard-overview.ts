@@ -167,6 +167,7 @@ function mapOverviewRow(
     directScoreEntry: Boolean(row.direct_score_entry),
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: null,
+    campusName: null,
     parentEntityName: row.parent_entity_name,
     orgLevel1Name: null,
     orgLevel2Name: null,

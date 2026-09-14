@@ -82,7 +82,7 @@ export async function createCampus(input: CreateCampusInput): Promise<CampusReco
     if (error instanceof CampusError) throw error;
     const code = (error as { code?: string }).code;
     if (code === "23505") {
-      throw new CampusError("A campus with this name or code already exists.", 409);
+      throw new CampusError("A site with this name or code already exists.", 409);
     }
     throw error;
   }
@@ -100,13 +100,13 @@ export async function updateCampus(
       [input.name.trim(), input.code.trim().toUpperCase(), input.isActive ?? true, id],
     );
     const updated = await getCampusById(id);
-    if (!updated) throw new CampusError("Campus not found.", 404);
+    if (!updated) throw new CampusError("Site not found.", 404);
     return updated;
   } catch (error) {
     if (error instanceof CampusError) throw error;
     const code = (error as { code?: string }).code;
     if (code === "23505") {
-      throw new CampusError("A campus with this name or code already exists.", 409);
+      throw new CampusError("A site with this name or code already exists.", 409);
     }
     throw error;
   }

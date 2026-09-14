@@ -13,6 +13,7 @@ import {
 } from "@/types/users";
 import { fetchFormTemplatesForDashboard } from "@/lib/queries/forms-client";
 import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
+import { useCampusesQuery } from "@/app/queries/users";
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { SearchableManagerSelect } from "@/app/components/users/SearchableManagerSelect";
 import { RoleAccessSelect } from "@/app/components/users/RoleAccessSelect";
@@ -94,6 +95,7 @@ export function EditUserModal({
   onSubmit,
 }: EditUserModalProps) {
   const [form, setForm] = useState<EditUserFormState | null>(null);
+  const [selectedCampusId, setSelectedCampusId] = useState<string>("");
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<number>>(new Set());
   const [initialTemplateIds, setInitialTemplateIds] = useState<Set<number>>(new Set());
   const [additionalAccess, setAdditionalAccess] = useState<Record<AdditionalAccessModule, AdditionalAccessLevel | null>>(
@@ -116,12 +118,21 @@ export function EditUserModal({
     enabled: open && !!user?.employeeId,
   });
 
+  const { data: campuses = [] } = useCampusesQuery();
+
   const seedKey = open && user ? `${user.id}:${assignedFormsData?.forms.map((form) => form.templateId).join(",") ?? ""}` : "closed";
   const [prevSeedKey, setPrevSeedKey] = useState(seedKey);
   if (seedKey !== prevSeedKey) {
     setPrevSeedKey(seedKey);
     if (open && user) {
       setForm(toFormState(user));
+      // Set the site dropdown to the user's entity's campus.
+      const userEntity = entities.find(
+        (entity) => entity.id === user.entityId,
+      );
+      setSelectedCampusId(
+        userEntity?.campusId != null ? String(userEntity.campusId) : "",
+      );
       const assignedIds = new Set(
         (assignedFormsData?.forms ?? []).map((f) => f.templateId),
       );
@@ -129,6 +140,7 @@ export function EditUserModal({
       setInitialTemplateIds(assignedIds);
     } else if (!open) {
       setForm(null);
+      setSelectedCampusId("");
       setSelectedTemplateIds(new Set());
       setInitialTemplateIds(new Set());
       setAdditionalAccess(
@@ -183,13 +195,28 @@ export function EditUserModal({
 
   const entityOptions = useMemo(
     () =>
-      entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.parentName
-          ? `${entity.name} (${entity.parentName})`
-          : entity.name,
+      entities
+        .filter(
+          (entity) =>
+            !selectedCampusId ||
+            String(entity.campusId ?? 1) === selectedCampusId,
+        )
+        .map((entity) => ({
+          value: String(entity.id),
+          label: entity.parentName
+            ? `${entity.name} (${entity.parentName})`
+            : entity.name,
+        })),
+    [entities, selectedCampusId],
+  );
+
+  const campusOptions = useMemo(
+    () =>
+      campuses.map((campus) => ({
+        value: String(campus.id),
+        label: campus.name,
       })),
-    [entities],
+    [campuses],
   );
 
   // Org Level 1 = top-level entities (no parent).
@@ -466,6 +493,23 @@ export function EditUserModal({
                       }
                       disabled={isSubmitting}
                       className={inputClassName}
+                    />
+                  </Field>
+
+                  <Field label="Site" htmlFor="edit-user-campus">
+                    <SearchableSelect
+                      id="edit-user-campus"
+                      value={selectedCampusId}
+                      options={campusOptions}
+                      onChange={(next) => {
+                        setSelectedCampusId(next);
+                        setForm((current) =>
+                          current ? { ...current, entityId: "" } : current,
+                        );
+                      }}
+                      disabled={isSubmitting}
+                      placeholder="All Sites"
+                      emptyOptionLabel="All Sites"
                     />
                   </Field>
 

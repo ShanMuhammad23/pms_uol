@@ -37,6 +37,8 @@ export interface FormSubmissionListItem {
   entityId: number | null;
   entityName: string | null;
   parentEntityName: string | null;
+  /** Site/campus name derived from the employee's entity's campus_id. */
+  campusName: string | null;
   /** C1 ancestor when present; otherwise C0 / parent entity on the assignment chain. */
   orgLevel1Name: string | null;
   /** Entity with category code C2 on the assignment chain (self or ancestor). */

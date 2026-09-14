@@ -15,6 +15,7 @@ import {
   MANAGER_ELIGIBLE_ROLES,
   isManagerEligibleRole,
 } from "@/app/helpers/manager-eligibility";
+import { hasEntitiesCampusColumn } from "@/lib/queries/entities";
 
 interface UserRow {
   id: string;
@@ -31,6 +32,7 @@ interface UserRow {
   entity_id: number | null;
   entity_name: string | null;
   parent_entity_name: string | null;
+  campus_name: string | null;
   department_id?: number | null;
   department_name?: string | null;
   head_id: string | null;
@@ -143,6 +145,7 @@ function buildUserSelect(
   excelReady: boolean,
   qualsReady: boolean,
   eligibilityReady: boolean,
+  campusReady: boolean = false,
   cycleId: number | null = null,
 ): string {
   const orgIdColumn = mode === "entity" ? "u.entity_id" : "u.department_id";
@@ -150,6 +153,14 @@ function buildUserSelect(
   const parentEntityJoin =
     mode === "entity"
       ? "LEFT JOIN entities parent_ent ON parent_ent.id = org.parent_entity_id"
+      : "";
+  const campusSelect =
+    mode === "entity" && campusReady
+      ? "campus.name AS campus_name,"
+      : "NULL::text AS campus_name,";
+  const campusJoin =
+    mode === "entity" && campusReady
+      ? "LEFT JOIN campuses campus ON campus.id = org.campus_id"
       : "";
   const excelSelect = excelReady
     ? `u.designation,
@@ -233,6 +244,7 @@ function buildUserSelect(
       ${orgIdColumn} AS entity_id,
       org.name AS entity_name,
       ${parentEntitySelect}
+      ${campusSelect}
       u.head_id,
       CONCAT(h.first_name, ' ', h.last_name) AS head_name,
       u.manager_2_id,
@@ -245,6 +257,7 @@ function buildUserSelect(
     FROM users u
     LEFT JOIN ${orgJoinTable} org ON org.id = ${orgIdColumn}
     ${parentEntityJoin}
+    ${campusJoin}
     LEFT JOIN users h ON h.id = u.head_id
     LEFT JOIN users m2 ON m2.id = u.manager_2_id
     ${qualJoin}
@@ -277,6 +290,7 @@ function mapUserRow(row: UserRow): UserRecord {
     entityId: row.entity_id != null ? Number(row.entity_id) : null,
     entityName: row.entity_name,
     parentEntityName: row.parent_entity_name,
+    campusName: row.campus_name,
     headId: row.head_id ? Number(row.head_id) : null,
     headName: row.head_name,
     manager2Id: row.manager_2_id ? Number(row.manager_2_id) : null,
@@ -389,17 +403,18 @@ async function assertValidManagers(
  * Used as the single source of truth for populating Manager 1/2 dropdowns.
  */
 export async function listEligibleManagers(): Promise<UserRecord[]> {
-  const [mode, excelReady, eligibilityReady, cycle] = await Promise.all([
+  const [mode, excelReady, eligibilityReady, campusReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
     hasAssessmentEligibilityColumn(),
+    hasEntitiesCampusColumn(),
     getDefaultAppraisalCycle(),
   ]);
   const rolesPlaceholder = MANAGER_ELIGIBLE_ROLES.map(
     (_, i) => `$${i + 1}`,
   ).join(", ");
   const result = await getDbClient().query<UserRow>(
-    `${buildUserSelect(mode, excelReady, false, eligibilityReady, cycle?.id ?? null)}
+    `${buildUserSelect(mode, excelReady, false, eligibilityReady, campusReady, cycle?.id ?? null)}
      WHERE u.system_role IN (${rolesPlaceholder})
      ORDER BY u.last_name ASC, u.first_name ASC`,
     MANAGER_ELIGIBLE_ROLES as unknown as string[],
@@ -445,15 +460,16 @@ export async function listEntitiesForUsers(): Promise<EntityOptionRecord[]> {
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
-  const [mode, excelReady, qualsReady, eligibilityReady, cycle] = await Promise.all([
+  const [mode, excelReady, qualsReady, eligibilityReady, campusReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
     hasQualificationsTable(),
     hasAssessmentEligibilityColumn(),
+    hasEntitiesCampusColumn(),
     getDefaultAppraisalCycle(),
   ]);
   const result = await getDbClient().query<UserRow>(
-    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
+    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, campusReady, cycle?.id ?? null)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
 
@@ -464,14 +480,15 @@ export async function listUsers(): Promise<UserRecord[]> {
  * Slim user rows for filter facets / head pickers (no qualifications join).
  */
 export async function listUsersOverview(): Promise<UserRecord[]> {
-  const [mode, excelReady, eligibilityReady, cycle] = await Promise.all([
+  const [mode, excelReady, eligibilityReady, campusReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
     hasAssessmentEligibilityColumn(),
+    hasEntitiesCampusColumn(),
     getDefaultAppraisalCycle(),
   ]);
   const result = await getDbClient().query<UserRow>(
-    `${buildUserSelect(mode, excelReady, false, eligibilityReady, cycle?.id ?? null)}
+    `${buildUserSelect(mode, excelReady, false, eligibilityReady, campusReady, cycle?.id ?? null)}
      ORDER BY u.last_name ASC, u.first_name ASC`,
   );
 
@@ -491,15 +508,16 @@ export async function listUsersByEmployeeIds(
     return [];
   }
 
-  const [mode, excelReady, qualsReady, eligibilityReady, cycle] = await Promise.all([
+  const [mode, excelReady, qualsReady, eligibilityReady, campusReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
     hasQualificationsTable(),
     hasAssessmentEligibilityColumn(),
+    hasEntitiesCampusColumn(),
     getDefaultAppraisalCycle(),
   ]);
   const result = await getDbClient().query<UserRow>(
-    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
+    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, campusReady, cycle?.id ?? null)}
      WHERE u.employee_id = ANY($1::text[])`,
     [uniqueIds],
   );
@@ -515,15 +533,16 @@ export async function listUsersByEmployeeIds(
 
 
 export async function getUserById(id: number): Promise<UserRecord | null> {
-  const [mode, excelReady, qualsReady, eligibilityReady, cycle] = await Promise.all([
+  const [mode, excelReady, qualsReady, eligibilityReady, campusReady, cycle] = await Promise.all([
     getUserOrgMode(),
     hasExcelSheetColumns(),
     hasQualificationsTable(),
     hasAssessmentEligibilityColumn(),
+    hasEntitiesCampusColumn(),
     getDefaultAppraisalCycle(),
   ]);
   const result = await getDbClient().query<UserRow>(
-    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, cycle?.id ?? null)}
+    `${buildUserSelect(mode, excelReady, qualsReady, eligibilityReady, campusReady, cycle?.id ?? null)}
      WHERE u.id = $1`,
     [id],
   );

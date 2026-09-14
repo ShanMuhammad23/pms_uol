@@ -79,6 +79,7 @@ interface SubmissionListRow {
   entity_id: string | null;
   entity_name: string | null;
   parent_entity_name: string | null;
+  campus_name: string | null;
   org_level_1_name: string | null;
   org_level_2_name: string | null;
   status: AppraisalStatus;
@@ -370,6 +371,7 @@ function mapSubmissionRow(
     directScoreEntry,
     entityId: row.entity_id ? Number(row.entity_id) : null,
     entityName: row.entity_name,
+    campusName: row.campus_name,
     parentEntityName: row.parent_entity_name,
     orgLevel1Name: row.org_level_1_name ?? row.parent_entity_name,
     orgLevel2Name: row.org_level_2_name,
@@ -695,6 +697,7 @@ export async function listFormSubmissions(
        ) AS direct_score_entry,
        u.entity_id,
        ent.name AS entity_name,
+       campus.name AS campus_name,
        p1.name AS parent_entity_name,
        CASE
          WHEN ent_cat.code = 'C1' THEN ent.name
@@ -788,6 +791,7 @@ export async function listFormSubmissions(
      LEFT JOIN template_max_marks tm
        ON tm.template_id = COALESCE(ap.template_id, efa.template_id)
      LEFT JOIN entities ent ON ent.id = u.entity_id
+     LEFT JOIN campuses campus ON campus.id = ent.campus_id
      LEFT JOIN entity_categories ent_cat ON ent_cat.id = ent.entity_category_id
      LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
      LEFT JOIN entity_categories p1_cat ON p1_cat.id = p1.entity_category_id

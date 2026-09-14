@@ -21,7 +21,7 @@ import {
   useEntitiesQuery,
   useUniqueDesignationsQuery,
 } from "@/app/queries/organization";
-import { useUsersOverviewQuery } from "@/app/queries/users";
+import { useCampusesQuery, useUsersOverviewQuery } from "@/app/queries/users";
 import { useUsersPageFilters } from "@/app/queries/users-filters";
 import { saveUserAdditionalAccess } from "@/lib/queries/additional-access-client";
 import { fetchEmployeeAssignedForms } from "@/lib/queries/form-submissions-client";
@@ -109,6 +109,7 @@ const emptyAdditionalAccess = () =>
 export default function UsersManager() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<UserFormState>(emptyForm);
+  const [selectedCampusId, setSelectedCampusId] = useState<string>("");
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
   const [activeTab, setActiveTab] = useState<UserSectionTab>("list");
@@ -121,6 +122,7 @@ export default function UsersManager() {
   const { data: entities = [], isLoading: entitiesLoading } = useEntitiesQuery();
   const { data: designations = [], isLoading: designationsLoading } =
     useUniqueDesignationsQuery();
+  const { data: campuses = [] } = useCampusesQuery();
 
   const {
     data: users = [],
@@ -181,13 +183,28 @@ export default function UsersManager() {
 
   const entityOptions = useMemo(
     () =>
-      entities.map((entity) => ({
-        value: String(entity.id),
-        label: entity.parentName
-          ? `${entity.name} (${entity.parentName})`
-          : entity.name,
+      entities
+        .filter(
+          (entity) =>
+            !selectedCampusId ||
+            String(entity.campusId ?? 1) === selectedCampusId,
+        )
+        .map((entity) => ({
+          value: String(entity.id),
+          label: entity.parentName
+            ? `${entity.name} (${entity.parentName})`
+            : entity.name,
+        })),
+    [entities, selectedCampusId],
+  );
+
+  const campusOptions = useMemo(
+    () =>
+      campuses.map((campus) => ({
+        value: String(campus.id),
+        label: campus.name,
       })),
-    [entities],
+    [campuses],
   );
 
   const selectedEntity = useMemo(
@@ -212,6 +229,7 @@ export default function UsersManager() {
         entityId: form.entityId ? Number(form.entityId) : null,
         entityName: selectedEntity?.name ?? null,
         parentEntityName: selectedEntity?.parentName ?? null,
+        campusName: campuses.find((c) => c.id === selectedEntity?.campusId)?.name ?? null,
         headId: form.headId ? Number(form.headId) : null,
         headName: null,
         manager2Id: form.manager2Id ? Number(form.manager2Id) : null,
@@ -234,6 +252,7 @@ export default function UsersManager() {
 
   const resetForm = () => {
     setForm(emptyForm);
+    setSelectedCampusId("");
     setSelectedTemplateIds(new Set());
     setAdditionalAccess(emptyAdditionalAccess());
   };
@@ -572,6 +591,21 @@ export default function UsersManager() {
               }
               disabled={isSubmitting}
               className={inputClassName}
+            />
+          </Field>
+
+          <Field label="Site" htmlFor="user-campus">
+            <SearchableSelect
+              id="user-campus"
+              value={selectedCampusId}
+              options={campusOptions}
+              onChange={(next) => {
+                setSelectedCampusId(next);
+                setForm((current) => ({ ...current, entityId: "" }));
+              }}
+              disabled={isSubmitting}
+              placeholder="All Sites"
+              emptyOptionLabel="All Sites"
             />
           </Field>
 

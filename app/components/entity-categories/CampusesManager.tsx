@@ -50,7 +50,7 @@ export default function CampusesManager() {
     onSuccess: (campus) => {
       setFormMessage({
         tone: "success",
-        text: `Campus "${campus.name}" created successfully.`,
+        text: `Site "${campus.name}" created successfully.`,
       });
       resetForm();
       invalidateList();
@@ -84,9 +84,9 @@ export default function CampusesManager() {
   const renderFormCard = () => (
     <div className="rounded-md border border-slate-300/80 p-6 dark:border-white/15">
       <div>
-        <h2 className="text-lg font-semibold text-text-primary">Add Campus</h2>
+        <h2 className="text-lg font-semibold text-text-primary">Add Site</h2>
         <p className="mt-1 text-sm text-foreground/70">
-          Create a new campus. Entities assigned to this campus will appear under
+          Create a new site. Entities assigned to this site will appear under
           it in the organization tree.
         </p>
       </div>
@@ -163,7 +163,7 @@ export default function CampusesManager() {
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
         >
           <Plus className="size-4" />
-          Add Campus
+          Add Site
         </button>
       </form>
     </div>
@@ -173,13 +173,13 @@ export default function CampusesManager() {
     <div className="space-y-6">
       <div className="border-b border-slate-300/80 dark:border-white/15">
         <nav
-          aria-label="Campus section tabs"
+          aria-label="Site section tabs"
           className="-mb-px flex gap-1"
         >
           {(
             [
-              { id: "list", label: "Campuses", icon: Table2 },
-              { id: "add", label: "Add Campus", icon: Plus },
+              { id: "list", label: "Sites", icon: Table2 },
+              { id: "add", label: "Add Site", icon: Plus },
             ] as const
           ).map((tab) => {
             const Icon = tab.icon;
@@ -209,13 +209,13 @@ export default function CampusesManager() {
 
       {isLoading ? (
         <div className="rounded-md border border-slate-300/80 p-8 text-sm text-foreground/70 dark:border-white/15">
-          Loading campuses...
+          Loading sites...
         </div>
       ) : null}
 
       {error ? (
         <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-          Failed to load campuses.
+          Failed to load sites.
         </div>
       ) : null}
 
@@ -223,10 +223,10 @@ export default function CampusesManager() {
         <div className="rounded-md border border-dashed border-slate-300/80 px-6 py-12 text-center dark:border-white/15">
           <Building2 className="mx-auto size-8 text-foreground/50" />
           <p className="mt-3 text-sm font-medium text-text-primary">
-            No campuses yet
+            No sites yet
           </p>
           <p className="mt-1 text-sm text-foreground/70">
-            Add your first campus from the Add Campus tab.
+            Add your first site from the Add Site tab.
           </p>
         </div>
       ) : null}

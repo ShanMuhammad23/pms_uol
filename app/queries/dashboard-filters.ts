@@ -378,7 +378,7 @@ export function useDashboardFilters({
     if (selectedCampusId !== null) {
       const campus = campuses.find((c) => c.id === selectedCampusId);
       filters.push({
-        label: `Campus: ${campus?.name ?? selectedCampusId}`,
+        label: `Site: ${campus?.name ?? selectedCampusId}`,
         onRemove: () => setSelectedCampusId(null),
         color: "amber",
       });

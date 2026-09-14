@@ -8,6 +8,7 @@ export type UsersTableColumnId =
   | "email"
   | "designation"
   | "roleCategory"
+  | "site"
   | "orgLevel1"
   | "orgLevel2"
   | "dateOfJoining"
@@ -94,6 +95,11 @@ export const USERS_TABLE_COLUMNS: UsersTableColumnDef[] = [
     id: "roleCategory",
     label: "Role Category",
     getValue: (row) => formatNullable(row.roleCategory),
+  },
+  {
+    id: "site",
+    label: "Site",
+    getValue: (row) => formatNullable(row.campusName),
   },
   {
     id: "orgLevel1",

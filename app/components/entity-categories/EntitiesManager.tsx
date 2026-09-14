@@ -398,7 +398,7 @@ export default function EntitiesManager() {
               htmlFor="entity-campus"
               className="mb-1.5 block text-sm font-medium text-text-primary"
             >
-              Campus
+              Site
             </label>
             <select
               id="entity-campus"

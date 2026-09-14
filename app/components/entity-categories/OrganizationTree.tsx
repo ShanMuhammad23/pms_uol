@@ -266,7 +266,7 @@ function CampusCard({
           {campus.name}
         </span>
         <span className="mt-px block text-[9px] font-medium leading-tight opacity-80">
-          Campus · {entityCount} {entityCount === 1 ? "entity" : "entities"}
+          Site · {entityCount} {entityCount === 1 ? "entity" : "entities"}
         </span>
       </span>
     </button>

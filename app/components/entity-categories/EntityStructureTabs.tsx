@@ -12,7 +12,7 @@ type TabId = "categories" | "entities" | "tree" | "campuses";
 const tabs: Array<{ id: TabId; label: string; icon: typeof List }> = [
   { id: "categories", label: "Level Categories", icon: List },
   { id: "entities", label: "Organization Levels", icon: Building2 },
-  { id: "campuses", label: "Campuses", icon: Plus },
+  { id: "campuses", label: "Sites", icon: Plus },
   { id: "tree", label: "Organization Tree", icon: Network },
 ];
 
