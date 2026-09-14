@@ -115,6 +115,10 @@ export default function BulkAssessmentReview({
 
   // --- Question navigation ---
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+  // Furthest question the manager has unlocked by scoring+saving.
+  // Questions at index <= maxUnlockedIdx are accessible.
+  // Starts at 0 (only the first question is accessible).
+  const [maxUnlockedIdx, setMaxUnlockedIdx] = useState(0);
   const [drafts, setDrafts] = useState<Map<number, BulkDraft>>(new Map());
   const [modifiedRows, setModifiedRows] = useState<Set<number>>(new Set());
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
@@ -352,6 +356,7 @@ export default function BulkAssessmentReview({
   const handleStartReview = useCallback(() => {
     if (selectedSubmissionIds.size === 0) return;
     setCurrentQuestionIdx(0);
+    setMaxUnlockedIdx(0);
     setViewMode("workspace");
   }, [selectedSubmissionIds.size]);
 
@@ -434,8 +439,11 @@ export default function BulkAssessmentReview({
   const saveAndNavigate = useCallback(
     async (targetQuestionIdx: number) => {
       if (saveMutation.isPending || targetQuestionIdx === currentQuestionIdx) return;
+      // Block navigation to questions beyond the furthest unlocked one.
+      if (targetQuestionIdx > maxUnlockedIdx) return;
+      // For forward navigation, the current question must be fully scored.
       const isForward = targetQuestionIdx > currentQuestionIdx;
-      if (isForward && currentQuestion?.isRequired && missingScores.size > 0) {
+      if (isForward && missingScores.size > 0) {
         toast.error(
           missingBulkScoreMessage(missingScores.size, currentQuestionIsRating),
         );
@@ -446,12 +454,16 @@ export default function BulkAssessmentReview({
       } catch {
         return;
       }
+      // After a successful save, unlock the next question if we're moving forward.
+      if (isForward && targetQuestionIdx > maxUnlockedIdx) {
+        setMaxUnlockedIdx(targetQuestionIdx);
+      }
       setCurrentQuestionIdx(targetQuestionIdx);
     },
     [
-      currentQuestion,
       currentQuestionIdx,
       currentQuestionIsRating,
+      maxUnlockedIdx,
       missingScores.size,
       saveMutation,
     ],
@@ -472,7 +484,7 @@ export default function BulkAssessmentReview({
 
   const goNext = useCallback(async () => {
     if (saveMutation.isPending) return;
-    if (currentQuestion?.isRequired && missingScores.size > 0) {
+    if (missingScores.size > 0) {
       toast.error(
         missingBulkScoreMessage(missingScores.size, currentQuestionIsRating),
       );
@@ -484,19 +496,23 @@ export default function BulkAssessmentReview({
       return;
     }
     if (currentQuestionIdx < totalQuestions - 1) {
-      setCurrentQuestionIdx((idx) => idx + 1);
+      const nextIdx = currentQuestionIdx + 1;
+      if (nextIdx > maxUnlockedIdx) {
+        setMaxUnlockedIdx(nextIdx);
+      }
+      setCurrentQuestionIdx(nextIdx);
     }
   }, [
     saveMutation,
-    currentQuestion,
     currentQuestionIsRating,
     missingScores.size,
     currentQuestionIdx,
     totalQuestions,
+    maxUnlockedIdx,
   ]);
 
   const handleFinishClick = useCallback(async () => {
-    if (currentQuestion?.isRequired && missingScores.size > 0) {
+    if (missingScores.size > 0) {
       toast.error(
         missingBulkScoreMessage(missingScores.size, currentQuestionIsRating),
       );
@@ -530,7 +546,8 @@ export default function BulkAssessmentReview({
         drafts={drafts}
         modifiedRows={modifiedRows}
         missingScores={missingScores}
-        hasMissingRequired={Boolean(currentQuestion?.isRequired && missingScores.size > 0)}
+        hasMissingRequired={missingScores.size > 0}
+        maxUnlockedIdx={maxUnlockedIdx}
         progressPercent={progressPercent}
         totalQuestions={totalQuestions}
         isLastQuestion={isLastQuestion}
@@ -920,6 +937,7 @@ interface WorkspaceViewProps {
   modifiedRows: Set<number>;
   missingScores: Set<number>;
   hasMissingRequired: boolean;
+  maxUnlockedIdx: number;
   progressPercent: number;
   totalQuestions: number;
   isLastQuestion: boolean;
@@ -952,6 +970,7 @@ function WorkspaceView({
   modifiedRows,
   missingScores,
   hasMissingRequired,
+  maxUnlockedIdx,
   progressPercent,
   totalQuestions,
   isLastQuestion,
@@ -1019,15 +1038,19 @@ function WorkspaceView({
       {totalQuestions > 0 ? (
         <div className="mb-4 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-2 dark:border-white/10 dark:bg-slate-900">
           {questions.map((q, idx) => {
-            const isForward = idx > currentQuestionIdx;
-            const isBlocked = hasMissingRequired && isForward;
+            // A question button is accessible if:
+            //   - it's the current question, OR
+            //   - it's at or before the furthest unlocked question
+            // Questions beyond maxUnlockedIdx are locked.
+            const isLocked = idx > maxUnlockedIdx;
+            const isBlocked = isLocked || (hasMissingRequired && idx > currentQuestionIdx);
             return (
               <button
                 key={q.questionId}
                 type="button"
                 onClick={() => onJumpToQuestion(idx)}
                 disabled={isBlocked}
-                title={q.questionText.slice(0, 80)}
+                title={isLocked ? "Complete the current question first" : q.questionText.slice(0, 80)}
                 className={cn(
                   "size-7 rounded text-xs font-medium transition-colors",
                   idx === currentQuestionIdx
