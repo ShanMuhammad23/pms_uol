@@ -321,6 +321,9 @@ export default function EntityCategoriesManager() {
             <thead className="bg-primary text-white">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">
+                  Site
+                </th>
+                <th className="px-4 py-3 text-left font-semibold">
                   Code
                 </th>
                 <th className="px-4 py-3 text-left font-semibold">
@@ -340,6 +343,9 @@ export default function EntityCategoriesManager() {
                   key={category.id}
                   className="border-t border-slate-300/80 dark:border-white/15"
                 >
+                  <td className="px-4 py-3 text-text-primary">
+                    All Sites
+                  </td>
                   <td className="px-4 py-3 font-medium text-text-primary">
                     {category.code}
                   </td>

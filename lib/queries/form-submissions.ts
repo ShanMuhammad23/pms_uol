@@ -979,6 +979,7 @@ export async function listBulkReviewQueue(
 
   return submissions
     .filter((s) => s.status === "PENDING_HEAD_REVIEW")
+    .filter((s) => s.selfAssessmentEnabled && !s.directScoreEntry)
     .filter((s) =>
       isAssignedManagerAtLevelInline(reviewerUserId, s, s.managerLevel ?? 1),
     )
@@ -1087,6 +1088,8 @@ export async function getBulkReviewQuestionData(
     (s) =>
       submissionIds.includes(s.id) &&
       s.status === "PENDING_HEAD_REVIEW" &&
+      s.selfAssessmentEnabled &&
+      !s.directScoreEntry &&
       s.assessmentEligibility &&
       isAssignedManagerAtLevelInline(reviewerUserId, s, s.managerLevel ?? 1),
   );
@@ -1509,6 +1512,8 @@ export async function finishBulkReview(
         (s) =>
           submissionIds.includes(s.id) &&
           s.status === "PENDING_HEAD_REVIEW" &&
+          s.selfAssessmentEnabled &&
+          !s.directScoreEntry &&
           s.assessmentEligibility &&
           isAssignedManagerAtLevelInline(
             reviewerUserId,

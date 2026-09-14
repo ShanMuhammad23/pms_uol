@@ -57,7 +57,10 @@ async function cleanup() {
 
     // ------------------------------------------------------------------
     // 1. Manager 1 remarks that match self-assessment remarks.
-    //    Only for submissions in PENDING_HEAD_REVIEW with manager_level = 1.
+    //    Applies to ALL submissions regardless of status — if Manager 1
+    //    remarks are exactly the same as self-assessment remarks, they
+    //    were auto-filled and should be removed. Manager 1 should write
+    //    their own remarks.
     //    Manager 1 = users.head_id, Employee = appraisals.employee_id
     // ------------------------------------------------------------------
     const m1Matches = await client.query(`
@@ -75,9 +78,7 @@ async function cleanup() {
        AND emp.filled_by_id = ap.employee_id
        AND COALESCE(emp.question_id, 0) = COALESCE(m1.question_id, 0)
        AND COALESCE(emp.open_section_id, 0) = COALESCE(m1.open_section_id, 0)
-      WHERE ap.status = 'PENDING_HEAD_REVIEW'
-        AND ap.manager_level = 1
-        AND m1.filled_by_id = u.head_id
+      WHERE m1.filled_by_id = u.head_id
         AND m1.remarks IS NOT NULL
         AND m1.remarks = emp.remarks
     `);
@@ -94,7 +95,10 @@ async function cleanup() {
 
     // ------------------------------------------------------------------
     // 2. Manager 2 remarks that match Manager 1 remarks.
-    //    Only for submissions in PENDING_HEAD_REVIEW with manager_level = 2.
+    //    Applies to ALL submissions regardless of status — if Manager 2
+    //    remarks are exactly the same as Manager 1 remarks, they were
+    //    auto-filled and should be removed. Manager 2 should write their
+    //    own remarks.
     //    Manager 2 = users.manager_2_id, Manager 1 = users.head_id
     // ------------------------------------------------------------------
     const m2Matches = await client.query(`
@@ -112,9 +116,7 @@ async function cleanup() {
        AND m1.filled_by_id = u.head_id
        AND COALESCE(m1.question_id, 0) = COALESCE(m2.question_id, 0)
        AND COALESCE(m1.open_section_id, 0) = COALESCE(m2.open_section_id, 0)
-      WHERE ap.status = 'PENDING_HEAD_REVIEW'
-        AND ap.manager_level = 2
-        AND m2.filled_by_id = u.manager_2_id
+      WHERE m2.filled_by_id = u.manager_2_id
         AND m2.remarks IS NOT NULL
         AND m2.remarks = m1.remarks
     `);
@@ -131,7 +133,7 @@ async function cleanup() {
 
     // ------------------------------------------------------------------
     // 3. Manager 2 remarks that match self-assessment remarks.
-    //    Only for submissions in PENDING_HEAD_REVIEW with manager_level = 2.
+    //    Applies to ALL submissions regardless of status.
     //    (These are cases where Manager 1's remarks were themselves copied
     //    from self-assessment, and then copied to Manager 2.)
     // ------------------------------------------------------------------
@@ -150,9 +152,7 @@ async function cleanup() {
        AND emp.filled_by_id = ap.employee_id
        AND COALESCE(emp.question_id, 0) = COALESCE(m2.question_id, 0)
        AND COALESCE(emp.open_section_id, 0) = COALESCE(m2.open_section_id, 0)
-      WHERE ap.status = 'PENDING_HEAD_REVIEW'
-        AND ap.manager_level = 2
-        AND m2.filled_by_id = u.manager_2_id
+      WHERE m2.filled_by_id = u.manager_2_id
         AND m2.remarks IS NOT NULL
         AND m2.remarks = emp.remarks
     `);

@@ -1,6 +1,7 @@
 import type { EntityRecord } from "@/types/entities";
 
 export type EntitiesTableColumnId =
+  | "site"
   | "category"
   | "parent"
   | "name"
@@ -40,21 +41,27 @@ function formatParent(row: EntityRecord): string {
 
 export const ENTITIES_TABLE_COLUMNS: EntitiesTableColumnDef[] = [
   {
+    id: "site",
+    label: "Site",
+    widthClass: "w-[12%]",
+    getValue: (row) => formatNullable(row.campusName),
+  },
+  {
     id: "category",
     label: "Category",
-    widthClass: "w-[12%]",
+    widthClass: "w-[10%]",
     getValue: (row) => formatNullable(row.categoryCode),
   },
   {
     id: "parent",
     label: "Parent",
-    widthClass: "w-[24%]",
+    widthClass: "w-[22%]",
     getValue: (row) => formatParent(row),
   },
   {
     id: "name",
     label: "Name",
-    widthClass: "w-[26%]",
+    widthClass: "w-[24%]",
     getValue: (row) => formatNullable(row.name),
   },
   {
