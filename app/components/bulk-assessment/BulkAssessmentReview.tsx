@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -13,6 +14,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Square,
   Users,
   X,
 } from "lucide-react";
@@ -106,9 +108,10 @@ export default function BulkAssessmentReview({
   const queryClient = useQueryClient();
 
   // --- View state ---
-  type ViewMode = "forms" | "workspace";
+  type ViewMode = "forms" | "select" | "workspace";
   const [viewMode, setViewMode] = useState<ViewMode>("forms");
   const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null);
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<Set<number>>(new Set());
 
   // --- Question navigation ---
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
@@ -172,9 +175,8 @@ export default function BulkAssessmentReview({
   // --- Question data query (enabled when workspace is shown) ---
   const workspaceSubmissionIds = useMemo(() => {
     if (viewMode !== "workspace" || activeTemplateId == null) return [];
-    const group = formGroups.find((g) => g.templateId === activeTemplateId);
-    return group ? group.submissionIds.sort((a, b) => a - b) : [];
-  }, [formGroups, activeTemplateId, viewMode]);
+    return Array.from(selectedSubmissionIds).sort((a, b) => a - b);
+  }, [selectedSubmissionIds, activeTemplateId, viewMode]);
 
   const {
     data: questionData,
@@ -337,21 +339,30 @@ export default function BulkAssessmentReview({
   });
 
   // --- Navigation ---
-  const goPrev = useCallback(() => {
-    if (currentQuestionIdx > 0) {
-      setCurrentQuestionIdx((idx) => idx - 1);
-    }
-  }, [currentQuestionIdx]);
+
 
   const handleOpenForm = useCallback((templateId: number) => {
     setActiveTemplateId(templateId);
+    // Pre-select all employees for this form by default.
+    const group = formGroups.find((g) => g.templateId === templateId);
+    setSelectedSubmissionIds(new Set(group?.submissionIds ?? []));
+    setViewMode("select");
+  }, [formGroups]);
+
+  const handleStartReview = useCallback(() => {
+    if (selectedSubmissionIds.size === 0) return;
     setCurrentQuestionIdx(0);
     setViewMode("workspace");
-  }, []);
+  }, [selectedSubmissionIds.size]);
 
   const handleBackToForms = useCallback(() => {
     setViewMode("forms");
     setActiveTemplateId(null);
+    setSelectedSubmissionIds(new Set());
+  }, []);
+
+  const handleBackToSelect = useCallback(() => {
+    setViewMode("select");
   }, []);
 
   const handleFinishConfirm = useCallback(() => {
@@ -362,15 +373,27 @@ export default function BulkAssessmentReview({
     setFinishDialogOpen(false);
     if (finishResult) {
       setFinishResult(null);
-      // After finishing, go back to the forms view to pick the next form.
-      setViewMode("forms");
-      setActiveTemplateId(null);
-      // Refetch the queue so approved submissions disappear from form counts.
+      // Remove approved submissions from selection
+      const approvedIds = new Set(finishResult.approved.map((r) => r.id));
+      setSelectedSubmissionIds((prev) => {
+        const next = new Set(prev);
+        for (const id of approvedIds) next.delete(id);
+        return next;
+      });
+      // Refetch the queue so approved submissions disappear.
       void queryClient.invalidateQueries({
         queryKey: ["bulk-review-queue", userId],
       });
+      // If no more selected submissions remain, go back to forms.
+      if (selectedSubmissionIds.size - approvedIds.size === 0) {
+        setViewMode("forms");
+        setActiveTemplateId(null);
+      } else {
+        // Go back to the selection view to continue with remaining employees.
+        setViewMode("select");
+      }
     }
-  }, [finishResult, queryClient, userId]);
+  }, [finishResult, queryClient, userId, selectedSubmissionIds.size]);
 
   // --- Progress ---
   const progressPercent =
@@ -406,6 +429,45 @@ export default function BulkAssessmentReview({
 
   const currentQuestionIsRating = Boolean(
     currentQuestion?.ratingBased && currentQuestion.ratingScale,
+  );
+
+  const saveAndNavigate = useCallback(
+    async (targetQuestionIdx: number) => {
+      if (saveMutation.isPending || targetQuestionIdx === currentQuestionIdx) return;
+      const isForward = targetQuestionIdx > currentQuestionIdx;
+      if (isForward && currentQuestion?.isRequired && missingScores.size > 0) {
+        toast.error(
+          missingBulkScoreMessage(missingScores.size, currentQuestionIsRating),
+        );
+        return;
+      }
+      try {
+        await saveMutation.mutateAsync();
+      } catch {
+        return;
+      }
+      setCurrentQuestionIdx(targetQuestionIdx);
+    },
+    [
+      currentQuestion,
+      currentQuestionIdx,
+      currentQuestionIsRating,
+      missingScores.size,
+      saveMutation,
+    ],
+  );
+
+  const goPrev = useCallback(() => {
+    if (currentQuestionIdx > 0) {
+      void saveAndNavigate(currentQuestionIdx - 1);
+    }
+  }, [currentQuestionIdx, saveAndNavigate]);
+
+  const handleJumpToQuestion = useCallback(
+    (targetQuestionIdx: number) => {
+      void saveAndNavigate(targetQuestionIdx);
+    },
+    [saveAndNavigate],
   );
 
   const goNext = useCallback(async () => {
@@ -468,6 +530,7 @@ export default function BulkAssessmentReview({
         drafts={drafts}
         modifiedRows={modifiedRows}
         missingScores={missingScores}
+        hasMissingRequired={Boolean(currentQuestion?.isRequired && missingScores.size > 0)}
         progressPercent={progressPercent}
         totalQuestions={totalQuestions}
         isLastQuestion={isLastQuestion}
@@ -484,8 +547,26 @@ export default function BulkAssessmentReview({
         onFinish={handleFinishClick}
         onFinishConfirm={handleFinishConfirm}
         onFinishClose={handleFinishClose}
-        onBackToList={handleBackToForms}
-        onJumpToQuestion={setCurrentQuestionIdx}
+        onBackToList={handleBackToSelect}
+        onJumpToQuestion={handleJumpToQuestion}
+      />
+    );
+  }
+
+  if (viewMode === "select" && activeTemplateId != null) {
+    const activeGroup = formGroups.find((g) => g.templateId === activeTemplateId);
+    const employeesForForm = queueItems.filter(
+      (item) => item.templateId === activeTemplateId,
+    );
+    return (
+      <EmployeeSelectionView
+        templateTitle={activeGroup?.templateTitle ?? "Form"}
+        templateCode={activeGroup?.templateCode ?? null}
+        employees={employeesForForm}
+        selectedIds={selectedSubmissionIds}
+        onSelect={setSelectedSubmissionIds}
+        onStartReview={handleStartReview}
+        onBack={handleBackToForms}
       />
     );
   }
@@ -497,6 +578,214 @@ export default function BulkAssessmentReview({
       onOpenForm={handleOpenForm}
       onRefresh={() => refetchQueue()}
     />
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Employee Selection View (pick employees to assess for a form)              */
+/* -------------------------------------------------------------------------- */
+
+interface EmployeeSelectionViewProps {
+  templateTitle: string;
+  templateCode: string | null;
+  employees: BulkReviewQueueItem[];
+  selectedIds: Set<number>;
+  onSelect: (ids: Set<number>) => void;
+  onStartReview: () => void;
+  onBack: () => void;
+}
+
+function EmployeeSelectionView({
+  templateTitle,
+  templateCode,
+  employees,
+  selectedIds,
+  onSelect,
+  onStartReview,
+  onBack,
+}: EmployeeSelectionViewProps) {
+  const [search, setSearch] = useState("");
+
+  const filteredEmployees = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return employees;
+    return employees.filter(
+      (e) =>
+        e.employeeName.toLowerCase().includes(q) ||
+        e.employeeId.toLowerCase().includes(q),
+    );
+  }, [employees, search]);
+
+  const allFilteredSelected = useMemo(
+    () =>
+      filteredEmployees.length > 0 &&
+      filteredEmployees.every((e) => selectedIds.has(e.id)),
+    [filteredEmployees, selectedIds],
+  );
+
+  const toggleSelectAll = useCallback(() => {
+    if (allFilteredSelected) {
+      // Deselect only the filtered ones
+      onSelect(new Set([...selectedIds].filter((id) => !filteredEmployees.some((e) => e.id === id))));
+    } else {
+      // Select all filtered + already selected
+      const next = new Set(selectedIds);
+      for (const e of filteredEmployees) next.add(e.id);
+      onSelect(next);
+    }
+  }, [allFilteredSelected, filteredEmployees, selectedIds, onSelect]);
+
+  const toggleSelect = useCallback(
+    (id: number) => {
+      const next = new Set(selectedIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      onSelect(next);
+    },
+    [selectedIds, onSelect],
+  );
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-6">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+          >
+            <ArrowLeft className="size-4" />
+            Back to forms
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-text-primary">
+              {templateTitle}
+            </h1>
+            <p className="mt-0.5 text-sm text-foreground/70">
+              {templateCode && <span className="font-mono">{templateCode} · </span>}
+              {employees.length} employee{employees.length !== 1 ? "s" : ""} pending
+              review · {selectedIds.size} selected
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onStartReview}
+          disabled={selectedIds.size === 0}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
+        >
+          <CheckCircle2 className="size-4" />
+          Start Review ({selectedIds.size})
+        </button>
+      </div>
+
+      {/* Search + Select All */}
+      <div className="mb-4 flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-foreground/40" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or ID..."
+            className="w-full rounded-lg border border-slate-300 bg-background py-2 pl-9 pr-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary dark:border-white/15"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={toggleSelectAll}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-text-primary hover:bg-primary/10 dark:border-white/15"
+        >
+          {allFilteredSelected ? (
+            <CheckSquare className="size-4 text-primary" />
+          ) : (
+            <Square className="size-4" />
+          )}
+          {allFilteredSelected ? "Deselect All" : "Select All"}
+        </button>
+      </div>
+
+      {/* Employee table */}
+      {filteredEmployees.length === 0 ? (
+        <div className="rounded-lg border border-slate-300/80 p-12 text-center dark:border-white/15">
+          <Users className="mx-auto size-8 text-foreground/50" />
+          <p className="mt-3 text-sm font-medium text-text-primary">
+            {search ? "No employees match your search." : "No employees pending review."}
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-300/80 dark:border-white/15">
+          <table className="min-w-full text-sm">
+            <thead className="bg-primary text-white">
+              <tr>
+                <th className="w-10 px-4 py-3 text-left">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="inline-flex items-center"
+                  >
+                    {allFilteredSelected ? (
+                      <CheckSquare className="size-4" />
+                    ) : (
+                      <Square className="size-4" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-left font-semibold">Employee</th>
+                <th className="px-4 py-3 text-left font-semibold">Designation</th>
+                <th className="px-4 py-3 text-left font-semibold">Entity</th>
+                <th className="px-4 py-3 text-left font-semibold">Level</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEmployees.map((emp) => {
+                const isSelected = selectedIds.has(emp.id);
+                return (
+                  <tr
+                    key={emp.id}
+                    onClick={() => toggleSelect(emp.id)}
+                    className={cn(
+                      "cursor-pointer border-t border-slate-300/80 transition-colors dark:border-white/15",
+                      isSelected
+                        ? "bg-primary/5"
+                        : "hover:bg-slate-50/60 dark:hover:bg-slate-800/20",
+                    )}
+                  >
+                    <td className="px-4 py-3">
+                      {isSelected ? (
+                        <CheckSquare className="size-4 text-primary" />
+                      ) : (
+                        <Square className="size-4 text-foreground/40" />
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-text-primary">
+                        {emp.employeeName}
+                      </div>
+                      <div className="text-xs text-foreground/60">
+                        {emp.employeeId}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-text-primary">
+                      {emp.designation ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-text-primary">
+                      {emp.orgLevel1Name ?? emp.entityName ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        M{emp.managerLevel ?? 1}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -630,6 +919,7 @@ interface WorkspaceViewProps {
   drafts: Map<number, BulkDraft>;
   modifiedRows: Set<number>;
   missingScores: Set<number>;
+  hasMissingRequired: boolean;
   progressPercent: number;
   totalQuestions: number;
   isLastQuestion: boolean;
@@ -661,6 +951,7 @@ function WorkspaceView({
   drafts,
   modifiedRows,
   missingScores,
+  hasMissingRequired,
   progressPercent,
   totalQuestions,
   isLastQuestion,
@@ -727,22 +1018,29 @@ function WorkspaceView({
       {/* Question navigation bar */}
       {totalQuestions > 0 ? (
         <div className="mb-4 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-2 dark:border-white/10 dark:bg-slate-900">
-          {questions.map((q, idx) => (
-            <button
-              key={q.questionId}
-              type="button"
-              onClick={() => onJumpToQuestion(idx)}
-              title={q.questionText.slice(0, 80)}
-              className={cn(
-                "size-7 rounded text-xs font-medium transition-colors",
-                idx === currentQuestionIdx
-                  ? "bg-primary text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
-              )}
-            >
-              {idx + 1}
-            </button>
-          ))}
+          {questions.map((q, idx) => {
+            const isForward = idx > currentQuestionIdx;
+            const isBlocked = hasMissingRequired && isForward;
+            return (
+              <button
+                key={q.questionId}
+                type="button"
+                onClick={() => onJumpToQuestion(idx)}
+                disabled={isBlocked}
+                title={q.questionText.slice(0, 80)}
+                className={cn(
+                  "size-7 rounded text-xs font-medium transition-colors",
+                  idx === currentQuestionIdx
+                    ? "bg-primary text-white"
+                    : isBlocked
+                      ? "cursor-not-allowed bg-slate-100 text-slate-300 opacity-50 dark:bg-slate-800 dark:text-slate-600"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
+                )}
+              >
+                {idx + 1}
+              </button>
+            );
+          })}
         </div>
       ) : null}
 
@@ -975,7 +1273,7 @@ function WorkspaceView({
           <button
             type="button"
             onClick={onFinish}
-            disabled={savePending || finishPending || totalQuestions === 0}
+            disabled={savePending || finishPending || totalQuestions === 0 || hasMissingRequired}
             className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
           >
             <CheckCircle2 className="size-4" />
@@ -985,7 +1283,7 @@ function WorkspaceView({
           <button
             type="button"
             onClick={onNext}
-            disabled={savePending || totalQuestions === 0}
+            disabled={savePending || totalQuestions === 0 || hasMissingRequired}
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:opacity-50"
           >
             Save & Next
