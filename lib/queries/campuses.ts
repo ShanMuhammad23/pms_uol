@@ -111,3 +111,27 @@ export async function updateCampus(
     throw error;
   }
 }
+
+export async function deleteCampus(id: number): Promise<void> {
+  // Check if any entities are assigned to this campus before deleting.
+  // This prevents a foreign-key violation and gives a clear error message.
+  const refResult = await getDbClient().query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM entities WHERE campus_id = $1`,
+    [id],
+  );
+  const refCount = Number(refResult.rows[0]?.count ?? 0);
+  if (refCount > 0) {
+    throw new CampusError(
+      `Cannot delete this site because ${refCount} entit${refCount === 1 ? "y" : "ies"} are assigned to it. Reassign or remove those entities first.`,
+      409,
+    );
+  }
+
+  const result = await getDbClient().query(
+    `DELETE FROM campuses WHERE id = $1`,
+    [id],
+  );
+  if (result.rowCount === 0) {
+    throw new CampusError("Site not found.", 404);
+  }
+}
