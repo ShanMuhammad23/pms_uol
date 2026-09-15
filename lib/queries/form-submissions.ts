@@ -2223,6 +2223,7 @@ export async function getFormSubmissionById(
     isReturned: summary.isReturned ?? false,
     returnReason: summary.returnReason ?? null,
     returnHistory: await getReturnHistory(id),
+    manager2OpenAssessmentConfirmedAt: await getManager2OpenAssessmentConfirmedAt(id),
   };
 }
 
@@ -3126,6 +3127,23 @@ export interface ReturnSubmissionResult {
  * Fetches the return history for a submission from the `appraisal_logs` table.
  * Each entry corresponds to a RETURN_SUBMISSION action, with the return level
  * extracted from `old_value->>'return_level'` and the reason from
+/**
+ * Fetch the timestamp when Manager 2 confirmed they reviewed the open/free
+ * assessment sections. Returns null when not yet confirmed.
+ */
+async function getManager2OpenAssessmentConfirmedAt(
+  appraisalId: number,
+): Promise<string | null> {
+  const result = await db.query<{ confirmed_at: string | null }>(
+    `SELECT manager2_open_assessment_confirmed_at::text AS confirmed_at
+     FROM appraisals
+     WHERE id = $1`,
+    [appraisalId],
+  );
+  return result.rows[0]?.confirmed_at ?? null;
+}
+
+/**
  * `new_value->>'return_reason'`.
  */
 export async function getReturnHistory(

@@ -18,6 +18,7 @@ import {
   saveHrReview,
   resetFormSubmission,
 } from "@/lib/queries/form-submissions-client";
+import { confirmManager2OpenAssessment } from "@/lib/queries/direct-assessment-client";
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
@@ -66,7 +67,7 @@ import { InlineScoreAdjustmentCell } from "@/app/components/dashboard/InlineScor
 import QuartileBadge from "@/app/components/dashboard/QuartileBadge";
 import AttachmentList from "@/app/components/attachments/AttachmentList";
 import { getSubmissionAttachmentDownloadUrl } from "@/app/helpers/attachments";
-import { AlertTriangle, ArrowLeft, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import Link from "next/link";
 
 interface SubmissionDetailViewProps {
@@ -109,19 +110,17 @@ function buildInitialAuthoredDrafts(
 
   for (const section of openSections) {
     // For the current reviewer, seed from their own previously-saved authored
-    // answers first, falling back to the prior manager's answers for question
-    // text/marks/scores only — remarks are never copied from the prior stage.
+    // answers first. If the current reviewer has no authored answers (e.g.,
+    // an admin/HR user viewing as Manager 1, or Manager 2 who hasn't authored
+    // yet), fall back to Manager 1's authored answers for question text/marks.
     const ownAuthored = (data.managerAuthoredAnswers ?? []).filter(
       (a) => a.openSectionId === section.id,
     );
-    const priorAuthored =
-      currentLevel === 2
-        ? (data.manager1AuthoredAnswers ?? []).filter(
-            (a) => a.openSectionId === section.id,
-          )
-        : [];
-    const usingPrior = ownAuthored.length === 0 && priorAuthored.length > 0;
-    const source = ownAuthored.length > 0 ? ownAuthored : priorAuthored;
+    const mgr1Authored = (data.manager1AuthoredAnswers ?? []).filter(
+      (a) => a.openSectionId === section.id,
+    );
+    const usingFallback = ownAuthored.length === 0 && mgr1Authored.length > 0;
+    const source = ownAuthored.length > 0 ? ownAuthored : mgr1Authored;
 
     state[section.id] = source.map((a) => ({
       clientId: nextAuthoredClientId(),
@@ -131,7 +130,7 @@ function buildInitialAuthoredDrafts(
       ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
       // Never copy remarks from the prior manager — each reviewer writes
       // their own remarks.
-      remarks: usingPrior ? "" : (a.remarks ?? ""),
+      remarks: usingFallback ? "" : (a.remarks ?? ""),
     }));
   }
 
@@ -895,6 +894,24 @@ export default function SubmissionDetailView({
     },
   });
 
+  const [showOpenAssessmentConfirm, setShowOpenAssessmentConfirm] = useState(false);
+  const [openAssessmentConfirmSaving, setOpenAssessmentConfirmSaving] = useState(false);
+  const confirmOpenAssessmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!submissionId) throw new Error("Submission not loaded.");
+      return confirmManager2OpenAssessment(submissionId);
+    },
+    onSuccess: () => {
+      toast.success("Open assessment confirmed.");
+      queryClient.invalidateQueries({
+        queryKey: ["form-submission", submissionId],
+      });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Failed to confirm open assessment.");
+    },
+  });
+
   const hrSaveMutation = useMutation({
     mutationFn: () => {
       if (!data) {
@@ -1246,9 +1263,25 @@ export default function SubmissionDetailView({
 
   // Open-assessment section totals (authored questions).
   const openSections = data.sections.filter((s) => s.isOpenAssessment);
-  const openAssessmentMaxMarks = openSections.reduce(
-    (sum, s) => sum + (s.openAssessmentTotalMarks ?? 0), 0,
-  );
+  const openAssessmentMaxMarks = openSections.reduce((sum, s) => {
+    // The section's static openAssessmentTotalMarks is the budget set during
+    // form building. The actual total marks may differ because managers can
+    // author questions with different weights during assessment. Use the
+    // maximum of the static budget and the actual authored total marks
+    // across all reviewers (self, Manager 1, Manager 2).
+    const staticMax = s.openAssessmentTotalMarks ?? 0;
+    const selfAuthoredTotal = (data.authoredAnswers ?? [])
+      .filter((a) => a.openSectionId === s.id)
+      .reduce((sum, a) => sum + (a.authoredTotalMarks ?? 0), 0);
+    const mgr1AuthoredTotal = (data.manager1AuthoredAnswers ?? [])
+      .filter((a) => a.openSectionId === s.id)
+      .reduce((sum, a) => sum + (a.authoredTotalMarks ?? 0), 0);
+    const mgr2AuthoredTotal = (data.manager2AuthoredAnswers ?? [])
+      .filter((a) => a.openSectionId === s.id)
+      .reduce((sum, a) => sum + (a.authoredTotalMarks ?? 0), 0);
+    const actualMax = Math.max(staticMax, selfAuthoredTotal, mgr1AuthoredTotal, mgr2AuthoredTotal);
+    return sum + actualMax;
+  }, 0);
   const openSelfTotal = (data.authoredAnswers ?? []).reduce(
     (sum, a) => sum + (a.pointsEarned ?? 0), 0,
   );
@@ -1334,12 +1367,27 @@ export default function SubmissionDetailView({
   };
 
   const addAuthoredRow = (sectionId: number) => {
+    // Enforce section budget — block adding new questions when the
+    // section's total marks budget is fully allocated.
+    const section = data?.sections.find((s) => s.id === sectionId);
+    const budget = section?.openAssessmentTotalMarks ?? 0;
+    const existing = authoredDrafts[sectionId] ?? [];
+    const allocated = existing.reduce(
+      (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+      0,
+    );
+    if (budget > 0 && allocated >= budget) {
+      toast.error(
+        `Section budget of ${budget} marks is fully allocated. Reduce the marks of existing questions to add more.`,
+      );
+      return;
+    }
     setAuthoredDrafts((current) => {
-      const existing = current[sectionId] ?? [];
+      const existingDrafts = current[sectionId] ?? [];
       return {
         ...current,
         [sectionId]: [
-          ...existing,
+          ...existingDrafts,
           {
             clientId: nextAuthoredClientId(),
             authoredQuestionText: "",
@@ -1524,7 +1572,81 @@ export default function SubmissionDetailView({
                 >
                   {approveMutation.isPending ? "Approving..." : "Approve Review"}
                 </button>
+                {/* Manager 2 open assessment confirmation */}
+                {editingManager2 && openSections.length > 0 ? (
+                  data.manager2OpenAssessmentConfirmedAt ? (
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                      <CheckCircle className="size-3.5" />
+                      Open Assessment Confirmed
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowOpenAssessmentConfirm(true)}
+                      disabled={confirmOpenAssessmentMutation.isPending}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      <CheckCircle className="mr-1 inline size-3.5" />
+                      Confirm Open Assessment
+                    </button>
+                  )
+                ) : null}
               </>
+            ) : null}
+
+            {/* Manager 2 open assessment confirmation modal */}
+            {showOpenAssessmentConfirm ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !openAssessmentConfirmSaving && setShowOpenAssessmentConfirm(false)}>
+                <div className="mx-4 max-w-md rounded-lg bg-white p-5 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Confirm Open Assessment Review
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => !openAssessmentConfirmSaving && setShowOpenAssessmentConfirm(false)}
+                      className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                  <p className="mb-4 text-xs text-slate-600 dark:text-slate-400">
+                    You are about to confirm that you have reviewed the open/free
+                    assessment sections for{" "}
+                    <span className="font-bold">{data.employeeName}</span>.
+                    This action records your review confirmation.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowOpenAssessmentConfirm(false)}
+                      disabled={openAssessmentConfirmSaving}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenAssessmentConfirmSaving(true);
+                        confirmOpenAssessmentMutation.mutate(undefined, {
+                          onSuccess: () => {
+                            setOpenAssessmentConfirmSaving(false);
+                            setShowOpenAssessmentConfirm(false);
+                          },
+                          onError: () => {
+                            setOpenAssessmentConfirmSaving(false);
+                          },
+                        });
+                      }}
+                      disabled={openAssessmentConfirmSaving}
+                      className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {openAssessmentConfirmSaving ? "Confirming..." : "Confirm Review"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : null}
 
             {/* HR review actions */}
@@ -2046,18 +2168,47 @@ export default function SubmissionDetailView({
                         })
                       )}
                       {canEdit && canonicalQuestions.length > 0 ? (
-                        <tr className="border-b border-slate-100 dark:border-slate-700/40">
-                          <td colSpan={colSpan} className="px-4 py-2">
-                            <button
-                              type="button"
-                              onClick={() => addAuthoredRow(sectionId)}
-                              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-primary/90"
-                            >
-                              <Plus className="size-3" />
-                              Add Question
-                            </button>
-                          </td>
-                        </tr>
+                        <>
+                          <tr className="border-b border-slate-100 dark:border-slate-700/40">
+                            <td colSpan={colSpan} className="px-4 py-2">
+                              {/* Allocated / remaining budget display */}
+                              {(() => {
+                                const section = data.sections.find((s) => s.id === sectionId);
+                                const budget = section?.openAssessmentTotalMarks ?? 0;
+                                const sectionDrafts = authoredDrafts[sectionId] ?? [];
+                                const allocated = sectionDrafts.reduce(
+                                  (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+                                  0,
+                                );
+                                const remaining = budget - allocated;
+                                if (budget <= 0) return null;
+                                return (
+                                  <div className="mb-2 flex items-center gap-3">
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                                      Allocated:{" "}
+                                      <span className={cn("font-bold", remaining < 0 ? "text-red-600" : "text-slate-700 dark:text-slate-300")}>
+                                        {allocated}
+                                      </span>
+                                      {" / "}
+                                      <span className="font-bold text-slate-700 dark:text-slate-300">{budget}</span>
+                                      {remaining < 0 ? (
+                                        <span className="ml-1 text-red-600">(over budget)</span>
+                                      ) : null}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => addAuthoredRow(sectionId)}
+                                      className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-primary/90"
+                                    >
+                                      <Plus className="size-3" />
+                                      Add Question
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                          </tr>
+                        </>
                       ) : null}
                     </Fragment>
                   );
