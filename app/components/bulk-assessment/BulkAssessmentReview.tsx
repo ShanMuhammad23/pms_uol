@@ -12,9 +12,11 @@ import {
   FileText,
   Filter,
   Loader2,
+  Plus,
   RefreshCw,
   Search,
   Square,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -25,10 +27,14 @@ import {
   fetchBulkReviewQuestionData,
   finishBulkReview,
   saveBulkReviewQuestionScores,
+  saveBulkAuthoredAnswers,
   type BulkReviewQueueItem,
   type BulkReviewQuestionData,
+  type BulkAuthoredAnswerData,
   type SaveBulkReviewEntry,
+  type SaveBulkAuthoredEntry,
 } from "@/lib/queries/bulk-assessment-client";
+import { confirmManager2OpenAssessment } from "@/lib/queries/direct-assessment-client";
 import { cn } from "@/lib/utils";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import { FormDescription } from "@/app/components/forms/FormDescription";
@@ -98,6 +104,66 @@ function formatDate(iso: string | null): string {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Authored question drafts (open-assessment sections)                        */
+/* -------------------------------------------------------------------------- */
+
+interface AuthoredDraft {
+  clientId: string;
+  authoredQuestionText: string;
+  authoredTotalMarks: string;
+  pointsEarned: string;
+  ratingValue: string;
+  remarks: string;
+}
+
+let authoredClientIdCounter = 0;
+function nextAuthoredClientId(): string {
+  authoredClientIdCounter += 1;
+  return `ba-authored-${Date.now()}-${authoredClientIdCounter}`;
+}
+
+/** Build initial authored drafts from question data.
+ * submissionId → sectionId → drafts[] */
+function buildInitialAuthoredDrafts(
+  questions: BulkReviewQuestionData[],
+): Map<number, Map<number, AuthoredDraft[]>> {
+  const state = new Map<number, Map<number, AuthoredDraft[]>>();
+
+  for (const q of questions) {
+    if (!q.isOpenAssessment || q.openSectionId == null) continue;
+
+    for (const row of q.rows) {
+      // Seed from the current reviewer's authored answers first.
+      // If the reviewer has none, fall back to Manager 1's authored answers
+      // (for Manager 2 viewing Manager 1's questions).
+      const ownAuthored = row.managerAuthoredAnswers ?? [];
+      const mgr1Authored = row.manager1AuthoredAnswers ?? [];
+      const source = ownAuthored.length > 0 ? ownAuthored : mgr1Authored;
+      const usingFallback = ownAuthored.length === 0 && mgr1Authored.length > 0;
+
+      const drafts: AuthoredDraft[] = source.map((a) => ({
+        clientId: nextAuthoredClientId(),
+        authoredQuestionText: a.authoredQuestionText ?? "",
+        authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
+        pointsEarned: String(a.pointsEarned ?? 0),
+        ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
+        // Never copy remarks from the fallback source.
+        remarks: usingFallback ? "" : (a.remarks ?? ""),
+      }));
+
+      let sectionMap = state.get(row.submissionId);
+      if (!sectionMap) {
+        sectionMap = new Map();
+        state.set(row.submissionId, sectionMap);
+      }
+      sectionMap.set(q.openSectionId, drafts);
+    }
+  }
+
+  return state;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Component                                                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -126,6 +192,19 @@ export default function BulkAssessmentReview({
     approved: Array<{ id: number; managerLevel: number; status: string }>;
     skipped: Array<{ id: number; reason: string }>;
   } | null>(null);
+
+  // --- Authored draft state (open-assessment sections) ---
+  // submissionId → sectionId → drafts[]
+  const [authoredDrafts, setAuthoredDrafts] = useState<
+    Map<number, Map<number, AuthoredDraft[]>>
+  >(new Map());
+  const authoredDraftsRef = useRef(authoredDrafts);
+  authoredDraftsRef.current = authoredDrafts;
+  // Track which submission+section pairs have been modified.
+  const [authoredModified, setAuthoredModified] = useState<Set<string>>(new Set());
+  // Manager 2 open assessment confirmation modal.
+  const [confirmModalSubmissionId, setConfirmModalSubmissionId] = useState<number | null>(null);
+  const [confirmSaving, setConfirmSaving] = useState(false);
 
   // --- Queue query ---
   const {
@@ -196,6 +275,23 @@ export default function BulkAssessmentReview({
   const totalQuestions = questions.length;
   const currentQuestion: BulkReviewQuestionData | null =
     questions[currentQuestionIdx] ?? null;
+
+  // Initialize authored drafts when question data loads.
+  const [prevQuestionData, setPrevQuestionData] = useState(questionData);
+  if (questionData !== prevQuestionData) {
+    setPrevQuestionData(questionData);
+    if (questionData) {
+      const initial = buildInitialAuthoredDrafts(questionData.questions);
+      setAuthoredDrafts(initial);
+      setAuthoredModified(new Set());
+    }
+  }
+
+  // Open assessment sections in the current template.
+  const openAssessmentSections = useMemo(
+    () => questions.filter((q) => q.isOpenAssessment),
+    [questions],
+  );
 
   // --- Draft management ---
   // When question data loads or question changes, initialize drafts from
@@ -278,10 +374,161 @@ export default function BulkAssessmentReview({
     [],
   );
 
+  // --- Authored draft helpers (open-assessment sections) ---
+
+  const addAuthoredRow = useCallback(
+    (submissionId: number, sectionId: number, budget: number) => {
+      // Enforce section budget — block adding when allocated >= budget.
+      const existing =
+        authoredDraftsRef.current.get(submissionId)?.get(sectionId) ?? [];
+      const allocated = existing.reduce(
+        (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+        0,
+      );
+      if (budget > 0 && allocated >= budget) {
+        toast.error(
+          `Section budget of ${budget} marks is fully allocated. Reduce the marks of existing questions to add more.`,
+        );
+        return;
+      }
+      setAuthoredDrafts((prev) => {
+        const next = new Map(prev);
+        let sectionMap = next.get(submissionId);
+        if (!sectionMap) {
+          sectionMap = new Map();
+          next.set(submissionId, sectionMap);
+        }
+        const drafts = sectionMap.get(sectionId) ?? [];
+        sectionMap.set(sectionId, [
+          ...drafts,
+          {
+            clientId: nextAuthoredClientId(),
+            authoredQuestionText: "",
+            authoredTotalMarks: "",
+            pointsEarned: "",
+            ratingValue: "",
+            remarks: "",
+          },
+        ]);
+        return next;
+      });
+      setAuthoredModified((prev) => {
+        const next = new Set(prev);
+        next.add(`${submissionId}:${sectionId}`);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const removeAuthoredRow = useCallback(
+    (submissionId: number, sectionId: number, clientId: string) => {
+      setAuthoredDrafts((prev) => {
+        const next = new Map(prev);
+        const sectionMap = next.get(submissionId);
+        if (!sectionMap) return prev;
+        const drafts = sectionMap.get(sectionId) ?? [];
+        sectionMap.set(
+          sectionId,
+          drafts.filter((d) => d.clientId !== clientId),
+        );
+        return next;
+      });
+      setAuthoredModified((prev) => {
+        const next = new Set(prev);
+        next.add(`${submissionId}:${sectionId}`);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const updateAuthoredDraft = useCallback(
+    (
+      submissionId: number,
+      sectionId: number,
+      clientId: string,
+      field: keyof AuthoredDraft,
+      value: string,
+    ) => {
+      setAuthoredDrafts((prev) => {
+        const next = new Map(prev);
+        let sectionMap = next.get(submissionId);
+        if (!sectionMap) {
+          sectionMap = new Map();
+          next.set(submissionId, sectionMap);
+        }
+        const drafts = sectionMap.get(sectionId) ?? [];
+        sectionMap.set(
+          sectionId,
+          drafts.map((d) =>
+            d.clientId === clientId ? { ...d, [field]: value } : d,
+          ),
+        );
+        return next;
+      });
+      setAuthoredModified((prev) => {
+        const next = new Set(prev);
+        next.add(`${submissionId}:${sectionId}`);
+        return next;
+      });
+    },
+    [],
+  );
+
+  // --- Manager 2 open assessment confirmation mutation ---
+  const confirmOpenAssessmentMutation = useMutation({
+    mutationFn: async (submissionId: number) => {
+      return confirmManager2OpenAssessment(submissionId);
+    },
+    onSuccess: () => {
+      toast.success("Open assessment confirmed.");
+      void queryClient.invalidateQueries({
+        queryKey: ["bulk-review-questions", workspaceSubmissionIds],
+      });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Failed to confirm open assessment.");
+    },
+  });
+
   // --- Save mutation ---
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!currentQuestion) return;
+
+      // Open assessment section — save authored answers.
+      if (currentQuestion.isOpenAssessment && currentQuestion.openSectionId != null) {
+        const sectionId = currentQuestion.openSectionId;
+        const entries: SaveBulkAuthoredEntry[] = [];
+        for (const row of currentQuestion.rows) {
+          const drafts = authoredDraftsRef.current.get(row.submissionId)?.get(sectionId) ?? [];
+          const authoredQuestions = drafts
+            .map((d) => {
+              const text = d.authoredQuestionText.trim();
+              const totalMarks = Number(d.authoredTotalMarks) || 0;
+              const points = d.pointsEarned !== "" ? Number(d.pointsEarned) : 0;
+              const rating = d.ratingValue !== "" ? Number(d.ratingValue) : null;
+              const remarks = d.remarks.trim() || null;
+              // Skip blank rows — no text, no marks, no points, no remarks.
+              if (!text && !totalMarks && !points && !remarks) return null;
+              return {
+                authoredQuestionText: text || null,
+                authoredTotalMarks: totalMarks,
+                pointsEarned: points,
+                ratingValue: rating,
+                remarks,
+              };
+            })
+            .filter((q): q is NonNullable<typeof q> => q !== null);
+          if (authoredQuestions.length === 0) continue;
+          entries.push({ submissionId: row.submissionId, authoredQuestions });
+        }
+        if (entries.length === 0) return;
+        return saveBulkAuthoredAnswers(sectionId, entries);
+      }
+
+      // Normal question — save scores.
       const entries: SaveBulkReviewEntry[] = [];
       for (const [submissionId, draft] of drafts) {
         const hasPoints =
@@ -411,6 +658,9 @@ export default function BulkAssessmentReview({
   // --- Validation ---
   const missingScores = useMemo(() => {
     if (!currentQuestion) return new Set<number>();
+    // Open assessment sections don't block forward navigation —
+    // authored questions are optional (matching DirectAssessment behavior).
+    if (currentQuestion.isOpenAssessment) return new Set<number>();
     const missing = new Set<number>();
     for (const row of currentQuestion.rows) {
       const draft = drafts.get(row.submissionId);
@@ -566,6 +816,28 @@ export default function BulkAssessmentReview({
         onFinishClose={handleFinishClose}
         onBackToList={handleBackToSelect}
         onJumpToQuestion={handleJumpToQuestion}
+        authoredDrafts={authoredDrafts}
+        authoredModified={authoredModified}
+        onAddAuthoredRow={addAuthoredRow}
+        onRemoveAuthoredRow={removeAuthoredRow}
+        onUpdateAuthoredDraft={updateAuthoredDraft}
+        managerLevelBySubmissionId={managerLevelBySubmissionId}
+        confirmModalSubmissionId={confirmModalSubmissionId}
+        confirmSaving={confirmSaving}
+        onSetConfirmModal={setConfirmModalSubmissionId}
+        onSetConfirmSaving={setConfirmSaving}
+        onConfirmOpenAssessment={(submissionId) => {
+          setConfirmSaving(true);
+          confirmOpenAssessmentMutation.mutate(submissionId, {
+            onSuccess: () => {
+              setConfirmSaving(false);
+              setConfirmModalSubmissionId(null);
+            },
+            onError: () => {
+              setConfirmSaving(false);
+            },
+          });
+        }}
       />
     );
   }
@@ -959,6 +1231,24 @@ interface WorkspaceViewProps {
   onFinishClose: () => void;
   onBackToList: () => void;
   onJumpToQuestion: (idx: number) => void;
+  // Open assessment props
+  authoredDrafts: Map<number, Map<number, AuthoredDraft[]>>;
+  authoredModified: Set<string>;
+  onAddAuthoredRow: (submissionId: number, sectionId: number, budget: number) => void;
+  onRemoveAuthoredRow: (submissionId: number, sectionId: number, clientId: string) => void;
+  onUpdateAuthoredDraft: (
+    submissionId: number,
+    sectionId: number,
+    clientId: string,
+    field: keyof AuthoredDraft,
+    value: string,
+  ) => void;
+  managerLevelBySubmissionId: Map<number, number>;
+  confirmModalSubmissionId: number | null;
+  confirmSaving: boolean;
+  onSetConfirmModal: (id: number | null) => void;
+  onSetConfirmSaving: (saving: boolean) => void;
+  onConfirmOpenAssessment: (submissionId: number) => void;
 }
 
 function WorkspaceView({
@@ -989,6 +1279,17 @@ function WorkspaceView({
   onFinishClose,
   onBackToList,
   onJumpToQuestion,
+  authoredDrafts,
+  authoredModified,
+  onAddAuthoredRow,
+  onRemoveAuthoredRow,
+  onUpdateAuthoredDraft,
+  managerLevelBySubmissionId,
+  confirmModalSubmissionId,
+  confirmSaving,
+  onSetConfirmModal,
+  onSetConfirmSaving,
+  onConfirmOpenAssessment,
 }: WorkspaceViewProps) {
   return (
     <div className="flex flex-col h-full px-4 py-6 sm:px-6 lg:px-8">
@@ -1102,6 +1403,24 @@ function WorkspaceView({
             </p>
           </div>
 
+          {/* Open assessment section — per-employee authored question cards */}
+          {currentQuestion.isOpenAssessment && currentQuestion.openSectionId != null ? (
+            <OpenAssessmentContent
+              currentQuestion={currentQuestion}
+              authoredDrafts={authoredDrafts}
+              authoredModified={authoredModified}
+              managerLevelBySubmissionId={managerLevelBySubmissionId}
+              onAddAuthoredRow={onAddAuthoredRow}
+              onRemoveAuthoredRow={onRemoveAuthoredRow}
+              onUpdateAuthoredDraft={onUpdateAuthoredDraft}
+              confirmModalSubmissionId={confirmModalSubmissionId}
+              confirmSaving={confirmSaving}
+              onSetConfirmModal={onSetConfirmModal}
+              onSetConfirmSaving={onSetConfirmSaving}
+              onConfirmOpenAssessment={onConfirmOpenAssessment}
+            />
+          ) : (
+          <>
           {/* Score table */}
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
             <table className="w-full text-sm">
@@ -1264,6 +1583,8 @@ function WorkspaceView({
               )}
             </p>
           ) : null}
+          </>
+          )}
         </div>
       )}
 
@@ -1412,6 +1733,297 @@ function WorkspaceView({
           </motion.div>
         ) : null}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Open Assessment Content (per-employee authored question cards)            */
+/* -------------------------------------------------------------------------- */
+
+interface OpenAssessmentContentProps {
+  currentQuestion: BulkReviewQuestionData;
+  authoredDrafts: Map<number, Map<number, AuthoredDraft[]>>;
+  authoredModified: Set<string>;
+  managerLevelBySubmissionId: Map<number, number>;
+  onAddAuthoredRow: (submissionId: number, sectionId: number, budget: number) => void;
+  onRemoveAuthoredRow: (submissionId: number, sectionId: number, clientId: string) => void;
+  onUpdateAuthoredDraft: (
+    submissionId: number,
+    sectionId: number,
+    clientId: string,
+    field: keyof AuthoredDraft,
+    value: string,
+  ) => void;
+  confirmModalSubmissionId: number | null;
+  confirmSaving: boolean;
+  onSetConfirmModal: (id: number | null) => void;
+  onSetConfirmSaving: (saving: boolean) => void;
+  onConfirmOpenAssessment: (submissionId: number) => void;
+}
+
+function OpenAssessmentContent({
+  currentQuestion,
+  authoredDrafts,
+  authoredModified,
+  managerLevelBySubmissionId,
+  onAddAuthoredRow,
+  onRemoveAuthoredRow,
+  onUpdateAuthoredDraft,
+  confirmModalSubmissionId,
+  confirmSaving,
+  onSetConfirmModal,
+  onSetConfirmSaving,
+  onConfirmOpenAssessment,
+}: OpenAssessmentContentProps) {
+  const sectionId = currentQuestion.openSectionId!;
+  const budget = currentQuestion.openAssessmentTotalMarks ?? 0;
+  const confirmEmp = currentQuestion.rows.find(
+    (r) => r.submissionId === confirmModalSubmissionId,
+  );
+
+  return (
+    <div className="space-y-4">
+      {currentQuestion.rows.map((row) => {
+        const drafts = authoredDrafts.get(row.submissionId)?.get(sectionId) ?? [];
+        const allocated = drafts.reduce(
+          (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+          0,
+        );
+        const remaining = budget - allocated;
+        const totalScore = drafts.reduce(
+          (sum, d) => sum + (d.pointsEarned !== "" ? Number(d.pointsEarned) : 0),
+          0,
+        );
+        const managerLevel = managerLevelBySubmissionId.get(row.submissionId) ?? 1;
+        const isMgr2 = managerLevel === 2;
+        const isModified = authoredModified.has(`${row.submissionId}:${sectionId}`);
+        const mgr1Authored = row.manager1AuthoredAnswers ?? [];
+        const usingMgr1Fallback =
+          (row.managerAuthoredAnswers ?? []).length === 0 && mgr1Authored.length > 0;
+
+        return (
+          <div
+            key={row.submissionId}
+            className={cn(
+              "rounded-lg border bg-white p-4 dark:bg-slate-900",
+              isModified
+                ? "border-amber-300 dark:border-amber-700"
+                : "border-slate-200 dark:border-white/10",
+            )}
+          >
+            {/* Employee header */}
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  M{managerLevel}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {row.employeeName}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {row.employeeId}
+                  </p>
+                </div>
+                {usingMgr1Fallback ? (
+                  <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-950/30 dark:text-blue-300">
+                    Viewing Manager 1's questions
+                  </span>
+                ) : null}
+              </div>
+              {drafts.length > 0 ? (
+                <span className="text-xs font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                  {totalScore}/{allocated}
+                </span>
+              ) : null}
+            </div>
+
+            {/* Authored questions */}
+            {drafts.length > 0 ? (
+              <div className="space-y-2">
+                {drafts.map((draft, qIdx) => {
+                  const maxMarks = Number(draft.authoredTotalMarks) || 0;
+                  return (
+                    <div
+                      key={draft.clientId}
+                      className="flex items-start gap-2 rounded-md border border-slate-100 p-2 dark:border-slate-700/40"
+                    >
+                      <span className="mt-1.5 w-5 shrink-0 text-xs font-bold tabular-nums text-slate-400 dark:text-slate-500">
+                        {qIdx + 1}
+                      </span>
+                      <textarea
+                        value={draft.authoredQuestionText}
+                        rows={2}
+                        onChange={(e) =>
+                          onUpdateAuthoredDraft(
+                            row.submissionId,
+                            sectionId,
+                            draft.clientId,
+                            "authoredQuestionText",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Question text..."
+                        className="min-w-0 flex-1 resize-y rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                      <div className="flex shrink-0 items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={draft.authoredTotalMarks}
+                          onChange={(e) =>
+                            onUpdateAuthoredDraft(
+                              row.submissionId,
+                              sectionId,
+                              draft.clientId,
+                              "authoredTotalMarks",
+                              e.target.value,
+                            )
+                          }
+                          className="h-8 w-16 rounded border border-slate-200 bg-white px-1 text-right text-xs font-bold tabular-nums text-amber-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-amber-300"
+                          placeholder="Marks"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          max={maxMarks || undefined}
+                          step="0.5"
+                          value={draft.pointsEarned}
+                          onChange={(e) =>
+                            onUpdateAuthoredDraft(
+                              row.submissionId,
+                              sectionId,
+                              draft.clientId,
+                              "pointsEarned",
+                              clampScore(e.target.value, maxMarks),
+                            )
+                          }
+                          className="h-8 w-16 rounded border border-slate-200 bg-white px-1 text-right text-xs font-bold tabular-nums text-teal-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
+                          placeholder="Score"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onRemoveAuthoredRow(row.submissionId, sectionId, draft.clientId)
+                          }
+                          className="flex size-8 shrink-0 items-center justify-center rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          title="Remove question"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="py-3 text-center text-xs text-slate-400 dark:text-slate-500">
+                No questions authored yet.
+              </p>
+            )}
+
+            {/* Footer: budget + add question + Manager 2 confirm */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 dark:border-slate-700/40">
+              <div className="flex items-center gap-3">
+                {budget > 0 ? (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Allocated:{" "}
+                    <span
+                      className={cn(
+                        "font-bold",
+                        remaining < 0
+                          ? "text-red-600"
+                          : "text-slate-700 dark:text-slate-300",
+                      )}
+                    >
+                      {allocated}
+                    </span>
+                    {" / "}
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {budget}
+                    </span>
+                    {remaining < 0 ? (
+                      <span className="ml-1 text-red-600">(over budget)</span>
+                    ) : null}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onAddAuthoredRow(row.submissionId, sectionId, budget)}
+                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
+                >
+                  <Plus className="size-3" />
+                  Add Question
+                </button>
+              </div>
+              {/* Manager 2 confirmation */}
+              {isMgr2 ? (
+                <button
+                  type="button"
+                  onClick={() => onSetConfirmModal(row.submissionId)}
+                  disabled={confirmSaving}
+                  className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="size-3" />
+                  Confirm Open Assessment
+                </button>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Manager 2 confirmation modal */}
+      {confirmModalSubmissionId != null ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => !confirmSaving && onSetConfirmModal(null)}
+        >
+          <div
+            className="mx-4 max-w-md rounded-lg bg-white p-5 shadow-xl dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Confirm Open Assessment Review
+              </h3>
+              <button
+                type="button"
+                onClick={() => !confirmSaving && onSetConfirmModal(null)}
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <p className="mb-4 text-xs text-slate-600 dark:text-slate-400">
+              You are about to confirm that you have reviewed the open/free
+              assessment sections for{" "}
+              <span className="font-bold">{confirmEmp?.employeeName ?? "this employee"}</span>.
+              This action records your review confirmation.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onSetConfirmModal(null)}
+                disabled={confirmSaving}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => onConfirmOpenAssessment(confirmModalSubmissionId)}
+                disabled={confirmSaving}
+                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {confirmSaving ? "Confirming..." : "Confirm Review"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

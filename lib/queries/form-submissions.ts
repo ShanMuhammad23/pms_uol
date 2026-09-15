@@ -1024,6 +1024,15 @@ function isAssignedManagerAtLevelInline(
 /* Bulk Review Question Data                                                   */
 /* -------------------------------------------------------------------------- */
 
+export interface BulkAuthoredAnswerData {
+  authoredQuestionText: string | null;
+  authoredTotalMarks: number;
+  pointsEarned: number;
+  ratingValue: number | null;
+  remarks: string | null;
+  openSectionId: number;
+}
+
 export interface BulkReviewQuestionRow {
   submissionId: number;
   employeeId: string;
@@ -1045,6 +1054,12 @@ export interface BulkReviewQuestionRow {
   manager1Remarks: string | null;
   /** Attachments uploaded by the employee for this question. */
   attachments: EmployeeFormAnswerAttachment[];
+  /** Self-authored answers for open-assessment sections. */
+  authoredAnswers: BulkAuthoredAnswerData[];
+  /** Current reviewer's authored answers for open-assessment sections. */
+  managerAuthoredAnswers: BulkAuthoredAnswerData[];
+  /** Manager 1's authored answers (fallback for Manager 2). */
+  manager1AuthoredAnswers: BulkAuthoredAnswerData[];
 }
 
 export interface BulkReviewQuestionData {
@@ -1056,6 +1071,12 @@ export interface BulkReviewQuestionData {
   ratingBased: boolean;
   ratingScale: FormRatingScaleRecord | null;
   rows: BulkReviewQuestionRow[];
+  /** True when this question step is an open/free assessment section. */
+  isOpenAssessment: boolean;
+  /** Section ID for open-assessment sections. */
+  openSectionId: number | null;
+  /** Section budget (open_assessment_total_marks) for open-assessment sections. */
+  openAssessmentTotalMarks: number;
 }
 
 /**
@@ -1352,6 +1373,9 @@ export async function getBulkReviewQuestionData(
         manager1Remarks,
         attachments:
           attachmentsBySubmission.get(meta.id)?.get(q.id) ?? [],
+        authoredAnswers: [],
+        managerAuthoredAnswers: [],
+        manager1AuthoredAnswers: [],
       });
     }
 
@@ -1364,7 +1388,128 @@ export async function getBulkReviewQuestionData(
       ratingBased: template.ratingBased,
       ratingScale: getQuestionRatingScale(q, template.ratingScales),
       rows,
+      isOpenAssessment: false,
+      openSectionId: null,
+      openAssessmentTotalMarks: 0,
     });
+  }
+
+  // ---- Open assessment sections (free assessment) ----
+  // Each open section becomes a "question step" in the bulk review workspace.
+  // Authored answers are fetched in batch for all submissions + reviewers.
+  const openSections = template.sections.filter((s) => s.isOpenAssessment);
+
+  if (openSections.length > 0) {
+    const openSectionIds = openSections.map((s) => s.id);
+
+    // Collect all filled_by_id values we need authored answers from:
+    // employee (self), current reviewer, and Manager 1 (for Manager 2 fallback).
+    const authoredReviewerIds = new Set<number>([reviewerUserId]);
+    for (const meta of submissionMeta) {
+      authoredReviewerIds.add(meta.employeeUserId);
+      if (meta.manager1UserId != null) {
+        authoredReviewerIds.add(meta.manager1UserId);
+      }
+    }
+
+    // Batch fetch all authored answers for the selected submissions + open sections.
+    const authoredBySubmission = new Map<
+      string,
+      BulkAuthoredAnswerData[]
+    >();
+
+    if (selectedIds.length > 0 && openSectionIds.length > 0 && authoredReviewerIds.size > 0) {
+      const authoredResult = await db.query<{
+        appraisal_id: string;
+        filled_by_id: string;
+        open_section_id: string;
+        authored_question_text: string | null;
+        authored_total_marks: string;
+        points_earned: string;
+        rating_value: string | null;
+        remarks: string | null;
+      }>(
+        `SELECT appraisal_id::text, filled_by_id::text, open_section_id::text,
+                authored_question_text, authored_total_marks::text,
+                points_earned::text, rating_value::text, remarks
+         FROM appraisal_answers
+         WHERE appraisal_id = ANY($1::bigint[])
+           AND open_section_id = ANY($2::bigint[])
+           AND filled_by_id = ANY($3::bigint[])
+         ORDER BY appraisal_id ASC, filled_by_id ASC, open_section_id ASC, id ASC`,
+        [selectedIds, openSectionIds, [...authoredReviewerIds]],
+      );
+
+      for (const row of authoredResult.rows) {
+        const key = `${Number(row.appraisal_id)}:${Number(row.filled_by_id)}:${Number(row.open_section_id)}`;
+        const list = authoredBySubmission.get(key) ?? [];
+        list.push({
+          authoredQuestionText: row.authored_question_text,
+          authoredTotalMarks: Number(row.authored_total_marks),
+          pointsEarned: Number(row.points_earned),
+          ratingValue:
+            row.rating_value == null || row.rating_value === ""
+              ? null
+              : Number(row.rating_value),
+          remarks: row.remarks,
+          openSectionId: Number(row.open_section_id),
+        });
+        authoredBySubmission.set(key, list);
+      }
+    }
+
+    const getAuthoredList = (
+      submissionId: number,
+      filledById: number,
+      sectionId: number,
+    ): BulkAuthoredAnswerData[] =>
+      authoredBySubmission.get(`${submissionId}:${filledById}:${sectionId}`) ?? [];
+
+    for (const section of openSections) {
+      const openRows: BulkReviewQuestionRow[] = [];
+
+      for (const meta of submissionMeta) {
+        const selfAuthored = getAuthoredList(meta.id, meta.employeeUserId, section.id);
+        const mgrAuthored = getAuthoredList(meta.id, reviewerUserId, section.id);
+        const mgr1Authored =
+          meta.manager1UserId != null
+            ? getAuthoredList(meta.id, meta.manager1UserId, section.id)
+            : [];
+
+        openRows.push({
+          submissionId: meta.id,
+          employeeId: meta.employeeId,
+          employeeName: meta.employeeName,
+          selfScore: null,
+          selfRating: null,
+          selfRemarks: null,
+          managerScore: null,
+          managerRating: null,
+          managerRemarks: null,
+          manager1Score: null,
+          manager1Rating: null,
+          manager1Remarks: null,
+          attachments: [],
+          authoredAnswers: selfAuthored,
+          managerAuthoredAnswers: mgrAuthored,
+          manager1AuthoredAnswers: mgr1Authored,
+        });
+      }
+
+      questionsData.push({
+        questionId: 0,
+        questionText: section.title,
+        totalMarks: section.openAssessmentTotalMarks ?? 0,
+        isRequired: false,
+        sectionTitle: section.title,
+        ratingBased: template.ratingBased,
+        ratingScale: null,
+        rows: openRows,
+        isOpenAssessment: true,
+        openSectionId: section.id,
+        openAssessmentTotalMarks: section.openAssessmentTotalMarks ?? 0,
+      });
+    }
   }
 
   return {
@@ -1490,6 +1635,108 @@ export async function saveBulkReviewQuestionScores(
   }
 
   return { savedCount: validEntries.length };
+}
+
+/**
+ * Save authored answers (open-assessment sections) for multiple submissions
+ * in bulk. For each submission, deletes existing authored rows for the
+ * reviewer + section, then inserts the new set. Mirrors the authored-answer
+ * logic in `saveManagerReviewAnswers` but across multiple submissions.
+ */
+export async function saveBulkAuthoredAnswers(
+  reviewerUserId: number,
+  sectionId: number,
+  entries: Array<{
+    submissionId: number;
+    authoredQuestions: Array<{
+      authoredQuestionText: string | null;
+      authoredTotalMarks: number;
+      pointsEarned: number;
+      ratingValue?: number | null;
+      remarks?: string | null;
+    }>;
+  }>,
+  options?: {
+    ratingBased?: boolean;
+    ratingScales?: FormRatingScaleRecord[];
+  },
+): Promise<{ savedCount: number }> {
+  const ratingBased = Boolean(options?.ratingBased);
+  const ratingScales = options?.ratingScales ?? [];
+  let savedCount = 0;
+
+  for (const entry of entries) {
+    const { submissionId, authoredQuestions } = entry;
+
+    // Delete existing authored rows for this submission + reviewer + section.
+    await getDbClient().query(
+      `DELETE FROM appraisal_answers
+       WHERE appraisal_id = $1
+         AND filled_by_id = $2
+         AND open_section_id = $3`,
+      [submissionId, reviewerUserId, sectionId],
+    );
+
+    for (const authored of authoredQuestions) {
+      const questionText = (authored.authoredQuestionText ?? "").trim();
+      const totalMarks = Number(authored.authoredTotalMarks) || 0;
+      const remarks = authored.remarks?.trim() || null;
+
+      // In rating-based mode, derive points from the selected rating and the
+      // authored weight. In absolute mode, use the author's pointsEarned.
+      const ratingValue =
+        authored.ratingValue == null
+          ? null
+          : Number(authored.ratingValue);
+      let pointsEarned: number;
+      let storedRatingValue: number | null;
+      if (ratingBased && ratingValue != null && Number.isFinite(ratingValue)) {
+        pointsEarned = computeAuthoredRatingPoints(
+          ratingValue,
+          totalMarks,
+          ratingScales,
+        );
+        storedRatingValue = ratingValue;
+      } else {
+        pointsEarned = Number(authored.pointsEarned) || 0;
+        storedRatingValue = ratingBased ? null : ratingValue;
+      }
+
+      // Skip blank rows — no text, no marks, no points, no remarks.
+      if (!questionText && !totalMarks && !pointsEarned && !remarks) {
+        continue;
+      }
+
+      await getDbClient().query(
+        `INSERT INTO appraisal_answers (
+           appraisal_id,
+           question_id,
+           filled_by_id,
+           text_response,
+           selected_option_id,
+           points_earned,
+           rating_value,
+           remarks,
+           authored_question_text,
+           authored_total_marks,
+           open_section_id
+         ) VALUES ($1, NULL, $2, NULL, NULL, $3, $4, $5, $6, $7, $8)`,
+        [
+          submissionId,
+          reviewerUserId,
+          pointsEarned,
+          storedRatingValue,
+          remarks,
+          questionText,
+          totalMarks,
+          sectionId,
+        ],
+      );
+      savedCount += 1;
+    }
+  }
+
+  return { savedCount };
 }
 
 /**
