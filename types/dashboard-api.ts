@@ -26,6 +26,7 @@ export type DashboardOverviewCounts = {
   total: number;
   quotaEligibleCount: number;
   filters: {
+    campus: CountOption[];
     category0: CountOption[];
     category1: CountOption[];
     category2: CountOption[];

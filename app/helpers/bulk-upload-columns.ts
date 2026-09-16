@@ -128,7 +128,7 @@ function col(
 }
 
 export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
-  col("employeeName", "Name", "basic", "text", 180, true),
+  col("employeeName", "Employee Name", "basic", "text", 180, true),
   col("email", "Email", "basic", "text", 200, true),
   col("formAssignment", "Form", "basic", "form", 180, true),
   col("formStatus", "Form status", "basic", "readonly", 110),
@@ -137,7 +137,7 @@ export const BULK_UPLOAD_COLUMNS: readonly BulkUploadColumnDef[] = [
   col("roleCategory", "Role Category", "basic", "text", 140, true),
   col("orgLevel1", "ORG Level 1", "basic", "org1", 180, true),
   col("orgLevel2", "ORG Level 2", "basic", "org2", 180, true),
-  col("dateOfJoining", "Date of Joining", "basic", "date", 150, true),
+  col("dateOfJoining", "DOJ", "basic", "date", 150, true),
   col("systemRole", "System Role", "basic", "select", 140, true),
   col("manager1", "Manager 1", "basic", "manager", 200, true),
   col("manager2", "Manager 2", "basic", "manager", 200, true),
@@ -217,12 +217,53 @@ export const BULK_UPLOAD_SELECTABLE_COLUMNS: readonly BulkUploadColumnDef[] =
 export const DEFAULT_BULK_UPLOAD_COLUMN_IDS: readonly BulkUploadColumnId[] =
   BULK_UPLOAD_SELECTABLE_COLUMN_IDS;
 
+/**
+ * Columns HR can map from Excel when creating users (Users → Bulk upload).
+ * Matches Users listing basic info fields (SAP is the required sheet key, not mapped).
+ * Emp category/sub-category are excluded — defaults match Add User.
+ */
+export const BULK_CREATE_SELECTABLE_COLUMN_IDS: readonly BulkUploadColumnId[] = [
+  "employeeName",
+  "email",
+  "designation",
+  "roleCategory",
+  "orgLevel1",
+  "orgLevel2",
+  "dateOfJoining",
+  "systemRole",
+  "manager1",
+  "manager2",
+  "qualification",
+  "qualificationYear",
+  "qualificationSubject",
+  "qualificationInstitute",
+  "qualificationCountry",
+];
+
+export const BULK_CREATE_SELECTABLE_COLUMNS: readonly BulkUploadColumnDef[] =
+  BULK_UPLOAD_COLUMNS.filter((column) =>
+    BULK_CREATE_SELECTABLE_COLUMN_IDS.includes(column.id),
+  );
+
+export const DEFAULT_BULK_CREATE_COLUMN_IDS: readonly BulkUploadColumnId[] =
+  BULK_CREATE_SELECTABLE_COLUMN_IDS;
+
+/** Hidden create defaults (same as Users → Add User). */
+export const BULK_CREATE_DEFAULT_EMP_CATEGORY = "ADMINISTRATION";
+export const BULK_CREATE_DEFAULT_EMP_SUB_CATEGORY = "SYSTEM_ADMIN";
+
+/**
+ * Always shown on the create preview sheet in addition to mapped columns.
+ * Account status defaults to Active and is not Excel-mapped.
+ */
+export const BULK_CREATE_SHEET_EXTRA_COLUMN_IDS: readonly BulkUploadColumnId[] = [
+  "accountStatus",
+];
+
 /** Shown and required when adding a new employee row. */
 export const CREATE_REQUIRED_COLUMN_IDS: readonly BulkUploadColumnId[] = [
   "email",
   "systemRole",
-  "empCategory",
-  "empSubCategory",
 ];
 
 const CREATE_FIELD_IDS = new Set<BulkUploadColumnId>([
@@ -260,6 +301,8 @@ export function emptyBulkUploadRowValues(): Record<BulkUploadColumnId, string> {
   values.systemRole = "EMPLOYEE";
   values.assessmentEligibility = "true";
   values.accountStatus = "Active";
+  values.empCategory = BULK_CREATE_DEFAULT_EMP_CATEGORY;
+  values.empSubCategory = BULK_CREATE_DEFAULT_EMP_SUB_CATEGORY;
   return values;
 }
 
@@ -360,6 +403,75 @@ export function resolveEntityIdFromOrgLevels(
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+/** Resolve Excel org-level text (id or name) to an entity id string. */
+export function resolveOrgLevelMappedValue(
+  raw: string,
+  level: 1 | 2,
+  entities: EntityRecord[],
+  org1Id = "",
+): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  if (/^\d+$/.test(trimmed)) {
+    const byId = entities.find((entity) => String(entity.id) === trimmed);
+    if (byId) return String(byId.id);
+  }
+
+  const needle = trimmed.toLowerCase();
+  const matchesName = (entity: EntityRecord) =>
+    entity.name.trim().toLowerCase() === needle;
+
+  if (level === 1) {
+    const coded = entities.filter((entity) => entity.categoryCode === "C1");
+    const source =
+      coded.length > 0
+        ? coded
+        : entities.filter((entity) => entity.parentEntityId == null);
+    const match = source.find(matchesName) ?? entities.find(matchesName);
+    return match ? String(match.id) : "";
+  }
+
+  const underOrg1 = org1Id
+    ? entities.filter((entity) =>
+        isOrg2UnderOrg1(String(entity.id), org1Id, entities),
+      )
+    : entities.filter(
+        (entity) =>
+          entity.categoryCode === "C2" || entity.parentEntityId != null,
+      );
+  const match = underOrg1.find(matchesName) ?? entities.find(matchesName);
+  return match ? String(match.id) : "";
+}
+
+/** Resolve Excel manager text (user id, SAP, or full name) to a user id string. */
+export function resolveManagerMappedValue(
+  raw: string,
+  users: UserRecord[],
+): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  if (/^\d+$/.test(trimmed)) {
+    const byId = users.find((user) => String(user.id) === trimmed);
+    if (byId) return String(byId.id);
+  }
+
+  const sapKey = trimmed.toLowerCase().replace(/^0+/, "");
+  const bySap = users.find(
+    (user) =>
+      user.employeeId.trim().toLowerCase().replace(/^0+/, "") === sapKey,
+  );
+  if (bySap) return String(bySap.id);
+
+  const needle = trimmed.toLowerCase();
+  const byName = users.find(
+    (user) =>
+      `${user.firstName} ${user.lastName}`.trim().toLowerCase() === needle,
+  );
+  return byName ? String(byName.id) : "";
 }
 
 export function isOrg2UnderOrg1(

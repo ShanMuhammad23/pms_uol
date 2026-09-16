@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import {
   BULK_UPLOAD_SELECTABLE_COLUMNS,
+  type BulkUploadColumnDef,
   type BulkUploadColumnId,
 } from "@/app/helpers/bulk-upload-columns";
 
@@ -20,8 +21,34 @@ const COLUMN_HEADER_ALIASES: Partial<
   Record<BulkUploadColumnId, readonly string[]>
 > = {
   employeeName: ["name", "employee name", "staff name", "full name"],
-  email: ["email", "email address", "e-mail", "e mail", "mail"],
-  designation: ["designation", "job title", "position"],
+  email: [
+    "email",
+    "email address",
+    "email id",
+    "email ids",
+    "e-mail",
+    "e mail",
+    "mail",
+  ],
+  designation: ["designation", "job title", "position", "job"],
+  roleCategory: ["role category", "role", "additional designation"],
+  orgLevel1: [
+    "org level 1",
+    "org level1",
+    "organizational unit",
+    "organisation unit",
+    "faculty",
+    "department",
+    "org 1",
+  ],
+  orgLevel2: [
+    "org level 2",
+    "org level2",
+    "sub department",
+    "sub-department",
+    "section",
+    "org 2",
+  ],
   dateOfJoining: [
     "date of joining",
     "doj",
@@ -29,6 +56,16 @@ const COLUMN_HEADER_ALIASES: Partial<
     "join date",
     "date joined",
   ],
+  systemRole: ["system role", "user role", "pms role"],
+  manager1: [
+    "manager 1",
+    "manager1",
+    "reporting head",
+    "reporting manager",
+    "head",
+    "hod",
+  ],
+  manager2: ["manager 2", "manager2", "second manager", "mgr 2"],
   qualification: ["qualification", "degree", "education"],
   qualificationSubject: ["subject", "major", "field", "specialization"],
   qualificationYear: ["year", "passing year", "graduation year"],
@@ -318,6 +355,7 @@ export async function parseSapIdsFromExcelFile(file: File): Promise<string[]> {
 
 export function suggestExcelColumnMapping(
   columns: ExcelSheetColumn[],
+  targets: readonly BulkUploadColumnDef[] = BULK_UPLOAD_SELECTABLE_COLUMNS,
 ): ExcelColumnMapping {
   const mapping: ExcelColumnMapping = {};
   const usedTargets = new Set<BulkUploadColumnId>();
@@ -327,7 +365,7 @@ export function suggestExcelColumnMapping(
     if (column.isSap) continue;
 
     const header = normalizeExcelHeader(column.header.replace(/ \(\d+\)$/, ""));
-    const match = BULK_UPLOAD_SELECTABLE_COLUMNS.find((target) => {
+    const match = targets.find((target) => {
       if (usedTargets.has(target.id)) return false;
       const aliases = COLUMN_HEADER_ALIASES[target.id] ?? [];
       return (

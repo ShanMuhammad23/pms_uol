@@ -8,9 +8,11 @@ import {
   Pencil,
   Search,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BulkEditStaffModal } from "@/app/components/dashboard/BulkEditStaffModal";
+import { BulkUploadStaffModal } from "@/app/components/dashboard/BulkUploadStaffModal";
 import { ResizableHeader } from "@/app/components/common/ResizableHeader";
 import {
   ColumnManagementPanel,
@@ -236,6 +238,7 @@ export function UsersListingTable({
     () => new Set(),
   );
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [columnMgmtOpen, setColumnMgmtOpen] = useState(false);
 
   const {
@@ -560,6 +563,14 @@ export function UsersListingTable({
           />
           <button
             type="button"
+            onClick={() => setBulkUploadOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#185C37]"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Bulk upload
+          </button>
+          <button
+            type="button"
             onClick={() => setBulkEditOpen(true)}
             disabled={selectedCount === 0}
             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-amber-600 dark:hover:bg-amber-500"
@@ -875,6 +886,13 @@ export function UsersListingTable({
         open={bulkEditOpen}
         selectedEmployeeIds={[...selectedEmployeeIds]}
         onClose={() => setBulkEditOpen(false)}
+        onSuccess={() => setSelectedEmployeeIds(new Set())}
+      />
+
+      <BulkUploadStaffModal
+        open={bulkUploadOpen}
+        purpose="create-users"
+        onClose={() => setBulkUploadOpen(false)}
         onSuccess={() => setSelectedEmployeeIds(new Set())}
       />
     </motion.div>
