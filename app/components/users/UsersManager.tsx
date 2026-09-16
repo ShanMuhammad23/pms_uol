@@ -109,7 +109,7 @@ const emptyAdditionalAccess = () =>
 export default function UsersManager() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<UserFormState>(emptyForm);
-  const [selectedCampusId, setSelectedCampusId] = useState<string>("");
+  const [formCampusId, setFormCampusId] = useState<string>("");
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
   const [activeTab, setActiveTab] = useState<UserSectionTab>("list");
@@ -137,11 +137,13 @@ export default function UsersManager() {
   });
 
   const {
+    selectedCampusId,
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
     selectedRoleCategories,
     selectedDesignations,
+    campusOptions: filterCampusOptions,
     category0Options,
     category0DistributionOptions,
     category1Options,
@@ -150,6 +152,7 @@ export default function UsersManager() {
     designationOptions,
     filteredUsers,
     activeFilters,
+    handleCampusChange,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,
     handleCategory1EntityChange,
@@ -161,6 +164,7 @@ export default function UsersManager() {
     users,
     entities,
     designations,
+    campuses,
   });
 
   const tableClearAllRef = useRef<(() => void) | null>(null);
@@ -186,8 +190,8 @@ export default function UsersManager() {
       entities
         .filter(
           (entity) =>
-            !selectedCampusId ||
-            String(entity.campusId ?? 1) === selectedCampusId,
+            !formCampusId ||
+            String(entity.campusId ?? 1) === formCampusId,
         )
         .map((entity) => ({
           value: String(entity.id),
@@ -195,7 +199,7 @@ export default function UsersManager() {
             ? `${entity.name} (${entity.parentName})`
             : entity.name,
         })),
-    [entities, selectedCampusId],
+    [entities, formCampusId],
   );
 
   const campusOptions = useMemo(
@@ -252,7 +256,7 @@ export default function UsersManager() {
 
   const resetForm = () => {
     setForm(emptyForm);
-    setSelectedCampusId("");
+    setFormCampusId("");
     setSelectedTemplateIds(new Set());
     setAdditionalAccess(emptyAdditionalAccess());
   };
@@ -597,10 +601,10 @@ export default function UsersManager() {
           <Field label="Site" htmlFor="user-campus">
             <SearchableSelect
               id="user-campus"
-              value={selectedCampusId}
+              value={formCampusId}
               options={campusOptions}
               onChange={(next) => {
-                setSelectedCampusId(next);
+                setFormCampusId(next);
                 setForm((current) => ({ ...current, entityId: "" }));
               }}
               disabled={isSubmitting}
@@ -955,6 +959,11 @@ export default function UsersManager() {
       {activeTab === "list" && filtersReady && !error && users.length > 0 ? (
         <div className="space-y-4">
           <DashboardFilterBar
+            selectedCampusId={
+              selectedCampusId != null ? [String(selectedCampusId)] : null
+            }
+            onCampusChange={handleCampusChange}
+            campusOptions={filterCampusOptions}
             selectedCategory0EntityIds={selectedCategory0EntityIds}
             onCategory0EntityChange={handleCategory0EntityChange}
             selectedCategory1EntityIds={selectedCategory1EntityIds}

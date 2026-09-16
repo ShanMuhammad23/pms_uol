@@ -12,6 +12,7 @@ import type { UserRecord } from "@/types/users";
 
 export type UserPageFilterState = {
   searchQuery: string;
+  selectedCampusId: number | null;
   selectedCategory0EntityIds: MultiFilterSelection<number>;
   selectedCategory1EntityIds: MultiFilterSelection<number>;
   selectedCategory2EntityIds: MultiFilterSelection<number>;
@@ -21,11 +22,40 @@ export type UserPageFilterState = {
 };
 
 export type UserFilterDimension =
+  | "campus"
   | "category0"
   | "category1"
   | "category2"
   | "roleCategory"
   | "designation";
+
+/**
+ * True when the user's entity belongs to the given campus.
+ * Resolves the entity (and ancestors) the same way as dashboard campus matching.
+ */
+export function matchesUserCampus(
+  user: UserRecord,
+  campusId: number | null,
+  entities: EntityRecord[],
+): boolean {
+  if (campusId === null) {
+    return true;
+  }
+
+  if (user.entityId == null) {
+    return false;
+  }
+
+  const ancestorIds = getEntitySelfAndAncestorIds(user.entityId, entities);
+  for (const entityId of ancestorIds) {
+    const entity = entities.find((item) => item.id === entityId);
+    if (entity?.campusId === campusId) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function matchesUserEntityFilter(
   user: UserRecord,
@@ -82,6 +112,12 @@ export function matchesUserPageFilters(
   }
 
   if (
+    !matchesUserCampus(user, filters.selectedCampusId, filters.entities)
+  ) {
+    return false;
+  }
+
+  if (
     !matchesUserEntityMultiFilter(
       user,
       filters.selectedCategory0EntityIds,
@@ -134,6 +170,8 @@ export function matchesUserPageFiltersExcluding(
 ): boolean {
   return matchesUserPageFilters(user, {
     ...filters,
+    selectedCampusId:
+      exclude === "campus" ? null : filters.selectedCampusId,
     selectedCategory0EntityIds:
       exclude === "category0" ? null : filters.selectedCategory0EntityIds,
     selectedCategory1EntityIds:

@@ -19,10 +19,12 @@ import {
 import { formatRoleCategoryValue } from "@/app/helpers/dashboard-filters";
 import {
   addUserToEntityFacetCounts,
+  matchesUserCampus,
   matchesUserPageFilters,
   matchesUserPageFiltersExcluding,
   type UserPageFilterState,
 } from "@/app/helpers/users-page-filters";
+import type { CampusRecord } from "@/types/campuses";
 import type { EntityRecord } from "@/types/entities";
 import type { UserRecord } from "@/types/users";
 import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
@@ -31,6 +33,7 @@ interface UseUsersPageFiltersParams {
   users: UserRecord[];
   entities: EntityRecord[];
   designations: string[];
+  campuses: CampusRecord[];
 }
 
 function toStringSelection(
@@ -101,7 +104,10 @@ export function useUsersPageFilters({
   users,
   entities,
   designations,
+  campuses,
 }: UseUsersPageFiltersParams) {
+  const [selectedCampusId, setSelectedCampusId] =
+    useSessionStorageState<number | null>("pms:users-filters:campus", null);
   const [selectedCategory0EntityIds, setSelectedCategory0EntityIds] =
     useSessionStorageState<MultiFilterSelection<number>>(
       "pms:users-filters:category0",
@@ -129,8 +135,12 @@ export function useUsersPageFilters({
     );
 
   const category0Entities = useMemo(
-    () => getEntitiesForFilterLevels(entities, 0, null),
-    [entities],
+    () =>
+      getEntitiesForFilterLevels(entities, 0, null).filter(
+        (entity) =>
+          selectedCampusId === null || entity.campusId === selectedCampusId,
+      ),
+    [entities, selectedCampusId],
   );
 
   const category1Entities = useMemo(
@@ -142,6 +152,13 @@ export function useUsersPageFilters({
     () => getEntitiesForFilterLevels(entities, 2, selectedCategory1EntityIds),
     [entities, selectedCategory1EntityIds],
   );
+
+  useEffect(() => {
+    setPrunedSelection(
+      setSelectedCategory0EntityIds,
+      category0Entities.map((entity) => entity.id),
+    );
+  }, [category0Entities]);
 
   useEffect(() => {
     setPrunedSelection(
@@ -160,6 +177,7 @@ export function useUsersPageFilters({
   const baseFilterState = useMemo<UserPageFilterState>(
     () => ({
       searchQuery: "",
+      selectedCampusId,
       selectedCategory0EntityIds,
       selectedCategory1EntityIds,
       selectedCategory2EntityIds,
@@ -168,6 +186,7 @@ export function useUsersPageFilters({
       entities,
     }),
     [
+      selectedCampusId,
       selectedCategory0EntityIds,
       selectedCategory1EntityIds,
       selectedCategory2EntityIds,
@@ -201,6 +220,44 @@ export function useUsersPageFilters({
       ),
     [deferredUsers, deferredFilterState],
   );
+
+  const campusOptions = useMemo<MultiSelectOption[]>(() => {
+    const counts = new Map<number, number>();
+    for (const campus of campuses) {
+      counts.set(campus.id, 0);
+    }
+
+    for (const user of deferredUsers) {
+      if (
+        !matchesUserPageFiltersExcluding(user, deferredFilterState, "campus")
+      ) {
+        continue;
+      }
+      for (const campus of campuses) {
+        if (matchesUserCampus(user, campus.id, deferredFilterState.entities)) {
+          counts.set(campus.id, (counts.get(campus.id) ?? 0) + 1);
+        }
+      }
+    }
+
+    return campuses
+      .map((campus) => ({
+        value: String(campus.id),
+        label: campus.name,
+        count: counts.get(campus.id) ?? 0,
+      }))
+      .filter(
+        (option) =>
+          option.count > 0 ||
+          (selectedCampusId != null &&
+            String(selectedCampusId) === option.value),
+      );
+  }, [
+    campuses,
+    deferredUsers,
+    deferredFilterState,
+    selectedCampusId,
+  ]);
 
   const category0Options = useMemo<MultiSelectOption[]>(() => {
     const counts = new Map<number, number>();
@@ -414,6 +471,14 @@ export function useUsersPageFilters({
       .filter((option) => option.count > 0);
   }, [designations, deferredUsers, deferredFilterState]);
 
+  const handleCampusChange = useCallback((values: string[] | null) => {
+    if (values === null || values.length === 0) {
+      setSelectedCampusId(null);
+    } else {
+      setSelectedCampusId(Number(values[0]));
+    }
+  }, []);
+
   const handleCategory0EntityChange = useCallback((values: string[] | null) => {
     setSelectedCategory0EntityIds(fromStringIds(values));
   }, []);
@@ -447,6 +512,15 @@ export function useUsersPageFilters({
 
   const activeFilters = useMemo(() => {
     const filters: ActiveFilter[] = [];
+
+    if (selectedCampusId !== null) {
+      const campus = campuses.find((item) => item.id === selectedCampusId);
+      filters.push({
+        label: `Site: ${campus?.name ?? selectedCampusId}`,
+        onRemove: () => setSelectedCampusId(null),
+        color: "slate",
+      });
+    }
 
     if (selectedCategory0EntityIds !== null) {
       filters.push({
@@ -513,15 +587,18 @@ export function useUsersPageFilters({
 
     return filters;
   }, [
+    selectedCampusId,
     selectedCategory0EntityIds,
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
     selectedRoleCategories,
     selectedDesignations,
+    campuses,
     entities,
   ]);
 
   const clearAllFilters = useCallback(() => {
+    setSelectedCampusId(null);
     setSelectedCategory0EntityIds(null);
     setSelectedCategory1EntityIds(null);
     setSelectedCategory2EntityIds(null);
@@ -530,11 +607,13 @@ export function useUsersPageFilters({
   }, []);
 
   return {
+    selectedCampusId,
     selectedCategory0EntityIds: toStringSelection(selectedCategory0EntityIds),
     selectedCategory1EntityIds: toStringSelection(selectedCategory1EntityIds),
     selectedCategory2EntityIds: toStringSelection(selectedCategory2EntityIds),
     selectedRoleCategories,
     selectedDesignations,
+    campusOptions,
     category0Options,
     category0DistributionOptions,
     category1Options,
@@ -543,6 +622,7 @@ export function useUsersPageFilters({
     designationOptions,
     filteredUsers,
     activeFilters,
+    handleCampusChange,
     handleCategory0EntityChange,
     handleCategory0DistributionSelect,
     handleCategory1EntityChange,
