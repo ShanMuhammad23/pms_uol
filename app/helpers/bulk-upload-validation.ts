@@ -1,4 +1,6 @@
 import {
+  BULK_CREATE_DEFAULT_EMP_CATEGORY,
+  BULK_CREATE_DEFAULT_EMP_SUB_CATEGORY,
   isBulkUploadCreateField,
   isOrg2UnderOrg1,
   resolveEntityIdFromOrgLevels,
@@ -6,15 +8,9 @@ import {
 import { isManagerEligibleRole } from "@/app/helpers/manager-eligibility";
 import { parseFlexibleDate } from "@/app/helpers/bulk-upload-excel";
 import type { BulkUploadColumnId } from "@/app/helpers/bulk-upload-columns";
+import { USER_ROLES } from "@/types/users";
 import type { EntityRecord } from "@/types/entities";
 import type { CreateUserInput, UserRecord } from "@/types/users";
-import { USER_ROLES } from "@/types/users";
-import {
-  CATEGORY_SUB_MAP,
-  EMPLOYEE_CATEGORIES,
-  type EmployeeCategory,
-  type SubCategory,
-} from "@/types/forms";
 
 export const BULK_EDIT_MAX_EMPLOYEES = 500;
 export const NEW_EMPLOYEE_PASSWORD_PREFIX = "Welcome@";
@@ -296,10 +292,13 @@ export function collectBulkUploadCreates(
         lastName,
         designation: row.values.designation.trim() || null,
         roleCategory: row.values.roleCategory.trim() || null,
-        dateOfJoining: doj || null,
+        dateOfJoining: parseFlexibleDate(doj) ?? (doj || null),
         systemRole: (row.values.systemRole.trim() || "EMPLOYEE") as CreateUserInput["systemRole"],
-        empCategory: row.values.empCategory.trim(),
-        empSubCategory: row.values.empSubCategory.trim(),
+        empCategory:
+          row.values.empCategory.trim() || BULK_CREATE_DEFAULT_EMP_CATEGORY,
+        empSubCategory:
+          row.values.empSubCategory.trim() ||
+          BULK_CREATE_DEFAULT_EMP_SUB_CATEGORY,
         entityId: resolveEntityIdFromOrgLevels(row.values.orgLevel1, row.values.orgLevel2),
         headId: parseOptionalNumber(row.values.manager1),
         manager2Id: parseOptionalNumber(row.values.manager2),
@@ -401,17 +400,6 @@ export function checkValueConstraints(
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         issues.push(issue(row, "Enter a valid email address.", "email"));
       }
-      const category = row.values.empCategory.trim();
-      const subCategory = row.values.empSubCategory.trim();
-      if (!EMPLOYEE_CATEGORIES.includes(category as EmployeeCategory)) {
-        issues.push(issue(row, "A valid employee category is required.", "empCategory"));
-      } else if (
-        !CATEGORY_SUB_MAP[category as EmployeeCategory].includes(subCategory as SubCategory)
-      ) {
-        issues.push(
-          issue(row, "Sub-category must match the selected employee category.", "empSubCategory"),
-        );
-      }
       const role = row.values.systemRole.trim() || "EMPLOYEE";
       if (!USER_ROLES.includes(role as (typeof USER_ROLES)[number])) {
         issues.push(issue(row, "A valid system role is required.", "systemRole"));
@@ -419,6 +407,39 @@ export function checkValueConstraints(
       const doj = row.values.dateOfJoining.trim();
       if (doj && !parseFlexibleDate(doj) && Number.isNaN(Date.parse(doj))) {
         issues.push(issue(row, "Date of joining must be a valid date.", "dateOfJoining"));
+      }
+      if (
+        row.values.orgLevel1.trim() &&
+        !context.entities.some(
+          (entity) => String(entity.id) === row.values.orgLevel1.trim(),
+        )
+      ) {
+        issues.push(
+          issue(row, "ORG Level 1 must match an entity from the database.", "orgLevel1"),
+        );
+      }
+      if (
+        row.values.orgLevel2.trim() &&
+        !context.entities.some(
+          (entity) => String(entity.id) === row.values.orgLevel2.trim(),
+        )
+      ) {
+        issues.push(
+          issue(row, "ORG Level 2 must match an entity from the database.", "orgLevel2"),
+        );
+      }
+      if (
+        row.values.orgLevel1.trim() &&
+        row.values.orgLevel2.trim() &&
+        !isOrg2UnderOrg1(
+          row.values.orgLevel2,
+          row.values.orgLevel1,
+          context.entities,
+        )
+      ) {
+        issues.push(
+          issue(row, "ORG Level 2 must belong under ORG Level 1.", "orgLevel2"),
+        );
       }
     }
 

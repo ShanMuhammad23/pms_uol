@@ -20,14 +20,20 @@ import { BulkExcelExportPanel } from "@/app/components/dashboard/BulkExcelExport
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import {
+  BULK_CREATE_SELECTABLE_COLUMNS,
+  BULK_CREATE_SHEET_EXTRA_COLUMN_IDS,
   BULK_UPLOAD_COLUMN_GROUPS,
   BULK_UPLOAD_SELECTABLE_COLUMNS,
+  DEFAULT_BULK_CREATE_COLUMN_IDS,
   DEFAULT_BULK_UPLOAD_COLUMN_IDS,
   buildBulkUploadRowValues,
   bulkUploadGroupLabel,
   emptyBulkUploadRowValues,
+  getBulkUploadColumn,
   isBulkUploadCreateField,
   isOrg2UnderOrg1,
+  resolveManagerMappedValue,
+  resolveOrgLevelMappedValue,
   type BulkUploadColumnDef,
   type BulkUploadColumnGroup,
   type BulkUploadColumnId,
@@ -56,6 +62,10 @@ import {
 import {
   invalidateStaffListingQueries,
 } from "@/app/helpers/dashboard-listing-cache";
+import {
+  emptyDashboardFilterParams,
+  EMPTY_MASTER_FILTER_STATE,
+} from "@/lib/dashboard/filter-params";
 import { queryKeys } from "@/app/queries/keys";
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { fetchFormTemplatesForDashboard, assignFormTemplateToEmployees } from "@/lib/queries/forms-client";
@@ -79,6 +89,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type ExcelOpsMode = "choose" | "import" | "export";
+export type BulkUploadPurpose = "excel-ops" | "create-users";
 
 const EMPTY_SUBMISSIONS: FormSubmissionListItem[] = [];
 
@@ -95,10 +106,16 @@ type SheetRow = {
 
 interface BulkUploadStaffModalProps {
   open: boolean;
-  filterParams: DashboardFilterParams;
-  masterFilters: MasterFilterState;
+  /** Required for Staff Listing excel-ops; unused for create-users. */
+  filterParams?: DashboardFilterParams;
+  masterFilters?: MasterFilterState;
   onClose: () => void;
   onSuccess: () => void;
+  /**
+   * `excel-ops` — Staff Listing import/export updates (default).
+   * `create-users` — Users page: create new accounts from Excel SAPs.
+   */
+  purpose?: BulkUploadPurpose;
 }
 
 const cellInputClassName =
@@ -130,25 +147,37 @@ function delay(ms: number): Promise<void> {
 
 export function BulkUploadStaffModal({
   open,
-  filterParams,
-  masterFilters,
+  filterParams = emptyDashboardFilterParams(),
+  masterFilters = EMPTY_MASTER_FILTER_STATE,
   onClose,
   onSuccess,
+  purpose = "excel-ops",
 }: BulkUploadStaffModalProps) {
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState<ExcelOpsMode>("choose");
+  const isCreateUsers = purpose === "create-users";
+  const selectableColumns = isCreateUsers
+    ? BULK_CREATE_SELECTABLE_COLUMNS
+    : BULK_UPLOAD_SELECTABLE_COLUMNS;
+  const defaultColumnIds = isCreateUsers
+    ? DEFAULT_BULK_CREATE_COLUMN_IDS
+    : DEFAULT_BULK_UPLOAD_COLUMN_IDS;
+
+  const [mode, setMode] = useState<ExcelOpsMode>(
+    isCreateUsers ? "import" : "choose",
+  );
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [excelSheet, setExcelSheet] = useState<ParsedExcelStaffSheet | null>(null);
   const [columnMapping, setColumnMapping] = useState<ExcelColumnMapping>({});
   const [importedSapIds, setImportedSapIds] = useState<string[]>([]);
   const [importUnmatched, setImportUnmatched] = useState<string[]>([]);
+  const [importAlreadyExist, setImportAlreadyExist] = useState<string[]>([]);
   const [importParsing, setImportParsing] = useState(false);
   const [importDragOver, setImportDragOver] = useState(false);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(
     () => new Set(),
   );
   const [selectedColumnIds, setSelectedColumnIds] = useState<Set<BulkUploadColumnId>>(
-    () => new Set(DEFAULT_BULK_UPLOAD_COLUMN_IDS),
+    () => new Set(defaultColumnIds),
   );
   const [sheetRows, setSheetRows] = useState<SheetRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +198,7 @@ export function BulkUploadStaffModal({
         filters: filterParams,
         masterFilters,
       }),
-    enabled: open && mode === "import",
+    enabled: open && mode === "import" && !isCreateUsers,
   });
 
   const { data: entities } = useQuery({
@@ -178,7 +207,7 @@ export function BulkUploadStaffModal({
     enabled: open && mode === "import",
   });
 
-  const { data: users } = useQuery({
+  const { data: users, isLoading: usersLoading } = useQuery({
     queryKey: queryKeys.usersOverview,
     queryFn: fetchUsersOverview,
     enabled: open && mode === "import",
@@ -191,21 +220,23 @@ export function BulkUploadStaffModal({
   });
 
   const employees = pageData?.items ?? EMPTY_SUBMISSIONS;
+  const loadingStaff = isCreateUsers ? usersLoading : employeesLoading;
 
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setMode("choose");
+      setMode(isCreateUsers ? "import" : "choose");
       setImportFileName(null);
       setExcelSheet(null);
       setColumnMapping({});
       setImportedSapIds([]);
       setImportUnmatched([]);
+      setImportAlreadyExist([]);
       setImportParsing(false);
       setImportDragOver(false);
       setSelectedEmployeeIds(new Set());
-      setSelectedColumnIds(new Set(DEFAULT_BULK_UPLOAD_COLUMN_IDS));
+      setSelectedColumnIds(new Set(defaultColumnIds));
       setSheetRows([]);
       setError(null);
       setCheckOpen(false);
@@ -288,6 +319,26 @@ export function BulkUploadStaffModal({
   );
 
   const matchedPeople = useMemo(() => {
+    if (isCreateUsers) {
+      return [...selectedEmployeeIds].map((id) => {
+        const excelRow = excelSheet?.rows.find(
+          (row) => sapLookupKey(row.sap) === sapLookupKey(id),
+        );
+        const nameFromSheet =
+          excelRow &&
+          Object.entries(columnMapping).find(([, target]) => target === "employeeName");
+        let name = "";
+        if (nameFromSheet && excelRow) {
+          const [index] = nameFromSheet;
+          name = excelRow.values[Number(index)]?.trim() ?? "";
+        }
+        return {
+          employeeId: id,
+          name: name || id,
+        };
+      });
+    }
+
     const listingById = new Map(
       employees.map((row) => [row.employeeId, row] as const),
     );
@@ -302,17 +353,43 @@ export function BulkUploadStaffModal({
         name: user ? `${user.firstName} ${user.lastName}`.trim() : "—",
       };
     });
-  }, [selectedEmployeeIds, employees, usersByEmployeeId]);
+  }, [
+    isCreateUsers,
+    selectedEmployeeIds,
+    employees,
+    usersByEmployeeId,
+    excelSheet,
+    columnMapping,
+  ]);
 
   const applySapIds = useCallback(
     (sapIds: string[]) => {
-      const bySap = new Map<string, FormSubmissionListItem>();
-      for (const row of employees) {
-        bySap.set(sapLookupKey(row.employeeId), row);
-      }
       const byUserSap = new Map<string, UserRecord>();
       for (const user of users ?? []) {
         byUserSap.set(sapLookupKey(user.employeeId), user);
+      }
+
+      if (isCreateUsers) {
+        const nextIds = new Set<string>();
+        const alreadyExist: string[] = [];
+        for (const sap of sapIds) {
+          const key = sapLookupKey(sap);
+          if (!key) continue;
+          if (byUserSap.has(key)) {
+            alreadyExist.push(sap);
+            continue;
+          }
+          nextIds.add(sap);
+        }
+        setSelectedEmployeeIds(nextIds);
+        setImportUnmatched([]);
+        setImportAlreadyExist(alreadyExist);
+        return;
+      }
+
+      const bySap = new Map<string, FormSubmissionListItem>();
+      for (const row of employees) {
+        bySap.set(sapLookupKey(row.employeeId), row);
       }
 
       const nextIds = new Set<string>();
@@ -334,8 +411,9 @@ export function BulkUploadStaffModal({
 
       setSelectedEmployeeIds(nextIds);
       setImportUnmatched(unmatched);
+      setImportAlreadyExist([]);
     },
-    [employees, users],
+    [employees, users, isCreateUsers],
   );
 
   useEffect(() => {
@@ -355,7 +433,7 @@ export function BulkUploadStaffModal({
       const parsed = await parseExcelStaffSheet(file);
       setImportFileName(file.name);
       setExcelSheet(parsed);
-      setColumnMapping(suggestExcelColumnMapping(parsed.columns));
+      setColumnMapping(suggestExcelColumnMapping(parsed.columns, selectableColumns));
       const sapIds = parsed.rows.map((row) => row.sap);
       setImportedSapIds(sapIds);
       applySapIds(sapIds);
@@ -366,6 +444,7 @@ export function BulkUploadStaffModal({
       setImportedSapIds([]);
       setSelectedEmployeeIds(new Set());
       setImportUnmatched([]);
+      setImportAlreadyExist([]);
       setError(
         parseError instanceof Error
           ? parseError.message
@@ -379,11 +458,27 @@ export function BulkUploadStaffModal({
   const hasImportedSheet = excelSheet != null && importFileName != null;
   const selectedColumns = useMemo(
     () =>
-      BULK_UPLOAD_SELECTABLE_COLUMNS.filter((column) =>
-        selectedColumnIds.has(column.id),
-      ),
-    [selectedColumnIds],
+      selectableColumns.filter((column) => selectedColumnIds.has(column.id)),
+    [selectableColumns, selectedColumnIds],
   );
+
+  const previewColumns = useMemo(() => {
+    if (!isCreateUsers) return selectedColumns;
+
+    const seen = new Set<BulkUploadColumnId>();
+    const columns: BulkUploadColumnDef[] = [];
+    for (const column of selectedColumns) {
+      if (seen.has(column.id)) continue;
+      seen.add(column.id);
+      columns.push(column);
+    }
+    for (const id of BULK_CREATE_SHEET_EXTRA_COLUMN_IDS) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      columns.push(getBulkUploadColumn(id));
+    }
+    return columns;
+  }, [isCreateUsers, selectedColumns]);
 
   const toggleColumn = (id: BulkUploadColumnId) => {
     setSelectedColumnIds((current) => {
@@ -396,7 +491,7 @@ export function BulkUploadStaffModal({
 
   const selectAllColumns = () => {
     setSelectedColumnIds(
-      new Set(BULK_UPLOAD_SELECTABLE_COLUMNS.map((column) => column.id)),
+      new Set(selectableColumns.map((column) => column.id)),
     );
   };
 
@@ -405,12 +500,12 @@ export function BulkUploadStaffModal({
   };
 
   const toggleColumnGroup = (group: BulkUploadColumnGroup) => {
-    const groupIds = BULK_UPLOAD_SELECTABLE_COLUMNS.filter(
-      (column) => column.group === group,
-    ).map((column) => column.id);
+    const groupIds = selectableColumns
+      .filter((column) => column.group === group)
+      .map((column) => column.id);
     setSelectedColumnIds((current) => {
-      const allSelected = groupIds.every((id) => current.has(id));
       const next = new Set(current);
+      const allSelected = groupIds.every((id) => next.has(id));
       for (const id of groupIds) {
         if (allSelected) next.delete(id);
         else next.add(id);
@@ -456,18 +551,16 @@ export function BulkUploadStaffModal({
     }
 
     const entityList = entities ?? [];
+    const userList = users ?? [];
     const excelBySap = new Map(
       excelSheet.rows.map((row) => [sapLookupKey(row.sap), row] as const),
     );
-    const selected = employees.filter((row) =>
-      selectedEmployeeIds.has(row.employeeId),
-    );
-    const listedIds = new Set(selected.map((row) => row.employeeId));
 
     const applyMappedValues = (
       employeeId: string,
       employeeName: string,
       sourceValues: RowValues,
+      isNew: boolean,
     ): SheetRow => {
       const original = { ...sourceValues };
       const values = { ...sourceValues };
@@ -485,15 +578,78 @@ export function BulkUploadStaffModal({
           if (targetId === "employeeName") nextName = mapped;
         }
       }
+
+      if (isNew || selectedColumnIds.has("orgLevel1")) {
+        if (values.orgLevel1) {
+          values.orgLevel1 =
+            resolveOrgLevelMappedValue(values.orgLevel1, 1, entityList) ||
+            values.orgLevel1;
+        }
+      }
+      if (isNew || selectedColumnIds.has("orgLevel2")) {
+        if (values.orgLevel2) {
+          values.orgLevel2 =
+            resolveOrgLevelMappedValue(
+              values.orgLevel2,
+              2,
+              entityList,
+              values.orgLevel1,
+            ) || values.orgLevel2;
+        }
+      }
+      if (isNew || selectedColumnIds.has("manager1")) {
+        if (values.manager1) {
+          values.manager1 =
+            resolveManagerMappedValue(values.manager1, userList) ||
+            values.manager1;
+        }
+      }
+      if (isNew || selectedColumnIds.has("manager2")) {
+        if (values.manager2) {
+          values.manager2 =
+            resolveManagerMappedValue(values.manager2, userList) ||
+            values.manager2;
+        }
+      }
+
+      if (
+        values.orgLevel1 &&
+        values.orgLevel2 &&
+        !isOrg2UnderOrg1(values.orgLevel2, values.orgLevel1, entityList)
+      ) {
+        // Keep org2 only when hierarchy is valid after name/id resolution.
+        const resolvedOrg2 = resolveOrgLevelMappedValue(
+          values.orgLevel2,
+          2,
+          entityList,
+          values.orgLevel1,
+        );
+        values.orgLevel2 = resolvedOrg2;
+      }
+
       return {
-        rowKey: employeeId,
+        rowKey: isNew ? `new-${employeeId}` : employeeId,
         employeeId,
         employeeName: nextName,
-        isNew: false,
+        isNew,
         values,
-        original,
+        original: isNew ? emptyBulkUploadRowValues() : original,
       };
     };
+
+    if (isCreateUsers) {
+      const createRows = [...selectedEmployeeIds].map((sap) => {
+        const values = emptyBulkUploadRowValues();
+        return applyMappedValues(sap, sap, values, true);
+      });
+      setSheetRows(createRows);
+      return;
+    }
+
+    const selected = employees.filter((row) =>
+      selectedEmployeeIds.has(row.employeeId),
+    );
+    const listedIds = new Set(selected.map((row) => row.employeeId));
 
     const existingRows = selected.map((row) =>
       applyMappedValues(
@@ -504,6 +660,7 @@ export function BulkUploadStaffModal({
           usersByEmployeeId.get(row.employeeId),
           entityList,
         ),
+        false,
       ),
     );
     const extraRows = [...selectedEmployeeIds]
@@ -520,7 +677,7 @@ export function BulkUploadStaffModal({
         if (user?.dateOfJoining) {
           values.dateOfJoining = user.dateOfJoining.slice(0, 10);
         }
-        return applyMappedValues(id, name, values);
+        return applyMappedValues(id, name, values, false);
       });
 
     setSheetRows([...existingRows, ...extraRows]);
@@ -531,7 +688,9 @@ export function BulkUploadStaffModal({
     selectedEmployeeIds,
     employees,
     entities,
+    users,
     usersByEmployeeId,
+    isCreateUsers,
   ]);
 
   const updateCell = (
@@ -624,10 +783,14 @@ export function BulkUploadStaffModal({
 
   const startSaveChecks = async () => {
     if (!hasImportedSheet || selectedEmployeeIds.size === 0) {
-      setError("Upload an Excel file with a SAP column first.");
+      setError(
+        isCreateUsers
+          ? "Upload an Excel file with new SAP codes first."
+          : "Upload an Excel file with a SAP column first.",
+      );
       return;
     }
-    if (selectedColumnIds.size === 0) {
+    if (!isCreateUsers && selectedColumnIds.size === 0) {
       setError("Select at least one column to update.");
       return;
     }
@@ -649,7 +812,9 @@ export function BulkUploadStaffModal({
 
     await delay(280);
     if (!stillCurrent()) return;
-    const collected = collectBulkUploadSaveGroups(sheetRows, selectedColumnIds);
+    const collected = isCreateUsers
+      ? { groups: [], changedRowCount: 0, changedCellCount: 0 }
+      : collectBulkUploadSaveGroups(sheetRows, selectedColumnIds);
     const creates = collectBulkUploadCreates(sheetRows);
     if (collected.changedRowCount === 0 && creates.length === 0) {
       setCheckFailedStep("collect");
@@ -659,7 +824,9 @@ export function BulkUploadStaffModal({
           {
             employeeId: "",
             employeeName: "",
-            message: "No cell values have changed and no new employees were added.",
+            message: isCreateUsers
+              ? "No new employees to create from this sheet."
+              : "No cell values have changed and no new employees were added.",
           },
         ],
         createdCount: 0,
@@ -717,8 +884,9 @@ export function BulkUploadStaffModal({
 
   if (!open) return null;
 
-  const headerTitle =
-    mode === "export"
+  const headerTitle = isCreateUsers
+    ? "Bulk upload staff"
+    : mode === "export"
       ? "Bulk Excel Ops · Export to Sheet"
       : mode === "import"
         ? "Bulk Excel Ops · Import From Sheet"
@@ -738,7 +906,7 @@ export function BulkUploadStaffModal({
       >
         <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[#185C37]/40 bg-[#217346] px-4 py-2 text-white">
           <div className="flex min-w-0 items-center gap-2.5">
-            {mode !== "choose" ? (
+            {!isCreateUsers && mode !== "choose" ? (
               <button
                 type="button"
                 onClick={() => {
@@ -764,14 +932,14 @@ export function BulkUploadStaffModal({
             type="button"
             onClick={onClose}
             className="inline-flex size-7 items-center justify-center rounded text-white hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            aria-label="Close bulk Excel ops"
+            aria-label={isCreateUsers ? "Close bulk upload" : "Close bulk Excel ops"}
           >
             <X className="size-4" />
           </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto p-3">
-          {mode === "choose" ? (
+          {!isCreateUsers && mode === "choose" ? (
             <div className="mx-auto grid max-w-3xl gap-4 py-8 sm:grid-cols-2">
               <button
                 type="button"
@@ -825,10 +993,12 @@ export function BulkUploadStaffModal({
                 <EmployeeStep
                   fileName={importFileName}
                   parsing={importParsing}
-                  loadingStaff={employeesLoading}
+                  loadingStaff={loadingStaff}
                   dragOver={importDragOver}
                   matchedPeople={matchedPeople}
                   unmatchedSaps={importUnmatched}
+                  alreadyExistSaps={importAlreadyExist}
+                  createMode={isCreateUsers}
                   onDragOverChange={setImportDragOver}
                   onFile={handleExcelFile}
                 />
@@ -838,6 +1008,12 @@ export function BulkUploadStaffModal({
                   <div className="grid items-start gap-3 lg:grid-cols-2">
                     <ColumnStep
                       selectedIds={selectedColumnIds}
+                      columns={selectableColumns}
+                      title={
+                        isCreateUsers
+                          ? "Columns to import"
+                          : "Columns to update"
+                      }
                       onToggle={toggleColumn}
                       onSelectAll={selectAllColumns}
                       onClearAll={clearAllColumns}
@@ -852,20 +1028,21 @@ export function BulkUploadStaffModal({
                   </div>
                   <SheetStep
                     rows={sheetRows}
-                    columns={selectedColumns}
+                    columns={previewColumns}
                     org1Options={org1Options}
                     org2OptionsFor={org2OptionsFor}
                     managerOptions={managerSelectOptions}
                     formOptions={formSelectOptions}
                     onChange={updateCell}
                     disabled={saveMutation.isPending || checkOpen}
+                    createMode={isCreateUsers}
                   />
                 </>
               ) : null}
             </div>
           ) : null}
 
-          {mode === "export" ? (
+          {!isCreateUsers && mode === "export" ? (
             <BulkExcelExportPanel
               filterParams={filterParams}
               masterFilters={masterFilters}
@@ -878,6 +1055,14 @@ export function BulkUploadStaffModal({
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {error ? (
               <span className="font-medium text-red-600 dark:text-red-400">{error}</span>
+            ) : isCreateUsers ? (
+              hasImportedSheet ? (
+                `${matchedPeople.length} new · ${importAlreadyExist.length} already exist · ${selectedColumnIds.size} columns · ${
+                  Object.values(columnMapping).filter(Boolean).length
+                } mapped · System Role defaults to Employee · Status Active`
+              ) : (
+                "Upload an Excel file with SAP codes to create new staff accounts"
+              )
             ) : mode === "choose" ? (
               "Choose whether to import PMS updates from Excel or export PMS values into an existing sheet"
             ) : mode === "export" ? (
@@ -1237,6 +1422,8 @@ function EmployeeStep({
   dragOver,
   matchedPeople,
   unmatchedSaps,
+  alreadyExistSaps = [],
+  createMode = false,
   onDragOverChange,
   onFile,
 }: {
@@ -1246,6 +1433,8 @@ function EmployeeStep({
   dragOver: boolean;
   matchedPeople: Array<{ employeeId: string; name: string }>;
   unmatchedSaps: string[];
+  alreadyExistSaps?: string[];
+  createMode?: boolean;
   onDragOverChange: (next: boolean) => void;
   onFile: (file: File | undefined) => void;
 }) {
@@ -1303,14 +1492,29 @@ function EmployeeStep({
 
       {fileName && !parsing ? (
         <p className="text-xs text-slate-600 dark:text-slate-300">
-          <span className="font-semibold tabular-nums">{matchedPeople.length}</span> matched
-          <span className="mx-2 text-slate-300 dark:text-slate-600">·</span>
-          <span className="font-semibold tabular-nums">{unmatchedSaps.length}</span> not found
-          {unmatchedSaps.length > 0
-            ? ` (${unmatchedSaps.slice(0, 8).join(", ")}${
-                unmatchedSaps.length > 8 ? "…" : ""
-              })`
-            : ""}
+          {createMode ? (
+            <>
+              <span className="font-semibold tabular-nums">{matchedPeople.length}</span> new
+              <span className="mx-2 text-slate-300 dark:text-slate-600">·</span>
+              <span className="font-semibold tabular-nums">{alreadyExistSaps.length}</span> already exist
+              {alreadyExistSaps.length > 0
+                ? ` (${alreadyExistSaps.slice(0, 8).join(", ")}${
+                    alreadyExistSaps.length > 8 ? "…" : ""
+                  })`
+                : ""}
+            </>
+          ) : (
+            <>
+              <span className="font-semibold tabular-nums">{matchedPeople.length}</span> matched
+              <span className="mx-2 text-slate-300 dark:text-slate-600">·</span>
+              <span className="font-semibold tabular-nums">{unmatchedSaps.length}</span> not found
+              {unmatchedSaps.length > 0
+                ? ` (${unmatchedSaps.slice(0, 8).join(", ")}${
+                    unmatchedSaps.length > 8 ? "…" : ""
+                  })`
+                : ""}
+            </>
+          )}
         </p>
       ) : null}
     </div>
@@ -1319,12 +1523,16 @@ function EmployeeStep({
 
 function ColumnStep({
   selectedIds,
+  columns,
+  title = "Columns to update",
   onToggle,
   onSelectAll,
   onClearAll,
   onToggleGroup,
 }: {
   selectedIds: Set<BulkUploadColumnId>;
+  columns: readonly BulkUploadColumnDef[];
+  title?: string;
   onToggle: (id: BulkUploadColumnId) => void;
   onSelectAll: () => void;
   onClearAll: () => void;
@@ -1334,7 +1542,7 @@ function ColumnStep({
     <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
       <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Columns to update
+          {title}
         </h3>
         <div className="flex items-center gap-3">
           <button
@@ -1356,11 +1564,13 @@ function ColumnStep({
 
       <div className="flex flex-1 flex-col">
         {BULK_UPLOAD_COLUMN_GROUPS.map((group) => {
-          const columns = BULK_UPLOAD_SELECTABLE_COLUMNS.filter(
+          const groupColumns = columns.filter(
             (column) => column.group === group,
           );
-          if (columns.length === 0) return null;
-          const allSelected = columns.every((column) => selectedIds.has(column.id));
+          if (groupColumns.length === 0) return null;
+          const allSelected = groupColumns.every((column) =>
+            selectedIds.has(column.id),
+          );
           return (
             <div
               key={group}
@@ -1387,7 +1597,7 @@ function ColumnStep({
                 </button>
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {columns.map((column) => {
+                {groupColumns.map((column) => {
                   const checked = selectedIds.has(column.id);
                   return (
                     <label
@@ -1503,6 +1713,7 @@ function SheetStep({
   formOptions,
   onChange,
   disabled,
+  createMode = false,
 }: {
   rows: SheetRow[];
   columns: readonly BulkUploadColumnDef[];
@@ -1512,9 +1723,14 @@ function SheetStep({
   formOptions: { value: string; label: string }[];
   onChange: (rowKey: string, columnId: BulkUploadColumnId, next: string) => void;
   disabled: boolean;
+  createMode?: boolean;
 }) {
   const changedCount = rows.filter((row) =>
-    columns.some((column) => row.values[column.id] !== row.original[column.id]),
+    columns.some((column) =>
+      row.isNew
+        ? Boolean(row.values[column.id])
+        : row.values[column.id] !== row.original[column.id],
+    ),
   ).length;
 
   return (
@@ -1524,7 +1740,9 @@ function SheetStep({
           Preview
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {rows.length} staff · {changedCount} with changes
+          {createMode
+            ? `${rows.length} new staff · Account status Active by default`
+            : `${rows.length} staff · ${changedCount} with changes`}
         </p>
       </div>
       <div className="overflow-auto">
@@ -1552,7 +1770,9 @@ function SheetStep({
                   colSpan={columns.length + 1}
                   className="px-4 py-8 text-center text-sm text-slate-500"
                 >
-                  No matched staff to preview.
+                  {createMode
+                    ? "No new SAP codes to create."
+                    : "No matched staff to preview."}
                 </td>
               </tr>
             ) : (
@@ -1567,6 +1787,11 @@ function SheetStep({
                 >
                   <td className="sticky left-0 z-10 border-r border-b border-slate-200 bg-inherit px-3 py-1 text-xs font-semibold tabular-nums text-slate-700 dark:border-slate-700 dark:text-slate-200">
                     {row.employeeId}
+                    {row.isNew ? (
+                      <span className="ml-1.5 rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                        new
+                      </span>
+                    ) : null}
                   </td>
                   {columns.map((column) => (
                     <td
