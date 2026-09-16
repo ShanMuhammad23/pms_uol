@@ -27,6 +27,22 @@ export interface ActiveFilter {
   color: FilterChipColor;
 }
 
+/** Hide options with zero employees once facet counts are available. */
+function visibleFilterOptions(
+  options: MultiSelectOption[],
+  selectedValues: string[] | null,
+): MultiSelectOption[] {
+  const hasFacetCounts = options.some((option) => option.count > 0);
+  if (!hasFacetCounts) {
+    return options;
+  }
+
+  return options.filter(
+    (option) =>
+      option.count > 0 || selectedValues?.includes(option.value) === true,
+  );
+}
+
 interface DashboardFilterBarProps {
   selectedCampusId?: string[] | null;
   onCampusChange?: (value: string[] | null) => void;
@@ -109,12 +125,33 @@ export function DashboardFilterBar({
     selectedCategory1EntityIds,
     selectedCategory2EntityIds,
   ];
-  const entityOptions = [category0Options, category1Options, category2Options];
+  const entityOptions = [
+    visibleFilterOptions(category0Options, selectedCategory0EntityIds),
+    visibleFilterOptions(category1Options, selectedCategory1EntityIds),
+    visibleFilterOptions(category2Options, selectedCategory2EntityIds),
+  ];
   const entityHandlers = [
     onCategory0EntityChange,
     onCategory1EntityChange,
     onCategory2EntityChange,
   ];
+
+  const visibleCampusOptions = visibleFilterOptions(
+    campusOptions,
+    selectedCampusId,
+  );
+  const visibleRoleCategoryOptions = visibleFilterOptions(
+    roleCategoryOptions,
+    selectedRoleCategories,
+  );
+  const visibleDesignationOptions = visibleFilterOptions(
+    designationOptions,
+    selectedDesignations,
+  );
+  const visibleFormStateOptions = visibleFilterOptions(
+    formStateOptions,
+    selectedFormStates,
+  );
 
   return (
     <motion.div
@@ -176,15 +213,15 @@ export function DashboardFilterBar({
                       : "grid-cols-[repeat(6,minmax(0,1fr))]",
                   )}
                 >
-                  {campusOptions.length > 1 && onCampusChange ? (
+                  {visibleCampusOptions.length > 1 && onCampusChange ? (
                     <MultiSelectFilterDropdown
                       label="Site"
                       icon={Building2}
-                      options={campusOptions}
+                      options={visibleCampusOptions}
                       selectedValues={selectedCampusId}
                       onChange={onCampusChange}
                       placeholder="All"
-                      searchable={campusOptions.length > 8}
+                      searchable={visibleCampusOptions.length > 8}
                     />
                   ) : null}
 
@@ -209,17 +246,17 @@ export function DashboardFilterBar({
                   <MultiSelectFilterDropdown
                     label="Role Category"
                     icon={Tags}
-                    options={roleCategoryOptions}
+                    options={visibleRoleCategoryOptions}
                     selectedValues={selectedRoleCategories}
                     onChange={onRoleCategoryChange}
                     placeholder="All"
-                    searchable={roleCategoryOptions.length > 8}
+                    searchable={visibleRoleCategoryOptions.length > 8}
                   />
 
                   <MultiSelectFilterDropdown
                     label="Designation"
                     icon={IdCard}
-                    options={designationOptions}
+                    options={visibleDesignationOptions}
                     selectedValues={selectedDesignations}
                     onChange={onDesignationChange}
                     disabled={designationsLoading}
@@ -231,7 +268,7 @@ export function DashboardFilterBar({
                     <MultiSelectFilterDropdown
                       label="Form Status"
                       icon={Briefcase}
-                      options={formStateOptions}
+                      options={visibleFormStateOptions}
                       selectedValues={selectedFormStates}
                       onChange={onFormStateChange}
                       placeholder="All"

@@ -4,6 +4,7 @@ import {
 import { getSubmissionEligibilityDisplayStatus } from "@/app/helpers/dashboard-eligibility";
 import {
   formatRoleCategoryValue,
+  matchesSubmissionCampus,
   matchesSubmissionEntityMultiFilter,
   matchesSubmissionFilters,
   matchesSubmissionFiltersExcluding,
@@ -211,6 +212,21 @@ export function buildDashboardOverviewCounts(
     return count;
   };
 
+  const campusIds = [
+    ...new Set(
+      entities
+        .map((entity) => entity.campusId)
+        .filter((campusId): campusId is number => campusId != null),
+    ),
+  ];
+
+  const campus = campusIds.map((campusId) => ({
+    value: String(campusId),
+    count: countForDimension("campus", (submission) =>
+      matchesSubmissionCampus(submission, campusId, entities),
+    ),
+  }));
+
   const category0 = entities
     .filter((entity) => entity.categoryCode === "C0")
     .map((entity) => ({
@@ -308,6 +324,7 @@ export function buildDashboardOverviewCounts(
     total: filtered.length,
     quotaEligibleCount,
     filters: {
+      campus,
       category0,
       category1,
       category2,

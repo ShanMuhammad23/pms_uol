@@ -139,6 +139,11 @@ export function useDashboardPage() {
     [baseCategory0Options, overview?.filters.category0],
   );
 
+  const campusOptions = useMemo(
+    () => mergeEntityOptions(baseCampusOptions, overview?.filters.campus),
+    [baseCampusOptions, overview?.filters.campus],
+  );
+
   const category1Options = useMemo(
     () => mergeEntityOptions(baseCategory1Options, overview?.filters.category1),
     [baseCategory1Options, overview?.filters.category1],
@@ -244,7 +249,7 @@ export function useDashboardPage() {
     roleCategoryOptions,
     designationOptions,
     formStateOptions,
-    campusOptions: baseCampusOptions,
+    campusOptions,
     entitiesLoading,
     designationsLoading,
     overviewLoading,

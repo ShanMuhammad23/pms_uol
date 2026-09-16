@@ -192,7 +192,7 @@ export function matchesAppraisalFormState(
  * its `campusId`. Falls back to checking ancestor entities if the direct
  * entity has no campus (defensive — all entities should have campusId).
  */
-function matchesSubmissionCampus(
+export function matchesSubmissionCampus(
   submission: FormSubmissionListItem,
   campusId: number | null,
   entities: EntityRecord[],
