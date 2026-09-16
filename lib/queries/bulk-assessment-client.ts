@@ -43,6 +43,22 @@ export interface BulkReviewQuestionRow {
   manager1Remarks: string | null;
   /** Attachments uploaded by the employee for this question. */
   attachments: EmployeeFormAnswerAttachment[];
+  /** Self-authored answers for open-assessment sections. */
+  authoredAnswers?: BulkAuthoredAnswerData[];
+  /** Current reviewer's authored answers for open-assessment sections. */
+  managerAuthoredAnswers?: BulkAuthoredAnswerData[];
+  /** Manager 1's authored answers for open-assessment sections (fallback for Manager 2). */
+  manager1AuthoredAnswers?: BulkAuthoredAnswerData[];
+}
+
+/** Authored answer data for open-assessment sections in bulk review. */
+export interface BulkAuthoredAnswerData {
+  authoredQuestionText: string | null;
+  authoredTotalMarks: number;
+  pointsEarned: number;
+  ratingValue: number | null;
+  remarks: string | null;
+  openSectionId: number;
 }
 
 import type { FormRatingScaleRecord } from "@/types/forms";
@@ -56,6 +72,12 @@ export interface BulkReviewQuestionData {
   ratingBased?: boolean;
   ratingScale?: FormRatingScaleRecord | null;
   rows: BulkReviewQuestionRow[];
+  /** True when this question step is an open/free assessment section. */
+  isOpenAssessment?: boolean;
+  /** Section ID for open-assessment sections. */
+  openSectionId?: number;
+  /** Section budget (open_assessment_total_marks) for open-assessment sections. */
+  openAssessmentTotalMarks?: number;
 }
 
 export interface BulkReviewQuestionDataResponse {
@@ -76,6 +98,18 @@ export interface SaveBulkReviewEntry {
   pointsEarned: number;
   ratingValue?: number | null;
   remarks?: string | null;
+}
+
+/** One employee's authored answers for a single open-assessment section. */
+export interface SaveBulkAuthoredEntry {
+  submissionId: number;
+  authoredQuestions: Array<{
+    authoredQuestionText: string | null;
+    authoredTotalMarks: number;
+    pointsEarned: number;
+    ratingValue?: number | null;
+    remarks?: string | null;
+  }>;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -118,6 +152,18 @@ export async function saveBulkReviewQuestionScores(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ questionId, entries }),
+  });
+  return parseResponse<{ savedCount: number }>(response);
+}
+
+export async function saveBulkAuthoredAnswers(
+  sectionId: number,
+  entries: SaveBulkAuthoredEntry[],
+): Promise<{ savedCount: number }> {
+  const response = await fetch("/api/submissions/bulk-review/save-authored", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sectionId, entries }),
   });
   return parseResponse<{ savedCount: number }>(response);
 }

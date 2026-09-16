@@ -240,4 +240,6 @@ export interface FormSubmissionDetail {
   returnReason: string | null;
   /** Full history of returns to this submission (all levels). */
   returnHistory?: ReturnHistoryEntry[];
+  /** Timestamp when Manager 2 confirmed they reviewed the open/free assessment. Null = not confirmed. */
+  manager2OpenAssessmentConfirmedAt: string | null;
 }
