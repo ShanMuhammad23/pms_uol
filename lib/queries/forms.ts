@@ -497,6 +497,28 @@ async function checkDuplicateTarget(
   }
 }
 
+async function checkDuplicateCode(
+  code: string,
+  client?: PoolClient,
+): Promise<void> {
+  const executor = client ?? getDbClient();
+  const result = await executor.query<{ id: string; title: string }>(
+    `SELECT id, title FROM form_templates WHERE code = $1`,
+    [code],
+  );
+
+  if (result.rows.length > 0) {
+    throw new FormTemplateError(
+      `A form template with code "${code}" already exists. Please use a different code.`,
+      409,
+      {
+        existingFormId: Number(result.rows[0].id),
+        existingFormTitle: result.rows[0].title,
+      },
+    );
+  }
+}
+
 async function assertQuestionCanBeDeleted(
   questionId: number,
   client: PoolClient,
@@ -1489,6 +1511,11 @@ export async function createFormTemplate(
     input = sanitizeFormTemplateHtmlTitles(input);
 
     const cycleId = await resolveCycleId(input.cycleId);
+
+    // Check for duplicate code before INSERT — the database has a UNIQUE
+    // constraint on code, but a raw constraint violation produces a generic
+    // 500 error. This gives the user a helpful message + existing form link.
+    await checkDuplicateCode(input.code.trim(), client);
 
     const templateResult = await client.query<{ id: string }>(
       `INSERT INTO form_templates (

@@ -2472,7 +2472,11 @@ export default function FormBuilderWizard({
       ? `${initialState.title} (Copy)`
       : initialState?.title ?? "",
   );
-  const [code, setCode] = useState(initialState?.code ?? "");
+  const [code, setCode] = useState(
+    copyMode && initialState
+      ? `${initialState.code.slice(0, 45)}-COPY`
+      : initialState?.code ?? "",
+  );
   const [description, setDescription] = useState(initialState?.description ?? "");
   const [selfAssessmentEnabled, setSelfAssessmentEnabled] = useState(initialState?.selfAssessmentEnabled ?? true);
   const [additionalRemarksEnabled, setAdditionalRemarksEnabled] = useState(initialState?.additionalRemarksEnabled ?? false);
