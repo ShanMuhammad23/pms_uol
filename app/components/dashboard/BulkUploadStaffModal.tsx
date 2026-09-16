@@ -26,14 +26,19 @@ import {
   BULK_UPLOAD_SELECTABLE_COLUMNS,
   DEFAULT_BULK_CREATE_COLUMN_IDS,
   DEFAULT_BULK_UPLOAD_COLUMN_IDS,
+  applyOrgLevelsFromEntityId,
   buildBulkUploadRowValues,
+  buildEntityOrgLevelOptions,
   bulkUploadGroupLabel,
   emptyBulkUploadRowValues,
   getBulkUploadColumn,
   isBulkUploadCreateField,
   isOrg2UnderOrg1,
+  orgLevelDisplayLabel,
+  orgLevelsFromEntityId,
   resolveManagerMappedValue,
   resolveOrgLevelMappedValue,
+  suggestEntityIdForSheetOrgName,
   type BulkUploadColumnDef,
   type BulkUploadColumnGroup,
   type BulkUploadColumnId,
@@ -52,13 +57,17 @@ import {
 } from "@/app/helpers/bulk-upload-validation";
 import {
   normalizeMappedExcelValue,
+  normalizeSheetOrgValueKey,
   parseExcelStaffSheet,
   sapLookupKey,
   suggestExcelColumnMapping,
+  suggestOrgLevelSheetColumn,
+  uniqueSheetColumnValuesForSaps,
   type ExcelColumnMapping,
   type ExcelSheetColumn,
   type ParsedExcelStaffSheet,
 } from "@/app/helpers/bulk-upload-excel";
+import type { EntityRecord } from "@/types/entities";
 import {
   invalidateStaffListingQueries,
 } from "@/app/helpers/dashboard-listing-cache";
@@ -89,6 +98,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type ExcelOpsMode = "choose" | "import" | "export";
+type CreateImportPhase = "org" | "fields";
 export type BulkUploadPurpose = "excel-ops" | "create-users";
 
 const EMPTY_SUBMISSIONS: FormSubmissionListItem[] = [];
@@ -180,6 +190,14 @@ export function BulkUploadStaffModal({
     () => new Set(defaultColumnIds),
   );
   const [sheetRows, setSheetRows] = useState<SheetRow[]>([]);
+  const [createImportPhase, setCreateImportPhase] =
+    useState<CreateImportPhase>("org");
+  const [orgLevelColumnIndex, setOrgLevelColumnIndex] = useState<number | null>(
+    null,
+  );
+  const [orgLevelValueMapping, setOrgLevelValueMapping] = useState<
+    Record<string, string>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [checkOpen, setCheckOpen] = useState(false);
   const [checkStep, setCheckStep] = useState<BulkUploadCheckStepId>("collect");
@@ -238,6 +256,9 @@ export function BulkUploadStaffModal({
       setSelectedEmployeeIds(new Set());
       setSelectedColumnIds(new Set(defaultColumnIds));
       setSheetRows([]);
+      setCreateImportPhase("org");
+      setOrgLevelColumnIndex(null);
+      setOrgLevelValueMapping({});
       setError(null);
       setCheckOpen(false);
       setCheckStep("collect");
@@ -317,6 +338,35 @@ export function BulkUploadStaffModal({
     },
     [entities],
   );
+
+  const entityOrgLevelOptions = useMemo(
+    () => buildEntityOrgLevelOptions(entities ?? []),
+    [entities],
+  );
+
+  const orgSheetColumnOptions = useMemo(() => {
+    if (!excelSheet) return [];
+    return excelSheet.columns
+      .filter((column) => !column.isSap)
+      .map((column) => ({
+        value: String(column.index),
+        label: column.header || `Column ${column.index + 1}`,
+      }));
+  }, [excelSheet]);
+
+  const uniqueOrgSheetValues = useMemo(() => {
+    if (!excelSheet || orgLevelColumnIndex == null || !isCreateUsers) {
+      return [];
+    }
+    const sapKeys = new Set(
+      [...selectedEmployeeIds].map((id) => sapLookupKey(id)),
+    );
+    return uniqueSheetColumnValuesForSaps(
+      excelSheet,
+      orgLevelColumnIndex,
+      sapKeys,
+    );
+  }, [excelSheet, orgLevelColumnIndex, selectedEmployeeIds, isCreateUsers]);
 
   const matchedPeople = useMemo(() => {
     if (isCreateUsers) {
@@ -423,6 +473,41 @@ export function BulkUploadStaffModal({
     applySapIds(importedSapIds);
   }, [importedSapIds, applySapIds]);
 
+  useEffect(() => {
+    if (!isCreateUsers || !excelSheet || orgLevelColumnIndex == null) {
+      return;
+    }
+    const entityList = entities ?? [];
+    const sapKeys = new Set(
+      [...selectedEmployeeIds].map((id) => sapLookupKey(id)),
+    );
+    const uniqueValues = uniqueSheetColumnValuesForSaps(
+      excelSheet,
+      orgLevelColumnIndex,
+      sapKeys,
+    );
+    setOrgLevelValueMapping((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const value of uniqueValues) {
+        const key = normalizeSheetOrgValueKey(value);
+        if (next[key]) continue;
+        const suggested = suggestEntityIdForSheetOrgName(value, entityList);
+        if (suggested) {
+          next[key] = suggested;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [
+    isCreateUsers,
+    excelSheet,
+    orgLevelColumnIndex,
+    selectedEmployeeIds,
+    entities,
+  ]);
+
   const handleExcelFile = async (file: File | undefined) => {
     if (!file) {
       return;
@@ -434,6 +519,9 @@ export function BulkUploadStaffModal({
       setImportFileName(file.name);
       setExcelSheet(parsed);
       setColumnMapping(suggestExcelColumnMapping(parsed.columns, selectableColumns));
+      setCreateImportPhase("org");
+      setOrgLevelColumnIndex(suggestOrgLevelSheetColumn(parsed.columns));
+      setOrgLevelValueMapping({});
       const sapIds = parsed.rows.map((row) => row.sap);
       setImportedSapIds(sapIds);
       applySapIds(sapIds);
@@ -441,6 +529,9 @@ export function BulkUploadStaffModal({
       setImportFileName(null);
       setExcelSheet(null);
       setColumnMapping({});
+      setCreateImportPhase("org");
+      setOrgLevelColumnIndex(null);
+      setOrgLevelValueMapping({});
       setImportedSapIds([]);
       setSelectedEmployeeIds(new Set());
       setImportUnmatched([]);
@@ -550,6 +641,11 @@ export function BulkUploadStaffModal({
       return;
     }
 
+    if (isCreateUsers && createImportPhase === "org") {
+      setSheetRows((current) => (current.length === 0 ? current : []));
+      return;
+    }
+
     const entityList = entities ?? [];
     const userList = users ?? [];
     const excelBySap = new Map(
@@ -579,24 +675,51 @@ export function BulkUploadStaffModal({
         }
       }
 
-      if (isNew || selectedColumnIds.has("orgLevel1")) {
-        if (values.orgLevel1) {
-          values.orgLevel1 =
-            resolveOrgLevelMappedValue(values.orgLevel1, 1, entityList) ||
-            values.orgLevel1;
+      if (isNew && isCreateUsers) {
+        if (orgLevelColumnIndex != null && excelRow) {
+          const raw = (excelRow.values[orgLevelColumnIndex] ?? "").trim();
+          if (raw) {
+            const entityId =
+              orgLevelValueMapping[normalizeSheetOrgValueKey(raw)];
+            if (entityId) {
+              applyOrgLevelsFromEntityId(values, entityId, entityList);
+            }
+          }
+        }
+      } else {
+        if (isNew || selectedColumnIds.has("orgLevel1")) {
+          if (values.orgLevel1) {
+            values.orgLevel1 =
+              resolveOrgLevelMappedValue(values.orgLevel1, 1, entityList) ||
+              values.orgLevel1;
+          }
+        }
+        if (isNew || selectedColumnIds.has("orgLevel2")) {
+          if (values.orgLevel2) {
+            values.orgLevel2 =
+              resolveOrgLevelMappedValue(
+                values.orgLevel2,
+                2,
+                entityList,
+                values.orgLevel1,
+              ) || values.orgLevel2;
+          }
+        }
+        if (
+          values.orgLevel1 &&
+          values.orgLevel2 &&
+          !isOrg2UnderOrg1(values.orgLevel2, values.orgLevel1, entityList)
+        ) {
+          const resolvedOrg2 = resolveOrgLevelMappedValue(
+            values.orgLevel2,
+            2,
+            entityList,
+            values.orgLevel1,
+          );
+          values.orgLevel2 = resolvedOrg2;
         }
       }
-      if (isNew || selectedColumnIds.has("orgLevel2")) {
-        if (values.orgLevel2) {
-          values.orgLevel2 =
-            resolveOrgLevelMappedValue(
-              values.orgLevel2,
-              2,
-              entityList,
-              values.orgLevel1,
-            ) || values.orgLevel2;
-        }
-      }
+
       if (isNew || selectedColumnIds.has("manager1")) {
         if (values.manager1) {
           values.manager1 =
@@ -613,18 +736,12 @@ export function BulkUploadStaffModal({
       }
 
       if (
+        !isCreateUsers &&
         values.orgLevel1 &&
         values.orgLevel2 &&
         !isOrg2UnderOrg1(values.orgLevel2, values.orgLevel1, entityList)
       ) {
-        // Keep org2 only when hierarchy is valid after name/id resolution.
-        const resolvedOrg2 = resolveOrgLevelMappedValue(
-          values.orgLevel2,
-          2,
-          entityList,
-          values.orgLevel1,
-        );
-        values.orgLevel2 = resolvedOrg2;
+        values.orgLevel2 = "";
       }
 
       return {
@@ -691,7 +808,36 @@ export function BulkUploadStaffModal({
     users,
     usersByEmployeeId,
     isCreateUsers,
+    createImportPhase,
+    orgLevelColumnIndex,
+    orgLevelValueMapping,
   ]);
+
+  const confirmOrgMapping = () => {
+    if (!excelSheet) {
+      setError("Upload an Excel file first.");
+      return;
+    }
+    if (orgLevelColumnIndex == null) {
+      setError("Select the sheet column that contains organization / department.");
+      return;
+    }
+    if (selectedEmployeeIds.size === 0) {
+      setError("No new SAP codes to create from this sheet.");
+      return;
+    }
+    const unmapped = uniqueOrgSheetValues.filter(
+      (value) => !orgLevelValueMapping[normalizeSheetOrgValueKey(value)],
+    );
+    if (unmapped.length > 0) {
+      setError(
+        `Map every org value from the sheet (${unmapped.length} remaining: ${unmapped.slice(0, 5).join(", ")}${unmapped.length > 5 ? "…" : ""}).`,
+      );
+      return;
+    }
+    setError(null);
+    setCreateImportPhase("fields");
+  };
 
   const updateCell = (
     rowKey: string,
@@ -1003,7 +1149,31 @@ export function BulkUploadStaffModal({
                   onFile={handleExcelFile}
                 />
               </section>
-              {hasImportedSheet ? (
+              {hasImportedSheet && isCreateUsers && createImportPhase === "org" ? (
+                <OrgLevelMappingStep
+                  columnOptions={orgSheetColumnOptions}
+                  selectedColumnIndex={orgLevelColumnIndex}
+                  uniqueSheetValues={uniqueOrgSheetValues}
+                  entityOptions={entityOrgLevelOptions}
+                  mapping={orgLevelValueMapping}
+                  entities={entities ?? []}
+                  onColumnChange={(index) => {
+                    setOrgLevelColumnIndex(index);
+                    setOrgLevelValueMapping({});
+                    setError(null);
+                  }}
+                  onMapValue={(sheetValue, entityId) => {
+                    setOrgLevelValueMapping((current) => ({
+                      ...current,
+                      [normalizeSheetOrgValueKey(sheetValue)]: entityId,
+                    }));
+                    setError(null);
+                  }}
+                />
+              ) : null}
+
+              {hasImportedSheet &&
+              (!isCreateUsers || createImportPhase === "fields") ? (
                 <>
                   <div className="grid items-start gap-3 lg:grid-cols-2">
                     <ColumnStep
@@ -1033,6 +1203,7 @@ export function BulkUploadStaffModal({
                     org2OptionsFor={org2OptionsFor}
                     managerOptions={managerSelectOptions}
                     formOptions={formSelectOptions}
+                    entities={entities ?? []}
                     onChange={updateCell}
                     disabled={saveMutation.isPending || checkOpen}
                     createMode={isCreateUsers}
@@ -1057,9 +1228,11 @@ export function BulkUploadStaffModal({
               <span className="font-medium text-red-600 dark:text-red-400">{error}</span>
             ) : isCreateUsers ? (
               hasImportedSheet ? (
-                `${matchedPeople.length} new · ${importAlreadyExist.length} already exist · ${selectedColumnIds.size} columns · ${
-                  Object.values(columnMapping).filter(Boolean).length
-                } mapped · System Role defaults to Employee · Status Active`
+                createImportPhase === "org"
+                  ? `${matchedPeople.length} new · ${importAlreadyExist.length} already exist · map org values from sheet (${uniqueOrgSheetValues.length} unique)`
+                  : `${matchedPeople.length} new · ${selectedColumnIds.size} columns · ${
+                      Object.values(columnMapping).filter(Boolean).length
+                    } mapped · Org levels from sheet mapping`
               ) : (
                 "Upload an Excel file with SAP codes to create new staff accounts"
               )
@@ -1083,22 +1256,50 @@ export function BulkUploadStaffModal({
             >
               Cancel
             </button>
-            {mode === "import" ? (
+            {mode === "import" && isCreateUsers && createImportPhase === "fields" ? (
               <button
                 type="button"
                 onClick={() => {
-                  void startSaveChecks();
+                  setCreateImportPhase("org");
+                  setError(null);
                 }}
-                disabled={
-                  !hasImportedSheet ||
-                  sheetRows.length === 0 ||
-                  saveMutation.isPending ||
-                  checkOpen
-                }
-                className="rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#185C37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] disabled:opacity-60"
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
               >
-                Next
+                Back
               </button>
+            ) : null}
+            {mode === "import" ? (
+              isCreateUsers && createImportPhase === "org" ? (
+                <button
+                  type="button"
+                  onClick={confirmOrgMapping}
+                  disabled={
+                    !hasImportedSheet ||
+                    selectedEmployeeIds.size === 0 ||
+                    orgLevelColumnIndex == null
+                  }
+                  className="rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#185C37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] disabled:opacity-60"
+                >
+                  Continue to field mapping
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void startSaveChecks();
+                  }}
+                  disabled={
+                    !hasImportedSheet ||
+                    sheetRows.length === 0 ||
+                    saveMutation.isPending ||
+                    checkOpen ||
+                    (isCreateUsers && createImportPhase !== "fields")
+                  }
+                  className="rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#185C37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] disabled:opacity-60"
+                >
+                  Next
+                </button>
+              )
             ) : null}
           </div>
         </footer>
@@ -1704,6 +1905,140 @@ function MappingStep({
   );
 }
 
+function OrgLevelMappingStep({
+  columnOptions,
+  selectedColumnIndex,
+  uniqueSheetValues,
+  entityOptions,
+  mapping,
+  entities,
+  onColumnChange,
+  onMapValue,
+}: {
+  columnOptions: { value: string; label: string }[];
+  selectedColumnIndex: number | null;
+  uniqueSheetValues: string[];
+  entityOptions: { value: string; label: string }[];
+  mapping: Record<string, string>;
+  entities: EntityRecord[];
+  onColumnChange: (index: number | null) => void;
+  onMapValue: (sheetValue: string, entityId: string) => void;
+}) {
+  const mappedCount = uniqueSheetValues.filter((value) =>
+    Boolean(mapping[normalizeSheetOrgValueKey(value)]),
+  ).length;
+
+  return (
+    <section className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
+      <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          Map organization from sheet
+        </h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Choose the sheet column that contains department or org unit, then map
+          each unique value to an org level in PMS. Parent org levels are filled
+          automatically for every employee with that value.
+        </p>
+        <div className="mt-3 max-w-md">
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+            Org level column from sheet
+          </label>
+          <SearchableSelect
+            value={selectedColumnIndex != null ? String(selectedColumnIndex) : ""}
+            options={columnOptions}
+            onChange={(next) => onColumnChange(next ? Number(next) : null)}
+            placeholder="Select column…"
+            emptyOptionLabel="Select column…"
+            className={sheetSelectClassName}
+          />
+        </div>
+      </div>
+
+      {selectedColumnIndex != null ? (
+        <div className="overflow-auto">
+          <table className="min-w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <th className="border-b border-slate-200 px-4 py-2 text-xs font-semibold dark:border-slate-700">
+                  Sheet value
+                </th>
+                <th className="border-b border-slate-200 px-4 py-2 text-xs font-semibold dark:border-slate-700">
+                  Map to org level (database)
+                </th>
+                <th className="border-b border-slate-200 px-4 py-2 text-xs font-semibold dark:border-slate-700">
+                  Auto-filled parents
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {uniqueSheetValues.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={3}
+                    className="px-4 py-8 text-center text-sm text-slate-500"
+                  >
+                    No org values found in the selected column for new SAP codes.
+                  </td>
+                </tr>
+              ) : (
+                uniqueSheetValues.map((sheetValue, index) => {
+                  const entityId =
+                    mapping[normalizeSheetOrgValueKey(sheetValue)] ?? "";
+                  const org = entityId
+                    ? orgLevelsFromEntityId(Number(entityId), entities)
+                    : { org1: "", org2: "" };
+                  return (
+                    <tr
+                      key={sheetValue}
+                      className={
+                        index % 2 === 0
+                          ? "bg-white dark:bg-slate-950"
+                          : "bg-slate-50 dark:bg-slate-900/60"
+                      }
+                    >
+                      <td className="border-b border-slate-200 px-4 py-2 text-sm font-medium text-slate-800 dark:border-slate-700 dark:text-slate-200">
+                        {sheetValue}
+                      </td>
+                      <td className="border-b border-slate-200 px-4 py-2 dark:border-slate-700">
+                        <SearchableSelect
+                          value={entityId}
+                          options={entityOptions}
+                          onChange={(next) => onMapValue(sheetValue, next)}
+                          placeholder="Select org level…"
+                          emptyOptionLabel="Select org level…"
+                          className={sheetSelectClassName}
+                        />
+                      </td>
+                      <td className="border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        {entityId ? (
+                          <span>
+                            {orgLevelDisplayLabel(org.org1, entities)}
+                            {org.org2
+                              ? ` → ${orgLevelDisplayLabel(org.org2, entities)}`
+                              : ""}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {selectedColumnIndex != null ? (
+        <div className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          {mappedCount} of {uniqueSheetValues.length} sheet values mapped
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function SheetStep({
   rows,
   columns,
@@ -1711,6 +2046,7 @@ function SheetStep({
   org2OptionsFor,
   managerOptions,
   formOptions,
+  entities,
   onChange,
   disabled,
   createMode = false,
@@ -1721,6 +2057,7 @@ function SheetStep({
   org2OptionsFor: (org1Id: string) => { value: string; label: string }[];
   managerOptions: { value: string; label: string }[];
   formOptions: { value: string; label: string }[];
+  entities: EntityRecord[];
   onChange: (rowKey: string, columnId: BulkUploadColumnId, next: string) => void;
   disabled: boolean;
   createMode?: boolean;
@@ -1741,7 +2078,7 @@ function SheetStep({
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {createMode
-            ? `${rows.length} new staff · Account status Active by default`
+            ? `${rows.length} new staff · Org levels from sheet mapping`
             : `${rows.length} staff · ${changedCount} with changes`}
         </p>
       </div>
@@ -1806,6 +2143,8 @@ function SheetStep({
                         org2Options={org2OptionsFor(row.values.orgLevel1)}
                         managerOptions={managerOptions}
                         formOptions={formOptions}
+                        entities={entities}
+                        createOrgLevelsReadOnly={createMode}
                         onChange={onChange}
                         disabled={disabled}
                       />
@@ -1828,6 +2167,8 @@ function SheetCell({
   org2Options,
   managerOptions,
   formOptions,
+  entities,
+  createOrgLevelsReadOnly = false,
   onChange,
   disabled,
 }: {
@@ -1837,6 +2178,8 @@ function SheetCell({
   org2Options: { value: string; label: string }[];
   managerOptions: { value: string; label: string }[];
   formOptions: { value: string; label: string }[];
+  entities: EntityRecord[];
+  createOrgLevelsReadOnly?: boolean;
   onChange: (rowKey: string, columnId: BulkUploadColumnId, next: string) => void;
   disabled: boolean;
 }) {
@@ -1846,6 +2189,20 @@ function SheetCell({
   const createEditable = row.isNew && isBulkUploadCreateField(column.id);
   const readOnly =
     !createEditable && (column.input === "readonly" || !column.persistable);
+
+  if (
+    createOrgLevelsReadOnly &&
+    (column.id === "orgLevel1" || column.id === "orgLevel2")
+  ) {
+    return (
+      <div
+        className="max-h-16 overflow-hidden px-2 py-1.5 text-xs text-slate-600 dark:text-slate-300"
+        title={orgLevelDisplayLabel(value, entities)}
+      >
+        {orgLevelDisplayLabel(value, entities)}
+      </div>
+    );
+  }
 
   if (readOnly) {
     return (

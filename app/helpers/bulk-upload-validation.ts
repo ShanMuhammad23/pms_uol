@@ -441,6 +441,15 @@ export function checkValueConstraints(
           issue(row, "ORG Level 2 must belong under ORG Level 1.", "orgLevel2"),
         );
       }
+      if (!resolveEntityIdFromOrgLevels(row.values.orgLevel1, row.values.orgLevel2)) {
+        issues.push(
+          issue(
+            row,
+            "Org level is required — map the sheet department value in the org mapping step.",
+            "orgLevel1",
+          ),
+        );
+      }
     }
 
     if (appliesToRow(row, selectedColumnIds, "employeeName") && !row.isNew) {

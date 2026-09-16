@@ -122,6 +122,58 @@ export type ParsedExcelWorkbook = ParsedExcelStaffSheet & {
 
 export type ExcelColumnMapping = Record<number, BulkUploadColumnId | "">;
 
+/** Sheet column header aliases for bulk org-level mapping (create users). */
+const ORG_LEVEL_SHEET_COLUMN_ALIASES = [
+  "department",
+  "organizational unit",
+  "organisation unit",
+  "org unit",
+  "org level",
+  "org",
+  "faculty",
+  "division",
+  "section",
+  "unit",
+];
+
+/** Unique non-empty values in a sheet column for the given SAP keys. */
+export function uniqueSheetColumnValuesForSaps(
+  sheet: ParsedExcelStaffSheet,
+  columnIndex: number,
+  sapKeys: Set<string>,
+): string[] {
+  const values = new Set<string>();
+  for (const row of sheet.rows) {
+    if (!sapKeys.has(sapLookupKey(row.sap))) continue;
+    const raw = (row.values[columnIndex] ?? "").trim();
+    if (raw) values.add(raw);
+  }
+  return [...values].sort((left, right) =>
+    left.localeCompare(right, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+}
+
+/** Pick the most likely org/department column from an uploaded sheet. */
+export function suggestOrgLevelSheetColumn(
+  columns: ExcelSheetColumn[],
+): number | null {
+  for (const column of columns) {
+    if (column.isSap) continue;
+    const header = normalizeExcelHeader(column.header.replace(/ \(\d+\)$/, ""));
+    if (ORG_LEVEL_SHEET_COLUMN_ALIASES.includes(header)) {
+      return column.index;
+    }
+  }
+  return null;
+}
+
+export function normalizeSheetOrgValueKey(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
 export function normalizeSapId(value: unknown): string {
   if (value == null) {
     return "";

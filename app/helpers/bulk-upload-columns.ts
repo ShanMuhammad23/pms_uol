@@ -227,8 +227,6 @@ export const BULK_CREATE_SELECTABLE_COLUMN_IDS: readonly BulkUploadColumnId[] = 
   "email",
   "designation",
   "roleCategory",
-  "orgLevel1",
-  "orgLevel2",
   "dateOfJoining",
   "systemRole",
   "manager1",
@@ -245,8 +243,12 @@ export const BULK_CREATE_SELECTABLE_COLUMNS: readonly BulkUploadColumnDef[] =
     BULK_CREATE_SELECTABLE_COLUMN_IDS.includes(column.id),
   );
 
-export const DEFAULT_BULK_CREATE_COLUMN_IDS: readonly BulkUploadColumnId[] =
-  BULK_CREATE_SELECTABLE_COLUMN_IDS;
+export const DEFAULT_BULK_CREATE_COLUMN_IDS: readonly BulkUploadColumnId[] = [
+  "employeeName",
+  "email",
+  "designation",
+  "dateOfJoining",
+];
 
 /** Hidden create defaults (same as Users → Add User). */
 export const BULK_CREATE_DEFAULT_EMP_CATEGORY = "ADMINISTRATION";
@@ -254,11 +256,83 @@ export const BULK_CREATE_DEFAULT_EMP_SUB_CATEGORY = "SYSTEM_ADMIN";
 
 /**
  * Always shown on the create preview sheet in addition to mapped columns.
- * Account status defaults to Active and is not Excel-mapped.
+ * Org levels are filled from bulk sheet→entity mapping (read-only in preview).
  */
 export const BULK_CREATE_SHEET_EXTRA_COLUMN_IDS: readonly BulkUploadColumnId[] = [
+  "orgLevel1",
+  "orgLevel2",
   "accountStatus",
 ];
+
+/** Numeric org level for display (C0 → 0, C1 → 1, C2 → 2). */
+export function entityOrgLevelNumber(categoryCode: string): number {
+  if (categoryCode === "C0") return 0;
+  if (categoryCode === "C1") return 1;
+  if (categoryCode === "C2") return 2;
+  return -1;
+}
+
+export function formatEntityOrgLevelLabel(entity: EntityRecord): string {
+  const level = entityOrgLevelNumber(entity.categoryCode);
+  const levelLabel =
+    level >= 0 ? `ORG Level ${level}` : entity.categoryCode;
+  return `${entity.name} (${levelLabel})`;
+}
+
+export function buildEntityOrgLevelOptions(
+  entities: EntityRecord[],
+): { value: string; label: string }[] {
+  return [...entities]
+    .sort((left, right) => {
+      const levelDiff =
+        entityOrgLevelNumber(left.categoryCode) -
+        entityOrgLevelNumber(right.categoryCode);
+      if (levelDiff !== 0) return levelDiff;
+      return left.name.localeCompare(right.name, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    })
+    .map((entity) => ({
+      value: String(entity.id),
+      label: formatEntityOrgLevelLabel(entity),
+    }));
+}
+
+export function orgLevelDisplayLabel(
+  entityId: string,
+  entities: EntityRecord[],
+): string {
+  if (!entityId.trim()) return "—";
+  const entity = entities.find((item) => String(item.id) === entityId);
+  return entity ? entity.name : entityId;
+}
+
+/** Apply mapped entity to row org levels; parent levels are derived automatically. */
+export function applyOrgLevelsFromEntityId(
+  values: Record<BulkUploadColumnId, string>,
+  entityId: string,
+  entities: EntityRecord[],
+): void {
+  if (!entityId.trim()) return;
+  const parsed = Number(entityId);
+  if (!Number.isFinite(parsed)) return;
+  const org = orgLevelsFromEntityId(parsed, entities);
+  values.orgLevel1 = org.org1;
+  values.orgLevel2 = org.org2;
+}
+
+export function suggestEntityIdForSheetOrgName(
+  raw: string,
+  entities: EntityRecord[],
+): string {
+  const needle = raw.trim().toLowerCase();
+  if (!needle) return "";
+  const match = entities.find(
+    (entity) => entity.name.trim().toLowerCase() === needle,
+  );
+  return match ? String(match.id) : "";
+}
 
 /** Shown and required when adding a new employee row. */
 export const CREATE_REQUIRED_COLUMN_IDS: readonly BulkUploadColumnId[] = [
