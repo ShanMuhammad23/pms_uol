@@ -9,6 +9,7 @@ import {
   Download,
   FileSpreadsheet,
   Loader2,
+  Plus,
   ShieldAlert,
   Upload,
   UserPlus,
@@ -31,9 +32,11 @@ import {
   buildEntityOrgLevelOptions,
   bulkUploadGroupLabel,
   emptyBulkUploadRowValues,
+  formatEntityOrgLevelLabel,
   getBulkUploadColumn,
   isBulkUploadCreateField,
   isOrg2UnderOrg1,
+  entityOrgLevelNumber,
   orgLevelDisplayLabel,
   orgLevelsFromEntityId,
   resolveManagerMappedValue,
@@ -76,7 +79,9 @@ import {
   EMPTY_MASTER_FILTER_STATE,
 } from "@/lib/dashboard/filter-params";
 import { queryKeys } from "@/app/queries/keys";
-import { fetchDashboardEntities } from "@/lib/queries/entities-client";
+import { useCampusesQuery } from "@/app/queries/users";
+import { createEntity, fetchDashboardEntities } from "@/lib/queries/entities-client";
+import { fetchEntityCategories } from "@/lib/queries/entity-categories-client";
 import { fetchFormTemplatesForDashboard, assignFormTemplateToEmployees } from "@/lib/queries/forms-client";
 import {
   bulkUpdateEmployeeListingFields,
@@ -192,12 +197,16 @@ export function BulkUploadStaffModal({
   const [sheetRows, setSheetRows] = useState<SheetRow[]>([]);
   const [createImportPhase, setCreateImportPhase] =
     useState<CreateImportPhase>("org");
+  const [selectedCampusId, setSelectedCampusId] = useState<string>("");
   const [orgLevelColumnIndex, setOrgLevelColumnIndex] = useState<number | null>(
     null,
   );
   const [orgLevelValueMapping, setOrgLevelValueMapping] = useState<
     Record<string, string>
   >({});
+  const [createOrgDialog, setCreateOrgDialog] = useState<{
+    sheetValue: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checkOpen, setCheckOpen] = useState(false);
   const [checkStep, setCheckStep] = useState<BulkUploadCheckStepId>("collect");
@@ -237,6 +246,14 @@ export function BulkUploadStaffModal({
     enabled: open && mode === "import",
   });
 
+  const { data: campuses = [] } = useCampusesQuery();
+
+  const { data: entityCategories = [] } = useQuery({
+    queryKey: ["entity-categories"],
+    queryFn: fetchEntityCategories,
+    enabled: open && isCreateUsers && mode === "import",
+  });
+
   const employees = pageData?.items ?? EMPTY_SUBMISSIONS;
   const loadingStaff = isCreateUsers ? usersLoading : employeesLoading;
 
@@ -257,8 +274,10 @@ export function BulkUploadStaffModal({
       setSelectedColumnIds(new Set(defaultColumnIds));
       setSheetRows([]);
       setCreateImportPhase("org");
+      setSelectedCampusId("");
       setOrgLevelColumnIndex(null);
       setOrgLevelValueMapping({});
+      setCreateOrgDialog(null);
       setError(null);
       setCheckOpen(false);
       setCheckStep("collect");
@@ -339,9 +358,26 @@ export function BulkUploadStaffModal({
     [entities],
   );
 
+  const campusEntities = useMemo(() => {
+    const list = entities ?? [];
+    if (!selectedCampusId) return [];
+    return list.filter(
+      (entity) => String(entity.campusId ?? "") === selectedCampusId,
+    );
+  }, [entities, selectedCampusId]);
+
   const entityOrgLevelOptions = useMemo(
-    () => buildEntityOrgLevelOptions(entities ?? []),
-    [entities],
+    () => buildEntityOrgLevelOptions(campusEntities),
+    [campusEntities],
+  );
+
+  const campusSelectOptions = useMemo(
+    () =>
+      campuses.map((campus) => ({
+        value: String(campus.id),
+        label: campus.name,
+      })),
+    [campuses],
   );
 
   const orgSheetColumnOptions = useMemo(() => {
@@ -477,7 +513,6 @@ export function BulkUploadStaffModal({
     if (!isCreateUsers || !excelSheet || orgLevelColumnIndex == null) {
       return;
     }
-    const entityList = entities ?? [];
     const sapKeys = new Set(
       [...selectedEmployeeIds].map((id) => sapLookupKey(id)),
     );
@@ -491,8 +526,9 @@ export function BulkUploadStaffModal({
       let changed = false;
       for (const value of uniqueValues) {
         const key = normalizeSheetOrgValueKey(value);
-        if (next[key]) continue;
-        const suggested = suggestEntityIdForSheetOrgName(value, entityList);
+        // Skip keys the user already set (including explicit "Don't import").
+        if (Object.prototype.hasOwnProperty.call(next, key)) continue;
+        const suggested = suggestEntityIdForSheetOrgName(value, campusEntities);
         if (suggested) {
           next[key] = suggested;
           changed = true;
@@ -505,7 +541,7 @@ export function BulkUploadStaffModal({
     excelSheet,
     orgLevelColumnIndex,
     selectedEmployeeIds,
-    entities,
+    campusEntities,
   ]);
 
   const handleExcelFile = async (file: File | undefined) => {
@@ -520,8 +556,10 @@ export function BulkUploadStaffModal({
       setExcelSheet(parsed);
       setColumnMapping(suggestExcelColumnMapping(parsed.columns, selectableColumns));
       setCreateImportPhase("org");
+      setSelectedCampusId("");
       setOrgLevelColumnIndex(suggestOrgLevelSheetColumn(parsed.columns));
       setOrgLevelValueMapping({});
+      setCreateOrgDialog(null);
       const sapIds = parsed.rows.map((row) => row.sap);
       setImportedSapIds(sapIds);
       applySapIds(sapIds);
@@ -530,8 +568,10 @@ export function BulkUploadStaffModal({
       setExcelSheet(null);
       setColumnMapping({});
       setCreateImportPhase("org");
+      setSelectedCampusId("");
       setOrgLevelColumnIndex(null);
       setOrgLevelValueMapping({});
+      setCreateOrgDialog(null);
       setImportedSapIds([]);
       setSelectedEmployeeIds(new Set());
       setImportUnmatched([]);
@@ -755,10 +795,21 @@ export function BulkUploadStaffModal({
     };
 
     if (isCreateUsers) {
-      const createRows = [...selectedEmployeeIds].map((sap) => {
-        const values = emptyBulkUploadRowValues();
-        return applyMappedValues(sap, sap, values, true);
-      });
+      const createRows = [...selectedEmployeeIds]
+        .filter((sap) => {
+          if (orgLevelColumnIndex == null) return false;
+          const excelRow = excelBySap.get(sapLookupKey(sap));
+          if (!excelRow) return false;
+          const raw = (excelRow.values[orgLevelColumnIndex] ?? "").trim();
+          if (!raw) return false;
+          const entityId =
+            orgLevelValueMapping[normalizeSheetOrgValueKey(raw)];
+          return Boolean(entityId);
+        })
+        .map((sap) => {
+          const values = emptyBulkUploadRowValues();
+          return applyMappedValues(sap, sap, values, true);
+        });
       setSheetRows(createRows);
       return;
     }
@@ -818,6 +869,10 @@ export function BulkUploadStaffModal({
       setError("Upload an Excel file first.");
       return;
     }
+    if (!selectedCampusId) {
+      setError("Select a site before mapping organizations.");
+      return;
+    }
     if (orgLevelColumnIndex == null) {
       setError("Select the sheet column that contains organization / department.");
       return;
@@ -826,18 +881,46 @@ export function BulkUploadStaffModal({
       setError("No new SAP codes to create from this sheet.");
       return;
     }
-    const unmapped = uniqueOrgSheetValues.filter(
-      (value) => !orgLevelValueMapping[normalizeSheetOrgValueKey(value)],
+    const mappedValues = uniqueOrgSheetValues.filter((value) =>
+      Boolean(orgLevelValueMapping[normalizeSheetOrgValueKey(value)]),
     );
-    if (unmapped.length > 0) {
+    if (mappedValues.length === 0) {
       setError(
-        `Map every org value from the sheet (${unmapped.length} remaining: ${unmapped.slice(0, 5).join(", ")}${unmapped.length > 5 ? "…" : ""}).`,
+        "Map at least one sheet org value to a database org level, or create one with +.",
       );
       return;
     }
     setError(null);
     setCreateImportPhase("fields");
   };
+
+  const skippedCreateCount = useMemo(() => {
+    if (!isCreateUsers || !excelSheet || orgLevelColumnIndex == null) return 0;
+    let skipped = 0;
+    for (const sap of selectedEmployeeIds) {
+      const excelRow = excelSheet.rows.find(
+        (row) => sapLookupKey(row.sap) === sapLookupKey(sap),
+      );
+      if (!excelRow) {
+        skipped += 1;
+        continue;
+      }
+      const raw = (excelRow.values[orgLevelColumnIndex] ?? "").trim();
+      if (!raw) {
+        skipped += 1;
+        continue;
+      }
+      const entityId = orgLevelValueMapping[normalizeSheetOrgValueKey(raw)];
+      if (!entityId) skipped += 1;
+    }
+    return skipped;
+  }, [
+    isCreateUsers,
+    excelSheet,
+    orgLevelColumnIndex,
+    selectedEmployeeIds,
+    orgLevelValueMapping,
+  ]);
 
   const updateCell = (
     rowKey: string,
@@ -1151,12 +1234,19 @@ export function BulkUploadStaffModal({
               </section>
               {hasImportedSheet && isCreateUsers && createImportPhase === "org" ? (
                 <OrgLevelMappingStep
+                  campusOptions={campusSelectOptions}
+                  selectedCampusId={selectedCampusId}
+                  onCampusChange={(next) => {
+                    setSelectedCampusId(next);
+                    setOrgLevelValueMapping({});
+                    setError(null);
+                  }}
                   columnOptions={orgSheetColumnOptions}
                   selectedColumnIndex={orgLevelColumnIndex}
                   uniqueSheetValues={uniqueOrgSheetValues}
                   entityOptions={entityOrgLevelOptions}
                   mapping={orgLevelValueMapping}
-                  entities={entities ?? []}
+                  entities={campusEntities}
                   onColumnChange={(index) => {
                     setOrgLevelColumnIndex(index);
                     setOrgLevelValueMapping({});
@@ -1167,6 +1257,10 @@ export function BulkUploadStaffModal({
                       ...current,
                       [normalizeSheetOrgValueKey(sheetValue)]: entityId,
                     }));
+                    setError(null);
+                  }}
+                  onAddOrgLevel={(sheetValue) => {
+                    setCreateOrgDialog({ sheetValue });
                     setError(null);
                   }}
                 />
@@ -1229,10 +1323,14 @@ export function BulkUploadStaffModal({
             ) : isCreateUsers ? (
               hasImportedSheet ? (
                 createImportPhase === "org"
-                  ? `${matchedPeople.length} new · ${importAlreadyExist.length} already exist · map org values from sheet (${uniqueOrgSheetValues.length} unique)`
-                  : `${matchedPeople.length} new · ${selectedColumnIds.size} columns · ${
+                  ? `${matchedPeople.length} new · ${importAlreadyExist.length} already exist · ${
+                      selectedCampusId
+                        ? `${uniqueOrgSheetValues.filter((v) => Boolean(orgLevelValueMapping[normalizeSheetOrgValueKey(v)])).length}/${uniqueOrgSheetValues.length} org values mapped`
+                        : "select a site"
+                    }`
+                  : `${sheetRows.length} to create · ${skippedCreateCount} skipped (no org map) · ${selectedColumnIds.size} columns · ${
                       Object.values(columnMapping).filter(Boolean).length
-                    } mapped · Org levels from sheet mapping`
+                    } mapped`
               ) : (
                 "Upload an Excel file with SAP codes to create new staff accounts"
               )
@@ -1276,6 +1374,7 @@ export function BulkUploadStaffModal({
                   disabled={
                     !hasImportedSheet ||
                     selectedEmployeeIds.size === 0 ||
+                    !selectedCampusId ||
                     orgLevelColumnIndex == null
                   }
                   className="rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#185C37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346] disabled:opacity-60"
@@ -1320,6 +1419,30 @@ export function BulkUploadStaffModal({
             });
           }}
         />
+
+        {createOrgDialog && selectedCampusId ? (
+          <CreateOrgLevelDialog
+            open
+            initialName={createOrgDialog.sheetValue}
+            campusId={Number(selectedCampusId)}
+            campusName={
+              campuses.find((c) => String(c.id) === selectedCampusId)?.name ??
+              "Selected site"
+            }
+            categories={entityCategories}
+            campusEntities={campusEntities}
+            onClose={() => setCreateOrgDialog(null)}
+            onCreated={(entity) => {
+              queryClient.invalidateQueries({ queryKey: queryKeys.entities });
+              setOrgLevelValueMapping((current) => ({
+                ...current,
+                [normalizeSheetOrgValueKey(createOrgDialog.sheetValue)]:
+                  String(entity.id),
+              }));
+              setCreateOrgDialog(null);
+            }}
+          />
+        ) : null}
       </motion.div>
     </AnimatePresence>
   );
@@ -1906,6 +2029,9 @@ function MappingStep({
 }
 
 function OrgLevelMappingStep({
+  campusOptions,
+  selectedCampusId,
+  onCampusChange,
   columnOptions,
   selectedColumnIndex,
   uniqueSheetValues,
@@ -1914,7 +2040,11 @@ function OrgLevelMappingStep({
   entities,
   onColumnChange,
   onMapValue,
+  onAddOrgLevel,
 }: {
+  campusOptions: { value: string; label: string }[];
+  selectedCampusId: string;
+  onCampusChange: (campusId: string) => void;
   columnOptions: { value: string; label: string }[];
   selectedColumnIndex: number | null;
   uniqueSheetValues: string[];
@@ -1923,10 +2053,12 @@ function OrgLevelMappingStep({
   entities: EntityRecord[];
   onColumnChange: (index: number | null) => void;
   onMapValue: (sheetValue: string, entityId: string) => void;
+  onAddOrgLevel: (sheetValue: string) => void;
 }) {
   const mappedCount = uniqueSheetValues.filter((value) =>
     Boolean(mapping[normalizeSheetOrgValueKey(value)]),
   ).length;
+  const skippedCount = uniqueSheetValues.length - mappedCount;
 
   return (
     <section className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
@@ -1935,26 +2067,42 @@ function OrgLevelMappingStep({
           Map organization from sheet
         </h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Choose the sheet column that contains department or org unit, then map
-          each unique value to an org level in PMS. Parent org levels are filled
-          automatically for every employee with that value.
+          Select the site first, then the sheet department column. Map each unique
+          value to an org level at that site, or choose Don&apos;t import to skip
+          those employees. Parent org levels are filled automatically.
         </p>
-        <div className="mt-3 max-w-md">
-          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
-            Org level column from sheet
-          </label>
-          <SearchableSelect
-            value={selectedColumnIndex != null ? String(selectedColumnIndex) : ""}
-            options={columnOptions}
-            onChange={(next) => onColumnChange(next ? Number(next) : null)}
-            placeholder="Select column…"
-            emptyOptionLabel="Select column…"
-            className={sheetSelectClassName}
-          />
+        <div className="mt-3 grid max-w-3xl gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Site
+            </label>
+            <SearchableSelect
+              value={selectedCampusId}
+              options={campusOptions}
+              onChange={onCampusChange}
+              placeholder="Select site…"
+              emptyOptionLabel="Select site…"
+              className={sheetSelectClassName}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Org level column from sheet
+            </label>
+            <SearchableSelect
+              value={selectedColumnIndex != null ? String(selectedColumnIndex) : ""}
+              options={columnOptions}
+              onChange={(next) => onColumnChange(next ? Number(next) : null)}
+              placeholder="Select column…"
+              emptyOptionLabel="Select column…"
+              disabled={!selectedCampusId}
+              className={sheetSelectClassName}
+            />
+          </div>
         </div>
       </div>
 
-      {selectedColumnIndex != null ? (
+      {selectedCampusId && selectedColumnIndex != null ? (
         <div className="overflow-auto">
           <table className="min-w-full border-collapse text-left text-sm">
             <thead>
@@ -2000,14 +2148,27 @@ function OrgLevelMappingStep({
                         {sheetValue}
                       </td>
                       <td className="border-b border-slate-200 px-4 py-2 dark:border-slate-700">
-                        <SearchableSelect
-                          value={entityId}
-                          options={entityOptions}
-                          onChange={(next) => onMapValue(sheetValue, next)}
-                          placeholder="Select org level…"
-                          emptyOptionLabel="Select org level…"
-                          className={sheetSelectClassName}
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <div className="min-w-0 flex-1">
+                            <SearchableSelect
+                              value={entityId}
+                              options={entityOptions}
+                              onChange={(next) => onMapValue(sheetValue, next)}
+                              placeholder="Don't import"
+                              emptyOptionLabel="Don't import"
+                              className={sheetSelectClassName}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onAddOrgLevel(sheetValue)}
+                            title={`Add org level for "${sheetValue}"`}
+                            aria-label={`Add org level for ${sheetValue}`}
+                            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-[#217346] text-white hover:bg-[#185C37] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#217346]"
+                          >
+                            <Plus className="size-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
                       </td>
                       <td className="border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
                         {entityId ? (
@@ -2018,7 +2179,7 @@ function OrgLevelMappingStep({
                               : ""}
                           </span>
                         ) : (
-                          "—"
+                          <span className="text-slate-400">Skip create</span>
                         )}
                       </td>
                     </tr>
@@ -2028,14 +2189,292 @@ function OrgLevelMappingStep({
             </tbody>
           </table>
         </div>
-      ) : null}
+      ) : selectedCampusId ? (
+        <div className="px-4 py-8 text-center text-sm text-slate-500">
+          Select the sheet column that contains department / org unit names.
+        </div>
+      ) : (
+        <div className="px-4 py-8 text-center text-sm text-slate-500">
+          Select a site to load org levels for that campus.
+        </div>
+      )}
 
-      {selectedColumnIndex != null ? (
+      {selectedCampusId && selectedColumnIndex != null ? (
         <div className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
           {mappedCount} of {uniqueSheetValues.length} sheet values mapped
+          {skippedCount > 0
+            ? ` · ${skippedCount} will skip employee create`
+            : ""}
         </div>
       ) : null}
     </section>
+  );
+}
+
+function CreateOrgLevelDialog({
+  open,
+  initialName,
+  campusId,
+  campusName,
+  categories,
+  campusEntities,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  initialName: string;
+  campusId: number;
+  campusName: string;
+  categories: Array<{ id: number; code: string }>;
+  campusEntities: EntityRecord[];
+  onClose: () => void;
+  onCreated: (entity: EntityRecord) => void;
+}) {
+  const [name, setName] = useState(initialName);
+  const [entityCategoryId, setEntityCategoryId] = useState(
+    () => (categories[0] ? String(categories[0].id) : ""),
+  );
+  const [parentEntityId, setParentEntityId] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(initialName);
+    setEntityCategoryId(categories[0] ? String(categories[0].id) : "");
+    setParentEntityId("");
+    setFormError(null);
+  }, [open, initialName, categories]);
+
+  const selectedCategoryCode = useMemo(
+    () =>
+      categories.find((category) => String(category.id) === entityCategoryId)
+        ?.code ?? "",
+    [categories, entityCategoryId],
+  );
+
+  const selectedCategoryLevel = entityOrgLevelNumber(selectedCategoryCode);
+  const requiredParentLevel =
+    selectedCategoryLevel > 0 ? selectedCategoryLevel - 1 : null;
+
+  const parentOptions = useMemo(() => {
+    if (requiredParentLevel == null) {
+      return [];
+    }
+    return campusEntities
+      .filter(
+        (entity) =>
+          entityOrgLevelNumber(entity.categoryCode) === requiredParentLevel,
+      )
+      .map((entity) => ({
+        value: String(entity.id),
+        label: formatEntityOrgLevelLabel(entity),
+      }));
+  }, [campusEntities, requiredParentLevel]);
+
+  useEffect(() => {
+    if (!parentEntityId) return;
+    if (!parentOptions.some((option) => option.value === parentEntityId)) {
+      setParentEntityId("");
+    }
+  }, [parentEntityId, parentOptions]);
+
+  const createMutation = useMutation({
+    mutationFn: createEntity,
+    onSuccess: (entity) => {
+      onCreated(entity);
+    },
+    onError: (mutationError: Error) => {
+      setFormError(mutationError.message);
+    },
+  });
+
+  if (!open) return null;
+
+  const parentLevelLabel =
+    requiredParentLevel == null
+      ? null
+      : `ORG Level ${requiredParentLevel} (C${requiredParentLevel})`;
+
+  return (
+    <div className="fixed inset-0 z-110 flex items-center justify-center bg-black/40 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-org-level-title"
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+          <h3
+            id="create-org-level-title"
+            className="text-sm font-semibold text-slate-900 dark:text-slate-100"
+          >
+            Add org level
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex size-7 items-center justify-center rounded text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Close"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <form
+          className="space-y-3 px-4 py-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setFormError(null);
+            if (!name.trim()) {
+              setFormError("Name is required.");
+              return;
+            }
+            if (!entityCategoryId) {
+              setFormError("Category is required.");
+              return;
+            }
+            if (requiredParentLevel != null && !parentEntityId) {
+              setFormError(
+                `Select a parent at ${parentLevelLabel ?? "the previous level"}.`,
+              );
+              return;
+            }
+            createMutation.mutate({
+              name: name.trim(),
+              entityCategoryId: Number(entityCategoryId),
+              campusId,
+              parentEntityId: parentEntityId ? Number(parentEntityId) : null,
+            });
+          }}
+        >
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={150}
+              required
+              className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-[#217346]/40 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Category
+            </label>
+            <select
+              value={entityCategoryId}
+              onChange={(event) => {
+                setEntityCategoryId(event.target.value);
+                setParentEntityId("");
+              }}
+              required
+              className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-[#217346]/40 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+            >
+              <option value="" disabled>
+                Select category
+              </option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.code} (ORG Level{" "}
+                  {category.code === "C0"
+                    ? 0
+                    : category.code === "C1"
+                      ? 1
+                      : category.code === "C2"
+                        ? 2
+                        : category.code === "C3"
+                          ? 3
+                          : category.code}
+                  )
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Site
+            </label>
+            <input
+              type="text"
+              value={campusName}
+              disabled
+              className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Parent org level
+              {parentLevelLabel ? (
+                <span className="ml-1 font-normal text-slate-400">
+                  — {parentLevelLabel} only
+                </span>
+              ) : null}
+            </label>
+            {requiredParentLevel == null ? (
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                Top-level (C0) has no parent.
+              </p>
+            ) : (
+              <SearchableSelect
+                value={parentEntityId}
+                options={parentOptions}
+                onChange={setParentEntityId}
+                placeholder={
+                  parentOptions.length === 0
+                    ? `No ${parentLevelLabel} entities on this site`
+                    : `Select ${parentLevelLabel}…`
+                }
+                emptyOptionLabel={
+                  parentOptions.length === 0
+                    ? `No ${parentLevelLabel} available`
+                    : `Select ${parentLevelLabel}…`
+                }
+                disabled={parentOptions.length === 0}
+                className={sheetSelectClassName}
+              />
+            )}
+          </div>
+
+          {formError ? (
+            <p className="text-xs font-medium text-red-600 dark:text-red-400">
+              {formError}
+            </p>
+          ) : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={
+                createMutation.isPending ||
+                (requiredParentLevel != null &&
+                  (parentOptions.length === 0 || !parentEntityId))
+              }
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#185C37] disabled:opacity-60"
+            >
+              {createMutation.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Plus className="size-3.5" aria-hidden="true" />
+              )}
+              {createMutation.isPending ? "Creating…" : "Create"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

@@ -264,11 +264,12 @@ export const BULK_CREATE_SHEET_EXTRA_COLUMN_IDS: readonly BulkUploadColumnId[] =
   "accountStatus",
 ];
 
-/** Numeric org level for display (C0 → 0, C1 → 1, C2 → 2). */
+/** Numeric org level for display (C0 → 0, C1 → 1, C2 → 2, C3 → 3). */
 export function entityOrgLevelNumber(categoryCode: string): number {
   if (categoryCode === "C0") return 0;
   if (categoryCode === "C1") return 1;
   if (categoryCode === "C2") return 2;
+  if (categoryCode === "C3") return 3;
   return -1;
 }
 
