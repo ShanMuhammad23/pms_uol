@@ -79,15 +79,35 @@ function mergeWithDefaults(
     : null;
   const allIds = new Set(allColumns.map((col) => col.id));
 
-  // Normalize order: saved order first, then append any new columns
+  // Normalize order: saved order first (filtered to known/allowed columns),
+  // preserving the user's relative ordering. Genuinely-new columns (absent
+  // from saved.order — e.g. added to the codebase after preferences were
+  // saved) are spliced in at their canonical position: before the first
+  // already-ordered column that follows them in the default column list.
+  // This keeps a column added "before X" in the column definitions before X
+  // even for users with saved preferences, instead of dumping it at the end.
   const seen = new Set<string>();
   const order: string[] = [];
-  for (const id of [...saved.order, ...defaults.order]) {
+  for (const id of saved.order) {
     if (seen.has(id)) continue;
     if (allIds.has(id) && (!allowed || allowed.has(id))) {
       seen.add(id);
       order.push(id);
     }
+  }
+  for (let i = 0; i < defaults.order.length; i++) {
+    const id = defaults.order[i];
+    if (seen.has(id)) continue;
+    let insertAt = order.length;
+    for (let j = i + 1; j < defaults.order.length; j++) {
+      const pos = order.indexOf(defaults.order[j]);
+      if (pos !== -1) {
+        insertAt = pos;
+        break;
+      }
+    }
+    order.splice(insertAt, 0, id);
+    seen.add(id);
   }
 
   // Normalize visible: filter to allowed columns. Empty saved visible means

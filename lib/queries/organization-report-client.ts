@@ -5,6 +5,7 @@ export interface OrgReportNode {
   name: string;
   categoryCode: string;
   parentEntityId: number | null;
+  campusName: string | null;
   directStaffCount: number;
   subtreeStaffCount: number;
   eligible: number;
@@ -15,6 +16,8 @@ export interface OrgReportNode {
   performanceMatrixAssigned: number;
   incrementMatrixAssigned: number;
   selfAssessed: number;
+  manager1Assigned: number;
+  manager2Assigned: number;
   assessedByManager1: number;
   assessedByManager2: number;
   hrAlignment: number;

@@ -26,6 +26,14 @@ export interface BulkReviewQueueItem {
   submittedAt: string | null;
   selfAssessmentEnabled: boolean;
   assessmentEligibility: boolean;
+  selfScore: number;
+  manager1Score: number | null;
+  uolExperienceYears: number | null;
+  dateOfJoining: string | null;
+  eligibilityStatus?: "Fully Eligible" | "Partially Eligible" | "Not Eligible";
+  eligibilityReferenceYear?: number | null;
+  eligibilityCycleStartDate?: string | null;
+  eligibilityIneligibilityDate?: string | null;
 }
 
 export interface BulkReviewQuestionRow {

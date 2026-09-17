@@ -7,6 +7,7 @@ import {
   ChevronRight,
   FileBarChart,
   Loader2,
+  MapPin,
   X,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -61,6 +62,7 @@ const FILTER_LEVELS = [
 // ---------------------------------------------------------------------------
 
 type ReportColumnId =
+  | "site"
   | "organization"
   | "total"
   | "eligible"
@@ -71,12 +73,15 @@ type ReportColumnId =
   | "performanceMatrixAssigned"
   | "incrementMatrixAssigned"
   | "selfAssessed"
+  | "manager1Assigned"
   | "assessedByManager1"
+  | "manager2Assigned"
   | "assessedByManager2"
   | "hrAlignment"
   | "boardApproval";
 
 const REPORT_COLUMNS: ColumnDef[] = [
+  { id: "site", label: "Site", pinned: true, width: 120 },
   { id: "organization", label: "Organization", pinned: true, width: 280 },
   { id: "total", label: "Total", width: 100 },
   { id: "eligible", label: "Eligible", width: 100 },
@@ -84,7 +89,9 @@ const REPORT_COLUMNS: ColumnDef[] = [
   { id: "performanceMatrixAssigned", label: "Perf. Matrix", width: 120 },
   { id: "incrementMatrixAssigned", label: "Incr. Matrix", width: 120 },
   { id: "selfAssessed", label: "Assessed", width: 130 },
+  { id: "manager1Assigned", label: "Manager 1 Assigned", width: 150 },
   { id: "assessedByManager1", label: "Manager 1 Review", width: 150 },
+  { id: "manager2Assigned", label: "Manager 2 Assigned", width: 150 },
   { id: "assessedByManager2", label: "Manager 2 Review", width: 150 },
   { id: "hrAlignment", label: "HR Alignment", width: 130 },
   { id: "boardApproval", label: "Board Approval", width: 130 },
@@ -111,6 +118,7 @@ type CountVariant =
 
 /** Map column id → count variant for CountBadge. */
 const COLUMN_VARIANT: Record<ReportColumnId, CountVariant> = {
+  site: "total",
   organization: "total",
   total: "total",
   eligible: "eligible",
@@ -121,7 +129,9 @@ const COLUMN_VARIANT: Record<ReportColumnId, CountVariant> = {
   performanceMatrixAssigned: "perfMatrix",
   incrementMatrixAssigned: "incrMatrix",
   selfAssessed: "self",
+  manager1Assigned: "manager1",
   assessedByManager1: "manager1",
+  manager2Assigned: "manager2",
   assessedByManager2: "manager2",
   hrAlignment: "hr",
   boardApproval: "board",
@@ -142,7 +152,9 @@ function getNodeValue(
     case "performanceMatrixAssigned": return node.performanceMatrixAssigned;
     case "incrementMatrixAssigned": return node.incrementMatrixAssigned;
     case "selfAssessed": return node.selfAssessed;
+    case "manager1Assigned": return node.manager1Assigned;
     case "assessedByManager1": return node.assessedByManager1;
+    case "manager2Assigned": return node.manager2Assigned;
     case "assessedByManager2": return node.assessedByManager2;
     case "hrAlignment": return node.hrAlignment;
     case "boardApproval": return node.boardApproval;
@@ -192,6 +204,24 @@ function toOptions(entities: EntityRecord[]): MultiSelectOption[] {
 }
 
 /**
+ * Resolve an entity's site: its own campusId, or the campusId of the nearest
+ * ancestor that carries one (site is assigned on C0/root entities).
+ */
+function resolveEntityCampusId(
+  entity: EntityRecord,
+  byId: Map<number, EntityRecord>,
+): number | null {
+  let current: EntityRecord | undefined = entity;
+  while (current) {
+    if (current.campusId != null) return current.campusId;
+    current = current.parentEntityId != null
+      ? byId.get(current.parentEntityId)
+      : undefined;
+  }
+  return null;
+}
+
+/**
  * Collect all entity ids that should be visible given the filter selections.
  * For each level, if a selection is made, include those entities + all their
  * descendants + all their ancestors (so the tree path is preserved).
@@ -200,9 +230,9 @@ function getVisibleEntityIds(
   entities: EntityRecord[],
   selections: Record<string, number[] | null>,
 ): Set<number> | null {
-  const hasAnyFilter = FILTER_LEVELS.some(
-    (lvl) => selections[lvl.categoryCode] !== null,
-  );
+  const hasAnyFilter =
+    selections.site !== null ||
+    FILTER_LEVELS.some((lvl) => selections[lvl.categoryCode] !== null);
   if (!hasAnyFilter) return null; // null = show all
 
   const byId = new Map(entities.map((e) => [e.id, e]));
@@ -216,6 +246,19 @@ function getVisibleEntityIds(
   }
 
   const visible = new Set<number>();
+
+  // Site filter: seed every entity that resolves to a selected campus.
+  // Descendant/ancestor expansion below preserves the full tree paths.
+  const siteSel = selections.site;
+  if (siteSel !== null && siteSel.length > 0) {
+    const siteSet = new Set(siteSel);
+    for (const e of entities) {
+      const campusId = resolveEntityCampusId(e, byId);
+      if (campusId != null && siteSet.has(campusId)) {
+        visible.add(e.id);
+      }
+    }
+  }
 
   for (const lvl of FILTER_LEVELS) {
     const sel = selections[lvl.categoryCode];
@@ -436,6 +479,19 @@ function ReportRow({
         )}
       >
         {visibleColumns.map((col) => {
+          if (col.id === "site") {
+            return (
+              <td
+                key={col.id}
+                className={cellClassName(col, "text-left")}
+                style={cellStyle(col)}
+              >
+                <span className="block truncate pl-1 text-sm font-medium text-foreground/80">
+                  {node.campusName ?? "—"}
+                </span>
+              </td>
+            );
+          }
           if (col.id === "organization") {
             const isFrozen = frozenSet.has(col.id);
             return (
@@ -546,10 +602,12 @@ export default function ReportsPage() {
     hasSelectColumn: false,
   });
 
-  // Filter selections per category level: null = no filter, [] = none, [ids] = selected
+  // Filter selections per level: "site" (campus ids) then the org category
+  // levels C0–C3. null = no filter, [] = none, [ids] = selected.
   const [filterSelections, setFilterSelections] = useState<
     Record<string, number[] | null>
   >({
+    site: null,
     C0: null,
     C1: null,
     C2: null,
@@ -580,17 +638,55 @@ export default function ReportsPage() {
     setExpandedIds(new Set());
   };
 
-  // Build cascading filter options.
+  // Build cascading filter options. Site is the top level: a site selection
+  // restricts ORG Level 0 to entities at those campuses, which then cascades
+  // through the org levels as before.
   const filterOptions = useMemo(() => {
     const result: Record<string, MultiSelectOption[]> = {};
+    const allEntities = entities ?? [];
+    const byId = new Map(allEntities.map((e) => [e.id, e]));
+
+    // Site options: the distinct campuses referenced by the entity tree,
+    // counted by how many entities carry that campus directly.
+    const campusById = new Map<number, { name: string; count: number }>();
+    for (const e of allEntities) {
+      if (e.campusId != null && e.campusName) {
+        const entry = campusById.get(e.campusId);
+        if (entry) entry.count += 1;
+        else campusById.set(e.campusId, { name: e.campusName, count: 1 });
+      }
+    }
+    result.site = [...campusById.entries()]
+      .map(([id, { name, count }]) => ({
+        value: String(id),
+        label: name,
+        count,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    const siteSel = filterSelections.site;
+    // null = no site filter; [] = "none selected" (empties C0 options,
+    // matching how [] behaves at every other cascade level).
+    const siteSet = siteSel !== null ? new Set(siteSel) : null;
+
     let parentIds: number[] | null = null;
 
     for (const lvl of FILTER_LEVELS) {
-      const levelEntities = getEntitiesForLevel(
-        entities ?? [],
+      let levelEntities = getEntitiesForLevel(
+        allEntities,
         lvl.categoryCode,
         parentIds,
       );
+      // C0 options are scoped by the site selection — deeper levels already
+      // inherit site through their C0 parent.
+      if (lvl.categoryCode === "C0" && siteSet) {
+        levelEntities = levelEntities.filter(
+          (e) => {
+            const campusId = resolveEntityCampusId(e, byId);
+            return campusId != null && siteSet.has(campusId);
+          },
+        );
+      }
       result[lvl.categoryCode] = toOptions(levelEntities);
 
       const sel = filterSelections[lvl.categoryCode];
@@ -615,9 +711,13 @@ export default function ReportsPage() {
         const next: Record<string, number[] | null> = { ...prev };
         next[categoryCode] = numValues;
 
-        const levelIndex = FILTER_LEVELS.findIndex(
-          (lvl) => lvl.categoryCode === categoryCode,
-        );
+        // "site" sits above C0 — index -1 resets every org level below it.
+        const levelIndex =
+          categoryCode === "site"
+            ? -1
+            : FILTER_LEVELS.findIndex(
+                (lvl) => lvl.categoryCode === categoryCode,
+              );
         for (let i = levelIndex + 1; i < FILTER_LEVELS.length; i++) {
           next[FILTER_LEVELS[i].categoryCode] = null;
         }
@@ -628,12 +728,12 @@ export default function ReportsPage() {
     [],
   );
 
-  const hasActiveFilters = FILTER_LEVELS.some(
-    (lvl) => filterSelections[lvl.categoryCode] !== null,
-  );
+  const hasActiveFilters =
+    filterSelections.site !== null ||
+    FILTER_LEVELS.some((lvl) => filterSelections[lvl.categoryCode] !== null);
 
   const clearFilters = useCallback(() => {
-    setFilterSelections({ C0: null, C1: null, C2: null, C3: null });
+    setFilterSelections({ site: null, C0: null, C1: null, C2: null, C3: null });
   }, []);
 
   // Compute visible entity ids and prune the tree.
@@ -730,6 +830,22 @@ export default function ReportsPage() {
         <div className="flex items-center gap-1.5 pb-2 text-xs font-semibold text-foreground/70">
           <Building2 className="size-3.5" />
           Filter:
+        </div>
+        <div className="w-auto min-w-[160px] max-w-[220px]">
+          <MultiSelectFilterDropdown
+            label="Site"
+            icon={MapPin}
+            options={filterOptions.site ?? []}
+            selectedValues={
+              filterSelections.site === null
+                ? null
+                : filterSelections.site.map((id) => String(id))
+            }
+            onChange={(values) => handleFilterChange("site", values)}
+            disabled={(filterOptions.site ?? []).length === 0}
+            searchable
+            quiet
+          />
         </div>
         {FILTER_LEVELS.map((lvl) => {
           const sel = filterSelections[lvl.categoryCode];
@@ -850,6 +966,23 @@ export default function ReportsPage() {
                     const columnId = col.id as ReportColumnId;
                     const isFrozen = frozenSet.has(col.id);
                     const w = getColumnWidth(col.id, col.width);
+
+                    if (columnId === "site") {
+                      return (
+                        <td
+                          key={col.id}
+                          className={cn(
+                            "py-3 pl-1 text-sm font-bold",
+                            isFrozen && "sticky",
+                            isFrozen && "bg-slate-100/80 dark:bg-white/[0.06]",
+                          )}
+                          style={{
+                            ...(w != null ? { width: w, minWidth: w, maxWidth: w } : {}),
+                            ...(isFrozen ? { left: stickyOffsets[col.id], zIndex: 20 } : {}),
+                          }}
+                        />
+                      );
+                    }
 
                     if (columnId === "organization") {
                       return (

@@ -973,6 +973,16 @@ export interface BulkReviewQueueItem {
   submittedAt: string | null;
   selfAssessmentEnabled: boolean;
   assessmentEligibility: boolean;
+  /** Employee's self-assessment total score. */
+  selfScore: number;
+  /** Manager 1's total score — shown to Manager 2 reviewers only. */
+  manager1Score: number | null;
+  uolExperienceYears: number | null;
+  dateOfJoining: string | null;
+  eligibilityStatus?: "Fully Eligible" | "Partially Eligible" | "Not Eligible";
+  eligibilityReferenceYear?: number | null;
+  eligibilityCycleStartDate?: string | null;
+  eligibilityIneligibilityDate?: string | null;
 }
 
 /**
@@ -1016,6 +1026,14 @@ export async function listBulkReviewQueue(
       submittedAt: s.submittedAt,
       selfAssessmentEnabled: s.selfAssessmentEnabled,
       assessmentEligibility: s.assessmentEligibility,
+      selfScore: s.rawScore,
+      manager1Score: s.manager1Score,
+      uolExperienceYears: s.uolExperienceYears,
+      dateOfJoining: s.dateOfJoining,
+      eligibilityStatus: s.eligibilityStatus,
+      eligibilityReferenceYear: s.eligibilityReferenceYear,
+      eligibilityCycleStartDate: s.eligibilityCycleStartDate,
+      eligibilityIneligibilityDate: s.eligibilityIneligibilityDate,
     }));
 }
 

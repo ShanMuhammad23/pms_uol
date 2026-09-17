@@ -35,6 +35,12 @@ import {
   type SaveBulkAuthoredEntry,
 } from "@/lib/queries/bulk-assessment-client";
 import { confirmManager2OpenAssessment } from "@/lib/queries/direct-assessment-client";
+import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
+import {
+  getEligibilityDisplayLabel,
+  getEligibilityShortLabel,
+  getSubmissionEligibilityDisplayStatus,
+} from "@/app/helpers/dashboard-eligibility";
 import { cn } from "@/lib/utils";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import { FormDescription } from "@/app/components/forms/FormDescription";
@@ -1021,10 +1027,15 @@ function EmployeeSelectionView({
                     )}
                   </button>
                 </th>
+                <th className="px-4 py-3 text-left font-semibold">SAP ID</th>
                 <th className="px-4 py-3 text-left font-semibold">Employee</th>
                 <th className="px-4 py-3 text-left font-semibold">Designation</th>
-                <th className="px-4 py-3 text-left font-semibold">Entity</th>
-                <th className="px-4 py-3 text-left font-semibold">Level</th>
+                <th className="px-4 py-3 text-left font-semibold">ORG Level 1</th>
+                <th className="px-4 py-3 text-left font-semibold">ORG Level 2</th>
+                <th className="px-4 py-3 text-left font-semibold">Eligible</th>
+                <th className="px-4 py-3 text-left font-semibold">UOL Experience</th>
+                <th className="px-4 py-3 text-right font-semibold">Self Score</th>
+                <th className="px-4 py-3 text-right font-semibold">Manager 1 Score</th>
               </tr>
             </thead>
             <tbody>
@@ -1048,24 +1059,45 @@ function EmployeeSelectionView({
                         <Square className="size-4 text-foreground/40" />
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-text-primary">
-                        {emp.employeeName}
-                      </div>
-                      <div className="text-xs text-foreground/60">
-                        {emp.employeeId}
-                      </div>
+                    <td className="px-4 py-3 font-mono text-xs text-foreground/70">
+                      {emp.employeeId}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-text-primary">
+                      {emp.employeeName}
                     </td>
                     <td className="px-4 py-3 text-text-primary">
                       {emp.designation ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-text-primary">
-                      {emp.orgLevel1Name ?? emp.entityName ?? "—"}
+                      {emp.orgLevel1Name ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-text-primary">
+                      {emp.orgLevel2Name ?? "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        M{emp.managerLevel ?? 1}
-                      </span>
+                      {(() => {
+                        const status = getSubmissionEligibilityDisplayStatus(emp);
+                        return (
+                          <span
+                            className="inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-2.5 py-1 text-xs font-semibold text-white"
+                            style={{ backgroundColor: ELIGIBILITY_CONFIG[status].light }}
+                            title={getEligibilityDisplayLabel(status)}
+                          >
+                            {getEligibilityShortLabel(status)}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-text-primary">
+                      {emp.uolExperienceYears ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-text-primary">
+                      {formatScoreValue(emp.selfScore)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-text-primary">
+                      {emp.managerLevel === 2 && emp.manager1Score != null
+                        ? formatScoreValue(emp.manager1Score)
+                        : "—"}
                     </td>
                   </tr>
                 );

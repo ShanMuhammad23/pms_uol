@@ -8,8 +8,18 @@ import type { FormSubmissionListItem } from "@/types/form-submissions";
 
 export type { AppraisalEligibilityStatus };
 
+/** Minimum shape needed to resolve a submission's eligibility status. */
+export type EligibilityStatusInput = Pick<
+  FormSubmissionListItem,
+  | "eligibilityStatus"
+  | "dateOfJoining"
+  | "eligibilityReferenceYear"
+  | "eligibilityCycleStartDate"
+  | "eligibilityIneligibilityDate"
+>;
+
 export function getSubmissionEligibilityStatus(
-  submission: FormSubmissionListItem,
+  submission: EligibilityStatusInput,
 ): EligibilityStatus {
   if (submission.eligibilityStatus) {
     return submission.eligibilityStatus;
@@ -53,7 +63,8 @@ export function getEligibilityDisplayLabel(status: EligibilityStatus): string {
  * regardless of the duration-based calculation.
  */
 export function getSubmissionEligibilityDisplayStatus(
-  submission: FormSubmissionListItem,
+  submission: EligibilityStatusInput &
+    Pick<FormSubmissionListItem, "assessmentEligibility">,
 ): EligibilityStatus {
   if (!submission.assessmentEligibility) return "Ineligible";
   return getSubmissionEligibilityStatus(submission);

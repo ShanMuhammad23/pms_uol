@@ -11,6 +11,8 @@ export interface OrgReportNode {
   name: string;
   categoryCode: string;
   parentEntityId: number | null;
+  /** Site name — the node's own campus or the campus of its C0 ancestor. */
+  campusName: string | null;
   /** Direct staff count (users assigned to this entity). */
   directStaffCount: number;
   /** Subtree staff count (this entity + all descendants). */
@@ -31,6 +33,10 @@ export interface OrgReportNode {
   incrementMatrixAssigned: number;
   /** Employees who have submitted self-assessment (status >= PENDING_HEAD_REVIEW). */
   selfAssessed: number;
+  /** Employees with Manager 1 (users.head_id) assigned. */
+  manager1Assigned: number;
+  /** Employees with Manager 2 (users.manager_2_id) assigned. */
+  manager2Assigned: number;
   /** Employees currently in Manager 1 review (status = PENDING_HEAD_REVIEW, manager_level = 1). */
   assessedByManager1: number;
   /** Employees currently in Manager 2 review (status = PENDING_HEAD_REVIEW, manager_level = 2). */
@@ -55,6 +61,8 @@ interface EntityCountRow {
   performance_matrix_assigned: string;
   increment_matrix_assigned: string;
   self_assessed: string;
+  manager_1_assigned: string;
+  manager_2_assigned: string;
   assessed_by_manager1: string;
   assessed_by_manager2: string;
   hr_alignment: string;
@@ -164,6 +172,16 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
              'COMPLETED'
            )
          ) AS self_assessed,
+         -- Manager 1 assigned on the user record (users.head_id)
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE ${eligibleCond}
+             AND u.head_id IS NOT NULL
+         ) AS manager_1_assigned,
+         -- Manager 2 assigned on the user record (users.manager_2_id)
+         COUNT(DISTINCT u.id) FILTER (
+           WHERE ${eligibleCond}
+             AND u.manager_2_id IS NOT NULL
+         ) AS manager_2_assigned,
          COUNT(DISTINCT u.id) FILTER (
            WHERE ${eligibleCond}
              AND ap.status = 'PENDING_HEAD_REVIEW'
@@ -242,6 +260,8 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
        COALESCE(SUM(dc.performance_matrix_assigned), 0)::text AS performance_matrix_assigned,
        COALESCE(SUM(dc.increment_matrix_assigned), 0)::text AS increment_matrix_assigned,
        COALESCE(SUM(dc.self_assessed), 0)::text AS self_assessed,
+       COALESCE(SUM(dc.manager_1_assigned), 0)::text AS manager_1_assigned,
+       COALESCE(SUM(dc.manager_2_assigned), 0)::text AS manager_2_assigned,
        COALESCE(SUM(dc.assessed_by_manager1), 0)::text AS assessed_by_manager1,
       COALESCE(SUM(dc.assessed_by_manager2), 0)::text AS assessed_by_manager2,
        COALESCE(SUM(dc.hr_alignment), 0)::text AS hr_alignment,
@@ -268,6 +288,8 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       performanceMatrixAssigned: number;
       incrementMatrixAssigned: number;
       selfAssessed: number;
+      manager1Assigned: number;
+      manager2Assigned: number;
       assessedByManager1: number;
       assessedByManager2: number;
       hrAlignment: number;
@@ -288,6 +310,8 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       performanceMatrixAssigned: Number(row.performance_matrix_assigned ?? 0),
       incrementMatrixAssigned: Number(row.increment_matrix_assigned ?? 0),
       selfAssessed: Number(row.self_assessed ?? 0),
+      manager1Assigned: Number(row.manager_1_assigned ?? 0),
+      manager2Assigned: Number(row.manager_2_assigned ?? 0),
       assessedByManager1: Number(row.assessed_by_manager1 ?? 0),
       assessedByManager2: Number(row.assessed_by_manager2 ?? 0),
       hrAlignment: Number(row.hr_alignment ?? 0),
@@ -296,6 +320,21 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   }
 
   // Build the tree structure.
+  const entityById = new Map(entities.map((e) => [e.id, e]));
+
+  // Site is assigned on C0/root entities — resolve each node's site by
+  // walking up to the nearest ancestor that carries a campus.
+  const resolveSiteName = (entity: EntityRecord): string | null => {
+    let current: EntityRecord | undefined = entity;
+    while (current) {
+      if (current.campusName) return current.campusName;
+      current = current.parentEntityId != null
+        ? entityById.get(current.parentEntityId)
+        : undefined;
+    }
+    return null;
+  };
+
   const byId = new Map<number, OrgReportNode>();
   for (const entity of entities) {
     const counts = countsByEntity.get(entity.id);
@@ -304,6 +343,7 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       name: entity.name,
       categoryCode: entity.categoryCode,
       parentEntityId: entity.parentEntityId,
+      campusName: resolveSiteName(entity),
       directStaffCount: counts?.directStaffCount ?? 0,
       subtreeStaffCount: counts?.subtreeStaffCount ?? 0,
       eligible: counts?.eligible ?? 0,
@@ -314,6 +354,8 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
       performanceMatrixAssigned: counts?.performanceMatrixAssigned ?? 0,
       incrementMatrixAssigned: counts?.incrementMatrixAssigned ?? 0,
       selfAssessed: counts?.selfAssessed ?? 0,
+      manager1Assigned: counts?.manager1Assigned ?? 0,
+      manager2Assigned: counts?.manager2Assigned ?? 0,
       assessedByManager1: counts?.assessedByManager1 ?? 0,
       assessedByManager2: counts?.assessedByManager2 ?? 0,
       hrAlignment: counts?.hrAlignment ?? 0,
