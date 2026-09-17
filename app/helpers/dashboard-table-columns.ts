@@ -65,6 +65,8 @@ export type DashboardTableColumnId =
   | "site"
   | "facultyName"
   | "deptGroupName"
+  | "manager1Name"
+  | "manager2Name"
   | "dateOfJoining"
   | "uolExperience"
   | "qualification"
@@ -138,6 +140,8 @@ export const DASHBOARD_COLUMN_SECTIONS: readonly DashboardColumnSection[] = [
       "site",
       "facultyName",
       "deptGroupName",
+      "manager1Name",
+      "manager2Name",
       "dateOfJoining",
       "uolExperience",
       "qualification",
@@ -318,6 +322,20 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     width: 160,
     wrap: true,
     getValue: (row) => formatNullable(row.orgLevel2Name),
+  },
+  manager1Name: {
+    id: "manager1Name",
+    label: "Manager 1",
+    width: 160,
+    wrap: true,
+    getValue: (row) => formatNullable(row.manager1Name),
+  },
+  manager2Name: {
+    id: "manager2Name",
+    label: "Manager 2",
+    width: 160,
+    wrap: true,
+    getValue: (row) => formatNullable(row.manager2Name),
   },
   dateOfJoining: {
     id: "dateOfJoining",
@@ -626,6 +644,8 @@ export const HEAD_DASHBOARD_TABLE_COLUMN_IDS = [
   "roleCategory",
   "facultyName",
   "deptGroupName",
+  "manager1Name",
+  "manager2Name",
   "dateOfJoining",
   "uolExperience",
   "qualification",
@@ -697,6 +717,8 @@ export const MANAGER_FIXED_NORMAL_COLUMN_IDS = [
   "scoreO",
   "formAssignment",
   "deptGroupName",
+  "manager1Name",
+  "manager2Name",
   "dateOfJoining",
   "uolExperience",
   "qualification",
