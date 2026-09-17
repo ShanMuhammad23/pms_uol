@@ -22,7 +22,9 @@ import { confirmManager2OpenAssessment } from "@/lib/queries/direct-assessment-c
 import { invalidateStaffListingQueries } from "@/app/helpers/dashboard-listing-cache";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
+  computeAuthoredRatingPoints,
   formatScoreValue,
+  getAuthoredRatingScale,
   getQuestionRatingScale,
   incompleteRequiredReviewMessage,
   parseDraftScoreAnswer,
@@ -171,6 +173,8 @@ function authoredDraftsToSaveAnswers(
         authoredQuestionText: text || null,
         authoredTotalMarks: totalMarks,
         pointsEarned: points || undefined,
+        ratingValue:
+          draft.ratingValue !== "" ? Number(draft.ratingValue) : null,
         remarks: draft.remarks.trim() || null,
       });
     }
@@ -1917,6 +1921,13 @@ export default function SubmissionDetailView({
                   // from their own or the prior manager's answers).
                   const sectionDrafts = authoredDrafts[sectionId] ?? [];
 
+                  // Rating-based forms score authored questions by rating,
+                  // using the form's default scale (authored questions have
+                  // no per-question scale).
+                  const authoredRatingScale = data.ratingBased
+                    ? getAuthoredRatingScale(data.ratingScales)
+                    : null;
+
                   // Canonical question list — prefer the current reviewer's
                   // drafts, fall back to Manager 1, then employee.
                   const canonicalQuestions: { text: string; totalMarks: number; remarks: string | null }[] =
@@ -2051,14 +2062,33 @@ export default function SubmissionDetailView({
                                     min={0}
                                     step="0.5"
                                     value={draft.authoredTotalMarks}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
                                       updateAuthoredDraft(
                                         sectionId,
                                         draft.clientId,
                                         "authoredTotalMarks",
                                         e.target.value,
-                                      )
-                                    }
+                                      );
+                                      // Rating-based: keep derived points in
+                                      // sync when the weight changes.
+                                      if (
+                                        authoredRatingScale &&
+                                        draft.ratingValue !== ""
+                                      ) {
+                                        updateAuthoredDraft(
+                                          sectionId,
+                                          draft.clientId,
+                                          "pointsEarned",
+                                          String(
+                                            computeAuthoredRatingPoints(
+                                              Number(draft.ratingValue),
+                                              Number(e.target.value) || 0,
+                                              data.ratingScales,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }}
                                     className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-semibold tabular-nums text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                                     placeholder="0"
                                   />
@@ -2084,6 +2114,33 @@ export default function SubmissionDetailView({
                               {/* Manager 1 Score + Remarks */}
                               <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                                 {editingManager1 && canEdit && draft ? (
+                                  authoredRatingScale ? (
+                                    <RatingScoreField
+                                      scale={authoredRatingScale}
+                                      weight={maxMarks}
+                                      ratingValue={draft.ratingValue}
+                                      onRatingChange={(ratingValue, pointsEarned) => {
+                                        updateAuthoredDraft(
+                                          sectionId,
+                                          draft.clientId,
+                                          "ratingValue",
+                                          ratingValue,
+                                        );
+                                        updateAuthoredDraft(
+                                          sectionId,
+                                          draft.clientId,
+                                          "pointsEarned",
+                                          pointsEarned,
+                                        );
+                                      }}
+                                      fallbackPoints={
+                                        draft.pointsEarned !== ""
+                                          ? Number(draft.pointsEarned)
+                                          : null
+                                      }
+                                      tone="violet"
+                                    />
+                                  ) : (
                                   <input
                                     type="number"
                                     min={0}
@@ -2101,6 +2158,7 @@ export default function SubmissionDetailView({
                                     className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
                                     placeholder="0"
                                   />
+                                  )
                                 ) : m1Ans ? (
                                   <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
                                     {formatScoreValue(m1Ans.pointsEarned ?? 0)}
@@ -2123,6 +2181,33 @@ export default function SubmissionDetailView({
                                 <>
                                   <td className="min-w-0 overflow-hidden border-r border-slate-100 px-2 py-2.5 text-right dark:border-slate-700/40">
                                     {editingManager2 && canEdit && draft ? (
+                                      authoredRatingScale ? (
+                                        <RatingScoreField
+                                          scale={authoredRatingScale}
+                                          weight={maxMarks}
+                                          ratingValue={draft.ratingValue}
+                                          onRatingChange={(ratingValue, pointsEarned) => {
+                                            updateAuthoredDraft(
+                                              sectionId,
+                                              draft.clientId,
+                                              "ratingValue",
+                                              ratingValue,
+                                            );
+                                            updateAuthoredDraft(
+                                              sectionId,
+                                              draft.clientId,
+                                              "pointsEarned",
+                                              pointsEarned,
+                                            );
+                                          }}
+                                          fallbackPoints={
+                                            draft.pointsEarned !== ""
+                                              ? Number(draft.pointsEarned)
+                                              : null
+                                          }
+                                          tone="indigo"
+                                        />
+                                      ) : (
                                       <input
                                         type="number"
                                         min={0}
@@ -2140,6 +2225,7 @@ export default function SubmissionDetailView({
                                         className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-indigo-300"
                                         placeholder="0"
                                       />
+                                      )
                                     ) : m2Ans ? (
                                       <span className="font-bold tabular-nums text-indigo-700 dark:text-indigo-300">
                                         {formatScoreValue(m2Ans.pointsEarned ?? 0)}
