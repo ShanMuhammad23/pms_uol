@@ -21,6 +21,7 @@ import { deleteFormAttachmentFile } from "@/lib/uploads/form-attachments";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
   computeAuthoredRatingPoints,
+  getAuthoredRatingScale,
   getQuestionRatingScale,
   hasExplicitNumericScore,
   hasProvidedAnswerScore,
@@ -1532,7 +1533,12 @@ export async function getBulkReviewQuestionData(
         isRequired: false,
         sectionTitle: section.title,
         ratingBased: template.ratingBased,
-        ratingScale: null,
+        // Open sections have no per-question scale — use the form's default
+        // scale so authored questions are scored by rating in rating-based
+        // forms, matching the employee/direct-assessment flows.
+        ratingScale: template.ratingBased
+          ? getAuthoredRatingScale(template.ratingScales)
+          : null,
         rows: openRows,
         isOpenAssessment: true,
         openSectionId: section.id,

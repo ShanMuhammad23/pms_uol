@@ -47,6 +47,7 @@ import { FormDescription } from "@/app/components/forms/FormDescription";
 import { HtmlTitle } from "@/app/components/forms/HtmlTitle";
 import { RatingScoreField, AnswerScoreReadout } from "@/app/components/forms/RatingScoreField";
 import {
+  computeAuthoredRatingPoints,
   formatScoreValue,
   resolveDisplayedAnswerPoints,
 } from "@/app/helpers/form-rating-scoring";
@@ -1905,18 +1906,70 @@ function OpenAssessmentContent({
                           min={0}
                           step={1}
                           value={draft.authoredTotalMarks}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             onUpdateAuthoredDraft(
                               row.submissionId,
                               sectionId,
                               draft.clientId,
                               "authoredTotalMarks",
                               e.target.value,
-                            )
-                          }
+                            );
+                            // Rating-based: recompute derived points when the
+                            // weight changes and a rating is already selected.
+                            if (
+                              currentQuestion.ratingBased &&
+                              currentQuestion.ratingScale &&
+                              draft.ratingValue !== ""
+                            ) {
+                              onUpdateAuthoredDraft(
+                                row.submissionId,
+                                sectionId,
+                                draft.clientId,
+                                "pointsEarned",
+                                String(
+                                  computeAuthoredRatingPoints(
+                                    Number(draft.ratingValue),
+                                    Number(e.target.value) || 0,
+                                    [currentQuestion.ratingScale],
+                                  ),
+                                ),
+                              );
+                            }
+                          }}
                           className="h-8 w-16 rounded border border-slate-200 bg-white px-1 text-right text-xs font-bold tabular-nums text-amber-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-amber-300"
                           placeholder="Marks"
                         />
+                        {currentQuestion.ratingBased && currentQuestion.ratingScale ? (
+                          <div className="w-28">
+                            <RatingScoreField
+                              scale={currentQuestion.ratingScale}
+                              weight={maxMarks}
+                              ratingValue={draft.ratingValue}
+                              onRatingChange={(ratingValue, pointsEarned) => {
+                                onUpdateAuthoredDraft(
+                                  row.submissionId,
+                                  sectionId,
+                                  draft.clientId,
+                                  "ratingValue",
+                                  ratingValue,
+                                );
+                                onUpdateAuthoredDraft(
+                                  row.submissionId,
+                                  sectionId,
+                                  draft.clientId,
+                                  "pointsEarned",
+                                  pointsEarned,
+                                );
+                              }}
+                              fallbackPoints={
+                                draft.pointsEarned !== ""
+                                  ? Number(draft.pointsEarned)
+                                  : null
+                              }
+                              tone="teal"
+                            />
+                          </div>
+                        ) : (
                         <input
                           type="number"
                           min={0}
@@ -1935,6 +1988,7 @@ function OpenAssessmentContent({
                           className="h-8 w-16 rounded border border-slate-200 bg-white px-1 text-right text-xs font-bold tabular-nums text-teal-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300"
                           placeholder="Score"
                         />
+                        )}
                         <button
                           type="button"
                           onClick={() =>

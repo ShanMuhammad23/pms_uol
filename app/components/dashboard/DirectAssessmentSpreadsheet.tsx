@@ -13,7 +13,9 @@ import {
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { isScoredQuestion } from "@/app/helpers/form-questions";
 import {
+  computeAuthoredRatingPoints,
   formatScoreValue,
+  getAuthoredRatingScale,
   getQuestionRatingScale,
   hasProvidedAnswerScore,
   incompleteRequiredReviewMessage,
@@ -980,6 +982,11 @@ export default function DirectAssessmentSpreadsheet({
     (sum, s) => sum + (s.openAssessmentTotalMarks ?? 0), 0,
   );
   const totalMaxScore = maxRawScore + openAssessmentMaxMarks;
+  // Authored (open-assessment) questions have no per-question scale — use the
+  // form's default scale so rating-based forms score them by rating.
+  const authoredRatingScale = data.ratingBased
+    ? getAuthoredRatingScale(data.ratingScales)
+    : null;
   const staffColumnWidth = data.ratingBased
     ? RATING_EMPLOYEE_WIDTH
     : DEFAULT_EMPLOYEE_WIDTH;
@@ -1287,6 +1294,35 @@ export default function DirectAssessmentSpreadsheet({
                                       style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
                                     >
                                       {isMgr2 && draft ? (
+                                        authoredRatingScale ? (
+                                          <RatingScoreField
+                                            scale={authoredRatingScale}
+                                            weight={maxMarks}
+                                            ratingValue={draft.ratingValue}
+                                            onRatingChange={(ratingValue, pointsEarned) => {
+                                              updateAuthoredDraft(
+                                                emp.submissionId,
+                                                sectionId,
+                                                draft.clientId,
+                                                "ratingValue",
+                                                ratingValue,
+                                              );
+                                              updateAuthoredDraft(
+                                                emp.submissionId,
+                                                sectionId,
+                                                draft.clientId,
+                                                "pointsEarned",
+                                                pointsEarned,
+                                              );
+                                            }}
+                                            fallbackPoints={
+                                              draft.pointsEarned !== ""
+                                                ? Number(draft.pointsEarned)
+                                                : null
+                                            }
+                                            tone="violet"
+                                          />
+                                        ) : (
                                         <input
                                           type="number"
                                           min={0}
@@ -1305,6 +1341,7 @@ export default function DirectAssessmentSpreadsheet({
                                           className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs font-bold tabular-nums text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-violet-300"
                                           placeholder="0"
                                         />
+                                        )
                                       ) : matchAnswer ? (
                                         <span className="font-bold tabular-nums text-violet-700 dark:text-violet-300">
                                           {formatScoreValue(matchAnswer.pointsEarned ?? 0)}
@@ -1528,7 +1565,7 @@ export default function DirectAssessmentSpreadsheet({
                                     <div className="flex items-center gap-1 border-b border-slate-100 bg-slate-50/60 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/30 dark:text-slate-500">
                                       <span className="flex-1">Question</span>
                                       <span className="w-14 text-center">Marks</span>
-                                      <span className="w-14 text-center">Score</span>
+                                      <span className="w-14 text-center">{authoredRatingScale ? "Rating" : "Score"}</span>
                                       <span className="w-6" />
                                     </div>
                                   ) : null}
@@ -1572,19 +1609,72 @@ export default function DirectAssessmentSpreadsheet({
                                               min={0}
                                               step={1}
                                               value={draft.authoredTotalMarks}
-                                              onChange={(e) =>
+                                              onChange={(e) => {
                                                 updateAuthoredDraft(
                                                   emp.submissionId,
                                                   sectionId,
                                                   draft.clientId,
                                                   "authoredTotalMarks",
                                                   e.target.value,
-                                                )
-                                              }
+                                                );
+                                                // Rating-based: keep derived
+                                                // points in sync when the
+                                                // weight changes.
+                                                if (
+                                                  authoredRatingScale &&
+                                                  draft.ratingValue !== ""
+                                                ) {
+                                                  updateAuthoredDraft(
+                                                    emp.submissionId,
+                                                    sectionId,
+                                                    draft.clientId,
+                                                    "pointsEarned",
+                                                    String(
+                                                      computeAuthoredRatingPoints(
+                                                        Number(draft.ratingValue),
+                                                        Number(e.target.value) || 0,
+                                                        data.ratingScales,
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                              }}
                                               disabled={!isEditable}
                                               className="h-7 w-14 shrink-0 rounded border border-slate-200 bg-white px-1 text-right text-[11px] tabular-nums font-bold text-amber-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-default disabled:bg-transparent disabled:text-slate-500 dark:border-white/15 dark:bg-slate-800 dark:text-amber-300 dark:disabled:bg-transparent"
                                               placeholder="0"
                                             />
+                                            {authoredRatingScale ? (
+                                              <div className="w-24 shrink-0">
+                                                <RatingScoreField
+                                                  scale={authoredRatingScale}
+                                                  weight={maxMarks}
+                                                  ratingValue={draft.ratingValue}
+                                                  onRatingChange={(ratingValue, pointsEarned) => {
+                                                    updateAuthoredDraft(
+                                                      emp.submissionId,
+                                                      sectionId,
+                                                      draft.clientId,
+                                                      "ratingValue",
+                                                      ratingValue,
+                                                    );
+                                                    updateAuthoredDraft(
+                                                      emp.submissionId,
+                                                      sectionId,
+                                                      draft.clientId,
+                                                      "pointsEarned",
+                                                      pointsEarned,
+                                                    );
+                                                  }}
+                                                  fallbackPoints={
+                                                    draft.pointsEarned !== ""
+                                                      ? Number(draft.pointsEarned)
+                                                      : null
+                                                  }
+                                                  disabled={!isEditable}
+                                                  tone="teal"
+                                                />
+                                              </div>
+                                            ) : (
                                             <input
                                               type="number"
                                               min={0}
@@ -1604,6 +1694,7 @@ export default function DirectAssessmentSpreadsheet({
                                               className="h-7 w-14 shrink-0 rounded border border-slate-200 bg-white px-1 text-right text-[11px] tabular-nums font-bold text-teal-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400 disabled:cursor-default disabled:bg-transparent disabled:text-slate-500 dark:border-white/15 dark:bg-slate-800 dark:text-teal-300 dark:disabled:bg-transparent"
                                               placeholder="0"
                                             />
+                                            )}
                                             {isEditable ? (
                                               <button
                                                 type="button"
