@@ -153,6 +153,12 @@ export interface FormSubmissionListItem {
   manager1Name: string | null;
   /** Display name of the assigned Manager 2 (users.manager_2_id). Null when unassigned. */
   manager2Name: string | null;
+  /**
+   * True when the submission is parked at Manager Review but no manager is
+   * assigned for the current level — nobody can review it until HR assigns
+   * one. The row self-heals once a manager is assigned.
+   */
+  awaitingManagerAssignment: boolean;
 }
 
 export interface FormSubmissionDetail {
@@ -238,6 +244,12 @@ export interface FormSubmissionDetail {
   isReturned: boolean;
   /** Reason provided when the submission was returned. Null when not returned. */
   returnReason: string | null;
+  /**
+   * True when the submission is parked at Manager Review but no manager is
+   * assigned for the current level — nobody can review it until HR assigns
+   * one. The row self-heals once a manager is assigned.
+   */
+  awaitingManagerAssignment: boolean;
   /** Full history of returns to this submission (all levels). */
   returnHistory?: ReturnHistoryEntry[];
   /** Timestamp when Manager 2 confirmed they reviewed the open/free assessment. Null = not confirmed. */

@@ -6,6 +6,7 @@ import { getDbClient } from "@/lib/db-context";
 import { getDefaultAppraisalCycle } from "@/lib/queries/appraisal-cycles";
 import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
 import type { StaffListScope } from "@/lib/queries/staff-list-scope";
+import { isAwaitingManagerAssignment } from "@/app/helpers/manager-review";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
 import type { AppraisalStatus, PerformanceRating } from "@/types/forms";
 
@@ -240,6 +241,16 @@ function mapOverviewRow(
     returnReason: null,
     manager1Name: null,
     manager2Name: null,
+    awaitingManagerAssignment: isAwaitingManagerAssignment({
+      status: row.status,
+      managerLevel: row.manager_level != null ? Number(row.manager_level) : null,
+      manager1UserId: row.manager_1_user_id
+        ? Number(row.manager_1_user_id)
+        : null,
+      manager2UserId: row.manager_2_user_id
+        ? Number(row.manager_2_user_id)
+        : null,
+    }),
   };
 }
 

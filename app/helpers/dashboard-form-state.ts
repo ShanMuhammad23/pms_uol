@@ -68,6 +68,14 @@ export const FORM_STATE_CONFIG: Record<
     icon: Users,
     phase: 4,
   },
+  AWAITING_MANAGER_ASSIGNMENT: {
+    label: "Awaiting Manager",
+    color: "text-rose-700",
+    bg: "bg-rose-50",
+    border: "border-rose-300",
+    icon: AlertTriangle,
+    phase: 3,
+  },
   PENDING_HR_CALIBRATION: {
     label: "HR Alignment",
     color: "text-orange-700",
@@ -123,6 +131,11 @@ type StatusRow = {
   directScoreEntry?: boolean;
   selfAssessmentEnabled?: boolean;
   formAssigned?: boolean;
+  /**
+   * True when the submission is parked at Manager Review but no manager is
+   * assigned for the current level. Renders as the "Awaiting Manager" badge.
+   */
+  awaitingManagerAssignment?: boolean;
 };
 
 export function isNotInitiated(row: StatusRow): boolean {
@@ -174,6 +187,13 @@ export function getSubmissionStatusConfig(row: StatusRow): StatusStyle {
     return FORM_STATE_CONFIG.NOT_INITIATED;
   }
 
+  // Awaiting-manager takes precedence over the direct-assessment label — a
+  // row parked at Manager Review with no assigned reviewer needs HR action
+  // regardless of how it arrived at the stage.
+  if (row.status === "PENDING_HEAD_REVIEW" && row.awaitingManagerAssignment) {
+    return FORM_STATE_CONFIG.AWAITING_MANAGER_ASSIGNMENT;
+  }
+
   if (isPendingDirectAssessment(row)) {
     return FORM_STATE_CONFIG.PENDING_DIRECT_ASSESSMENT;
   }
@@ -204,6 +224,9 @@ export function matchesFormStateOption(row: StatusRow, state: string): boolean {
   }
   if (state === "PENDING_MANAGER_2_REVIEW") {
     return isPendingManager2Review(row);
+  }
+  if (state === "AWAITING_MANAGER_ASSIGNMENT") {
+    return row.awaitingManagerAssignment === true;
   }
   if (state === LEGACY_HEAD_REVIEW_FORM_STATE) {
     return row.status === "PENDING_HEAD_REVIEW";

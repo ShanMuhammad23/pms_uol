@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
 import {
   cancelStaffListingQueries,
   getStaffListingSnapshots,
@@ -28,6 +29,12 @@ interface InlineScoreAdjustmentCellProps {
   pendingValue?: number | null;
   /** When false, the cell is read-only (no edit button). Defaults to true. */
   canEdit?: boolean;
+  /**
+   * When set, the cell is locked read-only and renders a warning icon whose
+   * tooltip carries this message — used to block editing when a prerequisite
+   * (e.g. Score (O)) is missing. Takes precedence over canEdit.
+   */
+  warning?: string;
 }
 
 const FIELD_LABELS: Record<ScoreAdjustmentField | CompensationWorksheetField, string> = {
@@ -66,6 +73,7 @@ export function InlineScoreAdjustmentCell({
   onBufferedChange,
   pendingValue,
   canEdit = true,
+  warning,
 }: InlineScoreAdjustmentCellProps) {
   const isMoney = mode === "money";
   const isDecimal = mode === "decimal" || mode === "score" || isMoney;
@@ -206,6 +214,18 @@ export function InlineScoreAdjustmentCell({
   }
 
   const displayText = formatNumericDisplay(displayValue, mode);
+
+  if (warning) {
+    return (
+      <span
+        className="inline-flex w-full items-center justify-end gap-1 px-1.5 py-0.5 text-right text-sm tabular-nums text-slate-700 dark:text-slate-300"
+        title={warning}
+      >
+        <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500" />
+        {displayText}
+      </span>
+    );
+  }
 
   if (!canEdit) {
     return (

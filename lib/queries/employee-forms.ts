@@ -4,10 +4,7 @@ import type { PoolClient } from "pg";
 import { computeAppraisalEligibility } from "@/lib/appraisal-eligibility";
 import { db } from "@/lib/db";
 import { getDbClient, withTransaction } from "@/lib/db-context";
-import {
-  resolveSelfAssessmentAdvance,
-  toEmployeeManagers,
-} from "@/app/helpers/manager-review";
+import { resolveSelfAssessmentAdvance } from "@/app/helpers/manager-review";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import { getReturnHistory } from "@/lib/queries/form-submissions";
 import { htmlTitlePlainText } from "@/lib/html-title";
@@ -1180,25 +1177,10 @@ export async function saveEmployeeForm(
         savedAuthored,
       );
 
-      // Fetch the employee's manager assignments to determine the correct
-      // next workflow status. When both Manager 1 and Manager 2 are NULL,
-      // the Manager Review stage is bypassed and the submission transitions
-      // directly to HR Alignment (PENDING_HR_CALIBRATION).
-      const managerResult = await client.query<{
-        head_id: string | null;
-        manager_2_id: string | null;
-      }>(
-        `SELECT head_id, manager_2_id FROM users WHERE id = $1`,
-        [userId],
-      );
-      const managerRow = managerResult.rows[0];
-      const managers = toEmployeeManagers({
-        headId: managerRow?.head_id ? Number(managerRow.head_id) : null,
-        manager2Id: managerRow?.manager_2_id
-          ? Number(managerRow.manager_2_id)
-          : null,
-      });
-      const advance = resolveSelfAssessmentAdvance(managers);
+      // The submission always advances to Manager Review
+      // (PENDING_HEAD_REVIEW) at level 1 — when no manager is assigned it is
+      // held there (awaiting assignment) rather than bypassing the stage.
+      const advance = resolveSelfAssessmentAdvance();
 
       await client.query(
         `UPDATE appraisals

@@ -45,9 +45,11 @@ export type { ReturnHistoryEntry, ReturnLevel };
 import type { AppraisalStatus, FormRatingScaleRecord, PerformanceRating, QuestionRecord } from "@/types/forms";
 import { flattenAllQuestions } from "@/types/forms";
 import {
+  isAwaitingManagerAssignment,
   resolveManagerApprovalAdvance,
   toEmployeeManagers,
 } from "@/app/helpers/manager-review";
+import { getReportingManagerScore } from "@/app/helpers/score-o";
 import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
 import { assertManagerEligible } from "@/lib/queries/users";
 import type { StaffListScope } from "@/lib/queries/staff-list-scope";
@@ -441,6 +443,16 @@ function mapSubmissionRow(
     returnReason: row.return_reason ?? null,
     manager1Name: row.manager_1_name ?? null,
     manager2Name: row.manager_2_name ?? null,
+    awaitingManagerAssignment: isAwaitingManagerAssignment({
+      status: row.status,
+      managerLevel: row.manager_level,
+      manager1UserId: row.manager_1_user_id
+        ? Number(row.manager_1_user_id)
+        : null,
+      manager2UserId: row.manager_2_user_id
+        ? Number(row.manager_2_user_id)
+        : null,
+    }),
   };
 }
 
@@ -2123,8 +2135,19 @@ export async function approveManagerReview(appraisalId: number): Promise<{
     managerLevel === 2
       ? (row.manager_2_user_id ? Number(row.manager_2_user_id) : null)
       : (row.manager_1_user_id ? Number(row.manager_1_user_id) : null);
+
+  // Held submission: the employee has no manager assigned for the current
+  // review level, so nobody can legitimately approve it. The row self-heals
+  // once HR assigns a manager — it then appears in that manager's queue.
+  if (filledById == null) {
+    throw new FormSubmissionError(
+      "Approval is blocked — no manager is assigned for this review level. Assign a manager first; the submission will then appear in their queue.",
+      409,
+    );
+  }
+
   const templateId = row.template_id ? Number(row.template_id) : null;
-  if (filledById != null && templateId != null) {
+  if (templateId != null) {
     await assertRequiredManagerRatingsComplete(
       appraisalId,
       filledById,
@@ -2162,14 +2185,54 @@ export async function approveHrCalibration(appraisalId: number): Promise<{
   const current = await db.query<{
     status: AppraisalStatus;
     calibration_factor: string | null;
+    was_submitted: boolean;
+    direct_entry: boolean;
+    has_manager_review: boolean;
   }>(
-    `SELECT status, calibration_factor::text FROM appraisals WHERE id = $1`,
+    `SELECT ap.status,
+            ap.calibration_factor::text,
+            (ap.submitted_at IS NOT NULL) AS was_submitted,
+            EXISTS (
+              SELECT 1
+              FROM direct_score_entry_assignments dsea
+              WHERE dsea.employee_id = ap.employee_id
+                AND dsea.cycle_id IS NOT DISTINCT FROM ap.cycle_id
+            ) AS direct_entry,
+            (
+              EXISTS (
+                SELECT 1
+                FROM appraisal_answers aa
+                WHERE aa.appraisal_id = ap.id
+                  AND aa.filled_by_id <> ap.employee_id
+              )
+              OR ap.manager1_overall_remarks IS NOT NULL
+              OR ap.manager2_overall_remarks IS NOT NULL
+            ) AS has_manager_review
+     FROM appraisals ap
+     WHERE ap.id = $1`,
     [appraisalId],
   );
 
   const row = current.rows[0];
   if (!row) {
     throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  // Guard: a self-assessment submission that was never touched by a manager
+  // (no manager answers, no manager overall remarks) must not advance past
+  // HR Alignment. This catches legacy rows that bypassed Manager Review when
+  // no manager was assigned — they must be returned to a manager for review.
+  // Direct-score-entry appraisals are exempt: they have no self-assessment
+  // stage and are scored directly by HR.
+  if (
+    row.was_submitted &&
+    !row.direct_entry &&
+    !row.has_manager_review
+  ) {
+    throw new FormSubmissionError(
+      "Approval is blocked — this submission was never reviewed by a manager. Assign a manager and return the submission for review first.",
+      409,
+    );
   }
 
   let nextStatus: AppraisalStatus;
@@ -2412,6 +2475,7 @@ export async function getFormSubmissionById(
     managerLevel: summary.managerLevel,
     manager1UserId: summary.manager1UserId,
     manager2UserId: summary.manager2UserId,
+    awaitingManagerAssignment: isAwaitingManagerAssignment(summary),
     rawScore: summary.rawScore,
     maxRawScore: summary.maxRawScore,
     scorePercent: summary.scorePercent,
@@ -2486,6 +2550,71 @@ export type AppraisalScoreAdjustmentField =
   | "calibratedScoreNumeric"
   | "initialScoreNumeric";
 
+/**
+ * Score adjustments (CH / ORIC / QEC) are deltas applied on top of Score (O).
+ * This guard rejects adjustment writes when Score (O) does not exist yet —
+ * i.e. the manager review has not produced an approved score, or a
+ * direct-entry score was never set. Mirrors the client-side warning on the
+ * adjustment cells so the rule holds even when the UI is bypassed.
+ */
+async function assertScoreOAvailable(appraisalId: number): Promise<void> {
+  const result = await db.query<{
+    status: AppraisalStatus;
+    initial_score_numeric: string | null;
+    manager_2_user_id: string | null;
+    direct_entry: boolean;
+    manager_1_score: string | null;
+    manager_2_score: string | null;
+  }>(
+    `SELECT ap.status,
+            ap.initial_score_numeric::text,
+            u.manager_2_id::text AS manager_2_user_id,
+            EXISTS (
+              SELECT 1
+              FROM direct_score_entry_assignments dsea
+              WHERE dsea.employee_id = ap.employee_id
+                AND dsea.cycle_id IS NOT DISTINCT FROM ap.cycle_id
+            ) AS direct_entry,
+            (
+              SELECT SUM(aa.points_earned)::text
+              FROM appraisal_answers aa
+              WHERE aa.appraisal_id = ap.id
+                AND aa.filled_by_id = u.head_id
+            ) AS manager_1_score,
+            (
+              SELECT SUM(aa.points_earned)::text
+              FROM appraisal_answers aa
+              WHERE aa.appraisal_id = ap.id
+                AND aa.filled_by_id = u.manager_2_id
+            ) AS manager_2_score
+     FROM appraisals ap
+     INNER JOIN users u ON u.id = ap.employee_id
+     WHERE ap.id = $1`,
+    [appraisalId],
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    throw new FormSubmissionError("Submission not found.", 404);
+  }
+
+  const scoreO = getReportingManagerScore({
+    directScoreEntry: row.direct_entry,
+    scoreO: toNumber(row.initial_score_numeric),
+    manager1Score: toNumber(row.manager_1_score),
+    manager2Score: toNumber(row.manager_2_score),
+    manager2UserId: row.manager_2_user_id ? Number(row.manager_2_user_id) : null,
+    status: row.status,
+  });
+
+  if (scoreO == null) {
+    throw new FormSubmissionError(
+      "Score (O) is not available yet — adjustments apply on top of the manager-approved score. Complete the manager review first.",
+      409,
+    );
+  }
+}
+
 export async function updateAppraisalScoreAdjustments(
   appraisalId: number,
   fields: Partial<
@@ -2503,6 +2632,16 @@ export async function updateAppraisalScoreAdjustments(
   calibratedScoreNumeric: number | null;
   initialScoreNumeric: number | null;
 }> {
+  // Score adjustments are deltas applied on top of Score (O). Reject them
+  // when Score (O) does not exist yet — i.e. the manager review has not
+  // produced an approved score (or a direct-entry score was never set).
+  const SCORE_O_DEPENDENT_FIELDS: ReadonlySet<AppraisalScoreAdjustmentField> =
+    new Set(["creditHrsErpScoreAdj", "pubOricScoreAdj", "qecScoreAdj"]);
+  const touchedFields = Object.keys(fields) as AppraisalScoreAdjustmentField[];
+  if (touchedFields.some((field) => SCORE_O_DEPENDENT_FIELDS.has(field))) {
+    await assertScoreOAvailable(appraisalId);
+  }
+
   const setClauses: string[] = [];
   const values: unknown[] = [];
 

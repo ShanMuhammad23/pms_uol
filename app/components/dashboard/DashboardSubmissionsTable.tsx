@@ -35,6 +35,7 @@ import {
 import { TableColumnHeaderFilter } from "@/app/components/dashboard/TableColumnHeaderFilter";
 import { TopHorizontalScrollbar } from "@/app/components/common/TopHorizontalScrollbar";
 import { getSubmissionStatusConfig, isPendingDirectAssessment } from "@/app/helpers/dashboard-form-state";
+import { getReportingManagerScore } from "@/app/helpers/score-o";
 import { itemVariants } from "@/app/helpers/dashboard-animations";
 import { ELIGIBILITY_CONFIG } from "@/app/helpers/dashboard-chart-config";
 import {
@@ -336,6 +337,22 @@ function HodReviewCommentsCell({ value }: { value: string }) {
   );
 }
 
+/**
+ * Score adjustments (CH / ORIC / QEC) are deltas applied on top of Score (O).
+ * When Score (O) is unavailable — no manager-approved score yet — editing an
+ * adjustment would be meaningless, so the cell is locked with a warning.
+ */
+const SCORE_O_MISSING_WARNING =
+  "Score (O) is not available yet — adjustments apply on top of the manager-approved score. Complete the manager review first.";
+
+function scoreOAdjustmentWarning(
+  submission: FormSubmissionListItem,
+): string | undefined {
+  return getReportingManagerScore(submission) == null
+    ? SCORE_O_MISSING_WARNING
+    : undefined;
+}
+
 function renderCell(
   column: DashboardTableColumnDef,
   submission: FormSubmissionListItem,
@@ -490,6 +507,7 @@ function renderCell(
         value={submission.creditHrsErpScoreAdj}
         disabled={submission.id <= 0 || !submission.assessmentEligibility}
         canEdit={canEdit}
+        warning={scoreOAdjustmentWarning(submission)}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.creditHrsErpScoreAdj : undefined}
       />
@@ -505,6 +523,7 @@ function renderCell(
         value={submission.pubOricScoreAdj}
         disabled={submission.id <= 0 || !submission.assessmentEligibility}
         canEdit={canEdit}
+        warning={scoreOAdjustmentWarning(submission)}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.pubOricScoreAdj : undefined}
       />
@@ -520,6 +539,7 @@ function renderCell(
         value={submission.qecScoreAdj}
         disabled={submission.id <= 0 || !submission.assessmentEligibility}
         canEdit={canEdit}
+        warning={scoreOAdjustmentWarning(submission)}
         onBufferedChange={ctx?.isHrRole ? ctx.onBufferedChange : undefined}
         pendingValue={ctx?.isHrRole ? ctx.pendingChanges.qecScoreAdj : undefined}
       />

@@ -41,39 +41,48 @@ export function hasSecondManagerReview(managers: EmployeeManagers): boolean {
 }
 
 /**
- * Returns true when the employee has neither Manager 1 nor Manager 2
- * assigned. In this case the Manager Review stage is bypassed entirely.
- */
-export function hasNoAssignedManagers(managers: EmployeeManagers): boolean {
-  return managers.manager1Id == null && managers.manager2Id == null;
-}
-
-/**
  * Decide the next workflow status after an employee submits their
  * self-assessment.
  *
- * - If at least one manager is assigned → PENDING_HEAD_REVIEW (standard flow).
- * - If both Manager 1 and Manager 2 are NULL → PENDING_HR_CALIBRATION
- *   (skip Manager Review, go straight to HR Alignment).
+ * Always PENDING_HEAD_REVIEW at level 1 — the Manager Review stage is never
+ * bypassed. When the employee has no Manager 1 assigned, the submission is
+ * held at level 1 with no eligible reviewer (see isAwaitingManagerAssignment);
+ * it self-heals the moment HR assigns a Manager 1, appearing in that
+ * manager's queue without a Return action.
  *
  * This is the SINGLE SOURCE OF TRUTH for the self-assessment → next stage
  * transition. All callers must use this function instead of hardcoding the
  * status.
  */
-export function resolveSelfAssessmentAdvance(
-  managers: EmployeeManagers,
-): { managerLevel: number; status: AppraisalStatus } {
-  if (hasNoAssignedManagers(managers)) {
-    return {
-      managerLevel: 1,
-      status: "PENDING_HR_CALIBRATION",
-    };
-  }
-
+export function resolveSelfAssessmentAdvance(): {
+  managerLevel: number;
+  status: AppraisalStatus;
+} {
   return {
     managerLevel: 1,
     status: "PENDING_HEAD_REVIEW",
   };
+}
+
+/**
+ * True when a submission is parked at Manager Review but the employee has no
+ * manager assigned for the current level — nobody can review it until HR
+ * assigns one. Used to flag "awaiting manager assignment" rows in the staff
+ * listing. Rows in this state self-heal once a manager is assigned.
+ */
+export function isAwaitingManagerAssignment(
+  submission: Pick<
+    FormSubmissionListItem,
+    "status" | "managerLevel" | "manager1UserId" | "manager2UserId"
+  >,
+): boolean {
+  if (submission.status !== "PENDING_HEAD_REVIEW") {
+    return false;
+  }
+  const managers = toEmployeeManagers(submission);
+  return (
+    getReviewingManagerUserId(managers, submission.managerLevel ?? 1) == null
+  );
 }
 
 /**
