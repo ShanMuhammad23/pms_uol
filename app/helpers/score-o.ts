@@ -59,3 +59,40 @@ export function getReportingManagerScore(
 
   return row.manager1Score;
 }
+
+/**
+ * Human-readable reason the official Score (O) is unavailable, or null when a
+ * score exists. Used to surface a warning in the Adjusted Score cell — a bare
+ * "—" hides whether the score is simply pending review or missing because the
+ * review stage was bypassed / produced no marks.
+ */
+export function getMissingReportingScoreReason(
+  row: Pick<
+    FormSubmissionListItem,
+    | "directScoreEntry"
+    | "scoreO"
+    | "manager1Score"
+    | "manager2Score"
+    | "manager2UserId"
+    | "status"
+    | "awaitingManagerAssignment"
+  >,
+): string | null {
+  if (getReportingManagerScore(row) !== null) {
+    return null;
+  }
+
+  if (row.directScoreEntry) {
+    return "Score (O) missing — no direct score has been entered.";
+  }
+
+  if (row.awaitingManagerAssignment) {
+    return "Score (O) missing — no manager is assigned for this review level. Assign a manager to enable the review.";
+  }
+
+  if (!isManagerReviewApproved(row.status)) {
+    return "Score (O) not yet available — pending manager review.";
+  }
+
+  return "Score (O) missing — the manager review produced no score. Return the submission for review.";
+}
