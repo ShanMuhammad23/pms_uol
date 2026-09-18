@@ -27,6 +27,7 @@ import {
   getAuthoredRatingScale,
   getQuestionRatingScale,
   incompleteRequiredReviewMessage,
+  inferAuthoredRatingValueFromPoints,
   parseDraftScoreAnswer,
   resolveDisplayedAnswerPoints,
   resolveDisplayedRatingValue,
@@ -124,16 +125,30 @@ function buildInitialAuthoredDrafts(
     const usingFallback = ownAuthored.length === 0 && mgr1Authored.length > 0;
     const source = ownAuthored.length > 0 ? ownAuthored : mgr1Authored;
 
-    state[section.id] = source.map((a) => ({
-      clientId: nextAuthoredClientId(),
-      authoredQuestionText: a.authoredQuestionText ?? "",
-      authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
-      pointsEarned: String(a.pointsEarned ?? 0),
-      ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
-      // Never copy remarks from the prior manager — each reviewer writes
-      // their own remarks.
-      remarks: usingFallback ? "" : (a.remarks ?? ""),
-    }));
+    state[section.id] = source.map((a) => {
+      // Authored rows created before the form became rating-based have
+      // absolute points and no rating — infer the rating when the points
+      // land exactly on a rating step so the row shows its real score.
+      const seededRating =
+        a.ratingValue ??
+        (data.ratingBased
+          ? inferAuthoredRatingValueFromPoints(
+              Number(a.authoredTotalMarks) || 0,
+              data.ratingScales,
+              Number(a.pointsEarned) || 0,
+            )
+          : null);
+      return {
+        clientId: nextAuthoredClientId(),
+        authoredQuestionText: a.authoredQuestionText ?? "",
+        authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
+        pointsEarned: String(a.pointsEarned ?? 0),
+        ratingValue: seededRating == null ? "" : String(seededRating),
+        // Never copy remarks from the prior manager — each reviewer writes
+        // their own remarks.
+        remarks: usingFallback ? "" : (a.remarks ?? ""),
+      };
+    });
   }
 
   return state;

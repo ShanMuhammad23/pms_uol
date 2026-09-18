@@ -25,6 +25,7 @@
     "cron:assessment-reminders": "bash scripts/run-assessment-reminders.sh",
     "db:migrate:section-title-length": "node scripts/migrate-section-title-length.mjs",
     "db:migrate:open-assessment-flags": "node scripts/migrate-open-assessment-flags.mjs",
+    "db:migrate:authored-rating-values": "node scripts/migrate-authored-rating-values.mjs",
     "db:seed:employees": "node scripts/seed-employees-from-excel.mjs",
     "db:seed:sargodha-faculty": "node scripts/seed-sargodha-faculty-from-excel.mjs",
     "db:seed:sargodha-blue-collar": "node scripts/seed-sargodha-blue-collar-from-excel.mjs",

@@ -11,6 +11,7 @@ import {
   formatScoreValue,
   getAuthoredRatingScale,
   getQuestionRatingScale,
+  inferAuthoredRatingValueFromPoints,
   parseDraftScoreAnswer,
   resolveDisplayedAnswerPoints,
   usesRatingScore,
@@ -170,14 +171,27 @@ function buildInitialAuthoredAnswers(
     const sectionAnswers = existingAuthored.filter(
       (a) => a.openSectionId === section.id,
     );
-    state[section.id] = sectionAnswers.map((a) => ({
-      clientId: nextAuthoredClientId(),
-      authoredQuestionText: a.authoredQuestionText ?? "",
-      authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
-      pointsEarned: String(a.pointsEarned ?? 0),
-      ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
-      remarks: a.remarks ?? "",
-    }));
+    state[section.id] = sectionAnswers.map((a) => {
+      // Pre-rating-era rows have absolute points and no rating — infer
+      // the rating when the points land exactly on a rating step.
+      const seededRating =
+        a.ratingValue ??
+        (template.ratingBased
+          ? inferAuthoredRatingValueFromPoints(
+              Number(a.authoredTotalMarks) || 0,
+              template.ratingScales,
+              Number(a.pointsEarned) || 0,
+            )
+          : null);
+      return {
+        clientId: nextAuthoredClientId(),
+        authoredQuestionText: a.authoredQuestionText ?? "",
+        authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
+        pointsEarned: String(a.pointsEarned ?? 0),
+        ratingValue: seededRating == null ? "" : String(seededRating),
+        remarks: a.remarks ?? "",
+      };
+    });
   }
 
   return state;

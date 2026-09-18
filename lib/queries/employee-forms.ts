@@ -929,7 +929,15 @@ export async function saveEmployeeForm(
   const authoredInputs = input.answers.filter(
     (a) => a.openSectionId != null && a.questionId === 0,
   );
-  const openSections = template.sections.filter((s) => s.isOpenAssessment);
+  // Only sections the employee can author — mirrors the EmployeeFormFill
+  // filter. Restricting the delete/reinsert scope to authorable sections
+  // prevents a flag change (selfAssessmentEnabled toggled off) from wiping
+  // previously-authored rows, and blocks inserts into HOD-only sections.
+  const openSections = selfAssessmentEnabled
+    ? template.sections.filter(
+        (s) => s.isOpenAssessment && s.selfAssessmentEnabled !== false,
+      )
+    : [];
 
   await withTransaction(async () => {
     const client = getDbClient() as PoolClient;

@@ -49,6 +49,7 @@ import { RatingScoreField, AnswerScoreReadout } from "@/app/components/forms/Rat
 import {
   computeAuthoredRatingPoints,
   formatScoreValue,
+  inferAuthoredRatingValueFromPoints,
   resolveDisplayedAnswerPoints,
 } from "@/app/helpers/form-rating-scoring";
 import { toast } from "react-hot-toast";
@@ -148,15 +149,28 @@ function buildInitialAuthoredDrafts(
       const source = ownAuthored.length > 0 ? ownAuthored : mgr1Authored;
       const usingFallback = ownAuthored.length === 0 && mgr1Authored.length > 0;
 
-      const drafts: AuthoredDraft[] = source.map((a) => ({
-        clientId: nextAuthoredClientId(),
-        authoredQuestionText: a.authoredQuestionText ?? "",
-        authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
-        pointsEarned: String(a.pointsEarned ?? 0),
-        ratingValue: a.ratingValue == null ? "" : String(a.ratingValue),
-        // Never copy remarks from the fallback source.
-        remarks: usingFallback ? "" : (a.remarks ?? ""),
-      }));
+      const drafts: AuthoredDraft[] = source.map((a) => {
+        // Pre-rating-era rows have absolute points and no rating — infer
+        // the rating when the points land exactly on a rating step.
+        const seededRating =
+          a.ratingValue ??
+          (q.ratingBased && q.ratingScale
+            ? inferAuthoredRatingValueFromPoints(
+                Number(a.authoredTotalMarks) || 0,
+                [q.ratingScale],
+                Number(a.pointsEarned) || 0,
+              )
+            : null);
+        return {
+          clientId: nextAuthoredClientId(),
+          authoredQuestionText: a.authoredQuestionText ?? "",
+          authoredTotalMarks: String(a.authoredTotalMarks ?? 0),
+          pointsEarned: String(a.pointsEarned ?? 0),
+          ratingValue: seededRating == null ? "" : String(seededRating),
+          // Never copy remarks from the fallback source.
+          remarks: usingFallback ? "" : (a.remarks ?? ""),
+        };
+      });
 
       let sectionMap = state.get(row.submissionId);
       if (!sectionMap) {

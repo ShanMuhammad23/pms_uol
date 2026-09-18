@@ -308,6 +308,37 @@ export function computeAuthoredRatingPoints(
 }
 
 /**
+ * Infer an authored question's rating from stored absolute points. Mirrors
+ * `inferRatingValueFromPoints` but uses the authored formula — the form's
+ * default scale and the authored weight. Returns null when the points do
+ * not land exactly on a rating step.
+ */
+export function inferAuthoredRatingValueFromPoints(
+  weight: number,
+  scales: FormRatingScaleRecord[] | undefined,
+  points: number,
+): number | null {
+  if (!Number.isFinite(points) || points <= 0) {
+    return null;
+  }
+  const scale = getAuthoredRatingScale(scales);
+  if (!scale?.options.length) {
+    return null;
+  }
+  for (const option of scale.options) {
+    const expected = computeAuthoredRatingPoints(
+      Number(option.ratingValue),
+      weight,
+      scales,
+    );
+    if (roundScore(expected) === roundScore(points)) {
+      return Number(option.ratingValue);
+    }
+  }
+  return null;
+}
+
+/**
  * Whether a rating value matches a valid option on the form's default scale.
  */
 export function isValidAuthoredRating(
