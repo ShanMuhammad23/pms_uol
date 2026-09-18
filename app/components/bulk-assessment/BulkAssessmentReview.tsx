@@ -130,6 +130,21 @@ function nextAuthoredClientId(): string {
   return `ba-authored-${Date.now()}-${authoredClientIdCounter}`;
 }
 
+function bulkAuthoredRowsEqual(a: AuthoredDraft[], b: AuthoredDraft[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((row, i) => {
+    const other = b[i];
+    return (
+      other != null &&
+      row.authoredQuestionText === other.authoredQuestionText &&
+      row.authoredTotalMarks === other.authoredTotalMarks &&
+      row.pointsEarned === other.pointsEarned &&
+      row.ratingValue === other.ratingValue &&
+      row.remarks === other.remarks
+    );
+  });
+}
+
 /** Build initial authored drafts from question data.
  * submissionId → sectionId → drafts[] */
 function buildInitialAuthoredDrafts(
@@ -297,14 +312,50 @@ export default function BulkAssessmentReview({
   const currentQuestion: BulkReviewQuestionData | null =
     questions[currentQuestionIdx] ?? null;
 
-  // Initialize authored drafts when question data loads.
+  // Initialize authored drafts when question data loads. Merge instead of a
+  // wholesale reseed — sections the reviewer edited (marked in
+  // `authoredModified`) keep their in-progress rows; untouched sections adopt
+  // the freshly loaded data. A plain reseed would wipe unsaved authored
+  // objectives on every refetch and let a later save rewrite the stale set.
   const [prevQuestionData, setPrevQuestionData] = useState(questionData);
   if (questionData !== prevQuestionData) {
     setPrevQuestionData(questionData);
     if (questionData) {
       const initial = buildInitialAuthoredDrafts(questionData.questions);
-      setAuthoredDrafts(initial);
-      setAuthoredModified(new Set());
+      setAuthoredDrafts((current) => {
+        if (current.size === 0) {
+          return initial;
+        }
+        const next = new Map<number, Map<number, AuthoredDraft[]>>();
+        for (const [submissionId, sectionMap] of initial) {
+          const mergedSections = new Map(sectionMap);
+          const currentSections = current.get(submissionId);
+          if (currentSections) {
+            for (const [sectionId, rows] of currentSections) {
+              if (authoredModified.has(`${submissionId}:${sectionId}`)) {
+                mergedSections.set(sectionId, rows);
+              }
+            }
+          }
+          next.set(submissionId, mergedSections);
+        }
+        return next;
+      });
+      // Recompute modified markers: a section whose current rows now match
+      // the loaded data was just saved — drop it; sections still differing
+      // keep their marker so a later save persists them.
+      setAuthoredModified((prev) => {
+        const keep = new Set<string>();
+        for (const key of prev) {
+          const [subId, secId] = key.split(":").map(Number);
+          const currentRows = authoredDrafts.get(subId)?.get(secId) ?? [];
+          const incomingRows = initial.get(subId)?.get(secId) ?? [];
+          if (!bulkAuthoredRowsEqual(currentRows, incomingRows)) {
+            keep.add(key);
+          }
+        }
+        return keep;
+      });
     }
   }
 
@@ -332,6 +383,14 @@ export default function BulkAssessmentReview({
 
   const [prevQuestion, setPrevQuestion] = useState(currentQuestion);
   if (currentQuestion !== prevQuestion) {
+    // A questionData refetch produces a new object for the SAME question —
+    // merge so in-progress scores/remarks survive. A real navigation to a
+    // different question resets drafts entirely (existing behavior).
+    const isSameQuestion =
+      prevQuestion != null &&
+      currentQuestion != null &&
+      prevQuestion.questionId === currentQuestion.questionId &&
+      prevQuestion.openSectionId === currentQuestion.openSectionId;
     setPrevQuestion(currentQuestion);
     if (!currentQuestion) {
       setDrafts(new Map());
@@ -373,8 +432,39 @@ export default function BulkAssessmentReview({
           remarks: remarks ?? "",
         });
       }
-      setDrafts(next);
-      setModifiedRows(new Set());
+      if (isSameQuestion) {
+        setDrafts((current) => {
+          const merged = new Map(next);
+          for (const [submissionId, draft] of current) {
+            if (modifiedRows.has(submissionId) && next.has(submissionId)) {
+              merged.set(submissionId, draft);
+            }
+          }
+          return merged;
+        });
+        // Keep modified markers only for rows that still differ from the
+        // loaded data — a matching row was just saved.
+        setModifiedRows((prev) => {
+          const keep = new Set<number>();
+          for (const sid of prev) {
+            const cur = drafts.get(sid);
+            const inc = next.get(sid);
+            if (
+              cur &&
+              inc &&
+              (cur.pointsEarned !== inc.pointsEarned ||
+                cur.ratingValue !== inc.ratingValue ||
+                cur.remarks !== inc.remarks)
+            ) {
+              keep.add(sid);
+            }
+          }
+          return keep;
+        });
+      } else {
+        setDrafts(next);
+        setModifiedRows(new Set());
+      }
     }
   }
 
