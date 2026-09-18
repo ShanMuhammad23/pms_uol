@@ -3508,7 +3508,7 @@ export async function getReturnHistory(
     `SELECT al.id::text,
             al.old_value->>'return_level' AS return_level,
             al.new_value->>'return_reason' AS return_reason,
-            to_char(al.timestamp, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS returned_at,
+            to_char(al.timestamp, 'YYYY-MM-DD"T"HH24:MI:SSTZH:TZM') AS returned_at,
             CONCAT(u.first_name, ' ', u.last_name) AS returned_by_name
      FROM appraisal_logs al
      LEFT JOIN users u ON u.id = al.changed_by_id

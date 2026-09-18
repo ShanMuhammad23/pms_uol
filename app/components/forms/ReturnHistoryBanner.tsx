@@ -23,17 +23,17 @@ const LEVEL_LABELS: Record<ReturnLevel, string> = {
 };
 
 function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
+  const parsed = new Date(iso);
+  if (!iso || Number.isNaN(parsed.getTime())) {
+    return "—";
   }
+  return parsed.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function ReturnHistoryBanner({
@@ -129,11 +129,11 @@ function ReturnLevelGroup({
             transition={{ duration: 0.15 }}
             className="order-last ml-0 w-full overflow-hidden"
           >
-            <ul className="mt-2 space-y-1.5">
+            <ul className="mt-2 flex flex-row flex-wrap gap-1.5">
               {entries.map((entry, idx) => (
                 <li
                   key={entry.id}
-                  className="rounded-md border border-amber-200/60 bg-white/70 px-3 py-2 text-xs dark:border-amber-800/30 dark:bg-slate-900/50"
+                  className="w-64 shrink-0 rounded-md border border-amber-200/60 bg-white/70 px-3 py-2 text-xs dark:border-amber-800/30 dark:bg-slate-900/50"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-amber-800 dark:text-amber-300">
