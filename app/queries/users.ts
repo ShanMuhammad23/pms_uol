@@ -18,10 +18,11 @@ export function useUsersQuery() {
   });
 }
 
-export function useUsersOverviewQuery() {
+export function useUsersOverviewQuery(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.usersOverview,
     queryFn: fetchUsersOverview,
+    enabled: options?.enabled ?? true,
     ...DASHBOARD_QUERY_CACHE,
   });
 }
@@ -37,10 +38,11 @@ export function useUsersByEmployeeIdsQuery(employeeIds: string[]) {
   });
 }
 
-export function useCampusesQuery() {
+export function useCampusesQuery(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.campuses,
     queryFn: fetchCampuses,
+    enabled: options?.enabled ?? true,
     ...DASHBOARD_QUERY_CACHE,
   });
 }

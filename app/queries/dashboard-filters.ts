@@ -21,6 +21,8 @@ import type { EntityRecord } from "@/types/entities";
 import type { CampusRecord } from "@/types/campuses";
 import { useCampusesQuery } from "@/app/queries/users";
 import { useSessionStorageState } from "@/app/hooks/use-session-storage-state";
+import { useSession } from "next-auth/react";
+import { canViewAsUser } from "@/lib/queries/auth-client";
 
 interface UseDashboardFiltersParams {
   entities: EntityRecord[];
@@ -124,7 +126,13 @@ export function useDashboardFilters({
       "pms:dashboard-filters:campus",
       null,
     );
-  const { data: campuses = [] } = useCampusesQuery();
+  // /api/campuses requires admin-role access — skip the request for
+  // non-admin users (including view-as sessions) so it doesn't 403.
+  const { data: session } = useSession();
+  const canListCampuses = canViewAsUser(session?.user?.role);
+  const { data: campuses = [] } = useCampusesQuery({
+    enabled: canListCampuses,
+  });
   const [selectedCategory0EntityIds, setSelectedCategory0EntityIds] =
     useSessionStorageState<MultiFilterSelection<number>>(
       "pms:dashboard-filters:category0",

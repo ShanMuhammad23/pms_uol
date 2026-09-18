@@ -217,7 +217,10 @@ export function useColumnConfig(
       return;
     }
     const merged = mergeWithDefaults(savedConfig, allColumns, allowedColumnIds);
-    void saveColumnConfig(tableKey, merged);
+    // Best-effort persist — restricted roles (e.g. view-as sessions) get a
+    // 403 from the server; a failed prefs save must not surface as an
+    // unhandled rejection.
+    void saveColumnConfig(tableKey, merged).catch(() => {});
     void queryClient.setQueryData(queryKey, merged);
   }, [savedConfig, allColumns, allowedColumnIds, tableKey, queryKey, queryClient, isFixed]);
 
@@ -238,7 +241,7 @@ export function useColumnConfig(
         clearTimeout(saveTimerRef.current);
       }
       saveTimerRef.current = setTimeout(() => {
-        void saveColumnConfig(tableKey, next);
+        void saveColumnConfig(tableKey, next).catch(() => {});
       }, 500);
     },
     [tableKey, isFixed],

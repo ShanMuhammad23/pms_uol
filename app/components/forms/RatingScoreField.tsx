@@ -35,6 +35,8 @@ interface RatingScoreFieldProps {
   /** When no rating is selected, still show stored/calculated points. */
   fallbackPoints?: number | null;
   invalid?: boolean;
+  /** Render the derived points inline beside the select instead of below it. */
+  inlinePoints?: boolean;
 }
 
 export function RatingScoreField({
@@ -47,6 +49,7 @@ export function RatingScoreField({
   tone = "teal",
   fallbackPoints = null,
   invalid = false,
+  inlinePoints = false,
 }: RatingScoreFieldProps) {
   const storedMax = Number(scale.maxValue);
   const maxRating = deriveRatingScaleMaxValue(
@@ -80,7 +83,10 @@ export function RatingScoreField({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 max-w-full flex-col items-stretch gap-0.5 overflow-hidden",
+        "flex w-full min-w-0 max-w-full overflow-hidden",
+        inlinePoints
+          ? "flex-row items-center gap-1.5"
+          : "flex-col items-stretch gap-0.5",
         className,
       )}
     >
@@ -105,7 +111,8 @@ export function RatingScoreField({
           onRatingChange(String(rating), String(nextPoints));
         }}
         className={cn(
-          "box-border h-8 w-full min-w-0 max-w-full [field-sizing:fixed] rounded border border-slate-300 bg-white px-1 text-xs focus-visible:outline-none focus-visible:ring-2 disabled:opacity-80 dark:border-white/15 dark:bg-slate-800",
+          "box-border h-8 min-w-0 max-w-full [field-sizing:fixed] rounded border border-slate-300 bg-white px-1 text-xs focus-visible:outline-none focus-visible:ring-2 disabled:opacity-80 dark:border-white/15 dark:bg-slate-800",
+          inlinePoints ? "flex-1" : "w-full",
           TONE_SELECT[tone],
           invalid &&
             "border-red-500 ring-2 ring-red-400/80 focus-visible:ring-red-500 dark:border-red-400 bg-red-500",
@@ -123,7 +130,12 @@ export function RatingScoreField({
           </option>
         ))}
       </select>
-      <span className="truncate text-base tabular-nums  dark:text-slate-400">
+      <span
+        className={cn(
+          "tabular-nums dark:text-slate-400",
+          inlinePoints ? "shrink-0 whitespace-nowrap text-xs" : "truncate text-base",
+        )}
+      >
         {points == null ? "—" : `${formatScoreValue(points)} / ${weight}`}
       </span>
     </div>

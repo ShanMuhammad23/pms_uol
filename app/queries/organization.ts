@@ -11,10 +11,11 @@ import {
 import { fetchUniqueDesignations } from "@/lib/queries/designations-client";
 import type { EntityRecord } from "@/types/entities";
 
-export function useEntitiesQuery() {
+export function useEntitiesQuery(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.entities,
     queryFn: fetchEntities,
+    enabled: options?.enabled ?? true,
     ...DASHBOARD_QUERY_CACHE,
   });
 }

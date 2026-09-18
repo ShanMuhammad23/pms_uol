@@ -412,18 +412,19 @@ export default function BulkAssessmentReview({
         );
         return;
       }
+      // Compute the clientId outside the updater and clone the inner section
+      // Map — updater functions must be pure. Mutating the shared inner map
+      // (or calling impure helpers) inside makes StrictMode's double-invoked
+      // updater append the row twice.
+      const clientId = nextAuthoredClientId();
       setAuthoredDrafts((prev) => {
         const next = new Map(prev);
-        let sectionMap = next.get(submissionId);
-        if (!sectionMap) {
-          sectionMap = new Map();
-          next.set(submissionId, sectionMap);
-        }
+        const sectionMap = new Map(next.get(submissionId));
         const drafts = sectionMap.get(sectionId) ?? [];
         sectionMap.set(sectionId, [
           ...drafts,
           {
-            clientId: nextAuthoredClientId(),
+            clientId,
             authoredQuestionText: "",
             authoredTotalMarks: "",
             pointsEarned: "",
@@ -431,6 +432,7 @@ export default function BulkAssessmentReview({
             remarks: "",
           },
         ]);
+        next.set(submissionId, sectionMap);
         return next;
       });
       setAuthoredModified((prev) => {
@@ -445,14 +447,16 @@ export default function BulkAssessmentReview({
   const removeAuthoredRow = useCallback(
     (submissionId: number, sectionId: number, clientId: string) => {
       setAuthoredDrafts((prev) => {
+        const sectionMap0 = prev.get(submissionId);
+        if (!sectionMap0) return prev;
         const next = new Map(prev);
-        const sectionMap = next.get(submissionId);
-        if (!sectionMap) return prev;
+        const sectionMap = new Map(sectionMap0);
         const drafts = sectionMap.get(sectionId) ?? [];
         sectionMap.set(
           sectionId,
           drafts.filter((d) => d.clientId !== clientId),
         );
+        next.set(submissionId, sectionMap);
         return next;
       });
       setAuthoredModified((prev) => {
@@ -474,11 +478,7 @@ export default function BulkAssessmentReview({
     ) => {
       setAuthoredDrafts((prev) => {
         const next = new Map(prev);
-        let sectionMap = next.get(submissionId);
-        if (!sectionMap) {
-          sectionMap = new Map();
-          next.set(submissionId, sectionMap);
-        }
+        const sectionMap = new Map(next.get(submissionId));
         const drafts = sectionMap.get(sectionId) ?? [];
         sectionMap.set(
           sectionId,
@@ -486,6 +486,7 @@ export default function BulkAssessmentReview({
             d.clientId === clientId ? { ...d, [field]: value } : d,
           ),
         );
+        next.set(submissionId, sectionMap);
         return next;
       });
       setAuthoredModified((prev) => {
@@ -542,7 +543,13 @@ export default function BulkAssessmentReview({
               };
             })
             .filter((q): q is NonNullable<typeof q> => q !== null);
-          if (authoredQuestions.length === 0) continue;
+          // Include modified submissions even when empty — removing every
+          // authored row must clear the section server-side. Untouched
+          // submissions stay skipped so their authored rows are preserved.
+          const touched = authoredModified.has(
+            `${row.submissionId}:${sectionId}`,
+          );
+          if (authoredQuestions.length === 0 && !touched) continue;
           entries.push({ submissionId: row.submissionId, authoredQuestions });
         }
         if (entries.length === 0) return;
@@ -789,10 +796,83 @@ export default function BulkAssessmentReview({
       );
       return;
     }
+    // Validate open-assessment authored sections across ALL workspace
+    // questions — missingScores skips them and server-side approval only
+    // checks scored questions, so without this a manager can finish with
+    // incomplete authored objectives. Mirrors the employee submit rules:
+    // every authored row needs text + marks + a score, and allocated marks
+    // must equal the section budget.
+    for (const question of questions) {
+      if (!question.isOpenAssessment || question.openSectionId == null) {
+        continue;
+      }
+      const sectionId = question.openSectionId;
+      const budget = question.openAssessmentTotalMarks ?? 0;
+      for (const row of question.rows) {
+        const sectionDrafts =
+          authoredDraftsRef.current.get(row.submissionId)?.get(sectionId) ??
+          [];
+        if (sectionDrafts.length === 0) {
+          // Employee-authored rows carry the section without manager drafts —
+          // only flag sections nobody authored at all.
+          if ((row.authoredAnswers ?? []).length === 0) {
+            toast.error(
+              `"${question.sectionTitle}" has no authored questions for ${row.employeeName}.`,
+            );
+            return;
+          }
+          continue;
+        }
+        const allocated = sectionDrafts.reduce(
+          (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+          0,
+        );
+        if (budget > 0 && allocated !== budget) {
+          toast.error(
+            `"${question.sectionTitle}" for ${row.employeeName}: allocated marks (${allocated}) must equal the budget (${budget}).`,
+          );
+          return;
+        }
+        for (const d of sectionDrafts) {
+          if (!d.authoredQuestionText.trim()) {
+            toast.error(
+              `"${question.sectionTitle}" for ${row.employeeName}: every authored question needs text.`,
+            );
+            return;
+          }
+          if (!(Number(d.authoredTotalMarks) > 0)) {
+            toast.error(
+              `"${question.sectionTitle}" for ${row.employeeName}: every authored question needs total marks.`,
+            );
+            return;
+          }
+          const hasScore =
+            d.ratingValue !== "" ||
+            (d.pointsEarned !== "" && !Number.isNaN(Number(d.pointsEarned)));
+          if (!hasScore) {
+            toast.error(
+              `"${question.sectionTitle}" for ${row.employeeName}: score every authored question before finishing.`,
+            );
+            return;
+          }
+        }
+      }
+    }
     // Save the current question's scores before opening the finish dialog.
     // Without this, the last question's scores are never persisted and the
     // server-side approval validation rejects the submission as incomplete.
-    if (modifiedRows.size > 0) {
+    // Open-assessment edits are tracked in `authoredModified` (keyed
+    // "submissionId:sectionId"), not `modifiedRows` — include them or
+    // authored objectives on the final section are silently dropped.
+    const hasAuthoredChanges =
+      currentQuestion?.isOpenAssessment && currentQuestion.openSectionId != null
+        ? currentQuestion.rows.some((row) =>
+            authoredModified.has(
+              `${row.submissionId}:${currentQuestion.openSectionId}`,
+            ),
+          )
+        : false;
+    if (modifiedRows.size > 0 || hasAuthoredChanges) {
       try {
         await saveMutation.mutateAsync();
       } catch {
@@ -801,7 +881,7 @@ export default function BulkAssessmentReview({
       }
     }
     setFinishDialogOpen(true);
-  }, [currentQuestion, currentQuestionIsRating, missingScores.size, modifiedRows.size, saveMutation]);
+  }, [currentQuestion, currentQuestionIsRating, missingScores.size, modifiedRows.size, authoredModified, saveMutation, questions]);
 
   /* -------------------------------------------------------------------------- */
   /* Render                                                                      */
@@ -1899,22 +1979,39 @@ function OpenAssessmentContent({
                       <span className="mt-1.5 w-5 shrink-0 text-xs font-bold tabular-nums text-slate-400 dark:text-slate-500">
                         {qIdx + 1}
                       </span>
-                      <textarea
-                        value={draft.authoredQuestionText}
-                        rows={2}
-                        onChange={(e) =>
-                          onUpdateAuthoredDraft(
-                            row.submissionId,
-                            sectionId,
-                            draft.clientId,
-                            "authoredQuestionText",
-                            e.target.value,
-                          )
-                        }
-                        placeholder="Question text..."
-                        className="min-w-0 flex-1 resize-y rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
-                      />
-                      <div className="flex shrink-0 items-center gap-1">
+                      <div className="min-w-0 w-full max-w-xl space-y-1">
+                        <textarea
+                          value={draft.authoredQuestionText}
+                          rows={2}
+                          onChange={(e) =>
+                            onUpdateAuthoredDraft(
+                              row.submissionId,
+                              sectionId,
+                              draft.clientId,
+                              "authoredQuestionText",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Question text..."
+                          className="w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
+                        />
+                        <textarea
+                          value={draft.remarks}
+                          rows={1}
+                          onChange={(e) =>
+                            onUpdateAuthoredDraft(
+                              row.submissionId,
+                              sectionId,
+                              draft.clientId,
+                              "remarks",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Remarks (optional)..."
+                          className="w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-400"
+                        />
+                      </div>
+                      <div className="ml-auto flex shrink-0 items-center gap-1">
                         <input
                           type="number"
                           min={0}
@@ -1954,11 +2051,12 @@ function OpenAssessmentContent({
                           placeholder="Marks"
                         />
                         {currentQuestion.ratingBased && currentQuestion.ratingScale ? (
-                          <div className="w-28">
+                          <div className="w-60">
                             <RatingScoreField
                               scale={currentQuestion.ratingScale}
                               weight={maxMarks}
                               ratingValue={draft.ratingValue}
+                              inlinePoints
                               onRatingChange={(ratingValue, pointsEarned) => {
                                 onUpdateAuthoredDraft(
                                   row.submissionId,

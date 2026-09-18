@@ -177,11 +177,13 @@ function authoredDraftsToSaveAnswers(
 
   for (const [sectionIdStr, drafts] of Object.entries(authored)) {
     const openSectionId = Number(sectionIdStr);
+    let emitted = false;
     for (const draft of drafts) {
       const text = draft.authoredQuestionText.trim();
       const totalMarks = Number(draft.authoredTotalMarks) || 0;
       const points = draft.pointsEarned !== "" ? Number(draft.pointsEarned) : 0;
       if (!text && !totalMarks && !points && !draft.remarks.trim()) continue;
+      emitted = true;
       result.push({
         questionId: 0,
         openSectionId,
@@ -191,6 +193,20 @@ function authoredDraftsToSaveAnswers(
         ratingValue:
           draft.ratingValue !== "" ? Number(draft.ratingValue) : null,
         remarks: draft.remarks.trim() || null,
+      });
+    }
+    // Nothing survived for this section — the reviewer removed every row.
+    // Emit a blank marker carrying the section id so the server includes it
+    // in the delete scope; the server skips fully-blank rows at insert.
+    if (!emitted) {
+      result.push({
+        questionId: 0,
+        openSectionId,
+        authoredQuestionText: null,
+        authoredTotalMarks: 0,
+        pointsEarned: 0,
+        ratingValue: null,
+        remarks: null,
       });
     }
   }
@@ -2203,7 +2219,22 @@ export default function SubmissionDetailView({
                                 )}
                               </td>
                               <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
-                                {m1Ans?.remarks?.trim() ? (
+                                {editingManager1 && canEdit && draft ? (
+                                  <textarea
+                                    value={draft.remarks}
+                                    rows={2}
+                                    onChange={(e) =>
+                                      updateAuthoredDraft(
+                                        sectionId,
+                                        draft.clientId,
+                                        "remarks",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Remarks..."
+                                    className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
+                                  />
+                                ) : m1Ans?.remarks?.trim() ? (
                                   <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                     {m1Ans.remarks}
                                   </p>
@@ -2270,7 +2301,22 @@ export default function SubmissionDetailView({
                                     )}
                                   </td>
                                   <td className="px-2 py-2.5">
-                                    {m2Ans?.remarks?.trim() ? (
+                                    {editingManager2 && canEdit && draft ? (
+                                      <textarea
+                                        value={draft.remarks}
+                                        rows={2}
+                                        onChange={(e) =>
+                                          updateAuthoredDraft(
+                                            sectionId,
+                                            draft.clientId,
+                                            "remarks",
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="Remarks..."
+                                        className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
+                                      />
+                                    ) : m2Ans?.remarks?.trim() ? (
                                       <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                         {m2Ans.remarks}
                                       </p>

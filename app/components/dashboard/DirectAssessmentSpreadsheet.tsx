@@ -207,12 +207,14 @@ function authoredDraftsToSaveAnswers(
 
   for (const [sectionIdStr, drafts] of Object.entries(submissionDrafts)) {
     const openSectionId = Number(sectionIdStr);
+    let emitted = false;
     for (const draft of drafts) {
       const text = draft.authoredQuestionText.trim();
       const totalMarks = Number(draft.authoredTotalMarks) || 0;
       const points = draft.pointsEarned !== "" ? Number(draft.pointsEarned) : 0;
       const rating = draft.ratingValue !== "" ? Number(draft.ratingValue) : undefined;
       if (!text && !totalMarks && !points && !draft.remarks.trim()) continue;
+      emitted = true;
       result.push({
         questionId: 0,
         openSectionId,
@@ -221,6 +223,20 @@ function authoredDraftsToSaveAnswers(
         pointsEarned: points || undefined,
         ratingValue: rating ?? null,
         remarks: draft.remarks.trim() || null,
+      });
+    }
+    // Nothing survived for this section — the reviewer removed every row.
+    // Emit a blank marker carrying the section id so the server includes it
+    // in the delete scope; the server skips fully-blank rows at insert.
+    if (!emitted) {
+      result.push({
+        questionId: 0,
+        openSectionId,
+        authoredQuestionText: null,
+        authoredTotalMarks: 0,
+        pointsEarned: 0,
+        ratingValue: null,
+        remarks: null,
       });
     }
   }

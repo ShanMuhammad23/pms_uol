@@ -32,8 +32,12 @@ export function ViewAsUserModal({ open, onClose }: ViewAsUserModalProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const { data: users = [], isLoading } = useUsersOverviewQuery();
-  const { data: entities = [] } = useEntitiesQuery();
+  // Only fetch when the modal opens — these hit admin-scoped endpoints and
+  // would 403 while impersonating a non-admin user.
+  const { data: users = [], isLoading } = useUsersOverviewQuery({
+    enabled: open,
+  });
+  const { data: entities = [] } = useEntitiesQuery({ enabled: open });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEntityId, setSelectedEntityId] = useState<number | "all">("all");

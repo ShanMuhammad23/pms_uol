@@ -236,7 +236,10 @@ const Sidebar = () => {
 
 
   const realRole = user?.realRole ?? user?.role;
-  const canViewAs = canViewAsUser(realRole);
+  // While impersonating, the view-as modal's admin-scoped data sources are
+  // unavailable — hide the entry point; the admin exits view-as first.
+  const isViewingAs = Boolean(user?.viewAsUserId);
+  const canViewAs = canViewAsUser(realRole) && !isViewingAs;
 
   const navLinkClass = (active: boolean) =>
     cn(
