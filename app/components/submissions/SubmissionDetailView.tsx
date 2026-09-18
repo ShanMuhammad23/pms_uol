@@ -1145,7 +1145,6 @@ export default function SubmissionDetailView({
   // always see all remarks. Managers don't see the prior stage's remarks.
   const hideSelfRemarks =
     (editingManager1 || editingManager2) && !isAdminRole;
-  const hideMgr1Remarks = editingManager2 && !isAdminRole;
 
   const hasUnsavedChanges = useMemo(() => {
     if (!editingHr && !data?.canEditManagerReview) return false;
@@ -2628,8 +2627,6 @@ export default function SubmissionDetailView({
                                 className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                                 placeholder="Optional remarks"
                               />
-                            ) : hideMgr1Remarks ? (
-                              <span className="text-slate-400" title="Remarks not shared with next reviewer">—</span>
                             ) : mgr1Answer?.remarks?.trim() ? (
                               <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                 {mgr1Answer.remarks}
@@ -2652,8 +2649,6 @@ export default function SubmissionDetailView({
                                 className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
                                 placeholder="Type your answer..."
                               />
-                            ) : hideMgr1Remarks ? (
-                              <span className="text-slate-400" title="Remarks not shared with next reviewer">—</span>
                             ) : mgr1Answer?.remarks?.trim() ? (
                               <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                 {mgr1Answer.remarks}
