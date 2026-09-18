@@ -14,6 +14,7 @@ import {
 import {
   FormSubmissionError,
   approveManagerReview,
+  getAuthoredAnswersForSubmission,
   getFormSubmissionById,
   getFormSubmissionSummaryById,
   saveManagerReviewAnswers,
@@ -122,8 +123,17 @@ export const PUT = apiHandler(async (request: Request, context: RouteContext) =>
       },
     );
 
+    // Authored (open-assessment) rows are delete+reinserted by the save, so
+    // the client needs the fresh set — without it the cached detail keeps the
+    // pre-save authored answers and the next draft reseed reverts the rows.
+    const managerAuthoredAnswers = await getAuthoredAnswersForSubmission(
+      submissionId,
+      filledByUserId,
+    );
+
     return NextResponse.json({
       managerAnswers,
+      managerAuthoredAnswers,
       manager1OverallRemarks: detail.manager1OverallRemarks,
       manager2OverallRemarks: detail.manager2OverallRemarks,
     });

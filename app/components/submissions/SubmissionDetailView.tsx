@@ -214,28 +214,27 @@ function authoredDraftsToSaveAnswers(
   return result;
 }
 
-function managerDraftHasInput(draft: ManagerDraft): boolean {
-  return (
-    draft.ratingValue !== "" ||
-    (draft.pointsEarned !== "" && Number.isFinite(Number(draft.pointsEarned))) ||
-    Boolean(draft.remarks.trim())
-  );
-}
-
 function mergeManagerDraftMaps(
   current: Map<number, ManagerDraft>,
   incoming: Map<number, ManagerDraft>,
+  snapshot: Map<number, ManagerDraft>,
 ): Map<number, ManagerDraft> {
   if (current.size === 0) {
     return incoming;
   }
   const next = new Map(incoming);
   for (const [questionId, draft] of current) {
-    if (!managerDraftHasInput(draft)) {
-      continue;
-    }
-    const saved = next.get(questionId);
-    if (!saved || !managerDraftHasInput(saved)) {
+    // Preserve the reviewer's in-progress input: a draft that differs from
+    // the last loaded snapshot is an unsaved edit and must survive a data
+    // refresh — comparing against `incoming` instead would drop typed
+    // remarks/scores whenever the server copy has any content.
+    const base = snapshot.get(questionId);
+    const edited =
+      !base ||
+      draft.pointsEarned !== base.pointsEarned ||
+      draft.ratingValue !== base.ratingValue ||
+      draft.remarks !== base.remarks;
+    if (edited) {
       next.set(questionId, draft);
     }
   }
@@ -248,6 +247,53 @@ function cloneManagerDraft(draft: ManagerDraft): ManagerDraft {
     ratingValue: draft.ratingValue,
     remarks: draft.remarks,
   };
+}
+
+function authoredRowsEqual(
+  a: AuthoredDraft[],
+  b: AuthoredDraft[],
+): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((row, i) => {
+    const other = b[i];
+    return (
+      other != null &&
+      row.authoredQuestionText === other.authoredQuestionText &&
+      row.authoredTotalMarks === other.authoredTotalMarks &&
+      row.pointsEarned === other.pointsEarned &&
+      row.ratingValue === other.ratingValue &&
+      row.remarks === other.remarks
+    );
+  });
+}
+
+// Merge freshly-loaded authored rows into the draft state without wiping
+// in-progress edits: sections the user hasn't touched (still equal to the
+// last loaded snapshot) adopt the incoming rows; edited sections keep the
+// user's rows. Mirrors mergeManagerDraftMaps for the list-shaped authored
+// state — without it every data refresh reverts authored objectives to the
+// last fetched set.
+function mergeAuthoredDraftState(
+  current: AuthoredDraftState,
+  incoming: AuthoredDraftState,
+  snapshot: AuthoredDraftState,
+): AuthoredDraftState {
+  if (Object.keys(current).length === 0) {
+    return incoming;
+  }
+  const merged: AuthoredDraftState = {};
+  const sectionIds = new Set<number>([
+    ...Object.keys(current).map(Number),
+    ...Object.keys(incoming).map(Number),
+  ]);
+  for (const sectionId of sectionIds) {
+    const currentRows = current[sectionId] ?? [];
+    const snapshotRows = snapshot[sectionId] ?? [];
+    merged[sectionId] = authoredRowsEqual(currentRows, snapshotRows)
+      ? (incoming[sectionId] ?? [])
+      : currentRows;
+  }
+  return merged;
 }
 
 function ratingValueFromDraft(draft: ManagerDraft | undefined): number | null {
@@ -817,7 +863,9 @@ export default function SubmissionDetailView({
         data.ratingBased,
         data.ratingScales ?? [],
       );
-      setManagerDrafts((current) => mergeManagerDraftMaps(current, incoming));
+      setManagerDrafts((current) =>
+        mergeManagerDraftMaps(current, incoming, initialDraftsSnapshot),
+      );
       setInitialDraftsSnapshot(
         new Map(
           [...incoming.entries()].map(([k, v]) => [
@@ -826,9 +874,19 @@ export default function SubmissionDetailView({
           ]),
         ),
       );
-      // Initialize authored drafts for open-assessment sections.
+      // Initialize authored drafts for open-assessment sections. Merge
+      // instead of wholesale reseeding: sections the reviewer hasn't edited
+      // adopt the fresh server rows, edited sections keep in-progress work —
+      // otherwise a save's data patch reverts authored objectives to the
+      // previously fetched set.
       const initialAuthored = buildInitialAuthoredDrafts(data);
-      setAuthoredDrafts(initialAuthored);
+      setAuthoredDrafts((current) =>
+        mergeAuthoredDraftState(
+          current,
+          initialAuthored,
+          initialAuthoredDraftsSnapshot,
+        ),
+      );
       setInitialAuthoredDraftsSnapshot(initialAuthored);
       const m1Remarks = data.manager1OverallRemarks ?? "";
       const m2Remarks = data.manager2OverallRemarks ?? "";
@@ -876,6 +934,9 @@ export default function SubmissionDetailView({
         return {
           ...current,
           ...savedManagerAnswersPatch(managerLevel, result.managerAnswers),
+          ...(result.managerAuthoredAnswers !== undefined
+            ? { managerAuthoredAnswers: result.managerAuthoredAnswers }
+            : {}),
           ...(result.manager1OverallRemarks !== undefined
             ? { manager1OverallRemarks: result.manager1OverallRemarks }
             : {}),

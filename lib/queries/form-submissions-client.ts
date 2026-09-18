@@ -176,6 +176,7 @@ export async function saveManagerReview(
   overallRemarks?: string | null,
 ): Promise<{
   managerAnswers: FormSubmissionDetail["managerAnswers"];
+  managerAuthoredAnswers?: FormSubmissionDetail["managerAuthoredAnswers"];
   manager1OverallRemarks?: string | null;
   manager2OverallRemarks?: string | null;
 }> {
@@ -190,6 +191,7 @@ export async function saveManagerReview(
 
   return parseResponse<{
     managerAnswers: FormSubmissionDetail["managerAnswers"];
+    managerAuthoredAnswers?: FormSubmissionDetail["managerAuthoredAnswers"];
     manager1OverallRemarks?: string | null;
     manager2OverallRemarks?: string | null;
   }>(response);
