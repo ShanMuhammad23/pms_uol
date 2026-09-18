@@ -1496,8 +1496,81 @@ export default function SubmissionDetailView({
     saveMutation.mutate();
   };
 
+  // Open-assessment sections: mirrors the employee submit rules —
+  // every authored row needs text + marks + a score, and allocated marks
+  // must equal the section budget. Runs on approve only, so partially
+  // authored work can still be saved as a draft.
+  const assertAuthoredSectionsComplete = (): boolean => {
+    for (const section of data.sections.filter((s) => s.isOpenAssessment)) {
+      const sectionDrafts = authoredDrafts[section.id] ?? [];
+      if (sectionDrafts.length === 0) {
+        // Sections authored by someone else (e.g. employee-authored rows)
+        // carry content without reviewer drafts — only flag sections nobody
+        // authored at all.
+        const hasAuthored =
+          (data.authoredAnswers ?? []).some(
+            (a) => a.openSectionId === section.id,
+          ) ||
+          (data.managerAuthoredAnswers ?? []).some(
+            (a) => a.openSectionId === section.id,
+          ) ||
+          (data.manager1AuthoredAnswers ?? []).some(
+            (a) => a.openSectionId === section.id,
+          ) ||
+          (data.manager2AuthoredAnswers ?? []).some(
+            (a) => a.openSectionId === section.id,
+          );
+        if (!hasAuthored) {
+          toast.error(
+            `Section "${section.title}" has no authored questions.`,
+          );
+          return false;
+        }
+        continue;
+      }
+      const budget = section.openAssessmentTotalMarks ?? 0;
+      const allocated = sectionDrafts.reduce(
+        (sum, d) => sum + (Number(d.authoredTotalMarks) || 0),
+        0,
+      );
+      if (budget > 0 && allocated !== budget) {
+        toast.error(
+          `Section "${section.title}": allocated marks (${allocated}) must equal the budget (${budget}).`,
+        );
+        return false;
+      }
+      for (const d of sectionDrafts) {
+        if (!d.authoredQuestionText.trim()) {
+          toast.error(
+            `Section "${section.title}": every authored question needs text.`,
+          );
+          return false;
+        }
+        if (!(Number(d.authoredTotalMarks) > 0)) {
+          toast.error(
+            `Section "${section.title}": every authored question needs total marks.`,
+          );
+          return false;
+        }
+        const hasScore =
+          d.ratingValue !== "" ||
+          (d.pointsEarned !== "" && !Number.isNaN(Number(d.pointsEarned)));
+        if (!hasScore) {
+          toast.error(
+            `Section "${section.title}": score every authored question before approving.`,
+          );
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
   const handleApproveReview = () => {
     if (!assertRequiredScoresFilled("approve")) {
+      return;
+    }
+    if (!assertAuthoredSectionsComplete()) {
       return;
     }
     approveMutation.mutate();
