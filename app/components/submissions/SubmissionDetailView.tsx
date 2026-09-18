@@ -231,8 +231,17 @@ function answersFromManagerDrafts(
   questions: QuestionRecord[],
   drafts: Map<number, ManagerDraft>,
 ) {
-  return questions.filter(isScoredQuestion).map((question) => {
+  return questions.map((question) => {
     const draft = drafts.get(question.id);
+    // Non-scored questions are answered via remarks only.
+    if (!isScoredQuestion(question)) {
+      return {
+        questionId: question.id,
+        pointsEarned: undefined,
+        ratingValue: null,
+        remarks: draft?.remarks?.trim() || null,
+      };
+    }
     const pointsRaw = draft?.pointsEarned;
     const pointsEarned =
       pointsRaw === "" || pointsRaw == null
@@ -449,7 +458,18 @@ function buildManagerDraftMap(
   const drafts = new Map<number, ManagerDraft>();
 
   for (const question of questions) {
-    if (!isScoredQuestion(question)) continue;
+    // Non-scored questions (e.g. HOD-only short-text) carry no marks — the
+    // manager's answer is the remarks text itself. Seed only this reviewer's
+    // own saved remarks; a prior stage's remarks are never copied.
+    if (!isScoredQuestion(question)) {
+      const own = managerMap.get(question.id);
+      drafts.set(question.id, {
+        pointsEarned: "",
+        ratingValue: "",
+        remarks: own?.remarks ?? "",
+      });
+      continue;
+    }
 
     const manager = managerMap.get(question.id);
     const employee = employeeMap.get(question.id);
@@ -2411,7 +2431,21 @@ export default function SubmissionDetailView({
                                   <span className="text-slate-400" title="To be filled by Manager">N/A</span>
                                 )
                               ) : (
-                                "—"
+                                // Non-scored questions: the employee's answer
+                                // is the remarks/text itself.
+                                questionSelfAssessmentEnabled ? (
+                                  hideSelfRemarks ? (
+                                    <span className="text-slate-400" title="Remarks not shared with managers">—</span>
+                                  ) : answer?.remarks?.trim() || answer?.textResponse?.trim() ? (
+                                    <p className="whitespace-pre-wrap wrap-break-word">
+                                      {answer.remarks?.trim() || answer.textResponse}
+                                    </p>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )
+                                ) : (
+                                  <span className="text-slate-400" title="To be filled by Manager">N/A</span>
+                                )
                               )}
                             </td>
                           </>
@@ -2470,7 +2504,29 @@ export default function SubmissionDetailView({
                               <span className="text-slate-400">—</span>
                             )
                           ) : (
-                            <span className="text-slate-400">—</span>
+                            // Non-scored questions: the manager answers via
+                            // the remarks text itself.
+                            (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
+                              <textarea
+                                value={managerDraft.remarks}
+                                rows={2}
+                                onChange={(event) =>
+                                  updateManagerDraft(question!.id, {
+                                    remarks: event.target.value,
+                                  })
+                                }
+                                className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                placeholder="Type your answer..."
+                              />
+                            ) : hideMgr1Remarks ? (
+                              <span className="text-slate-400" title="Remarks not shared with next reviewer">—</span>
+                            ) : mgr1Answer?.remarks?.trim() ? (
+                              <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
+                                {mgr1Answer.remarks}
+                              </p>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )
                           )}
                         </td>
                         {/* Manager 2 Score + Remarks */}
@@ -2526,7 +2582,27 @@ export default function SubmissionDetailView({
                                   <span className="text-slate-400">—</span>
                                 )
                               ) : (
-                                <span className="text-slate-400">—</span>
+                                // Non-scored questions: the manager answers
+                                // via the remarks text itself.
+                                (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
+                                  <textarea
+                                    value={managerDraft.remarks}
+                                    rows={2}
+                                    onChange={(event) =>
+                                      updateManagerDraft(question!.id, {
+                                        remarks: event.target.value,
+                                      })
+                                    }
+                                    className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
+                                    placeholder="Type your answer..."
+                                  />
+                                ) : mgr2Answer?.remarks?.trim() ? (
+                                  <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
+                                    {mgr2Answer.remarks}
+                                  </p>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )
                               )}
                             </td>
                           </>

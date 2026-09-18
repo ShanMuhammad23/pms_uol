@@ -1915,7 +1915,27 @@ export async function saveManagerReviewAnswers(
 
   for (const answer of normalAnswers) {
     const question = questionById.get(answer.questionId);
-    if (!question || !isScoredQuestion(question)) {
+    if (!question) {
+      continue;
+    }
+
+    const remarks =
+      typeof answer.remarks === "string"
+        ? answer.remarks.trim() || null
+        : null;
+
+    // Non-scored questions (e.g. HOD-only short-text with no marks) carry no
+    // score — the manager's answer is the remarks text itself.
+    if (!isScoredQuestion(question)) {
+      if (!remarks) {
+        continue;
+      }
+      validAnswers.push({
+        questionId: answer.questionId,
+        pointsEarned: 0,
+        ratingValue: null,
+        remarks,
+      });
       continue;
     }
 
@@ -1931,11 +1951,6 @@ export async function saveManagerReviewAnswers(
     if (!resolved.ok) {
       throw new FormSubmissionError(resolved.error);
     }
-
-    const remarks =
-      typeof answer.remarks === "string"
-        ? answer.remarks.trim() || null
-        : null;
 
     // Skip blank rows so an empty draft cannot overwrite a saved score.
     // An explicit 0 is a real mark and must be persisted.
