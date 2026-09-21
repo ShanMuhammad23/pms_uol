@@ -21,6 +21,7 @@ import {
   incompleteRequiredReviewMessage,
   inferAuthoredRatingValueFromPoints,
   parseDraftScoreAnswer,
+  ratingRequiresRemarks,
   resolveDisplayedAnswerPoints,
   usesRatingScore,
 } from "@/app/helpers/form-rating-scoring";
@@ -614,6 +615,36 @@ export default function DirectAssessmentSpreadsheet({
       const empDrafts = draftsRef.current[submissionId];
       if (!empDrafts) {
         throw new Error("Select ratings before approving this assessment.");
+      }
+      // Rating-based forms: a 4/5 or 5/5 rating must be justified in
+      // remarks — checked here so the reviewer fixes it before save+approve.
+      if (data.ratingBased) {
+        const unjustified = data.questions
+          .filter(isScoredQuestion)
+          .find(
+            (q) =>
+              ratingRequiresRemarks(ratingValueFromDraft(empDrafts[q.id])) &&
+              !empDrafts[q.id]?.remarks?.trim(),
+          );
+        if (unjustified) {
+          throw new Error(
+            `Add remarks justifying the high rating for "${unjustified.questionText.slice(0, 60)}".`,
+          );
+        }
+        const authoredForSub = authoredDraftsRef.current[submissionId];
+        if (authoredForSub) {
+          for (const sectionDrafts of Object.values(authoredForSub)) {
+            const bad = sectionDrafts.find(
+              (d) =>
+                ratingRequiresRemarks(d.ratingValue) && !d.remarks.trim(),
+            );
+            if (bad) {
+              throw new Error(
+                `Add remarks justifying the ${bad.ratingValue}-point rating for "${(bad.authoredQuestionText || "Untitled").slice(0, 60)}".`,
+              );
+            }
+          }
+        }
       }
       const answers = data.questions
         .filter(isScoredQuestion)
@@ -1725,6 +1756,44 @@ export default function DirectAssessmentSpreadsheet({
                                               placeholder="0"
                                             />
                                             )}
+                                            {authoredRatingScale && isEditable ? (
+                                              <div className="relative mt-0.5 w-28 shrink-0">
+                                                <input
+                                                  type="text"
+                                                  value={draft.remarks}
+                                                  onChange={(e) =>
+                                                    updateAuthoredDraft(
+                                                      emp.submissionId,
+                                                      sectionId,
+                                                      draft.clientId,
+                                                      "remarks",
+                                                      e.target.value,
+                                                    )
+                                                  }
+                                                  className={cn(
+                                                    "h-7 w-full rounded border bg-white px-1.5 pr-4 text-[11px] text-slate-600 focus-visible:outline-none focus-visible:ring-1 dark:bg-slate-800 dark:text-slate-300",
+                                                    ratingRequiresRemarks(draft.ratingValue) &&
+                                                      !draft.remarks.trim()
+                                                      ? "border-rose-400 focus-visible:ring-rose-400 dark:border-rose-500/60"
+                                                      : "border-slate-200 focus-visible:ring-teal-400 dark:border-white/15",
+                                                  )}
+                                                  placeholder={
+                                                    ratingRequiresRemarks(draft.ratingValue)
+                                                      ? "Required — justify"
+                                                      : "Remarks"
+                                                  }
+                                                />
+                                                {ratingRequiresRemarks(draft.ratingValue) ? (
+                                                  <span
+                                                    className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs font-bold text-rose-500"
+                                                    title="Remarks are required to justify this rating"
+                                                    aria-label="Mandatory remarks"
+                                                  >
+                                                    *
+                                                  </span>
+                                                ) : null}
+                                              </div>
+                                            ) : null}
                                             {isEditable ? (
                                               <button
                                                 type="button"
@@ -1869,6 +1938,14 @@ export default function DirectAssessmentSpreadsheet({
                         const hasRatingSelected =
                           isRatingQuestion &&
                           ratingValueFromDraft(draft) != null;
+                        // Rating-based forms: a 4/5 or 5/5 rating makes
+                        // remarks mandatory (justification for the score).
+                        const needsJustification =
+                          isRatingQuestion &&
+                          ratingRequiresRemarks(
+                            ratingValueFromDraft(draft),
+                          ) &&
+                          !(draft?.remarks ?? "").trim();
 
                         return (
                           <td
@@ -1945,6 +2022,39 @@ export default function DirectAssessmentSpreadsheet({
                           ) : (
                             <span className="text-slate-400">â€”</span>
                           )}
+                          {isEditable && scored && isRatingQuestion ? (
+                            <div className="relative mt-1">
+                              <input
+                                type="text"
+                                value={draft?.remarks ?? ""}
+                                onChange={(e) =>
+                                  updateDraft(emp.submissionId, question!.id, {
+                                    remarks: e.target.value,
+                                  })
+                                }
+                                className={cn(
+                                  "h-7 w-full min-w-24 rounded border bg-white px-1.5 pr-4 text-left text-[11px] text-slate-700 focus-visible:outline-none focus-visible:ring-1 dark:bg-slate-800 dark:text-slate-300",
+                                  needsJustification
+                                    ? "border-rose-400 focus-visible:ring-rose-400 dark:border-rose-500/60"
+                                    : "border-slate-200 focus-visible:ring-violet-400 dark:border-white/15",
+                                )}
+                                placeholder={
+                                  needsJustification
+                                    ? "Required — justify rating"
+                                    : "Remarks"
+                                }
+                              />
+                              {needsJustification ? (
+                                <span
+                                  className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs font-bold text-rose-500"
+                                  title="Remarks are required to justify this rating"
+                                  aria-label="Mandatory remarks"
+                                >
+                                  *
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </td>
                       );
                     })}

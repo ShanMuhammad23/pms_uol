@@ -29,6 +29,7 @@ import {
   incompleteRequiredReviewMessage,
   inferAuthoredRatingValueFromPoints,
   parseDraftScoreAnswer,
+  ratingRequiresRemarks,
   resolveDisplayedAnswerPoints,
   resolveDisplayedRatingValue,
   usesRatingScore,
@@ -1549,8 +1550,42 @@ export default function SubmissionDetailView({
     return false;
   };
 
+  // Rating-based forms: a 4/5 or 5/5 rating must be justified in remarks.
+  // Flags the offending rows and blocks save/approve until filled.
+  const assertHighRatingsJustified = (action: "save" | "approve"): boolean => {
+    if (!data.ratingBased) {
+      return true;
+    }
+    const missing = data.questions
+      .filter(
+        (question) =>
+          isScoredQuestion(question) &&
+          ratingRequiresRemarks(
+            ratingValueFromDraft(managerDrafts.get(question.id)),
+          ) &&
+          !managerDrafts.get(question.id)?.remarks?.trim(),
+      )
+      .map((question) => question.id);
+    if (missing.length === 0) {
+      return true;
+    }
+    setIncompleteQuestionIds(new Set(missing));
+    toast.error(
+      `Add remarks justifying the high rating for ${missing.length} question${missing.length === 1 ? "" : "s"} before ${action === "save" ? "saving" : "approving"}.`,
+    );
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`manager-question-${missing[0]}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return false;
+  };
+
   const handleSaveReview = () => {
     if (!assertRequiredScoresFilled("save")) {
+      return;
+    }
+    if (!assertHighRatingsJustified("save")) {
       return;
     }
     saveMutation.mutate();
@@ -1621,6 +1656,17 @@ export default function SubmissionDetailView({
           );
           return false;
         }
+        // Rating-based forms: a 4/5 or 5/5 authored rating must be justified.
+        if (
+          data.ratingBased &&
+          ratingRequiresRemarks(d.ratingValue) &&
+          !d.remarks.trim()
+        ) {
+          toast.error(
+            `Section "${section.title}": add remarks justifying the ${d.ratingValue}-point rating for "${(d.authoredQuestionText || "Untitled").slice(0, 60)}".`,
+          );
+          return false;
+        }
       }
     }
     return true;
@@ -1628,6 +1674,9 @@ export default function SubmissionDetailView({
 
   const handleApproveReview = () => {
     if (!assertRequiredScoresFilled("approve")) {
+      return;
+    }
+    if (!assertHighRatingsJustified("approve")) {
       return;
     }
     if (!assertAuthoredSectionsComplete()) {
@@ -2353,20 +2402,38 @@ export default function SubmissionDetailView({
                               </td>
                               <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                                 {editingManager1 && canEdit && draft ? (
-                                  <textarea
-                                    value={draft.remarks}
-                                    rows={2}
-                                    onChange={(e) =>
-                                      updateAuthoredDraft(
-                                        sectionId,
-                                        draft.clientId,
-                                        "remarks",
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Remarks..."
-                                    className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
-                                  />
+                                  <div className="relative">
+                                    <textarea
+                                      value={draft.remarks}
+                                      rows={2}
+                                      onChange={(e) =>
+                                        updateAuthoredDraft(
+                                          sectionId,
+                                          draft.clientId,
+                                          "remarks",
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="Remarks..."
+                                      className={`w-full min-w-0 rounded border bg-white px-2 py-1 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 dark:bg-slate-800 dark:text-slate-200 ${
+                                        data.ratingBased &&
+                                        ratingRequiresRemarks(draft.ratingValue) &&
+                                        !draft.remarks.trim()
+                                          ? "border-rose-400 pr-5 focus-visible:ring-rose-400 dark:border-rose-500/60"
+                                          : "border-slate-300 focus-visible:ring-violet-400 dark:border-white/15"
+                                      }`}
+                                    />
+                                    {data.ratingBased &&
+                                    ratingRequiresRemarks(draft.ratingValue) ? (
+                                      <span
+                                        className="pointer-events-none absolute right-1.5 top-1 text-sm font-bold text-rose-500"
+                                        title="Remarks are required to justify this rating"
+                                        aria-label="Mandatory remarks"
+                                      >
+                                        *
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 ) : m1Ans?.remarks?.trim() ? (
                                   <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                     {m1Ans.remarks}
@@ -2435,20 +2502,38 @@ export default function SubmissionDetailView({
                                   </td>
                                   <td className="px-2 py-2.5">
                                     {editingManager2 && canEdit && draft ? (
-                                      <textarea
-                                        value={draft.remarks}
-                                        rows={2}
-                                        onChange={(e) =>
-                                          updateAuthoredDraft(
-                                            sectionId,
-                                            draft.clientId,
-                                            "remarks",
-                                            e.target.value,
-                                          )
-                                        }
-                                        placeholder="Remarks..."
-                                        className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
-                                      />
+                                      <div className="relative">
+                                        <textarea
+                                          value={draft.remarks}
+                                          rows={2}
+                                          onChange={(e) =>
+                                            updateAuthoredDraft(
+                                              sectionId,
+                                              draft.clientId,
+                                              "remarks",
+                                              e.target.value,
+                                            )
+                                          }
+                                          placeholder="Remarks..."
+                                          className={`w-full min-w-0 rounded border bg-white px-2 py-1 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 dark:bg-slate-800 dark:text-slate-200 ${
+                                            data.ratingBased &&
+                                            ratingRequiresRemarks(draft.ratingValue) &&
+                                            !draft.remarks.trim()
+                                              ? "border-rose-400 pr-5 focus-visible:ring-rose-400 dark:border-rose-500/60"
+                                              : "border-slate-300 focus-visible:ring-indigo-400 dark:border-white/15"
+                                          }`}
+                                        />
+                                        {data.ratingBased &&
+                                        ratingRequiresRemarks(draft.ratingValue) ? (
+                                          <span
+                                            className="pointer-events-none absolute right-1.5 top-1 text-sm font-bold text-rose-500"
+                                            title="Remarks are required to justify this rating"
+                                            aria-label="Mandatory remarks"
+                                          >
+                                            *
+                                          </span>
+                                        ) : null}
+                                      </div>
                                     ) : m2Ans?.remarks?.trim() ? (
                                       <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                         {m2Ans.remarks}
@@ -2538,6 +2623,15 @@ export default function SubmissionDetailView({
                   undefined,
                 );
                 const needsMark = incompleteQuestionIds.has(question!.id);
+                // Rating-based forms: a 4/5 or 5/5 draft rating makes the
+                // remarks field mandatory (justification for the high score).
+                const needsJustification =
+                  data.ratingBased &&
+                  scored &&
+                  ratingRequiresRemarks(
+                    ratingValueFromDraft(managerDraft),
+                  ) &&
+                  !managerDraft.remarks.trim();
 
                 return (
                   <Fragment key={row.isHeaderOnly ? `header-${row.sr}` : question!.id}>
@@ -2677,17 +2771,36 @@ export default function SubmissionDetailView({
                         <td className="border-r border-slate-100 px-2 py-2.5 dark:border-slate-700/40">
                           {scored ? (
                             (editingManager1 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
-                              <textarea
-                                value={managerDraft.remarks}
-                                rows={2}
-                                onChange={(event) =>
-                                  updateManagerDraft(question!.id, {
-                                    remarks: event.target.value,
-                                  })
-                                }
-                                className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                                placeholder="Optional remarks"
-                              />
+                              <div className="relative">
+                                <textarea
+                                  value={managerDraft.remarks}
+                                  rows={2}
+                                  onChange={(event) =>
+                                    updateManagerDraft(question!.id, {
+                                      remarks: event.target.value,
+                                    })
+                                  }
+                                  className={`w-full min-w-40 rounded border bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 dark:bg-slate-800 dark:text-slate-300 ${
+                                    needsJustification
+                                      ? "border-rose-400 pr-5 focus-visible:ring-rose-400 dark:border-rose-500/60"
+                                      : "border-slate-300 focus-visible:ring-violet-400 dark:border-white/15"
+                                  }`}
+                                  placeholder={
+                                    needsJustification
+                                      ? "Required — justify the rating"
+                                      : "Optional remarks"
+                                  }
+                                />
+                                {needsJustification ? (
+                                  <span
+                                    className="pointer-events-none absolute right-1.5 top-1 text-sm font-bold text-rose-500"
+                                    title="Remarks are required to justify this rating"
+                                    aria-label="Mandatory remarks"
+                                  >
+                                    *
+                                  </span>
+                                ) : null}
+                              </div>
                             ) : mgr1Answer?.remarks?.trim() ? (
                               <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                 {mgr1Answer.remarks}
@@ -2753,17 +2866,36 @@ export default function SubmissionDetailView({
                             <td className="px-2 py-2.5">
                               {scored ? (
                                 (editingManager2 && (!isAdminRole || isAssignedManagerForCurrentLevel)) || (editingHr && !isAdminRole) ? (
-                                  <textarea
-                                    value={managerDraft.remarks}
-                                    rows={2}
-                                    onChange={(event) =>
-                                      updateManagerDraft(question!.id, {
-                                        remarks: event.target.value,
-                                      })
-                                    }
-                                    className="w-full min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                                    placeholder="Optional remarks"
-                                  />
+                                  <div className="relative">
+                                    <textarea
+                                      value={managerDraft.remarks}
+                                      rows={2}
+                                      onChange={(event) =>
+                                        updateManagerDraft(question!.id, {
+                                          remarks: event.target.value,
+                                        })
+                                      }
+                                      className={`w-full min-w-40 rounded border bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 dark:bg-slate-800 dark:text-slate-300 ${
+                                        needsJustification
+                                          ? "border-rose-400 pr-5 focus-visible:ring-rose-400 dark:border-rose-500/60"
+                                          : "border-slate-300 focus-visible:ring-indigo-400 dark:border-white/15"
+                                      }`}
+                                      placeholder={
+                                        needsJustification
+                                          ? "Required — justify the rating"
+                                          : "Optional remarks"
+                                      }
+                                    />
+                                    {needsJustification ? (
+                                      <span
+                                        className="pointer-events-none absolute right-1.5 top-1 text-sm font-bold text-rose-500"
+                                        title="Remarks are required to justify this rating"
+                                        aria-label="Mandatory remarks"
+                                      >
+                                        *
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 ) : mgr2Answer?.remarks?.trim() ? (
                                   <p className="whitespace-pre-wrap wrap-break-word text-xs text-slate-600 dark:text-slate-300">
                                     {mgr2Answer.remarks}

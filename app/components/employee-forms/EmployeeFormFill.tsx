@@ -13,6 +13,7 @@ import {
   getQuestionRatingScale,
   inferAuthoredRatingValueFromPoints,
   parseDraftScoreAnswer,
+  ratingRequiresRemarks,
   resolveDisplayedAnswerPoints,
   usesRatingScore,
 } from "@/app/helpers/form-rating-scoring";
@@ -541,11 +542,17 @@ export default function EmployeeFormFill({
         }
       }
 
-      // Remarks are required when the employee filled in a score — whether
-      // the question is mandatory or optional. If an optional question is
-      // skipped (no score), remarks are also optional.
-      if (hasScore && !(answer!.remarks ?? "").trim()) {
-        return `Remarks are required for "${question.questionText.slice(0, 60)}..."`;
+      // Remarks rules:
+      // - Rating-based questions: only a 4/5 or 5/5 rating must be justified.
+      // - Marks-based questions: remarks are required whenever the employee
+      //   filled in a score (whether the question is mandatory or optional).
+      const needsRemarks = ratingQuestion
+        ? ratingRequiresRemarks(answer!.ratingValue)
+        : hasScore;
+      if (needsRemarks && !(answer!.remarks ?? "").trim()) {
+        return ratingQuestion
+          ? `Add remarks justifying the ${answer!.ratingValue}-point rating for "${question.questionText.slice(0, 60)}..."`
+          : `Remarks are required for "${question.questionText.slice(0, 60)}..."`;
       }
     }
 
@@ -568,6 +575,15 @@ export default function EmployeeFormFill({
       for (const draft of drafts) {
         if (!draft.authoredQuestionText.trim()) {
           return `Section "${htmlTitlePlainText(section.title)}": every question must have text.`;
+        }
+        // Rating-based forms: a 4/5 or 5/5 self-rating on an authored
+        // question must be justified in remarks.
+        if (
+          data.template.ratingBased &&
+          ratingRequiresRemarks(draft.ratingValue) &&
+          !draft.remarks.trim()
+        ) {
+          return `Section "${htmlTitlePlainText(section.title)}": add remarks justifying the ${draft.ratingValue}-point rating for "${draft.authoredQuestionText.slice(0, 60)}".`;
         }
       }
     }
@@ -1140,20 +1156,44 @@ export default function EmployeeFormFill({
                                                 </button>
                                               ) : null}
                                             </div>
-                                            <textarea
-                                              value={draft.remarks}
-                                              disabled={isReadOnly || isHodOnly}
-                                              onChange={(e) =>
-                                                updateAuthored(
-                                                  draft.clientId,
-                                                  "remarks",
-                                                  e.target.value,
-                                                )
-                                              }
-                                              rows={2}
-                                              className="w-full resize-y rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                                              placeholder="Remarks (optional)..."
-                                            />
+                                            <div className="relative">
+                                              <textarea
+                                                value={draft.remarks}
+                                                disabled={isReadOnly || isHodOnly}
+                                                onChange={(e) =>
+                                                  updateAuthored(
+                                                    draft.clientId,
+                                                    "remarks",
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                rows={2}
+                                                className={cn(
+                                                  "w-full resize-y rounded border bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 dark:bg-slate-800 dark:text-slate-300",
+                                                  authoredRatingBased &&
+                                                    ratingRequiresRemarks(draft.ratingValue) &&
+                                                    !draft.remarks.trim()
+                                                    ? "border-rose-400 pr-5 focus-visible:ring-rose-400 dark:border-rose-500/60"
+                                                    : "border-slate-300 focus-visible:ring-primary dark:border-white/15",
+                                                )}
+                                                placeholder={
+                                                  authoredRatingBased &&
+                                                  ratingRequiresRemarks(draft.ratingValue)
+                                                    ? "Required — justify the rating"
+                                                    : "Remarks (optional)..."
+                                                }
+                                              />
+                                              {authoredRatingBased &&
+                                              ratingRequiresRemarks(draft.ratingValue) ? (
+                                                <span
+                                                  className="pointer-events-none absolute right-1.5 top-1 text-sm font-bold text-rose-500"
+                                                  title="Remarks are required to justify this rating"
+                                                  aria-label="Mandatory remarks"
+                                                >
+                                                  *
+                                                </span>
+                                              ) : null}
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
@@ -1306,29 +1346,52 @@ export default function EmployeeFormFill({
                                   const hasScore =
                                     answer.pointsEarned !== "" ||
                                     answer.ratingValue !== "";
-                                  const remarksRequired = !isHodOnly && (question!.isRequired || hasScore);
+                                  const questionUsesRating = usesRatingScore(
+                                    question!,
+                                    data.template.ratingBased,
+                                    data.template.ratingScales,
+                                  );
+                                  // Rating questions: remarks mandatory only
+                                  // for a 4/5 or 5/5 rating. Marks questions:
+                                  // required question or any filled score.
+                                  const remarksRequired =
+                                    !isHodOnly &&
+                                    (questionUsesRating
+                                      ? ratingRequiresRemarks(answer.ratingValue)
+                                      : question!.isRequired || hasScore);
                                   return (
-                                    <textarea
-                                      value={answer.remarks}
-                                      disabled={isReadOnly || isHodOnly}
-                                      rows={2}
-                                      onChange={(e) =>
-                                        updateAnswer(question!.id, "remarks", e.target.value)
-                                      }
-                                      className={cn(
-                                        "w-full rounded border bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:bg-slate-800 dark:text-slate-300",
-                                        remarksRequired
-                                          ? "border-amber-400 dark:border-amber-600/50"
-                                          : "border-slate-300 dark:border-white/15",
-                                      )}
-                                      placeholder={
-                                        isHodOnly
-                                          ? "HOD only"
-                                          : remarksRequired
-                                            ? "Required remarks *"
-                                            : "Optional remarks"
-                                      }
-                                    />
+                                    <div className="relative">
+                                      <textarea
+                                        value={answer.remarks}
+                                        disabled={isReadOnly || isHodOnly}
+                                        rows={2}
+                                        onChange={(e) =>
+                                          updateAnswer(question!.id, "remarks", e.target.value)
+                                        }
+                                        className={cn(
+                                          "w-full rounded border bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:bg-slate-800 dark:text-slate-300",
+                                          remarksRequired
+                                            ? "border-amber-400 pr-5 dark:border-amber-600/50"
+                                            : "border-slate-300 dark:border-white/15",
+                                        )}
+                                        placeholder={
+                                          isHodOnly
+                                            ? "HOD only"
+                                            : remarksRequired
+                                              ? "Required remarks"
+                                              : "Optional remarks"
+                                        }
+                                      />
+                                      {remarksRequired ? (
+                                        <span
+                                          className="pointer-events-none absolute right-1.5 top-1 text-sm font-bold text-amber-500"
+                                          title="Remarks are required"
+                                          aria-label="Mandatory remarks"
+                                        >
+                                          *
+                                        </span>
+                                      ) : null}
+                                    </div>
                                   );
                                 })()}
                               </td>

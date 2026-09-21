@@ -7,6 +7,20 @@ import type {
 
 export const DEFAULT_RATING_MAX = 5;
 
+// Ratings at or above this threshold demand a written justification —
+// a 4/5 or 5/5 score must be defended in remarks by whoever assigned it
+// (employee self-assessment, Manager 1, or Manager 2).
+export const HIGH_RATING_JUSTIFICATION_THRESHOLD = 4;
+
+export function ratingRequiresRemarks(
+  ratingValue: number | string | null | undefined,
+): boolean {
+  const value = Number(ratingValue);
+  return (
+    Number.isFinite(value) && value >= HIGH_RATING_JUSTIFICATION_THRESHOLD
+  );
+}
+
 export function deriveRatingScaleMaxValue(
   options: Array<{ ratingValue: number | string | null | undefined }>,
   fallback = DEFAULT_RATING_MAX,

@@ -26,6 +26,7 @@ import {
   hasExplicitNumericScore,
   hasProvidedAnswerScore,
   hydrateAnswerPoints,
+  ratingRequiresRemarks,
   resolveAnswerScore,
   resolveDisplayedAnswerPoints,
   usesRatingScore,
@@ -1838,11 +1839,16 @@ export async function finishBulkReview(
 }
 
 /**
- * Copy scores/remarks from a source reviewer onto a target reviewer for
+ * Copy scores/ratings from a source reviewer onto a target reviewer for
  * questions the target has not yet answered. Existing target answers are
  * never overwritten (ON CONFLICT DO NOTHING), so a manager who already
  * scored HOD-only questions still receives self-assessment copies for the
  * remaining items.
+ *
+ * Remarks are deliberately NOT copied — each reviewer writes their own.
+ * Seeding them would persist the previous stage's remarks as if the new
+ * reviewer had typed them (historically this produced thousands of
+ * byte-identical copied remarks).
  */
 async function seedManagerAnswersFromSource(
   appraisalId: number,
@@ -1865,7 +1871,6 @@ async function seedManagerAnswersFromSource(
   const questionIds = sourceAnswers.map((a) => a.questionId);
   const pointsArray = sourceAnswers.map((a) => a.pointsEarned);
   const ratingArray = sourceAnswers.map((a) => a.ratingValue ?? null);
-  const remarksArray = sourceAnswers.map((a) => a.remarks);
 
   await getDbClient().query(
     `INSERT INTO appraisal_answers (
@@ -1878,9 +1883,9 @@ async function seedManagerAnswersFromSource(
        rating_value,
        remarks
      )
-     SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::numeric[]), unnest($6::text[])
+     SELECT $1, unnest($2::bigint[]), $3, NULL, NULL, unnest($4::numeric[]), unnest($5::numeric[]), NULL::text
      ON CONFLICT (appraisal_id, question_id, filled_by_id) DO NOTHING`,
-    [appraisalId, questionIds, targetUserId, pointsArray, ratingArray, remarksArray],
+    [appraisalId, questionIds, targetUserId, pointsArray, ratingArray],
   );
 }
 
@@ -2113,11 +2118,12 @@ async function assertRequiredManagerRatingsComplete(
   const byQuestion = new Map(answers.map((answer) => [answer.questionId, answer]));
 
   for (const question of flattenAllQuestions(template)) {
-    if (!isScoredQuestion(question) || !question.isRequired) {
+    if (!isScoredQuestion(question)) {
       continue;
     }
     const answer = byQuestion.get(question.id);
     if (
+      question.isRequired &&
       !hasProvidedAnswerScore(
         question,
         template.ratingBased,
@@ -2129,6 +2135,17 @@ async function assertRequiredManagerRatingsComplete(
         usesRatingScore(question, template.ratingBased, template.ratingScales)
           ? `Select a rating for "${question.questionText.slice(0, 80)}".`
           : `Enter a score for "${question.questionText.slice(0, 80)}". A mark of 0 is allowed.`,
+      );
+    }
+    // A 4/5 or 5/5 rating must be justified in remarks — applies to every
+    // scored question, required or optional.
+    if (
+      usesRatingScore(question, template.ratingBased, template.ratingScales) &&
+      ratingRequiresRemarks(answer?.ratingValue) &&
+      !answer?.remarks?.trim()
+    ) {
+      throw new FormSubmissionError(
+        `Add remarks justifying the ${answer?.ratingValue}-point rating for "${question.questionText.slice(0, 80)}".`,
       );
     }
   }

@@ -50,6 +50,7 @@ import {
   computeAuthoredRatingPoints,
   formatScoreValue,
   inferAuthoredRatingValueFromPoints,
+  ratingRequiresRemarks,
   resolveDisplayedAnswerPoints,
 } from "@/app/helpers/form-rating-scoring";
 import { toast } from "react-hot-toast";
@@ -945,6 +946,35 @@ export default function BulkAssessmentReview({
             );
             return;
           }
+          // Rating-based forms: a 4/5 or 5/5 authored rating must be
+          // justified in remarks.
+          if (
+            question.ratingBased &&
+            ratingRequiresRemarks(d.ratingValue) &&
+            !d.remarks.trim()
+          ) {
+            toast.error(
+              `"${question.sectionTitle}" for ${row.employeeName}: add remarks justifying the ${d.ratingValue}-point rating for "${(d.authoredQuestionText || "Untitled").slice(0, 60)}".`,
+            );
+            return;
+          }
+        }
+      }
+    }
+    // Rating-based forms: a 4/5 or 5/5 rating on the current question must
+    // be justified in remarks. Other questions' saved rows are enforced
+    // server-side at approval.
+    if (currentQuestionIsRating && currentQuestion) {
+      for (const row of currentQuestion.rows) {
+        const draft = drafts.get(row.submissionId);
+        if (
+          ratingRequiresRemarks(draft?.ratingValue) &&
+          !draft?.remarks?.trim()
+        ) {
+          toast.error(
+            `Add remarks justifying the ${draft?.ratingValue}-point rating for ${row.employeeName}.`,
+          );
+          return;
         }
       }
     }
@@ -971,7 +1001,7 @@ export default function BulkAssessmentReview({
       }
     }
     setFinishDialogOpen(true);
-  }, [currentQuestion, currentQuestionIsRating, missingScores.size, modifiedRows.size, authoredModified, saveMutation, questions]);
+  }, [currentQuestion, currentQuestionIsRating, drafts, missingScores.size, modifiedRows.size, authoredModified, saveMutation, questions]);
 
   /* -------------------------------------------------------------------------- */
   /* Render                                                                      */
@@ -1657,6 +1687,12 @@ function WorkspaceView({
                   const draft = drafts.get(row.submissionId);
                   const isModified = modifiedRows.has(row.submissionId);
                   const isMissing = missingScores.has(row.submissionId);
+                  // Rating-based forms: a 4/5 or 5/5 rating makes remarks
+                  // mandatory (justification for the high score).
+                  const needsJustification =
+                    currentQuestion.ratingBased &&
+                    ratingRequiresRemarks(draft?.ratingValue) &&
+                    !(draft?.remarks ?? "").trim();
                   return (
                     <tr
                       key={row.submissionId}
@@ -1758,17 +1794,37 @@ function WorkspaceView({
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <input
-                          type="text"
-                          value={draft?.remarks ?? ""}
-                          onChange={(e) =>
-                            onUpdateDraft(row.submissionId, {
-                              remarks: e.target.value,
-                            })
-                          }
-                          className="w-full min-w-[160px] rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-violet-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-300"
-                          placeholder="Optional remarks"
-                        />
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={draft?.remarks ?? ""}
+                            onChange={(e) =>
+                              onUpdateDraft(row.submissionId, {
+                                remarks: e.target.value,
+                              })
+                            }
+                            className={cn(
+                              "w-full min-w-[160px] rounded border bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 dark:bg-slate-800 dark:text-slate-300",
+                              needsJustification
+                                ? "border-rose-400 pr-5 focus:ring-rose-400 dark:border-rose-500/60"
+                                : "border-slate-300 focus:ring-violet-400 dark:border-white/15",
+                            )}
+                            placeholder={
+                              needsJustification
+                                ? "Required — justify the rating"
+                                : "Optional remarks"
+                            }
+                          />
+                          {needsJustification ? (
+                            <span
+                              className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-sm font-bold text-rose-500"
+                              title="Remarks are required to justify this rating"
+                              aria-label="Mandatory remarks"
+                            >
+                              *
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <AttachmentList
@@ -2085,21 +2141,45 @@ function OpenAssessmentContent({
                           placeholder="Question text..."
                           className="w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary dark:border-white/15 dark:bg-slate-800 dark:text-slate-200"
                         />
-                        <textarea
-                          value={draft.remarks}
-                          rows={1}
-                          onChange={(e) =>
-                            onUpdateAuthoredDraft(
-                              row.submissionId,
-                              sectionId,
-                              draft.clientId,
-                              "remarks",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Remarks (optional)..."
-                          className="w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400 dark:border-white/15 dark:bg-slate-800 dark:text-slate-400"
-                        />
+                        <div className="relative">
+                          <textarea
+                            value={draft.remarks}
+                            rows={1}
+                            onChange={(e) =>
+                              onUpdateAuthoredDraft(
+                                row.submissionId,
+                                sectionId,
+                                draft.clientId,
+                                "remarks",
+                                e.target.value,
+                              )
+                            }
+                            placeholder={
+                              currentQuestion.ratingBased &&
+                              ratingRequiresRemarks(draft.ratingValue)
+                                ? "Required — justify the rating"
+                                : "Remarks (optional)..."
+                            }
+                            className={cn(
+                              "w-full resize-y rounded border bg-white px-2 py-1 text-xs text-slate-500 focus-visible:outline-none focus-visible:ring-1 dark:bg-slate-800 dark:text-slate-400",
+                              currentQuestion.ratingBased &&
+                                ratingRequiresRemarks(draft.ratingValue) &&
+                                !draft.remarks.trim()
+                                ? "border-rose-400 pr-5 focus-visible:ring-rose-400 dark:border-rose-500/60"
+                                : "border-slate-200 focus-visible:ring-teal-400 dark:border-white/15",
+                            )}
+                          />
+                          {currentQuestion.ratingBased &&
+                          ratingRequiresRemarks(draft.ratingValue) ? (
+                            <span
+                              className="pointer-events-none absolute right-1.5 top-1 text-sm font-bold text-rose-500"
+                              title="Remarks are required to justify this rating"
+                              aria-label="Mandatory remarks"
+                            >
+                              *
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="ml-auto flex shrink-0 items-center gap-1">
                         <input

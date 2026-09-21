@@ -34,6 +34,7 @@ import { APPRAISAL_STATUSES, flattenAllQuestions } from "@/types/forms";
 import {
   computeAuthoredRatingPoints,
   isValidAuthoredRating,
+  ratingRequiresRemarks,
   resolveAnswerScore,
   usesRatingScore,
   hydrateAnswerPoints,
@@ -588,20 +589,33 @@ function validateAnswers(
       );
     }
 
-    // When submitting, remarks are required if the employee filled in a score
-    // for this question — regardless of whether the question is mandatory or
-    // optional. If an optional question is skipped (no score), remarks are
-    // also optional.
+    // When submitting, remarks requirements:
+    // - Rating-based questions: only a 4/5 or 5/5 rating must be justified.
+    // - Marks-based questions: remarks are required if the employee filled in
+    //   a score — regardless of whether the question is mandatory or
+    //   optional. If an optional question is skipped (no score), remarks are
+    //   also optional.
     if (submit && answer && !answer.remarks?.trim()) {
+      const isRating = usesRatingScore(
+        question,
+        template.ratingBased,
+        template.ratingScales,
+      );
       const hasScore =
         isScored &&
         answer.pointsEarned !== undefined &&
         answer.pointsEarned !== null;
       const hasText = Boolean(answer.textResponse?.trim());
 
-      if (hasScore || hasText || question.isRequired) {
+      const needsRemarks = isRating
+        ? ratingRequiresRemarks(answer.ratingValue)
+        : hasScore || hasText || question.isRequired;
+
+      if (needsRemarks) {
         throw new EmployeeFormError(
-          `Remarks are required for "${question.questionText.slice(0, 80)}".`,
+          isRating
+            ? `Add remarks justifying the ${answer.ratingValue}-point rating for "${question.questionText.slice(0, 80)}".`
+            : `Remarks are required for "${question.questionText.slice(0, 80)}".`,
         );
       }
     }
@@ -657,6 +671,19 @@ function validateAnswers(
             `Score for "${question.questionText.slice(0, 80)}" must be between 0 and ${question.totalMarks}.`,
           );
         }
+      }
+
+      // A 4/5 or 5/5 self-rating must be justified in remarks — applies to
+      // required and optional questions alike on rating-based forms.
+      if (
+        submit &&
+        ratingQuestion &&
+        ratingRequiresRemarks(answer.ratingValue) &&
+        !answer.remarks?.trim()
+      ) {
+        throw new EmployeeFormError(
+          `Add remarks justifying the ${answer.ratingValue}-point rating for "${question.questionText.slice(0, 80)}".`,
+        );
       }
     } else if (question.inputType === "NUMBER") {
       const value = answer.pointsEarned ?? Number(answer.textResponse);
