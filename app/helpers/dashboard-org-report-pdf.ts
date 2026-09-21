@@ -588,7 +588,10 @@ function drawDistributionMatrix(
     drawCenteredCellText(pdf, row.rating, cellX, rowY, levelColW, rowH, 7.5, 3);
     cellX += levelColW;
 
-    row.quartiles.forEach((cell) => {
+    // Placeholder cells (id === null) pad the row to the widest level's
+    // quartile count — skip them so a level only paints its own quartiles.
+    const realCells = row.quartiles.filter((cell) => cell.id !== null);
+    realCells.forEach((cell) => {
       setFill(pdf, fill);
       pdf.rect(cellX, rowY, dataColW, rowH, "F");
       setText(pdf, WHITE);
@@ -613,6 +616,7 @@ function drawDistributionMatrix(
       }
       cellX += dataColW;
     });
+    cellX += dataColW * (columns.length - realCells.length);
 
     setFill(pdf, NAVY);
     pdf.rect(cellX, rowY, dataColW, rowH, "F");
