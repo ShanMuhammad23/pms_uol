@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -95,6 +96,10 @@ export function ViewAsUserModal({ open, onClose }: ViewAsUserModalProps) {
       // dashboard is not displayed.
       queryClient.clear();
 
+      // Purge the client Router Cache so the /dashboard RSC payload is
+      // re-fetched under the new session identity (not the cached render).
+      router.refresh();
+
       // Navigate to the dashboard root — the session now reflects the
       // target user's identity.
       router.push("/dashboard");
@@ -103,7 +108,12 @@ export function ViewAsUserModal({ open, onClose }: ViewAsUserModalProps) {
     }
   }
 
-  return (
+  // Render via portal — the modal mounts inside <motion.aside>, whose
+  // transform creates a containing block that would trap `fixed inset-0`
+  // inside the sidebar's box instead of the viewport.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 dark:bg-black/60"
       onClick={onClose}
@@ -243,6 +253,7 @@ export function ViewAsUserModal({ open, onClose }: ViewAsUserModalProps) {
           </p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

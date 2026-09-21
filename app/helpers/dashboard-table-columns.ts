@@ -14,6 +14,7 @@ import {
 } from "@/app/helpers/compensation-worksheet";
 import {
   getAdjustedScore as sharedGetAdjustedScore,
+  getAdjustedScorePercent as sharedGetAdjustedScorePercent,
   getNormalizedScorePercent as sharedGetNormalizedScorePercent,
   canResolvePerformanceRating,
 } from "@/lib/performance-rating";
@@ -230,9 +231,7 @@ function getAdjustedScore(row: FormSubmissionListItem): number | null {
 }
 
 function getAdjustedScorePercent(row: FormSubmissionListItem): number | null {
-  const adjusted = getAdjustedScore(row);
-  if (adjusted === null || row.maxRawScore <= 0) return null;
-  return Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
+  return sharedGetAdjustedScorePercent(row);
 }
 
 function getAdjustedRating(row: FormSubmissionListItem): string | null {

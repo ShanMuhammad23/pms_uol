@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { LogOut, X } from "lucide-react";
 
@@ -14,7 +15,12 @@ export function SignOutConfirmModal({
   onConfirm,
   onClose,
 }: SignOutConfirmModalProps) {
-  return (
+  // Render via portal — this modal mounts inside <motion.aside>, whose
+  // transform creates a containing block that would trap `fixed inset-0`
+  // inside the sidebar's box instead of the viewport.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {open ? (
         <motion.div
@@ -74,6 +80,7 @@ export function SignOutConfirmModal({
           </motion.div>
         </motion.div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

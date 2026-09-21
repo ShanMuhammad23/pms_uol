@@ -666,9 +666,17 @@ export async function listFormSubmissions(
 
   const result = await db.query<SubmissionListRow>(
     `WITH template_max_marks AS (
-       SELECT template_id, SUM(total_marks) AS max_raw
-       FROM form_questions
-       WHERE total_marks > 0
+       SELECT template_id, SUM(marks) AS max_raw
+       FROM (
+         SELECT template_id, total_marks AS marks
+         FROM form_questions
+         WHERE total_marks > 0
+         UNION ALL
+         SELECT template_id, open_assessment_total_marks AS marks
+         FROM form_sections
+         WHERE is_open_assessment = TRUE
+           AND open_assessment_total_marks > 0
+       ) marks_by_template
        GROUP BY template_id
      )
      SELECT
