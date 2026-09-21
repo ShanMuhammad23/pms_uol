@@ -133,28 +133,26 @@ export function DashboardPrimaryCharts({
                     }}
                   />
                 </Area>
-                {isHead ? null : (
-                  <Area
-                    type="monotone"
+                <Area
+                  type="monotone"
+                  dataKey="actual"
+                  name="Actual Distribution"
+                  stroke="#d97706"
+                  strokeWidth={2}
+                  fill="url(#actualGrad)"
+                  dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}
+                >
+                  <LabelList
                     dataKey="actual"
-                    name="Actual Distribution"
-                    stroke="#d97706"
-                    strokeWidth={2}
-                    fill="url(#actualGrad)"
-                    dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}
-                  >
-                    <LabelList
-                      dataKey="actual"
-                      position="top"
-                      offset={8}
-                      style={{
-                        fontSize: 11,
-                        fill: "#d97706",
-                        fontWeight: 600,
-                      }}
-                    />
-                  </Area>
-                )}
+                    position="top"
+                    offset={8}
+                    style={{
+                      fontSize: 11,
+                      fill: "#d97706",
+                      fontWeight: 600,
+                    }}
+                  />
+                </Area>
               </AreaChart>
             </ResponsiveContainer>
             ) : null}

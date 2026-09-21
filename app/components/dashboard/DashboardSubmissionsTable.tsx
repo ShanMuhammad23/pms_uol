@@ -18,7 +18,6 @@ import {
   type ColumnDef,
 } from "@/app/hooks/use-column-config";
 import { useVirtualRows } from "@/app/hooks/use-virtual-rows";
-import type { ColumnConfig } from "@/lib/queries/column-widths-client";
 import { isHeadRole } from "@/lib/auth/home-path";
 import { InlineRemarksCell } from "@/app/components/dashboard/InlineRemarksCell";
 import { InlineRoleCategoryCell } from "@/app/components/dashboard/InlineRoleCategoryCell";
@@ -60,6 +59,7 @@ import {
   hasValidNormalizedScore,
   HEAD_DASHBOARD_TABLE_COLUMN_IDS,
   MANAGER_FIXED_COLUMN_IDS,
+  MANAGER_FIXED_COLUMNS,
   MANAGER_FIXED_FROZEN_COLUMN_IDS,
 } from "@/app/helpers/dashboard-table-columns";
 import type { FormSubmissionListItem } from "@/types/form-submissions";
@@ -927,18 +927,23 @@ export function DashboardSubmissionsTable({
     }
     return [...base] as DashboardTableColumnId[];
   }, [isManagerRole, allowedColumnIds]);
-  const managerFixedConfig = useMemo<ColumnConfig | undefined>(
-    () =>
-      isManagerRole && managerAllowedColumnIds
-        ? {
-            order: [...managerAllowedColumnIds],
-            visible: [...managerAllowedColumnIds],
-            frozen: [...MANAGER_FIXED_FROZEN_COLUMN_IDS],
-            widths: {},
-          }
-        : undefined,
-    [isManagerRole, managerAllowedColumnIds],
-  );
+  // Managers get column management too — but their starting layout keeps
+  // the old fixed design: MANAGER_FIXED order first (extras appended) and
+  // the four fixed columns frozen until they change it.
+  const managerOrderedColumns = useMemo(() => {
+    if (!isManagerRole || !managerAllowedColumnIds) {
+      return DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[];
+    }
+    const allowed = new Set<string>(managerAllowedColumnIds);
+    const fixedOrdered = MANAGER_FIXED_COLUMNS.filter((col) =>
+      allowed.has(col.id),
+    );
+    const fixedIds = new Set<string>(fixedOrdered.map((col) => col.id));
+    const extras = (DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[]).filter(
+      (col) => allowed.has(col.id) && !fixedIds.has(col.id),
+    );
+    return [...fixedOrdered, ...extras];
+  }, [isManagerRole, managerAllowedColumnIds]);
 
   const {
     config,
@@ -952,10 +957,12 @@ export function DashboardSubmissionsTable({
     updateConfig,
     resetConfig,
   } = useColumnConfig("dashboard-staff-listing", {
-    allColumns: DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[],
+    allColumns: managerOrderedColumns,
     allowedColumnIds: managerAllowedColumnIds,
     hasSelectColumn: isHrRole,
-    fixedConfig: managerFixedConfig,
+    defaultFrozenColumnIds: isManagerRole
+      ? MANAGER_FIXED_FROZEN_COLUMN_IDS
+      : undefined,
   });
   const allowedColumns = useMemo(() => {
     if (!managerAllowedColumnIds) return DASHBOARD_TABLE_COLUMNS as readonly ColumnDef[];

@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { db } from "@/lib/db";
 import { getDbClient } from "@/lib/db-context";
-import { isHeadRole } from "@/lib/auth/home-path";
 import { apiHandler } from "@/lib/api-handler";
 
 export const dynamic = "force-dynamic";
@@ -16,17 +15,6 @@ const VALID_TABLE_KEYS = new Set([
 
 const MIN_WIDTH = 80;
 const MAX_WIDTH = 600;
-
-/**
- * Table keys where column management is restricted to admin roles
- * (HR / Board / Super Admin). Manager 1 / Manager 2 must not be able to
- * update column preferences for these tables — they always see a fixed
- * predefined layout. Even if the API is called manually, the request is
- * rejected.
- */
-const COLUMN_MANAGEMENT_RESTRICTED_TABLE_KEYS = new Set([
-  "dashboard-staff-listing",
-]);
 
 interface ColumnConfig {
   order: string[];
@@ -121,20 +109,6 @@ export const PUT = apiHandler(async (request: Request) => {
     return NextResponse.json(
       { error: "Invalid or missing tableKey" },
       { status: 400 },
-    );
-  }
-
-  // Reject column preference updates from Manager 1 / Manager 2 for tables
-  // where column management is restricted to admin roles. Managers always
-  // see a fixed predefined layout and must not be able to save preferences,
-  // even if the API is called manually.
-  if (
-    COLUMN_MANAGEMENT_RESTRICTED_TABLE_KEYS.has(tableKey) &&
-    isHeadRole(session.user.role)
-  ) {
-    return NextResponse.json(
-      { error: "Forbidden: column management is not available for your role" },
-      { status: 403 },
     );
   }
 

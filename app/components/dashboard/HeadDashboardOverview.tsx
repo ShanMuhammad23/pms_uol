@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User } from "lucide-react";
+import { Info, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Area,
@@ -14,6 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { CalibrationDistributionMatrix } from "@/app/components/dashboard/CalibrationDistributionMatrix";
 import { ChartCard } from "@/app/components/dashboard/ChartCard";
 import { CustomTooltip } from "@/app/components/dashboard/CustomTooltip";
 import { EligibilityStatCard } from "@/app/components/dashboard/EligibilityStatCard";
@@ -21,7 +22,10 @@ import { FormStatusStatCard } from "@/app/components/dashboard/FormStatusStatCar
 import { ManagerReviewStatCard } from "@/app/components/dashboard/ManagerReviewStatCard";
 import { StatCard } from "@/app/components/dashboard/StatCard";
 import { containerVariants } from "@/app/helpers/dashboard-animations";
-import type { CardFilterId } from "@/app/helpers/dashboard-types";
+import type {
+  CardFilterId,
+  RatingQuartileMatrixData,
+} from "@/app/helpers/dashboard-types";
 import type {
   ManagerReviewDualStats,
   WorkflowStageStats,
@@ -35,6 +39,10 @@ interface HeadDashboardOverviewProps {
   selectedCardFilter: CardFilterId | null;
   onFilterByCard: (cardId: CardFilterId) => void;
   calibrationData: Array<{ rating: string; quota: number; actual: number }>;
+  /** Rating × Quartile matrix (Score O-based) shown in the info popup. */
+  ratingQuartileMatrix: RatingQuartileMatrixData;
+  employeeCount: number;
+  performanceMatrixLoading?: boolean;
   statsVisible?: boolean;
   chartsVisible?: boolean;
 }
@@ -51,10 +59,14 @@ export function HeadDashboardOverview({
   selectedCardFilter,
   onFilterByCard,
   calibrationData,
+  ratingQuartileMatrix,
+  employeeCount,
+  performanceMatrixLoading = false,
   statsVisible = true,
   chartsVisible = true,
 }: HeadDashboardOverviewProps) {
   const [chartsKey, setChartsKey] = useState(0);
+  const [matrixOpen, setMatrixOpen] = useState(false);
   const [chartReady, setChartReady] = useState(chartsVisible);
   const [wasChartsVisible, setWasChartsVisible] = useState(chartsVisible);
 
@@ -165,6 +177,17 @@ export function HeadDashboardOverview({
               title="Performance Rating Curve"
               delay={0.35}
               className="h-full min-h-80"
+              action={
+                <button
+                  type="button"
+                  onClick={() => setMatrixOpen(true)}
+                  className="flex size-7 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-600 dark:border-white/15 dark:text-slate-500 dark:hover:border-white/25 dark:hover:bg-white/5 dark:hover:text-slate-300"
+                  title="View Rating × Quartile matrix (Score O)"
+                  aria-label="View Rating × Quartile matrix (Score O)"
+                >
+                  <Info className="size-3.5" />
+                </button>
+              }
             >
               <div className="h-80">
                 {chartReady ? (
@@ -193,6 +216,24 @@ export function HeadDashboardOverview({
                           <stop
                             offset="95%"
                             stopColor="#64748b"
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
+                        <linearGradient
+                          id={`headActualGrad-${chartsKey}`}
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="5%"
+                            stopColor="#d97706"
+                            stopOpacity={0.15}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor="#d97706"
                             stopOpacity={0}
                           />
                         </linearGradient>
@@ -240,11 +281,76 @@ export function HeadDashboardOverview({
                           }}
                         />
                       </Area>
+                      <Area
+                        type="monotone"
+                        dataKey="actual"
+                        name="Actual Distribution"
+                        stroke="#d97706"
+                        strokeWidth={2}
+                        fill={`url(#headActualGrad-${chartsKey})`}
+                        dot={{ r: 4, fill: "#d97706", strokeWidth: 0 }}
+                      >
+                        <LabelList
+                          dataKey="actual"
+                          position="top"
+                          offset={8}
+                          style={{
+                            fontSize: 11,
+                            fill: "#d97706",
+                            fontWeight: 600,
+                          }}
+                        />
+                      </Area>
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : null}
               </div>
             </ChartCard>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {matrixOpen ? (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 dark:bg-black/60"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMatrixOpen(false)}
+          >
+            <motion.div
+              className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl dark:bg-slate-900"
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-white">
+                    Performance Rating Quartile Matrix
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    Based on Score (O) — the rating from the M1/M2 assessment.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMatrixOpen(false)}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-300"
+                  aria-label="Close"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <CalibrationDistributionMatrix
+                rows={ratingQuartileMatrix.rows}
+                columns={ratingQuartileMatrix.columns}
+                employeeCount={employeeCount}
+                isLoading={performanceMatrixLoading}
+              />
+            </motion.div>
           </motion.div>
         ) : null}
       </AnimatePresence>

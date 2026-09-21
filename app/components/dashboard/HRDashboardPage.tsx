@@ -221,6 +221,9 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
             selectedCardFilter={selectedCardFilter}
             onFilterByCard={filterByCard}
             calibrationData={filteredCalibrationData}
+            ratingQuartileMatrix={ratingQuartileMatrix}
+            employeeCount={chartSubmissionsCount}
+            performanceMatrixLoading={performanceMatrixLoading}
             statsVisible={statsVisible}
             chartsVisible={chartsVisible}
           />

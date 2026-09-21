@@ -24,6 +24,11 @@ import {
   fetchDirectScoreEntryAssignments,
   unassignDirectScoreEntry,
 } from "@/lib/queries/forms-client";
+import { useDashboardEntitiesQuery } from "@/app/queries/organization";
+import {
+  buildUserOrgFilterLookup,
+  type UserOrgFilterValues,
+} from "@/app/helpers/user-org-filters";
 import { fetchUsers } from "@/lib/queries/users-client";
 import type { UserRecord } from "@/types/users";
 import { cn } from "@/lib/utils";
@@ -37,6 +42,9 @@ const PAGE_SIZE_OPTIONS: PageSizeOption[] = [50, 200, 1000, 5000, "all"];
 const DEFAULT_PAGE_SIZE: PageSizeOption = 50;
 
 type MultiFilterId =
+  | "site"
+  | "orgLevel1"
+  | "orgLevel2"
   | "entityName"
   | "designation"
   | "roleCategory"
@@ -54,6 +62,9 @@ type FilterState = {
 };
 
 const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
+  { id: "site", label: "Site" },
+  { id: "orgLevel1", label: "Org Level 1" },
+  { id: "orgLevel2", label: "Org Level 2" },
   { id: "assignmentStatus", label: "Assignment Status" },
   { id: "entityName", label: "Entity" },
   { id: "designation", label: "Designation" },
@@ -65,6 +76,9 @@ const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
 const EMPTY_FILTERS: FilterState = {
   text: {},
   multi: {
+    site: null,
+    orgLevel1: null,
+    orgLevel2: null,
     assignmentStatus: null,
     entityName: null,
     designation: null,
@@ -92,10 +106,17 @@ function getFilterValue(
   user: UserRecord,
   field: UserColumnId,
   assignedIds: Set<string>,
+  orgLookup: Map<string, UserOrgFilterValues>,
 ): string {
   if (field === "assignmentStatus") return getAssignmentStatus(user, assignedIds);
   if (field === "employeeId") return user.employeeId;
   if (field === "name") return `${user.firstName} ${user.lastName}`.trim();
+  if (field === "site" || field === "orgLevel1" || field === "orgLevel2") {
+    return (
+      orgLookup.get(user.employeeId)?.[field] ??
+      (field === "site" ? user.campusName ?? "—" : "—")
+    );
+  }
   return String(user[field] ?? "—");
 }
 
@@ -111,12 +132,13 @@ function userMatchesFiltersExcluding(
   filters: FilterState,
   assignedEmployeeIds: Set<string>,
   excludeField: UserColumnId | null,
+  orgLookup: Map<string, UserOrgFilterValues>,
 ): boolean {
   for (const id of ["employeeId", "name"] as const) {
     if (excludeField === id) continue;
     const query = filters.text[id];
     if (!query?.trim()) continue;
-    const value = getFilterValue(user, id, assignedEmployeeIds);
+    const value = getFilterValue(user, id, assignedEmployeeIds, orgLookup);
     if (!matchesTextQuery(value, query)) return false;
   }
 
@@ -125,7 +147,7 @@ function userMatchesFiltersExcluding(
     const sel = filters.multi[f.id];
     if (sel === null || sel === undefined) continue;
     if (sel.length === 0) return false;
-    const val = getFilterValue(user, f.id, assignedEmployeeIds);
+    const val = getFilterValue(user, f.id, assignedEmployeeIds, orgLookup);
     if (!sel.includes(val)) return false;
   }
   return true;
@@ -137,15 +159,16 @@ function buildOptions(
   filters: FilterState,
   selected: FilterSelection,
   assignedEmployeeIds: Set<string>,
+  orgLookup: Map<string, UserOrgFilterValues>,
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 
   for (const user of users) {
-    if (!userMatchesFiltersExcluding(user, filters, assignedEmployeeIds, field)) {
+    if (!userMatchesFiltersExcluding(user, filters, assignedEmployeeIds, field, orgLookup)) {
       continue;
     }
 
-    const value = getFilterValue(user, field, assignedEmployeeIds);
+    const value = getFilterValue(user, field, assignedEmployeeIds, orgLookup);
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
@@ -170,8 +193,9 @@ function userMatchesFilters(
   user: UserRecord,
   filters: FilterState,
   assignedEmployeeIds: Set<string>,
+  orgLookup: Map<string, UserOrgFilterValues>,
 ): boolean {
-  return userMatchesFiltersExcluding(user, filters, assignedEmployeeIds, null);
+  return userMatchesFiltersExcluding(user, filters, assignedEmployeeIds, null, orgLookup);
 }
 
 function countActiveFilters(filters: FilterState): number {
@@ -205,8 +229,13 @@ export default function DirectScoreEntryAssignment() {
     queryKey: ["direct-score-entry-employees"],
     queryFn: () => fetchDirectScoreEntryAssignments(),
   });
+  const { data: entities = [] } = useDashboardEntitiesQuery();
 
   const allUsers = useMemo(() => users ?? [], [users]);
+  const orgLookup = useMemo(
+    () => buildUserOrgFilterLookup(allUsers, entities),
+    [allUsers, entities],
+  );
   const activeCount = countActiveFilters(filters);
 
   const assignedEmployeeIds = useMemo(
@@ -219,16 +248,16 @@ export default function DirectScoreEntryAssignment() {
     for (const f of FILTER_CONFIG) {
       map.set(
         f.id,
-        buildOptions(allUsers, f.id, filters, filters.multi[f.id], assignedEmployeeIds),
+        buildOptions(allUsers, f.id, filters, filters.multi[f.id], assignedEmployeeIds, orgLookup),
       );
     }
     return map;
-  }, [allUsers, filters, assignedEmployeeIds]);
+  }, [allUsers, filters, assignedEmployeeIds, orgLookup]);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allUsers.filter((user) => {
-      if (!userMatchesFilters(user, filters, assignedEmployeeIds)) return false;
+      if (!userMatchesFilters(user, filters, assignedEmployeeIds, orgLookup)) return false;
       if (!query) return true;
       const name = `${user.firstName} ${user.lastName}`.toLowerCase();
       return (
@@ -236,7 +265,7 @@ export default function DirectScoreEntryAssignment() {
         name.includes(query)
       );
     });
-  }, [search, allUsers, filters, assignedEmployeeIds]);
+  }, [search, allUsers, filters, assignedEmployeeIds, orgLookup]);
 
   const totalCount = filteredUsers.length;
   const displayPageSize = pageSize === "all" ? Math.max(totalCount, 1) : pageSize;
