@@ -12,7 +12,12 @@ import {
 import { useResettingPage } from "@/app/hooks/use-resetting-page";
 import { DASHBOARD_QUERY_CACHE } from "@/app/queries/query-cache";
 import { queryKeys } from "@/app/queries/keys";
+import { useDashboardEntitiesQuery } from "@/app/queries/organization";
 import { fetchUsers } from "@/lib/queries/users-client";
+import {
+  buildUserOrgFilterLookup,
+  type UserOrgFilterValues,
+} from "@/app/helpers/user-org-filters";
 import { cn } from "@/lib/utils";
 import type { UserRecord } from "@/types/users";
 
@@ -21,6 +26,9 @@ const PAGE_SIZE_OPTIONS: PageSizeOption[] = [50, 200, 1000, 5000, "all"];
 const DEFAULT_PAGE_SIZE: PageSizeOption = 50;
 
 type MultiFilterId =
+  | "site"
+  | "orgLevel1"
+  | "orgLevel2"
   | "entityName"
   | "designation"
   | "roleCategory"
@@ -38,6 +46,9 @@ type FilterState = {
 };
 
 const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
+  { id: "site", label: "Site" },
+  { id: "orgLevel1", label: "Org Level 1" },
+  { id: "orgLevel2", label: "Org Level 2" },
   { id: "assignmentStatus", label: "Assignment Status" },
   { id: "entityName", label: "Entity" },
   { id: "designation", label: "Designation" },
@@ -49,6 +60,9 @@ const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
 const EMPTY_FILTERS: FilterState = {
   text: {},
   multi: {
+    site: null,
+    orgLevel1: null,
+    orgLevel2: null,
     assignmentStatus: null,
     entityName: null,
     designation: null,
@@ -57,6 +71,8 @@ const EMPTY_FILTERS: FilterState = {
     manager2Name: null,
   },
 };
+
+type OrgFilterValues = UserOrgFilterValues;
 
 type UserColumnId = TextFilterId | MultiFilterId;
 
@@ -103,12 +119,19 @@ function getFilterValue(
   field: UserColumnId,
   assignedLabelByEmployeeId: Map<string, string>,
   targetLabel: string,
+  orgLookup: Map<string, OrgFilterValues>,
 ): string {
   if (field === "assignmentStatus") {
     return getAssignmentStatus(user, assignedLabelByEmployeeId, targetLabel);
   }
   if (field === "employeeId") return user.employeeId;
   if (field === "name") return `${user.firstName} ${user.lastName}`.trim();
+  if (field === "site" || field === "orgLevel1" || field === "orgLevel2") {
+    return (
+      orgLookup.get(user.employeeId)?.[field] ??
+      (field === "site" ? user.campusName ?? "—" : "—")
+    );
+  }
   return String(user[field] ?? "—");
 }
 
@@ -125,12 +148,13 @@ function userMatchesFiltersExcluding(
   assignedLabelByEmployeeId: Map<string, string>,
   targetLabel: string,
   excludeField: UserColumnId | null,
+  orgLookup: Map<string, OrgFilterValues>,
 ): boolean {
   for (const id of ["employeeId", "name"] as const) {
     if (excludeField === id) continue;
     const query = filters.text[id];
     if (!query?.trim()) continue;
-    if (!matchesTextQuery(getFilterValue(user, id, assignedLabelByEmployeeId, targetLabel), query)) {
+    if (!matchesTextQuery(getFilterValue(user, id, assignedLabelByEmployeeId, targetLabel, orgLookup), query)) {
       return false;
     }
   }
@@ -140,7 +164,7 @@ function userMatchesFiltersExcluding(
     const sel = filters.multi[filter.id];
     if (sel === null || sel === undefined) continue;
     if (sel.length === 0) return false;
-    const val = getFilterValue(user, filter.id, assignedLabelByEmployeeId, targetLabel);
+    const val = getFilterValue(user, filter.id, assignedLabelByEmployeeId, targetLabel, orgLookup);
     if (!sel.includes(val)) return false;
   }
 
@@ -152,6 +176,7 @@ function userMatchesFilters(
   filters: FilterState,
   assignedLabelByEmployeeId: Map<string, string>,
   targetLabel: string,
+  orgLookup: Map<string, OrgFilterValues>,
 ): boolean {
   return userMatchesFiltersExcluding(
     user,
@@ -159,6 +184,7 @@ function userMatchesFilters(
     assignedLabelByEmployeeId,
     targetLabel,
     null,
+    orgLookup,
   );
 }
 
@@ -169,6 +195,7 @@ function buildOptions(
   selected: FilterSelection,
   assignedLabelByEmployeeId: Map<string, string>,
   targetLabel: string,
+  orgLookup: Map<string, OrgFilterValues>,
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 
@@ -180,12 +207,13 @@ function buildOptions(
         assignedLabelByEmployeeId,
         targetLabel,
         field,
+        orgLookup,
       )
     ) {
       continue;
     }
 
-    const value = getFilterValue(user, field, assignedLabelByEmployeeId, targetLabel);
+    const value = getFilterValue(user, field, assignedLabelByEmployeeId, targetLabel, orgLookup);
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
@@ -245,8 +273,13 @@ export default function MatrixEmployeeAssignment({
     queryFn: fetchUsers,
     ...DASHBOARD_QUERY_CACHE,
   });
+  const { data: entities = [] } = useDashboardEntitiesQuery();
 
   const allUsers = useMemo(() => users ?? [], [users]);
+  const orgLookup = useMemo(
+    () => buildUserOrgFilterLookup(allUsers, entities),
+    [allUsers, entities],
+  );
   const activeCount = countActiveFilters(filters);
 
   const assignedLabelByEmployeeId = useMemo(() => {
@@ -279,23 +312,24 @@ export default function MatrixEmployeeAssignment({
           filters.multi[filter.id],
           assignedLabelByEmployeeId,
           targetLabel,
+          orgLookup,
         ),
       );
     }
     return map;
-  }, [allUsers, filters, assignedLabelByEmployeeId, targetLabel]);
+  }, [allUsers, filters, assignedLabelByEmployeeId, targetLabel, orgLookup]);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allUsers.filter((user) => {
-      if (!userMatchesFilters(user, filters, assignedLabelByEmployeeId, targetLabel)) {
+      if (!userMatchesFilters(user, filters, assignedLabelByEmployeeId, targetLabel, orgLookup)) {
         return false;
       }
       if (!query) return true;
       const name = `${user.firstName} ${user.lastName}`.toLowerCase();
       return user.employeeId.toLowerCase().includes(query) || name.includes(query);
     });
-  }, [search, allUsers, filters, assignedLabelByEmployeeId, targetLabel]);
+  }, [search, allUsers, filters, assignedLabelByEmployeeId, targetLabel, orgLookup]);
 
   const totalCount = filteredUsers.length;
   const displayPageSize = pageSize === "all" ? Math.max(totalCount, 1) : pageSize;
