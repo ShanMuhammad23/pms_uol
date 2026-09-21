@@ -129,10 +129,15 @@ export function useDashboardPage() {
 
   const [matrixScoreType, setMatrixScoreType] = useState<MatrixScoreType>("normalized");
 
+  // Managers don't get the score-type dropdown — their Performance Rating
+  // Curve always shows the actual distribution of Score(O) (the rating from
+  // the M1/M2 assessment), not the normalized post-HR-calibration score.
+  const effectiveScoreType: MatrixScoreType = isHead ? "scoreO" : matrixScoreType;
+
   const {
     data: overview,
     isLoading: overviewLoading,
-  } = useDashboardOverviewQuery(filterParams, matrixScoreType);
+  } = useDashboardOverviewQuery(filterParams, effectiveScoreType);
 
   const category0Options = useMemo(
     () => mergeEntityOptions(baseCategory0Options, overview?.filters.category0),

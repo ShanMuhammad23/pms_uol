@@ -680,11 +680,11 @@ export function getHeadDashboardColumnSections(): DashboardColumnSection[] {
 }
 
 /**
- * Fixed column layout for Manager 1 / Manager 2 roles in the Staff Listing.
+ * Default column layout for Manager 1 / Manager 2 roles in the Staff Listing.
  *
- * Managers do NOT get column management — they always see this predefined
- * layout with the first four columns frozen (sticky) during horizontal
- * scrolling. Saved column preferences are ignored for these roles.
+ * Managers get column management like other roles — this layout is their
+ * DEFAULT (order + four frozen columns), applied until they save their own
+ * preferences.
  *
  * Frozen columns (sticky, in order):
  *   1. SAP ID        (sapCode)
@@ -845,14 +845,12 @@ export function resolveOrderedColumns(
 /**
  * Role-based column configuration layer for the Staff Listing table.
  *
- * - HR / Board / Super Admin: return the full customizable column set.
- *   Saved column preferences are honored.
- * - Manager 1 / Manager 2 (MANAGER role): return the fixed predefined
- *   layout. Column management is disabled and saved preferences are
- *   ignored — the manager always sees the same columns in the same order
- *   with the first four columns frozen.
+ * - HR / Board / Super Admin: the full customizable column set.
+ * - Manager 1 / Manager 2 (MANAGER role): the MANAGER_FIXED layout — used
+ *   as their default column order (with frozen columns applied via
+ *   defaultFrozenColumnIds). Saved preferences override it once set.
  *
- * Returns the column definitions to render, in display order.
+ * Returns the column definitions in display order.
  */
 export function getStaffListingColumns(
   role: string | null | undefined,
@@ -868,10 +866,12 @@ export function getStaffListingColumns(
  * Whether the given role is allowed to use column management (show/hide,
  * reorder, resize, freeze/unfreeze, save preferences) on the Staff Listing.
  *
- * Managers are excluded — they always see the fixed layout.
+ * All roles with access to the listing get column management. Managers keep
+ * the MANAGER_FIXED layout as their default (see defaultFrozenColumnIds in
+ * useColumnConfig) but may customize and save preferences like HR/Board.
  */
 export function canManageStaffListingColumns(
   role: string | null | undefined,
 ): boolean {
-  return role !== "MANAGER";
+  return true;
 }

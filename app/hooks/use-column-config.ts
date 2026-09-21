@@ -33,19 +33,24 @@ export interface UseColumnConfigOptions {
   /**
    * When provided, the hook ignores saved server preferences and always
    * returns this fixed configuration. Used for roles that do not get column
-   * management (e.g. Manager 1 / Manager 2 in the Staff Listing).
+   * management at all.
    *
-   * The fixed config is derived from a role-based column layout — see
-   * `getStaffListingColumns` / `MANAGER_FIXED_COLUMNS` in
-   * dashboard-table-columns.ts. No reads or writes to the column-preferences
-   * API occur while this is set.
+   * No reads or writes to the column-preferences API occur while this is set.
    */
   fixedConfig?: ColumnConfig;
+  /**
+   * Column IDs frozen (sticky) by default for first-time users with no saved
+   * preferences. Once the user saves any config, their saved frozen set wins.
+   * Lets a role keep its predefined sticky columns as the starting layout
+   * while still allowing customization.
+   */
+  defaultFrozenColumnIds?: readonly string[];
 }
 
 function buildDefaultConfig(
   allColumns: readonly ColumnDef[],
   allowedColumnIds?: readonly string[],
+  defaultFrozenColumnIds?: readonly string[],
 ): ColumnConfig {
   const allowed = allowedColumnIds
     ? new Set(allowedColumnIds)
@@ -56,7 +61,9 @@ function buildDefaultConfig(
   return {
     order: columns.map((col) => col.id),
     visible: columns.map((col) => col.id),
-    frozen: [],
+    frozen: (defaultFrozenColumnIds ?? []).filter(
+      (id) => !allowed || allowed.has(id),
+    ),
     widths: {},
   };
 }
@@ -65,8 +72,13 @@ function mergeWithDefaults(
   saved: ColumnConfig,
   allColumns: readonly ColumnDef[],
   allowedColumnIds?: readonly string[],
+  defaultFrozenColumnIds?: readonly string[],
 ): ColumnConfig {
-  const defaults = buildDefaultConfig(allColumns, allowedColumnIds);
+  const defaults = buildDefaultConfig(
+    allColumns,
+    allowedColumnIds,
+    defaultFrozenColumnIds,
+  );
 
   // First-time user: no saved preferences (API returns empty arrays).
   // Use defaults so all RBAC-permitted columns are visible.
@@ -156,7 +168,13 @@ export function useColumnConfig(
   tableKey: string,
   options: UseColumnConfigOptions,
 ) {
-  const { allColumns, allowedColumnIds, hasSelectColumn = true, fixedConfig } = options;
+  const {
+    allColumns,
+    allowedColumnIds,
+    hasSelectColumn = true,
+    fixedConfig,
+    defaultFrozenColumnIds,
+  } = options;
   const queryClient = useQueryClient();
   const queryKey = useMemo(
     () => ["column-config", tableKey] as const,
@@ -175,8 +193,8 @@ export function useColumnConfig(
   });
 
   const defaults = useMemo(
-    () => buildDefaultConfig(allColumns, allowedColumnIds),
-    [allColumns, allowedColumnIds],
+    () => buildDefaultConfig(allColumns, allowedColumnIds, defaultFrozenColumnIds),
+    [allColumns, allowedColumnIds, defaultFrozenColumnIds],
   );
 
   const [config, setConfig] = useState<ColumnConfig>(
@@ -202,7 +220,12 @@ export function useColumnConfig(
     }
   } else if (!initialized && savedConfig) {
     setInitialized(true);
-    const merged = mergeWithDefaults(savedConfig, allColumns, allowedColumnIds);
+    const merged = mergeWithDefaults(
+      savedConfig,
+      allColumns,
+      allowedColumnIds,
+      defaultFrozenColumnIds,
+    );
     setConfig(merged);
     setHydrated(true);
   }
@@ -216,26 +239,36 @@ export function useColumnConfig(
     if (!isFirstTime) {
       return;
     }
-    const merged = mergeWithDefaults(savedConfig, allColumns, allowedColumnIds);
+    const merged = mergeWithDefaults(
+      savedConfig,
+      allColumns,
+      allowedColumnIds,
+      defaultFrozenColumnIds,
+    );
     // Best-effort persist — restricted roles (e.g. view-as sessions) get a
     // 403 from the server; a failed prefs save must not surface as an
     // unhandled rejection.
     void saveColumnConfig(tableKey, merged).catch(() => {});
     void queryClient.setQueryData(queryKey, merged);
-  }, [savedConfig, allColumns, allowedColumnIds, tableKey, queryKey, queryClient, isFixed]);
+  }, [savedConfig, allColumns, allowedColumnIds, defaultFrozenColumnIds, tableKey, queryKey, queryClient, isFixed]);
 
   const columnsKey = `${allColumns.map((column) => column.id).join(",")}:${allowedColumnIds?.join(",") ?? ""}`;
   const [prevColumnsKey, setPrevColumnsKey] = useState(columnsKey);
   if (!isFixed && initialized && columnsKey !== prevColumnsKey) {
     setPrevColumnsKey(columnsKey);
     setConfig((current) =>
-      mergeWithDefaults(current, allColumns, allowedColumnIds),
+      mergeWithDefaults(
+        current,
+        allColumns,
+        allowedColumnIds,
+        defaultFrozenColumnIds,
+      ),
     );
   }
 
   const persist = useCallback(
     (next: ColumnConfig) => {
-      // Never persist when using a fixed config (managers have no prefs).
+      // Never persist while a fixed config is in force.
       if (isFixed) return;
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
