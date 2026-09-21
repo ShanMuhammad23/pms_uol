@@ -106,44 +106,59 @@ export function CalibrationDistributionMatrix({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-sm dark:divide-neutral-700">
-              {rows.map((row) => (
-                <tr
-                  key={row.levelId}
-                  className="divide-x divide-slate-200 dark:divide-neutral-700"
-                >
-                  <td
-                    className={cn(
-                      "px-2 py-2 font-bold text-white dark:text-slate-200 sm:px-3 sm:py-2.5 sm:text-base lg:text-lg",
-                      getPerformanceLevelColor(row.rating),
-                    )}
+              {rows.map((row) => {
+                // Placeholder cells (id === null) only exist to pad the row to
+                // the widest level's quartile count. Render only the level's
+                // real quartiles and stretch them (via colSpan) across all
+                // quartile columns so they always fill the available space.
+                const realCells = row.quartiles.filter(
+                  (cell) => cell.id !== null,
+                );
+                const baseSpan =
+                  realCells.length > 0
+                    ? Math.floor(columns.length / realCells.length)
+                    : 0;
+                const extraColumns =
+                  realCells.length > 0
+                    ? columns.length % realCells.length
+                    : 0;
+
+                return (
+                  <tr
+                    key={row.levelId}
+                    className="divide-x divide-slate-200 dark:divide-neutral-700"
                   >
-                    <span className="block break-words leading-tight">
-                      {row.rating}
-                    </span>
-                  </td>
-                  {row.quartiles.map((cell) => (
                     <td
-                      key={`${row.levelId}-${cell.id ?? cell.sortOrder}`}
                       className={cn(
-                        "px-1 py-2 text-center sm:px-2 sm:py-2.5",
+                        "px-2 py-2 font-bold text-white dark:text-slate-200 sm:px-3 sm:py-2.5 sm:text-base lg:text-lg",
                         getPerformanceLevelColor(row.rating),
                       )}
                     >
-                      {cell.count === null ? (
-                        <span className="text-slate-300 dark:text-slate-600">
-                          
-                        </span>
-                      ) : (
+                      <span className="block break-words leading-tight">
+                        {row.rating}
+                      </span>
+                    </td>
+                    {realCells.map((cell, cellIndex) => (
+                      <td
+                        key={`${row.levelId}-${cell.id ?? cell.sortOrder}`}
+                        colSpan={
+                          baseSpan + (cellIndex < extraColumns ? 1 : 0)
+                        }
+                        className={cn(
+                          "px-1 py-2 text-center sm:px-2 sm:py-2.5",
+                          getPerformanceLevelColor(row.rating),
+                        )}
+                      >
                         <div className="min-w-0 space-y-0.5">
                           <span
                             className={cn(
                               "inline-flex max-w-full items-center justify-center rounded-md text-base font-bold tabular-nums sm:text-lg dark:text-slate-200",
-                              cell.count > 0
+                              cell.count !== null && cell.count > 0
                                 ? "text-white  text-bold dark:bg-amber-950/40 dark:text-amber-300"
                                 : "text-slate-400 dark:text-slate-600",
                             )}
                           >
-                            {cell.count === 0 ? "" : cell.count}
+                            {!cell.count ? "" : cell.count}
                           </span>
                           {cell.sublabel ? (
                             <p className="break-words text-[10px] leading-tight text-white dark:text-slate-500">
@@ -151,14 +166,24 @@ export function CalibrationDistributionMatrix({
                             </p>
                           ) : null}
                         </div>
-                      )}
+                      </td>
+                    ))}
+                    {realCells.length === 0 ? (
+                      <td
+                        colSpan={columns.length}
+                        className="bg-slate-100 px-1 py-2 text-center sm:px-2 sm:py-2.5 dark:bg-white/4"
+                      >
+                        <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                          No quartiles
+                        </span>
+                      </td>
+                    ) : null}
+                    <td className="bg-primary px-1 py-2 text-center text-sm font-bold tabular-nums text-white sm:px-2 sm:py-2.5 sm:text-base">
+                      {row.rowTotal === 0 ? "" : row.rowTotal}
                     </td>
-                  ))}
-                  <td className="bg-primary px-1 py-2 text-center text-sm font-bold tabular-nums text-white sm:px-2 sm:py-2.5 sm:text-base">
-                    {row.rowTotal === 0 ? "" : row.rowTotal}
-                  </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
