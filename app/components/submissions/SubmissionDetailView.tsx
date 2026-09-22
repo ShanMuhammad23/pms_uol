@@ -1426,7 +1426,16 @@ export default function SubmissionDetailView({
         : manager1Total + openMgr1Total > 0
           ? manager1Total + openMgr1Total
           : selfTotal + openSelfTotal;
-  const totalMaxScore = data.maxRawScore + openAssessmentMaxMarks;
+  // data.maxRawScore already includes each open section's static budget
+  // (open_assessment_total_marks). Subtract it before adding the resolved
+  // openAssessmentMaxMarks (which may exceed the budget when managers author
+  // extra marks) so the static marks are not counted twice.
+  const staticOpenBudget = openSections.reduce(
+    (sum, s) => sum + (s.openAssessmentTotalMarks ?? 0),
+    0,
+  );
+  const totalMaxScore =
+    data.maxRawScore - staticOpenBudget + openAssessmentMaxMarks;
   const displayedFormPercent =
     totalMaxScore > 0
       ? Math.round((displayedFormScore / totalMaxScore) * 1000) / 10
@@ -2959,7 +2968,7 @@ export default function SubmissionDetailView({
                   Total
                 </td>
                 <td className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-100">
-                  {data.maxRawScore + openAssessmentMaxMarks}
+                  {totalMaxScore}
                 </td>
                 {selfAssessmentEnabled ? (
                   <>
@@ -3004,7 +3013,7 @@ export default function SubmissionDetailView({
                 {
                   label: "Self Assessment",
                   awardedMarks: selfTotal + openSelfTotal,
-                  totalMarks: data.maxRawScore + openAssessmentMaxMarks,
+                  totalMarks: totalMaxScore,
                   accentClass:
                     "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
                   completed: selfAssessmentComplete,
@@ -3016,7 +3025,7 @@ export default function SubmissionDetailView({
               awardedMarks: editingManager1
                 ? managerDraftTotal + openMgrDraftTotal
                 : manager1Total + openMgr1Total,
-              totalMarks: data.maxRawScore + openAssessmentMaxMarks,
+              totalMarks: totalMaxScore,
               accentClass:
                 "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
               personLabel: formatNameWithSap(
@@ -3032,7 +3041,7 @@ export default function SubmissionDetailView({
                   awardedMarks: editingManager2
                     ? managerDraftTotal + openMgrDraftTotal
                     : (manager2Total ?? 0) + openMgr2Total,
-                  totalMarks: data.maxRawScore + openAssessmentMaxMarks,
+                  totalMarks: totalMaxScore,
                   accentClass:
                     "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
                   personLabel: formatNameWithSap(
