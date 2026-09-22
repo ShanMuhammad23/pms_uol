@@ -308,6 +308,8 @@ export interface FormTemplateInput {
   code: string;
   description: string;
   cycleId?: number;
+  /** Site (campus) the form belongs to — display-only label. */
+  campusId?: number | null;
   targetCategory?: EmployeeCategory;
   targetSubCategory?: SubCategory;
   selfAssessmentEnabled: boolean;
@@ -365,6 +367,9 @@ export interface FormTemplateListItem {
   updatedByName: string | null;
   /** SAP / employee code of the last updater. */
   updatedByEmployeeId: string | null;
+  /** Site (campus) the form belongs to — display-only label. */
+  campusId: number | null;
+  campusName: string | null;
 }
 
 export interface FormTemplateRecord {
@@ -374,6 +379,8 @@ export interface FormTemplateRecord {
   description: string | null;
   cycleId: number;
   fiscalYear: number;
+  /** Site (campus) the form belongs to — display-only label. */
+  campusId: number | null;
   targetCategory: EmployeeCategory | null;
   targetSubCategory: SubCategory | null;
   selfAssessmentEnabled: boolean;

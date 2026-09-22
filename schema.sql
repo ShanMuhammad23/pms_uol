@@ -112,6 +112,9 @@ CREATE TABLE form_templates (
     -- (selected rating / scale max) × question weight (total_marks).
     rating_based BOOLEAN NOT NULL DEFAULT FALSE,
 
+    -- Site this form belongs to (display label only — no workflow impact)
+    campus_id INT REFERENCES campuses(id) ON DELETE SET NULL,
+
     created_by BIGINT REFERENCES users(id),
     updated_by BIGINT REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

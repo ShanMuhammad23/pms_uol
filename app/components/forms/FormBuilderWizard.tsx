@@ -56,6 +56,7 @@ import {
   questionNeedsOptions,
 } from "@/types/forms";
 import { cn } from "@/lib/utils";
+import { useCampusesQuery } from "@/app/queries/users";
 import { deriveRatingScaleMaxValue } from "@/app/helpers/form-rating-scoring";
 import { isHtmlTitleEmpty, sanitizeFormTemplateHtmlTitles } from "@/lib/html-title";
 import {
@@ -75,6 +76,7 @@ import {
   Layers,
   HelpCircle,
   PanelRight,
+  MapPin,
   X
 } from "lucide-react";
 
@@ -217,6 +219,7 @@ function draftToTemplateRecord(
     selfAssessmentEnabled,
     additionalRemarksEnabled,
     ratingBased,
+    campusId: null,
     ratingScales: mappedScales,
     sections: recordSections,
     questions: recordQuestions,
@@ -326,6 +329,7 @@ function mapRecordToState(record: FormTemplateRecord) {
     code: record.code ?? "",
     description: record.description ?? "",
     cycleId: record.cycleId,
+    campusId: record.campusId ?? null,
     selfAssessmentEnabled: record.selfAssessmentEnabled,
     additionalRemarksEnabled: record.additionalRemarksEnabled,
     ratingBased: record.ratingBased,
@@ -439,6 +443,7 @@ interface ModernFormDesignStepProps {
   title: string;
   code: string;
   description: string;
+  campusId: number | null;
   selfAssessmentEnabled: boolean;
   additionalRemarksEnabled: boolean;
   ratingBased: boolean;
@@ -448,6 +453,7 @@ interface ModernFormDesignStepProps {
   questions: QuestionInput[];
   errors: Record<string, string>;
   onDescriptionChange: (description: string) => void;
+  onCampusChange: (campusId: number | null) => void;
   onAdditionalRemarksEnabledChange: (enabled: boolean) => void;
   onScoringModeChange: (mode: "absolute" | "rating") => void;
   onRatingScalesChange: (scales: FormRatingScaleInput[]) => void;
@@ -459,6 +465,7 @@ function ModernFormDesignStep({
   title,
   code,
   description,
+  campusId,
   selfAssessmentEnabled,
   additionalRemarksEnabled,
   ratingBased,
@@ -468,6 +475,7 @@ function ModernFormDesignStep({
   questions,
   errors,
   onDescriptionChange,
+  onCampusChange,
   onAdditionalRemarksEnabledChange,
   onScoringModeChange,
   onRatingScalesChange,
@@ -479,6 +487,7 @@ function ModernFormDesignStep({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(scoringMode == null);
+  const { data: campuses = [] } = useCampusesQuery();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1065,6 +1074,30 @@ function ModernFormDesignStep({
                 rows={3}
                 className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-950"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <MapPin className="h-3 w-3" />
+                Site
+              </label>
+              <select
+                value={campusId ?? ""}
+                onChange={(e) =>
+                  onCampusChange(e.target.value ? Number(e.target.value) : null)
+                }
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              >
+                <option value="">All sites</option>
+                {campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>
+                    {campus.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+                Label only — does not affect assignments or submissions.
+              </p>
             </div>
 
             <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-snug text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-indigo-500/40">
@@ -2538,6 +2571,9 @@ export default function FormBuilderWizard({
       ? pickDefaultAppraisalCycleId(appraisalCycles)
       : initialState?.cycleId ?? pickDefaultAppraisalCycleId(appraisalCycles),
   );
+  const [campusId, setCampusId] = useState<number | null>(
+    initialState?.campusId ?? null,
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [duplicateFormId, setDuplicateFormId] = useState<number | null>(null);
@@ -2561,6 +2597,7 @@ export default function FormBuilderWizard({
         : [],
       sections: normalized.sections,
       questions: normalized.questions,
+      campusId,
       ...(cycleId ? { cycleId } : {}),
     });
   }, [
@@ -2574,6 +2611,7 @@ export default function FormBuilderWizard({
     sections,
     questions,
     cycleId,
+    campusId,
   ]);
 
   const saveMutation = useMutation({
@@ -2858,6 +2896,7 @@ export default function FormBuilderWizard({
             title={title}
             code={code}
             description={description}
+            campusId={campusId}
             selfAssessmentEnabled={selfAssessmentEnabled}
             additionalRemarksEnabled={additionalRemarksEnabled}
             ratingBased={ratingBased}
@@ -2867,6 +2906,7 @@ export default function FormBuilderWizard({
             questions={questions}
             errors={errors}
             onDescriptionChange={setDescription}
+            onCampusChange={setCampusId}
             onAdditionalRemarksEnabledChange={setAdditionalRemarksEnabled}
             onScoringModeChange={(mode) => {
               setScoringMode(mode);

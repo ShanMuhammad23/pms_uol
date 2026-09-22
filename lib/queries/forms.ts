@@ -44,6 +44,8 @@ interface FormTemplateListRow {
   updated_by_first_name: string | null;
   updated_by_last_name: string | null;
   updated_by_employee_id: string | null;
+  campus_id: number | null;
+  campus_name: string | null;
 }
 
 interface FormTemplateRow {
@@ -53,6 +55,7 @@ interface FormTemplateRow {
   description: string | null;
   cycle_id: number;
   fiscal_year: number;
+  campus_id: number | null;
   target_category: EmployeeCategory | null;
   target_sub_category: SubCategory | null;
   self_assessment_enabled: boolean;
@@ -436,6 +439,8 @@ function mapFormTemplateListItem(row: FormTemplateListRow): FormTemplateListItem
     updatedById: row.updated_by != null ? Number(row.updated_by) : null,
     updatedByName,
     updatedByEmployeeId: row.updated_by_employee_id,
+    campusId: row.campus_id != null ? Number(row.campus_id) : null,
+    campusName: row.campus_name ?? null,
   };
 }
 
@@ -1266,10 +1271,13 @@ export async function listFormTemplates(): Promise<FormTemplateListItem[]> {
        ft.updated_by::text,
        ub.first_name AS updated_by_first_name,
        ub.last_name AS updated_by_last_name,
-       ub.employee_id AS updated_by_employee_id
+       ub.employee_id AS updated_by_employee_id,
+       ft.campus_id,
+       camp.name AS campus_name
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN users ub ON ub.id = ft.updated_by
+     LEFT JOIN campuses camp ON camp.id = ft.campus_id
      LEFT JOIN (
        SELECT template_id, COUNT(*)::text AS question_count
        FROM form_questions
@@ -1341,7 +1349,9 @@ export async function listDirectAssessmentTemplates(scope: {
          ft.updated_by::text,
          ub.first_name AS updated_by_first_name,
          ub.last_name AS updated_by_last_name,
-         ub.employee_id AS updated_by_employee_id
+         ub.employee_id AS updated_by_employee_id,
+         NULL::int AS campus_id,
+         NULL::text AS campus_name
        FROM form_templates ft
        INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
        LEFT JOIN users ub ON ub.id = ft.updated_by
@@ -1409,7 +1419,9 @@ export async function listDirectAssessmentTemplates(scope: {
        ft.updated_by::text,
        ub.first_name AS updated_by_first_name,
        ub.last_name AS updated_by_last_name,
-       ub.employee_id AS updated_by_employee_id
+       ub.employee_id AS updated_by_employee_id,
+       NULL::int AS campus_id,
+       NULL::text AS campus_name
      FROM form_templates ft
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN users ub ON ub.id = ft.updated_by
@@ -1464,6 +1476,7 @@ export async function getFormTemplateById(
        ft.self_assessment_enabled,
        ft.additional_remarks_enabled,
        ft.rating_based,
+       ft.campus_id,
        ft.created_at::text,
        ft.updated_at::text
      FROM form_templates ft
@@ -1492,6 +1505,7 @@ export async function getFormTemplateById(
     selfAssessmentEnabled: row.self_assessment_enabled,
     additionalRemarksEnabled: row.additional_remarks_enabled,
     ratingBased: row.rating_based,
+    campusId: row.campus_id != null ? Number(row.campus_id) : null,
     ratingScales: await getRatingScalesForTemplate(Number(row.id)),
     sections: structure.sections,
     questions: structure.questions,
@@ -1528,9 +1542,10 @@ export async function createFormTemplate(
          self_assessment_enabled,
          additional_remarks_enabled,
          rating_based,
+         campus_id,
          created_by,
          updated_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
        RETURNING id`,
       [
         input.title,
@@ -1542,6 +1557,7 @@ export async function createFormTemplate(
         input.selfAssessmentEnabled,
         input.additionalRemarksEnabled ?? false,
         input.ratingBased ?? false,
+        input.campusId ?? null,
         createdById ?? null,
       ],
     );
@@ -1616,9 +1632,10 @@ export async function updateFormTemplate(
            self_assessment_enabled = $7,
            additional_remarks_enabled = $8,
            rating_based = $9,
-           updated_by = COALESCE($10, updated_by),
+           campus_id = $10,
+           updated_by = COALESCE($11, updated_by),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $11`,
+       WHERE id = $12`,
       [
         input.title,
         input.code.trim(),
@@ -1629,6 +1646,7 @@ export async function updateFormTemplate(
         input.selfAssessmentEnabled,
         input.additionalRemarksEnabled ?? false,
         input.ratingBased ?? false,
+        input.campusId ?? null,
         updatedById ?? null,
         id,
       ],
