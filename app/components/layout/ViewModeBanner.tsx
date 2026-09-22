@@ -31,6 +31,9 @@ export function ViewModeBanner() {
     try {
       await update({ viewAsUserId: null });
       queryClient.clear();
+      // Purge the client Router Cache — /dashboard's cached RSC payload was
+      // rendered under the impersonated identity and must be re-fetched.
+      router.refresh();
       router.push("/dashboard");
     } catch {
       setExiting(false);

@@ -316,6 +316,8 @@ export function getScoreOPercent(
 /**
  * Compute the adjusted score as a percentage of maxRawScore, capped at 100.
  * Adjusted = Score(O) + CH Adj + ORIC Adj + QEC Adj.
+ * Capped at 100 — adjustments may push the raw adjusted score above
+ * maxRawScore, but the percentage-of-max representation is bounded.
  * Returns null when Score(O) or maxRawScore is not valid.
  */
 export function getAdjustedScorePercent(
@@ -335,8 +337,8 @@ export function getAdjustedScorePercent(
 ): number | null {
   const adjusted = getAdjustedScore(row);
   if (adjusted === null || row.maxRawScore <= 0) return null;
-  const pct = Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
-  return Math.min(pct, 100);
+  const percent = (adjusted / row.maxRawScore) * 100;
+  return Number(Math.min(percent, 100).toFixed(2));
 }
 
 type AdjustedRatingRow = Pick<
