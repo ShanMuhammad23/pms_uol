@@ -191,12 +191,12 @@ async function loadSampleRecipients(pool) {
          ON ap.employee_id = u.id AND ap.template_id = efa.template_id
        WHERE ft.cycle_id = $1
          AND efa.self_assessment_disabled = FALSE
+         AND u.system_role = 'EMPLOYEE'
          AND u.is_active = TRUE
          AND COALESCE(u.assessment_eligibility, TRUE) = TRUE
-         AND (
-           ap.id IS NULL
-           OR (ap.status = 'PENDING_SELF_ASSESSMENT' AND ap.submitted_at IS NULL)
-         )
+         AND COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT')
+               = 'PENDING_SELF_ASSESSMENT'
+         AND ap.submitted_at IS NULL
        ORDER BY efa.id
        LIMIT 1`,
       [cycle.id],

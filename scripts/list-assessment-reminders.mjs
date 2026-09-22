@@ -106,22 +106,19 @@ async function main() {
         AND ap.template_id = efa.template_id
        WHERE ft.cycle_id = $1
          AND efa.self_assessment_disabled = FALSE
+         AND u.system_role = 'EMPLOYEE'
          AND u.is_active = TRUE
          AND COALESCE(u.assessment_eligibility, TRUE) = TRUE
          AND u.employee_id <> 'EMP-0001'
          AND u.email IS NOT NULL
          AND BTRIM(u.email) <> ''
-         AND (
-           ap.id IS NULL
-           OR (
-             ap.status = 'PENDING_SELF_ASSESSMENT'
-             AND ap.submitted_at IS NULL
-           )
-         )
+         AND COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT')
+               = 'PENDING_SELF_ASSESSMENT'
+         AND ap.submitted_at IS NULL
          AND (
            efa.last_self_assessment_reminder_at IS NULL
            OR efa.last_self_assessment_reminder_at
-                <= (CURRENT_TIMESTAMP - INTERVAL '48 hours')
+                <= (CURRENT_TIMESTAMP - INTERVAL '3 days')
          )
        ORDER BY u.email, efa.id`,
       [cycle.id],
@@ -147,7 +144,7 @@ async function main() {
            CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
            u.email AS employee_email,
            efa.last_self_assessment_reminder_at AS last_reminder_at,
-           (efa.last_self_assessment_reminder_at + INTERVAL '48 hours')
+           (efa.last_self_assessment_reminder_at + INTERVAL '3 days')
              AS next_eligible_at
          FROM employee_form_assignments efa
          INNER JOIN form_templates ft ON ft.id = efa.template_id
@@ -157,26 +154,23 @@ async function main() {
           AND ap.template_id = efa.template_id
          WHERE ft.cycle_id = $1
            AND efa.self_assessment_disabled = FALSE
+           AND u.system_role = 'EMPLOYEE'
            AND u.is_active = TRUE
            AND COALESCE(u.assessment_eligibility, TRUE) = TRUE
            AND u.employee_id <> 'EMP-0001'
            AND u.email IS NOT NULL
            AND BTRIM(u.email) <> ''
-           AND (
-             ap.id IS NULL
-             OR (
-               ap.status = 'PENDING_SELF_ASSESSMENT'
-               AND ap.submitted_at IS NULL
-             )
-           )
+           AND COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT')
+                 = 'PENDING_SELF_ASSESSMENT'
+           AND ap.submitted_at IS NULL
            AND efa.last_self_assessment_reminder_at
-                 > (CURRENT_TIMESTAMP - INTERVAL '48 hours')
+                 > (CURRENT_TIMESTAMP - INTERVAL '3 days')
          ORDER BY efa.last_self_assessment_reminder_at DESC`,
         [cycle.id],
       );
 
       printTable(
-        "Employees — pending but on 48h cooldown (skipped)",
+        "Employees — pending but on 3-day cooldown (skipped)",
         employeeBlocked.rows,
         [
           { key: "assignment_id", label: "assignment" },

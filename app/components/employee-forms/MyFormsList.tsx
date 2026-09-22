@@ -403,10 +403,11 @@ export default function MyFormsList({
             <h2 className="text-lg font-bold tracking-tight text-text-primary sm:text-xl">
               Assigned Forms
             </h2>
-            {data && data.length > 0 ? (
+            {data && data.filter((f) => f.formAssigned).length > 0 ? (
               <p className="mt-0.5 text-sm text-foreground/55">
-                {data.length} form{data.length > 1 ? "s" : ""} ready for this
-                cycle
+                {data.filter((f) => f.formAssigned).length} form
+                {data.filter((f) => f.formAssigned).length > 1 ? "s" : ""} ready
+                for this cycle
               </p>
             ) : (
               <p className="mt-0.5 text-sm text-foreground/55">
@@ -485,14 +486,46 @@ export default function MyFormsList({
                     </span>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-foreground/60">
-                    <span className="inline-flex items-center gap-1">
-                      <ClipboardList className="size-3.5" aria-hidden="true" />
-                      {form.questionCount} questions
-                    </span>
-                  </div>
+                  {form.formAssigned && !form.selfAssessmentEnabled ? (
+                    <p className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-700/50 dark:bg-sky-900/30 dark:text-sky-200">
+                      Self-assessment is disabled for this form — your manager
+                      completes the assessment directly. No action is required
+                      from you.
+                    </p>
+                  ) : null}
 
-                  <div className="mt-4">
+                  {form.formAssigned && form.directScoreEntry ? (
+                    <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800 dark:border-violet-700/50 dark:bg-violet-900/30 dark:text-violet-200">
+                      This appraisal is marked for direct score entry — your
+                      score is entered by your administrator and no
+                      self-assessment is required from you.
+                    </p>
+                  ) : null}
+
+                  {!form.formAssigned ? (
+                    <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm dark:border-violet-700/50 dark:bg-violet-900/30">
+                      <p className="font-semibold text-violet-900 dark:text-violet-100">
+                        No self-assessment required
+                      </p>
+                      <p className="mt-1 text-violet-700/90 dark:text-violet-200/80">
+                        Your appraisal for this cycle is completed via direct
+                        score entry by your administrator. There is no form for
+                        you to fill.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-foreground/60">
+                        <span className="inline-flex items-center gap-1">
+                          <ClipboardList
+                            className="size-3.5"
+                            aria-hidden="true"
+                          />
+                          {form.questionCount} questions
+                        </span>
+                      </div>
+
+                      <div className="mt-4">
                     <p className="mb-3 text-xs font-medium text-foreground/50">
                       Workflow Progress
                     </p>
@@ -569,24 +602,28 @@ export default function MyFormsList({
                         );
                       })}
                     </ol>
-                  </div>
+                      </div>
+                    </>
+                  )}
 
                   <div className="mt-4 flex items-center justify-between border-t border-primary/8 pt-4 dark:border-white/[0.06]">
                     <span className="text-xs text-foreground/50">
                       {relativeDate ? `Updated ${relativeDate}` : "Not started"}
                     </span>
-                    <Link
-                      href={`/dashboard/my-forms/${form.templateId}`}
-                      className={cn(
-                        "inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                        canFill
-                          ? "bg-primary text-white hover:bg-primary/90"
-                          : "border border-primary/20 text-primary hover:bg-primary/10 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/10",
-                      )}
-                    >
-                      <Eye className="size-3.5" aria-hidden="true" />
-                      {canFill ? "Fill Form" : "View"}
-                    </Link>
+                    {form.formAssigned ? (
+                      <Link
+                        href={`/dashboard/my-forms/${form.templateId}`}
+                        className={cn(
+                          "inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                          canFill
+                            ? "bg-primary text-white hover:bg-primary/90"
+                            : "border border-primary/20 text-primary hover:bg-primary/10 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/10",
+                        )}
+                      >
+                        <Eye className="size-3.5" aria-hidden="true" />
+                        {canFill ? "Fill Form" : "View"}
+                      </Link>
+                    ) : null}
                   </div>
                 </motion.div>
               );
@@ -594,7 +631,7 @@ export default function MyFormsList({
           </div>
         )}
 
-        {data && data.length === 1 ? (
+        {data && data.filter((f) => f.formAssigned).length === 1 ? (
           <p className="text-center text-xs text-foreground/45">
             More forms will appear here as they are assigned to you.
           </p>

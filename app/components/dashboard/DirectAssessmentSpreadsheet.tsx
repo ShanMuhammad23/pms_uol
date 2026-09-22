@@ -323,7 +323,7 @@ function buildInitialDrafts(
       const mgr1 = mgr1Map.get(question.id);
 
       // For Manager 2, fall back to Manager 1's score/rating only.
-      // Remarks are NOT copied â€” each manager writes their own.
+      // Remarks are NOT copied each manager writes their own.
       const fallback =
         (emp.managerLevel ?? 1) === 2 ? mgr1 : null;
       const source = my ?? fallback;
@@ -483,7 +483,7 @@ export default function DirectAssessmentSpreadsheet({
   >(null);
   const [confirmSaving, setConfirmSaving] = useState(false);
 
-  // Column resize state â€” keyed by column id ("sr", "kpi", "max", or
+  // Column resize state keyed by column id ("sr", "kpi", "max", or
   // `emp-${submissionId}` for employee columns).
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
@@ -821,7 +821,7 @@ export default function DirectAssessmentSpreadsheet({
     }
     if (skipped > 0) {
       toast(
-        `${skipped} employee(s) skipped â€” section budget fully allocated.`,
+        `${skipped} employee(s) skipped section budget fully allocated.`,
       );
     }
   };
@@ -992,7 +992,7 @@ export default function DirectAssessmentSpreadsheet({
           Back to templates
         </button>
         <h2 className="text-lg font-semibold text-text-primary">
-          Direct Assessment â€” {data.templateTitle}
+          Direct Assessment {data.templateTitle}
         </h2>
         <DirectAssessmentFilterBar
           filterState={filters.filterState}
@@ -1066,7 +1066,7 @@ export default function DirectAssessmentSpreadsheet({
         </button>
         <div className="text-right">
           <h2 className="text-lg font-semibold text-text-primary">
-            Direct Assessment â€” {data.templateTitle}
+            Direct Assessment {data.templateTitle}
           </h2>
           {scope === "managed" ? (
             <p className="text-xs text-foreground/60">
@@ -1111,7 +1111,7 @@ export default function DirectAssessmentSpreadsheet({
 
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/50 px-4 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-500">
         Showing {filteredEmployees.length} of {data.employees.length} employees
-        â€” drag column borders to resize
+        drag column borders to resize
       </div>
 
       <div className="overflow-auto max-h-[75vh] rounded-md border border-slate-300 dark:border-slate-700">
@@ -1275,7 +1275,7 @@ export default function DirectAssessmentSpreadsheet({
                               className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                               style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                             >
-                              {budget || "â€”"}
+                              {budget || "”"}
                             </td>
                             {filteredEmployees.map((emp) => {
                               const empColId = `emp-${emp.submissionId}`;
@@ -1286,7 +1286,7 @@ export default function DirectAssessmentSpreadsheet({
                                   className="border-r border-slate-100 px-2 py-2.5 text-center text-[10px] italic text-slate-300 dark:border-slate-700/40 dark:text-slate-600"
                                   style={{ width: empWidth, minWidth: empWidth, maxWidth: empWidth }}
                                 >
-                                  â€”
+                                  ”
                                 </td>
                               );
                             })}
@@ -1312,7 +1312,7 @@ export default function DirectAssessmentSpreadsheet({
                                   style={{ width: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), minWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH), maxWidth: getColumnWidth("kpi", DEFAULT_KPI_WIDTH) }}
                                 >
                                   <p className="break-words whitespace-pre-wrap text-xs leading-snug text-slate-800 dark:text-slate-200">
-                                    {authored.authoredQuestionText || "â€”"}
+                                    {authored.authoredQuestionText || "”"}
                                   </p>
                                   {authored.remarks ? (
                                     <p className="mt-1 text-[10px] italic text-slate-400 dark:text-slate-500">
@@ -1324,7 +1324,7 @@ export default function DirectAssessmentSpreadsheet({
                                   className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                                   style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                                 >
-                                  {authored.authoredTotalMarks ?? "â€”"}
+                                  {authored.authoredTotalMarks ?? "”"}
                                 </td>
                                 {filteredEmployees.map((emp) => {
                                   const isEditable = emp.canEdit;
@@ -1332,7 +1332,7 @@ export default function DirectAssessmentSpreadsheet({
                                   const empColId = `emp-${emp.submissionId}`;
                                   const empWidth = getColumnWidth(empColId, staffColumnWidth);
                                   // Manager 2 drafts (seeded from Manager 1's
-                                  // authored answers) â€” used for editable score.
+                                  // authored answers) used for editable score.
                                   const empDrafts =
                                     authoredDrafts[emp.submissionId]?.[sectionId] ?? [];
                                   const draft = empDrafts[qIdx];
@@ -1408,7 +1408,7 @@ export default function DirectAssessmentSpreadsheet({
                                           {formatScoreValue(matchAnswer.pointsEarned ?? 0)}
                                         </span>
                                       ) : (
-                                        <span className="text-slate-400">â€”</span>
+                                        <span className="text-slate-400">”</span>
                                       )}
                                     </td>
                                   );
@@ -1486,7 +1486,7 @@ export default function DirectAssessmentSpreadsheet({
                                     {totalScore} / {totalMarks}
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] italic text-slate-300 dark:text-slate-600">â€”</span>
+                                  <span className="text-[10px] italic text-slate-300 dark:text-slate-600">”</span>
                                 )}
                               </td>
                             );
@@ -1509,7 +1509,7 @@ export default function DirectAssessmentSpreadsheet({
                           </td>
                         </tr>
                       ) : null}
-                      {/* Controls row â€” "Open Objectives Row" (all) + per-employee "Open Objective" */}
+                      {/* Controls row "Open Objectives Row" (all) + per-employee "Open Objective" */}
                       <tr
                         className={cn(
                           "align-top [&>td]:border-b [&>td]:border-slate-100 dark:[&>td]:border-slate-700/40",
@@ -1541,7 +1541,7 @@ export default function DirectAssessmentSpreadsheet({
                           className="border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                           style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                         >
-                          {budget || "â€”"}
+                          {budget || "”"}
                         </td>
                         {filteredEmployees.map((emp) => {
                           const isEditable = emp.canEdit;
@@ -1567,14 +1567,14 @@ export default function DirectAssessmentSpreadsheet({
                                 </button>
                               ) : (
                                 <span className="text-[10px] italic text-slate-300 dark:text-slate-600">
-                                  â€”
+                                  ”
                                 </span>
                               )}
                             </td>
                           );
                         })}
                       </tr>
-                      {/* Inline question rows â€” full-width with per-employee mini-tables */}
+                      {/* Inline question rows full-width with per-employee mini-tables */}
                       <tr className="bg-amber-50/30 dark:bg-amber-950/5">
                         <td
                           colSpan={3 + filteredEmployees.length}
@@ -1817,7 +1817,7 @@ export default function DirectAssessmentSpreadsheet({
                                       })
                                     )}
                                   </div>
-                                  {/* Footer â€” allocated/remaining */}
+                                  {/* Footer allocated/remaining */}
                                   {isEditable && empDrafts.length > 0 ? (
                                     <div className="border-t border-slate-100 px-2 py-1 text-[10px] dark:border-slate-700/40">
                                       <span className="text-slate-500 dark:text-slate-400">
@@ -1919,7 +1919,7 @@ export default function DirectAssessmentSpreadsheet({
                         className="overflow-hidden whitespace-nowrap border-r border-slate-100 px-3 py-2.5 text-right tabular-nums font-semibold text-slate-700 dark:border-slate-700/40 dark:text-slate-300"
                         style={{ width: getColumnWidth("max", DEFAULT_MAX_WIDTH), minWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH), maxWidth: getColumnWidth("max", DEFAULT_MAX_WIDTH) }}
                       >
-                        {scored ? question!.totalMarks : "â€”"}
+                        {scored ? question!.totalMarks : "”"}
                       </td>
                       {filteredEmployees.map((emp) => {
                         const isEditable = emp.canEdit;
@@ -2020,7 +2020,7 @@ export default function DirectAssessmentSpreadsheet({
                               />
                             )
                           ) : (
-                            <span className="text-slate-400">â€”</span>
+                            <span className="text-slate-400">”</span>
                           )}
                           {isEditable && scored && isRatingQuestion ? (
                             <div className="relative mt-1">
@@ -2266,7 +2266,7 @@ export default function DirectAssessmentSpreadsheet({
                         </div>
                       ) : (
                         <span className="block text-center text-xs text-slate-400 dark:text-slate-500">
-                          â€”
+                          ”
                         </span>
                       )}
                     </td>
@@ -2335,7 +2335,7 @@ export default function DirectAssessmentSpreadsheet({
         }}
       />
 
-      {/* Manager 2 â€” Confirm open assessment modal */}
+      {/* Manager 2 Confirm open assessment modal */}
       {confirmModalSubmissionId != null && data ? (() => {
         const emp = data.employees.find(
           (e) => e.submissionId === confirmModalSubmissionId,

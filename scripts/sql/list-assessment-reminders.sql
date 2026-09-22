@@ -37,22 +37,19 @@ employee_due AS (
     ON ap.employee_id = u.id
    AND ap.template_id = efa.template_id
   WHERE efa.self_assessment_disabled = FALSE
+    AND u.system_role = 'EMPLOYEE'
     AND u.is_active = TRUE
     AND COALESCE(u.assessment_eligibility, TRUE) = TRUE
     AND u.employee_id <> 'EMP-0001'
     AND u.email IS NOT NULL
     AND BTRIM(u.email) <> ''
-    AND (
-      ap.id IS NULL
-      OR (
-        ap.status = 'PENDING_SELF_ASSESSMENT'
-        AND ap.submitted_at IS NULL
-      )
-    )
+    AND COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT')
+          = 'PENDING_SELF_ASSESSMENT'
+    AND ap.submitted_at IS NULL
     AND (
       efa.last_self_assessment_reminder_at IS NULL
       OR efa.last_self_assessment_reminder_at
-           <= (CURRENT_TIMESTAMP - INTERVAL '48 hours')
+           <= (CURRENT_TIMESTAMP - INTERVAL '3 days')
     )
 ),
 
