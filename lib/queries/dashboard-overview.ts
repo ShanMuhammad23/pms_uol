@@ -281,7 +281,7 @@ export async function listDashboardOverview(
        ap.calibrated_score_numeric::text,
        COALESCE(ap.system_raw_score, 0)::text AS system_raw_score,
        ap.initial_score_numeric::text,
-       COALESCE(tm.max_raw::text, '0') AS max_raw_score,
+       (COALESCE(tm.max_raw, 0) + COALESCE(authored_marks.authored_max, 0))::text AS max_raw_score,
        ap.credit_hrs_erp_score_adj::text,
        ap.pub_oric_score_adj::text,
        ap.qec_score_adj::text,
@@ -418,6 +418,20 @@ export async function listDashboardOverview(
      ) assigned_performance_matrix ON TRUE
      LEFT JOIN template_max_marks tm
        ON tm.template_id = COALESCE(ap.template_id, assigned.template_id)
+     -- Open-section questions are authored per appraisal (question_id IS NULL)
+     -- and duplicated per reviewer, so dedupe by section + question text and
+     -- count each authored question's marks once in the achievable total.
+     LEFT JOIN LATERAL (
+       SELECT SUM(aq.marks) AS authored_max
+       FROM (
+         SELECT MAX(aa.authored_total_marks) AS marks
+         FROM appraisal_answers aa
+         WHERE aa.appraisal_id = ap.id
+           AND aa.open_section_id IS NOT NULL
+           AND aa.authored_total_marks > 0
+         GROUP BY aa.open_section_id, aa.authored_question_text
+       ) aq
+     ) authored_marks ON TRUE
      LEFT JOIN entities ent ON ent.id = u.entity_id
      LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
      WHERE u.is_active = TRUE

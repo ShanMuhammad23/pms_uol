@@ -287,7 +287,7 @@ export function resolveSubmissionPerformanceQuartile(
 export type MatrixScoreType = "normalized" | "scoreO" | "adjusted";
 
 /**
- * Compute Score(O) as a percentage of maxRawScore.
+ * Compute Score(O) as a percentage of maxRawScore, capped at 100.
  * Uses the official reporting-manager score (getReportingManagerScore),
  * NOT self-assessment rawScore. Returns null when no approved manager
  * score is available or maxRawScore is not valid.
@@ -309,11 +309,12 @@ export function getScoreOPercent(
     return null;
   }
   if (row.maxRawScore <= 0) return null;
-  return Number(((scoreO / row.maxRawScore) * 100).toFixed(2));
+  const pct = Number(((scoreO / row.maxRawScore) * 100).toFixed(2));
+  return Math.min(pct, 100);
 }
 
 /**
- * Compute the adjusted score as a percentage of maxRawScore.
+ * Compute the adjusted score as a percentage of maxRawScore, capped at 100.
  * Adjusted = Score(O) + CH Adj + ORIC Adj + QEC Adj.
  * Returns null when Score(O) or maxRawScore is not valid.
  */
@@ -334,7 +335,8 @@ export function getAdjustedScorePercent(
 ): number | null {
   const adjusted = getAdjustedScore(row);
   if (adjusted === null || row.maxRawScore <= 0) return null;
-  return Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
+  const pct = Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
+  return Math.min(pct, 100);
 }
 
 type AdjustedRatingRow = Pick<

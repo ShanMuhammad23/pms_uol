@@ -232,7 +232,8 @@ function getAdjustedScore(row: FormSubmissionListItem): number | null {
 function getAdjustedScorePercent(row: FormSubmissionListItem): number | null {
   const adjusted = getAdjustedScore(row);
   if (adjusted === null || row.maxRawScore <= 0) return null;
-  return Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
+  const pct = Number(((adjusted / row.maxRawScore) * 100).toFixed(2));
+  return Math.min(pct, 100);
 }
 
 function getAdjustedRating(row: FormSubmissionListItem): string | null {

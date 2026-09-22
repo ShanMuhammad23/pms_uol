@@ -751,7 +751,7 @@ export async function listFormSubmissions(
          WHERE aa.appraisal_id = ap.id
            AND aa.filled_by_id = u.manager_2_id
        ) AS manager_2_score,
-       COALESCE(tm.max_raw::text, '0') AS max_raw_score,
+       (COALESCE(tm.max_raw, 0) + COALESCE(authored_marks.authored_max, 0))::text AS max_raw_score,
        ap.submitted_at::text,
        COALESCE(efa.self_assessment_disabled, false) AS self_assessment_disabled,
       COALESCE(u.assessment_eligibility, true) AS assessment_eligibility,
@@ -803,6 +803,20 @@ export async function listFormSubmissions(
      LEFT JOIN form_templates ft ON ft.id = COALESCE(ap.template_id, efa.template_id)
      LEFT JOIN template_max_marks tm
        ON tm.template_id = COALESCE(ap.template_id, efa.template_id)
+     -- Open-section questions are authored per appraisal (question_id IS NULL)
+     -- and duplicated per reviewer, so dedupe by section + question text and
+     -- count each authored question's marks once in the achievable total.
+     LEFT JOIN LATERAL (
+       SELECT SUM(aq.marks) AS authored_max
+       FROM (
+         SELECT MAX(aa.authored_total_marks) AS marks
+         FROM appraisal_answers aa
+         WHERE aa.appraisal_id = ap.id
+           AND aa.open_section_id IS NOT NULL
+           AND aa.authored_total_marks > 0
+         GROUP BY aa.open_section_id, aa.authored_question_text
+       ) aq
+     ) authored_marks ON TRUE
      LEFT JOIN entities ent ON ent.id = u.entity_id
      LEFT JOIN campuses campus ON campus.id = ent.campus_id
      LEFT JOIN entity_categories ent_cat ON ent_cat.id = ent.entity_category_id

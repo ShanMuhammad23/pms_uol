@@ -4,10 +4,7 @@ import {
   getScorePercentByType,
   type MatrixScoreType,
 } from "@/lib/performance-rating";
-import {
-  isHrAlignmentAligned,
-  isSubmissionEligible,
-} from "@/app/helpers/dashboard-workflow-stats";
+import { isHrAlignmentAligned } from "@/app/helpers/dashboard-workflow-stats";
 
 /** Employee has started/submitted an appraisal (exclude bare staff rows). */
 export function hasAppraisalProgress(
@@ -32,7 +29,7 @@ function hasValidNormalizedScoreForCharts(
 /**
  * Rows that may populate the Performance Rating Curve (Actual) and the
  * Rating × Quartile Matrix when Score (N) is selected. Requires:
- * - appraisal progress + eligibility
+ * - appraisal progress
  * - HR alignment completed (past PENDING_HR_CALIBRATION)
  * - a valid normalized score (persisted Norm. Score or derived %)
  */
@@ -41,7 +38,6 @@ export function contributesToPerformanceDistribution(
 ): boolean {
   return (
     hasAppraisalProgress(submission) &&
-    isSubmissionEligible(submission) &&
     isHrAlignmentAligned(submission) &&
     hasValidNormalizedScoreForCharts(submission)
   );
@@ -50,14 +46,15 @@ export function contributesToPerformanceDistribution(
 /**
  * Generalized contribution check for the Rating × Quartile Matrix dropdown.
  * For `normalized` (default): requires HR alignment + valid normalized score.
- * For `scoreO` / `adjusted`: only requires appraisal progress + eligibility +
- * a valid score of the selected type (no HR alignment needed).
+ * For `scoreO` / `adjusted`: only requires appraisal progress + a valid score
+ * of the selected type (no HR alignment needed). Eligibility is intentionally
+ * not checked — anyone with a valid score counts.
  */
 export function contributesToMatrixByScoreType(
   submission: FormSubmissionListItem,
   scoreType: MatrixScoreType,
 ): boolean {
-  if (!hasAppraisalProgress(submission) || !isSubmissionEligible(submission)) {
+  if (!hasAppraisalProgress(submission)) {
     return false;
   }
   if (scoreType === "normalized") {
