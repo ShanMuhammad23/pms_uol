@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, FileText } from "lucide-react";
+import { Eye, FileText, Search, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   deleteFormTemplate,
   fetchFormTemplates,
@@ -104,6 +104,55 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
     deleteMutation.mutate(id);
   };
 
+  const [titleFilter, setTitleFilter] = useState("");
+  const [codeFilter, setCodeFilter] = useState("");
+  const [siteFilter, setSiteFilter] = useState("");
+
+  const siteOptions = useMemo(() => {
+    const byId = new Map<number, string>();
+    for (const t of data ?? []) {
+      if (t.campusId != null && t.campusName) {
+        byId.set(t.campusId, t.campusName);
+      }
+    }
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [data]);
+
+  const hasUnassignedSite = useMemo(
+    () => (data ?? []).some((t) => t.campusId == null),
+    [data],
+  );
+
+  const filtered = useMemo(() => {
+    const titleNeedle = titleFilter.trim().toLowerCase();
+    const codeNeedle = codeFilter.trim().toLowerCase();
+    return (data ?? []).filter((t) => {
+      if (titleNeedle && !t.title.toLowerCase().includes(titleNeedle)) {
+        return false;
+      }
+      if (codeNeedle && !(t.code ?? "").toLowerCase().includes(codeNeedle)) {
+        return false;
+      }
+      if (siteFilter === "none") {
+        if (t.campusId != null) return false;
+      } else if (siteFilter && t.campusId !== Number(siteFilter)) {
+        return false;
+      }
+      return true;
+    });
+  }, [data, titleFilter, codeFilter, siteFilter]);
+
+  const hasActiveFilters =
+    titleFilter.trim() !== "" || codeFilter.trim() !== "" || siteFilter !== "";
+
+  const clearFilters = () => {
+    setTitleFilter("");
+    setCodeFilter("");
+    setSiteFilter("");
+  };
+
   if (isLoading && !data) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-400">
@@ -148,6 +197,54 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
         <p className="text-sm text-red-600">{deleteError}</p>
       ) : null}
 
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-52 flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={titleFilter}
+            onChange={(e) => setTitleFilter(e.target.value)}
+            placeholder="Filter by title…"
+            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 dark:border-neutral-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+        </div>
+        <input
+          type="text"
+          value={codeFilter}
+          onChange={(e) => setCodeFilter(e.target.value)}
+          placeholder="Filter by code…"
+          className="h-9 w-36 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 dark:border-neutral-700 dark:bg-slate-900 dark:text-slate-100"
+        />
+        <select
+          value={siteFilter}
+          onChange={(e) => setSiteFilter(e.target.value)}
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition-all focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 dark:border-neutral-700 dark:bg-slate-900 dark:text-slate-100"
+        >
+          <option value="">All sites</option>
+          {siteOptions.map((site) => (
+            <option key={site.id} value={site.id}>
+              {site.name}
+            </option>
+          ))}
+          {hasUnassignedSite ? <option value="none">No site</option> : null}
+        </select>
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-neutral-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <X className="size-3.5" />
+            Clear
+          </button>
+        ) : null}
+        {hasActiveFilters ? (
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {filtered.length} of {data?.length ?? 0} forms
+          </span>
+        ) : null}
+      </div>
+
       <div className=" border border-slate-200 dark:border-neutral-700 rounded-md overflow-x-auto bg-white dark:bg-slate-900">
         <table className="min-w-full">
           <thead className="bg-primary text-left text-sm font-semibold whitespace-nowrap text-white">
@@ -163,7 +260,24 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
             </tr>
           </thead>
           <tbody className="text-sm divide-y divide-slate-200 dark:divide-neutral-700">
-            {data.map((template) => (
+            {filtered.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={8}
+                  className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400"
+                >
+                  No forms match the current filters.
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="ml-2 font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                  >
+                    Clear filters
+                  </button>
+                </td>
+              </tr>
+            ) : null}
+            {filtered.map((template) => (
               <tr
                 key={template.id}
                 className="divide-x divide-slate-200 dark:divide-neutral-700"
