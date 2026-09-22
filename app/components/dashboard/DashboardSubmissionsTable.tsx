@@ -1569,12 +1569,12 @@ export function DashboardSubmissionsTable({
               Bulk Excel Ops
             </button>
           ) : null}
-          {hasActiveFilters ? (
+          {masterFilterActiveCount > 0 ? (
             <button
               type="button"
-              onClick={handleClearAllFilters}
+              onClick={clearMasterFilters}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.04]"
-              title="Clear all filters and search"
+              title="Clear table filters"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Clear filters
@@ -2042,12 +2042,14 @@ export function DashboardSubmissionsTable({
           <p className="mt-4 text-sm font-medium text-slate-500 dark:text-slate-500">
             No records match your filters
           </p>
-          <button
-            onClick={handleClearAllFilters}
-            className="mt-2 text-xs text-amber-600 hover:underline dark:text-amber-400"
-          >
-            Clear all filters
-          </button>
+          {masterFilterActiveCount > 0 ? (
+            <button
+              onClick={clearMasterFilters}
+              className="mt-2 text-xs text-amber-600 hover:underline dark:text-amber-400"
+            >
+              Clear table filters
+            </button>
+          ) : null}
         </motion.div>
       ) : null}
 
