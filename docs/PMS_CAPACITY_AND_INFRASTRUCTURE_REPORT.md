@@ -15,7 +15,7 @@
 | Can the current server support **~4,000 employees using My Forms at the same time**? | **No.** Under a peak of ~4,000 concurrent virtual users, **~76% of requests failed** and most employee page/API calls did not return success. |
 | Does the portal work well at **moderate** concurrent use? | **Yes, for light dashboard traffic.** A staged test up to **60 concurrent** users on `/dashboard` completed with **100% success** and **p95 latency ~39 ms**. |
 | What limits capacity today? | **Shared 4‑core / ~8 GB host**, **one Node.js process** for PMS, **default DB connection pool (~10)**, **PostgreSQL on the same machine**, and **multiple other portals** competing for CPU/RAM. |
-| Is “4,000 employees” the same as “4,000 concurrent users”? | **No.** 4,000 is total headcount. Concurrent users at one moment are normally a fraction of that. The test proved **true concurrent 4,000** is not viable on this host. |
+| Is “4,000 employeesthe same as “4,000 concurrent users”? | **No.** 4,000 is total headcount. Concurrent users at one moment are normally a fraction of that. The test proved **true concurrent 4,000** is not viable on this host. |
 
 **Bottom line for management:** The PMS application is functional and performs well under modest concurrent load. The **current shared server cannot safely absorb a mass concurrent open of My Forms by thousands of employees**. Capacity must be increased (dedicated resources / horizontal scale / DB pool tuning) and peak usage should be planned (staggered windows), or the portal will degrade (timeouts, errors) during peak events.
 
@@ -31,7 +31,7 @@
    - **Employees:** `/dashboard/my-forms` + `/api/my-forms`
    - **HR:** `/dashboard` + `/api/submissions/overview` (~10–20 concurrent)
 
-### 2.2 What “concurrent users” means
+### 2.2 What “concurrent usersmeans
 
 | Term | Meaning |
 |------|---------|
@@ -209,7 +209,7 @@ nginx connection limits were **not** indicated as the first failure point relati
 |----------|----------------------------|
 | Dozens of concurrent users (order of **≤ ~60** on light dashboard path in Test A) | **Yes** (measured, excellent latency) |
 | Hundreds–thousands concurrent My Forms (Test C peak **4,000**) | **No** (measured, majority failures) |
-| Exact “safe” concurrent My Forms ceiling (e.g. 150 vs 300) | **Not yet pinned** — requires stepped peaks (100 / 200 / 500) after optimisations; Test C mixed healthy early stages with failed peak into one average |
+| Exact “safeconcurrent My Forms ceiling (e.g. 150 vs 300) | **Not yet pinned** — requires stepped peaks (100 / 200 / 500) after optimisations; Test C mixed healthy early stages with failed peak into one average |
 
 **Recommended wording for stakeholders:**
 
@@ -221,10 +221,10 @@ nginx connection limits were **not** indicated as the first failure point relati
 
 | Risk | Impact |
 |------|--------|
-| Campus-wide “open appraisal forms now” spike | Portal timeouts/errors; support flood; incomplete submissions |
+| Campus-wide “open appraisal forms nowspike | Portal timeouts/errors; support flood; incomplete submissions |
 | HR working during employee peak | HR dashboard/overview also degrades (~40%+ failures in Test C) |
 | Shared VM incident | Alumni / other portals can steal CPU/RAM during PMS peaks (and vice versa) |
-| Misreading headcount as capacity | Planning for “4,000 users” without concurrency planning leads to outage-class events |
+| Misreading headcount as capacity | Planning for “4,000 userswithout concurrency planning leads to outage-class events |
 
 ---
 

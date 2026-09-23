@@ -56,6 +56,7 @@ import {
   type BulkUploadCheckResult,
   type BulkUploadCheckStepId,
   type BulkUploadCreateDraft,
+  type BulkUploadIssue,
   type BulkUploadSaveGroup,
 } from "@/app/helpers/bulk-upload-validation";
 import {
@@ -214,6 +215,7 @@ export function BulkUploadStaffModal({
     null,
   );
   const [checkResult, setCheckResult] = useState<BulkUploadCheckResult | null>(null);
+  const [sheetIssues, setSheetIssues] = useState<BulkUploadIssue[]>([]);
   const checkRunId = useRef(0);
 
   const { data: pageData, isLoading: employeesLoading } = useQuery({
@@ -283,6 +285,7 @@ export function BulkUploadStaffModal({
       setCheckStep("collect");
       setCheckFailedStep(null);
       setCheckResult(null);
+      setSheetIssues([]);
       checkRunId.current += 1;
     }
   }
@@ -550,6 +553,7 @@ export function BulkUploadStaffModal({
     }
     setError(null);
     setImportParsing(true);
+    setSheetIssues([]);
     try {
       const parsed = await parseExcelStaffSheet(file);
       setImportFileName(file.name);
@@ -576,6 +580,7 @@ export function BulkUploadStaffModal({
       setSelectedEmployeeIds(new Set());
       setImportUnmatched([]);
       setImportAlreadyExist([]);
+      setSheetIssues([]);
       setError(
         parseError instanceof Error
           ? parseError.message
@@ -927,6 +932,19 @@ export function BulkUploadStaffModal({
     columnId: BulkUploadColumnId,
     nextValue: string,
   ) => {
+    const editedRow = sheetRows.find((row) => row.rowKey === rowKey);
+    if (editedRow) {
+      const editedSap = sapLookupKey(editedRow.employeeId);
+      setSheetIssues((current) =>
+        current.filter(
+          (item) =>
+            !(
+              sapLookupKey(item.employeeId) === editedSap &&
+              item.columnId === columnId
+            ),
+        ),
+      );
+    }
     setSheetRows((current) =>
       current.map((row) => {
         if (row.rowKey !== rowKey) return row;
@@ -1002,12 +1020,34 @@ export function BulkUploadStaffModal({
     },
   });
 
+  const issuesBySap = useMemo(() => {
+    const map = new Map<string, BulkUploadIssue[]>();
+    for (const item of sheetIssues) {
+      const key = sapLookupKey(item.employeeId);
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
+    }
+    return map;
+  }, [sheetIssues]);
+
   const closeChecks = () => {
     if (saveMutation.isPending) return;
     checkRunId.current += 1;
     setCheckOpen(false);
     setCheckFailedStep(null);
     setCheckResult(null);
+
+    const firstFlagged = sheetRows.find((row) =>
+      issuesBySap.has(sapLookupKey(row.employeeId)),
+    );
+    if (firstFlagged) {
+      window.requestAnimationFrame(() => {
+        document
+          .getElementById(`sheet-row-${firstFlagged.rowKey}`)
+          ?.scrollIntoView({ block: "center" });
+      });
+    }
   };
 
   const startSaveChecks = async () => {
@@ -1031,6 +1071,7 @@ export function BulkUploadStaffModal({
     setCheckOpen(true);
     setCheckFailedStep(null);
     setCheckResult(null);
+    setSheetIssues([]);
     setCheckStep("collect");
 
     const formTemplateIds = new Set(
@@ -1047,17 +1088,19 @@ export function BulkUploadStaffModal({
     const creates = collectBulkUploadCreates(sheetRows);
     if (collected.changedRowCount === 0 && creates.length === 0) {
       setCheckFailedStep("collect");
+      const collectIssues: BulkUploadIssue[] = [
+        {
+          employeeId: "",
+          employeeName: "",
+          message: isCreateUsers
+            ? "No new employees to create from this sheet."
+            : "No cell values have changed and no new employees were added.",
+        },
+      ];
+      setSheetIssues(collectIssues);
       setCheckResult({
         ok: false,
-        issues: [
-          {
-            employeeId: "",
-            employeeName: "",
-            message: isCreateUsers
-              ? "No new employees to create from this sheet."
-              : "No cell values have changed and no new employees were added.",
-          },
-        ],
+        issues: collectIssues,
         createdCount: 0,
         creates: [],
         ...collected,
@@ -1075,6 +1118,7 @@ export function BulkUploadStaffModal({
     });
     if (constraintIssues.length > 0) {
       setCheckFailedStep("constraints");
+      setSheetIssues(constraintIssues);
       setCheckResult({
         ok: false,
         issues: constraintIssues,
@@ -1091,6 +1135,7 @@ export function BulkUploadStaffModal({
     const duplicateIssues = checkDuplicates(sheetRows, selectedColumnIds, userList);
     if (duplicateIssues.length > 0) {
       setCheckFailedStep("duplicates");
+      setSheetIssues(duplicateIssues);
       setCheckResult({
         ok: false,
         issues: duplicateIssues,
@@ -1293,6 +1338,7 @@ export function BulkUploadStaffModal({
                   <SheetStep
                     rows={sheetRows}
                     columns={previewColumns}
+                    issuesBySap={issuesBySap}
                     org1Options={org1Options}
                     org2OptionsFor={org2OptionsFor}
                     managerOptions={managerSelectOptions}
@@ -2481,6 +2527,7 @@ function CreateOrgLevelDialog({
 function SheetStep({
   rows,
   columns,
+  issuesBySap,
   org1Options,
   org2OptionsFor,
   managerOptions,
@@ -2492,6 +2539,7 @@ function SheetStep({
 }: {
   rows: SheetRow[];
   columns: readonly BulkUploadColumnDef[];
+  issuesBySap: Map<string, BulkUploadIssue[]>;
   org1Options: { value: string; label: string }[];
   org2OptionsFor: (org1Id: string) => { value: string; label: string }[];
   managerOptions: { value: string; label: string }[];
@@ -2508,6 +2556,9 @@ function SheetStep({
         : row.values[column.id] !== row.original[column.id],
     ),
   ).length;
+  const issueRowCount = rows.filter((row) =>
+    issuesBySap.has(sapLookupKey(row.employeeId)),
+  ).length;
 
   return (
     <section className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
@@ -2519,6 +2570,11 @@ function SheetStep({
           {createMode
             ? `${rows.length} new staff · Org levels from sheet mapping`
             : `${rows.length} staff · ${changedCount} with changes`}
+          {issueRowCount > 0 ? (
+            <span className="ml-1 font-semibold text-red-600 dark:text-red-400">
+              · {issueRowCount} row{issueRowCount === 1 ? "" : "s"} with issues
+            </span>
+          ) : null}
         </p>
       </div>
       <div className="overflow-auto">
@@ -2552,45 +2608,89 @@ function SheetStep({
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => (
-                <tr
-                  key={row.rowKey}
-                  className={
-                    index % 2 === 0
-                      ? "bg-white dark:bg-slate-950"
-                      : "bg-slate-50 dark:bg-slate-900/60"
-                  }
-                >
-                  <td className="sticky left-0 z-10 border-r border-b border-slate-200 bg-inherit px-3 py-1 text-xs font-semibold tabular-nums text-slate-700 dark:border-slate-700 dark:text-slate-200">
-                    {row.employeeId}
-                    {row.isNew ? (
-                      <span className="ml-1.5 rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                        new
-                      </span>
-                    ) : null}
-                  </td>
-                  {columns.map((column) => (
+              rows.map((row, index) => {
+                const rowIssues =
+                  issuesBySap.get(sapLookupKey(row.employeeId)) ?? [];
+                const issueColumns = new Set(
+                  rowIssues
+                    .map((item) => item.columnId)
+                    .filter((id): id is BulkUploadColumnId => id != null),
+                );
+                const hasIssue = rowIssues.length > 0;
+                return (
+                  <tr
+                    key={row.rowKey}
+                    id={`sheet-row-${row.rowKey}`}
+                    className={
+                      hasIssue
+                        ? "bg-red-50 dark:bg-red-950/30"
+                        : index % 2 === 0
+                          ? "bg-white dark:bg-slate-950"
+                          : "bg-slate-50 dark:bg-slate-900/60"
+                    }
+                  >
                     <td
-                      key={column.id}
-                      className="border-r border-b border-slate-200 p-0 dark:border-slate-700"
-                      style={{ minWidth: column.minWidth }}
+                      className={cn(
+                        "sticky left-0 z-10 border-r border-b border-slate-200 bg-inherit px-3 py-1 text-xs font-semibold tabular-nums text-slate-700 dark:border-slate-700 dark:text-slate-200",
+                        hasIssue &&
+                          "border-l-2 border-l-red-500 text-red-800 dark:text-red-200",
+                      )}
+                      title={
+                        hasIssue
+                          ? rowIssues.map((item) => item.message).join("\n")
+                          : undefined
+                      }
                     >
-                      <SheetCell
-                        column={column}
-                        row={row}
-                        org1Options={org1Options}
-                        org2Options={org2OptionsFor(row.values.orgLevel1)}
-                        managerOptions={managerOptions}
-                        formOptions={formOptions}
-                        entities={entities}
-                        createOrgLevelsReadOnly={createMode}
-                        onChange={onChange}
-                        disabled={disabled}
-                      />
+                      <span className="inline-flex items-center gap-1.5">
+                        {hasIssue ? (
+                          <AlertTriangle
+                            className="size-3.5 shrink-0 text-red-500 dark:text-red-400"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        {row.employeeId}
+                      </span>
+                      {row.isNew ? (
+                        <span className="ml-1.5 rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                          new
+                        </span>
+                      ) : null}
                     </td>
-                  ))}
-                </tr>
-              ))
+                    {columns.map((column) => (
+                      <td
+                        key={column.id}
+                        className={cn(
+                          "border-r border-b border-slate-200 p-0 dark:border-slate-700",
+                          issueColumns.has(column.id) &&
+                            "bg-red-100/80 ring-1 ring-inset ring-red-300 dark:bg-red-900/40 dark:ring-red-800",
+                        )}
+                        style={{ minWidth: column.minWidth }}
+                        title={
+                          issueColumns.has(column.id)
+                            ? rowIssues
+                                .filter((item) => item.columnId === column.id)
+                                .map((item) => item.message)
+                                .join("\n")
+                            : undefined
+                        }
+                      >
+                        <SheetCell
+                          column={column}
+                          row={row}
+                          org1Options={org1Options}
+                          org2Options={org2OptionsFor(row.values.orgLevel1)}
+                          managerOptions={managerOptions}
+                          formOptions={formOptions}
+                          entities={entities}
+                          createOrgLevelsReadOnly={createMode}
+                          onChange={onChange}
+                          disabled={disabled}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

@@ -7,7 +7,7 @@ import {
 } from "@/lib/mail/notifications/templates";
 
 /** Employee self-assessment reminder cooldown. */
-export const EMPLOYEE_REMINDER_INTERVAL = "48 hours";
+export const EMPLOYEE_REMINDER_INTERVAL = "3 days";
 
 /** Manager digest reminder cooldown. */
 export const MANAGER_REMINDER_INTERVAL = "3 days";
@@ -41,9 +41,13 @@ export interface PendingManagerReminder {
  * alone — otherwise a submitted appraisal with a null/mismatched cycle_id is
  * treated as missing and keeps getting reminders.
  *
- * Incomplete means:
- * - no appraisal for this assigned template, OR
- * - appraisal still PENDING_SELF_ASSESSMENT and not submitted
+ * Strict candidate criteria:
+ * - form assigned in the active cycle (INNER JOIN on efa + template)
+ * - user system_role = EMPLOYEE
+ * - self-assessment enabled on the assignment
+ * - appraisal status is PENDING_SELF_ASSESSMENT (missing appraisal counts as
+ *   pending — same as the dashboard) and submitted_at is empty
+ * - last reminder is at least 3 days old (or never sent)
  */
 export async function listPendingSelfAssessmentReminders(
   cycleId: number,
@@ -74,18 +78,15 @@ export async function listPendingSelfAssessmentReminders(
       AND ap.template_id = efa.template_id
      WHERE ft.cycle_id = $1
        AND efa.self_assessment_disabled = FALSE
+       AND u.system_role = 'EMPLOYEE'
        AND u.is_active = TRUE
        AND COALESCE(u.assessment_eligibility, TRUE) = TRUE
        AND u.employee_id <> 'EMP-0001'
        AND u.email IS NOT NULL
        AND BTRIM(u.email) <> ''
-       AND (
-         ap.id IS NULL
-         OR (
-           ap.status = 'PENDING_SELF_ASSESSMENT'
-           AND ap.submitted_at IS NULL
-         )
-       )
+       AND COALESCE(ap.status, 'PENDING_SELF_ASSESSMENT')
+             = 'PENDING_SELF_ASSESSMENT'
+       AND ap.submitted_at IS NULL
        AND (
          efa.last_self_assessment_reminder_at IS NULL
          OR efa.last_self_assessment_reminder_at

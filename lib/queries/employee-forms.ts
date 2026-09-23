@@ -194,6 +194,8 @@ async function listExplicitlyAssignedTemplatesForUser(
     questionCount: number;
     selfAssessmentEnabled: boolean;
     fiscalYear: number;
+    cycleId: number;
+    directScoreEntry: boolean;
   }>
 > {
   const executor = client ?? getDbClient();
@@ -204,20 +206,29 @@ async function listExplicitlyAssignedTemplatesForUser(
     question_count: string;
     self_assessment_disabled: boolean;
     fiscal_year: number;
+    cycle_id: string;
+    direct_score_entry: boolean;
   }>(
     `SELECT
        ft.id,
        ft.title,
        ft.description,
+       ft.cycle_id,
        efa.self_assessment_disabled,
        ac.fiscal_year,
-       COUNT(fq.id)::text AS question_count
+       COUNT(fq.id)::text AS question_count,
+       EXISTS (
+         SELECT 1
+         FROM direct_score_entry_assignments dsea
+         WHERE dsea.employee_id = efa.employee_id
+           AND dsea.cycle_id = ft.cycle_id
+       ) AS direct_score_entry
      FROM employee_form_assignments efa
      INNER JOIN form_templates ft ON ft.id = efa.template_id
      INNER JOIN appraisal_cycles ac ON ac.id = ft.cycle_id
      LEFT JOIN form_questions fq ON fq.template_id = ft.id
      WHERE efa.employee_id = $1
-     GROUP BY ft.id, efa.self_assessment_disabled, ac.fiscal_year
+     GROUP BY ft.id, efa.employee_id, efa.self_assessment_disabled, ac.fiscal_year
      ORDER BY ft.id DESC`,
     [userId],
   );
@@ -229,6 +240,39 @@ async function listExplicitlyAssignedTemplatesForUser(
     questionCount: Number(row.question_count),
     selfAssessmentEnabled: !row.self_assessment_disabled,
     fiscalYear: Number(row.fiscal_year),
+    cycleId: Number(row.cycle_id),
+    directScoreEntry: row.direct_score_entry,
+  }));
+}
+
+/**
+ * Direct-score-entry rows for the user across cycles. These employees never
+ * fill a self-assessment form — HR/admin enters their score directly.
+ */
+async function listDirectScoreEntryCyclesForUser(
+  userId: number,
+  client?: PoolClient,
+): Promise<
+  Array<{ id: number; cycleId: number | null; fiscalYear: number | null }>
+> {
+  const executor = client ?? getDbClient();
+  const result = await executor.query<{
+    id: string;
+    cycle_id: string | null;
+    fiscal_year: number | null;
+  }>(
+    `SELECT dsea.id, dsea.cycle_id, ac.fiscal_year
+     FROM direct_score_entry_assignments dsea
+     LEFT JOIN appraisal_cycles ac ON ac.id = dsea.cycle_id
+     WHERE dsea.employee_id = $1
+     ORDER BY dsea.cycle_id DESC NULLS LAST`,
+    [userId],
+  );
+
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    cycleId: row.cycle_id == null ? null : Number(row.cycle_id),
+    fiscalYear: row.fiscal_year == null ? null : Number(row.fiscal_year),
   }));
 }
 
@@ -792,16 +836,45 @@ function normalizeAnswer(
   };
 }
 
+/**
+ * Latest appraisal for the employee within a cycle, regardless of template.
+ * Used for direct-score-entry employees, whose appraisal may exist without a
+ * form assignment.
+ */
+async function getLatestAppraisalForUserCycle(
+  userId: number,
+  cycleId: number,
+): Promise<AppraisalRow | null> {
+  const result = await getDbClient().query<AppraisalRow>(
+    `SELECT
+       id,
+       status,
+       submitted_at::text,
+       updated_at::text,
+       system_raw_score,
+       manager_level::text
+     FROM appraisals
+     WHERE employee_id = $1
+       AND cycle_id = $2
+     ORDER BY updated_at DESC NULLS LAST, id DESC
+     LIMIT 1`,
+    [userId, cycleId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
 export async function listAssignedFormsForUser(
   userId: number,
 ): Promise<AssignedFormListItem[]> {
   const explicitAssignments = await listExplicitlyAssignedTemplatesForUser(userId);
-  const [eligibilityCtx, cycleDates] = await Promise.all([
+  const [eligibilityCtx, cycleDates, directEntries] = await Promise.all([
     getUserAssessmentEligibilityContext(userId),
     getActiveFinancialYearCycleDates(),
+    listDirectScoreEntryCyclesForUser(userId),
   ]);
 
-  return Promise.all(
+  const items: AssignedFormListItem[] = await Promise.all(
     explicitAssignments.map(async (assigned) => {
       const appraisal = await getAppraisalForUserTemplate(userId, assigned.templateId);
       const eligibility = resolveEmployeeAssessmentEligibility(
@@ -818,7 +891,7 @@ export async function listAssignedFormsForUser(
         status: resolveAppraisalWorkflowStatus(appraisal, assigned.selfAssessmentEnabled),
         selfAssessmentEnabled: assigned.selfAssessmentEnabled,
         managerLevel: appraisal?.manager_level ? Number(appraisal.manager_level) : null,
-        directScoreEntry: false,
+        directScoreEntry: assigned.directScoreEntry,
         formAssigned: true,
         submittedAt: appraisal?.submitted_at ?? null,
         updatedAt: appraisal?.updated_at ?? null,
@@ -828,6 +901,56 @@ export async function listAssignedFormsForUser(
       } satisfies AssignedFormListItem;
     }),
   );
+
+  // Direct-score-entry cycles with no form assignment still get a card so the
+  // employee sees why there is nothing to fill.
+  const assignedCycleIds = new Set(
+    explicitAssignments.map((assigned) => assigned.cycleId),
+  );
+  const unassignedEntries = directEntries.filter(
+    (entry) => entry.cycleId == null || !assignedCycleIds.has(entry.cycleId),
+  );
+
+  for (const entry of unassignedEntries) {
+    const appraisal =
+      entry.cycleId == null
+        ? null
+        : await getLatestAppraisalForUserCycle(userId, entry.cycleId);
+    const eligibility =
+      entry.fiscalYear == null
+        ? {
+            eligibilityStatus: "Fully Eligible" as const,
+            canFillAssessment: false,
+            ineligibilityReason: null,
+          }
+        : resolveEmployeeAssessmentEligibility(
+            eligibilityCtx,
+            entry.fiscalYear,
+            cycleDates,
+          );
+
+    items.push({
+      templateId: -entry.id,
+      title: "Direct Score Entry Assessment",
+      description:
+        "Your appraisal for this cycle is completed via direct score entry.",
+      questionCount: 0,
+      status: resolveAppraisalWorkflowStatus(appraisal, false),
+      selfAssessmentEnabled: false,
+      managerLevel: appraisal?.manager_level
+        ? Number(appraisal.manager_level)
+        : null,
+      directScoreEntry: true,
+      formAssigned: false,
+      submittedAt: appraisal?.submitted_at ?? null,
+      updatedAt: appraisal?.updated_at ?? null,
+      eligibilityStatus: eligibility.eligibilityStatus,
+      canFillAssessment: false,
+      ineligibilityReason: eligibility.ineligibilityReason,
+    });
+  }
+
+  return items;
 }
 
 export async function getEmployeeFormDetail(

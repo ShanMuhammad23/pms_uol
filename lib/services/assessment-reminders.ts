@@ -114,7 +114,7 @@ async function sendManagerReminder(
 }
 
 /**
- * Send due employee (48h) and manager (3d) assessment reminder emails.
+ * Send due employee (3d) and manager (3d) assessment reminder emails.
  *
  * Idempotent per cooldown window: last-reminder timestamps are updated only
  * after a successful SMTP send so failed deliveries can retry on the next run.
