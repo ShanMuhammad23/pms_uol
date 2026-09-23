@@ -1,6 +1,9 @@
 import type { FormTemplateInput } from "@/types/forms";
 
-const LOOKS_LIKE_HTML = /<[a-z][\s\S]*>/i;
+// Values containing real tags OR HTML entities (&nbsp;, &amp;, &#39;, ...)
+// are HTML-flavored — entities must reach innerHTML intact so they render
+// as characters, not literal text.
+const LOOKS_LIKE_HTML = /<[a-z][\s\S]*>|&(?:[a-z]+|#\d+);/i;
 
 const ALLOWED_TAGS = new Set([
   "b",
@@ -59,18 +62,6 @@ export function htmlTitleLooksLikeHtml(value: string): boolean {
   return LOOKS_LIKE_HTML.test(value);
 }
 
-function unescapeHtmlEntitiesOnce(value: string): string {
-  if (!/&lt;\/?[a-z]/i.test(value)) {
-    return value;
-  }
-  return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&");
-}
-
 function isSafeColor(value: string): boolean {
   const color = value.trim();
   return (
@@ -94,14 +85,20 @@ export function htmlTitlePlainText(html: string | null | undefined): string {
     return "";
   }
 
-  return unescapeHtmlEntitiesOnce(html)
+  // Collapse &amp; first so double-encoded entities (&amp;nbsp; → &nbsp;) and
+  // escaped tags (&amp;lt;div&amp;gt; → &lt;div&gt;) resolve to single form.
+  let text = html;
+  for (let i = 0; i < 2; i += 1) {
+    text = text.replace(/&amp;/g, "&");
+  }
+
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
     .replace(/<br\s*\/?>/gi, " ")
     .replace(/<\/(p|div|li|h[1-6]|tr|blockquote)>/gi, " ")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
@@ -197,13 +194,11 @@ export function sanitizeHtmlTitle(html: string | null | undefined): string {
     return "";
   }
 
-  const source = unescapeHtmlEntitiesOnce(html);
-
-  if (!htmlTitleLooksLikeHtml(source)) {
-    return source;
+  if (!htmlTitleLooksLikeHtml(html)) {
+    return html;
   }
 
-  let output = source
+  let output = html
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(
       /<\/?(script|style|iframe|object|embed|link|meta|base|form|input|textarea|button|svg|math|video|audio)[^>]*>/gi,
@@ -231,24 +226,21 @@ export function toSafeHtmlTitle(html: string | null | undefined): string {
     return "";
   }
 
-  const source = unescapeHtmlEntitiesOnce(html);
-
-  if (!htmlTitleLooksLikeHtml(source)) {
-    return escapeHtmlText(source).replace(/\n/g, "<br>");
+  if (!htmlTitleLooksLikeHtml(html)) {
+    return escapeHtmlText(html).replace(/\n/g, "<br>");
   }
 
-  return sanitizeHtmlTitle(source);
+  return sanitizeHtmlTitle(html);
 }
 
 export function valueToEditorHtml(value: string): string {
   if (!value) {
     return "";
   }
-  const source = unescapeHtmlEntitiesOnce(value);
-  if (htmlTitleLooksLikeHtml(source)) {
-    return source;
+  if (htmlTitleLooksLikeHtml(value)) {
+    return value;
   }
-  return escapeHtmlText(source).replace(/\n/g, "<br>");
+  return escapeHtmlText(value).replace(/\n/g, "<br>");
 }
 
 export function sanitizeFormTemplateHtmlTitles(
