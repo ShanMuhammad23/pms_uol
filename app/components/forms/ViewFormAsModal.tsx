@@ -16,12 +16,13 @@ import FormAssessmentPreview, {
 } from "./FormAssessmentPreview";
 import { fetchFormTemplate } from "@/lib/queries/forms-client";
 import type { FormTemplateRecord } from "@/types/forms";
-import { cn } from "@/lib/utils";
+import { cn, formatFormTitleWithCode } from "@/lib/utils";
 
 interface ViewFormAsModalProps {
   open: boolean;
   templateId: number | null;
   templateTitle: string;
+  templateCode?: string | null;
   onClose: () => void;
 }
 
@@ -72,6 +73,7 @@ export function ViewFormAsModal({
   open,
   templateId,
   templateTitle,
+  templateCode,
   onClose,
 }: ViewFormAsModalProps) {
   const [selectedRole, setSelectedRole] = useState<FormPreviewRole | null>(null);
@@ -144,7 +146,7 @@ export function ViewFormAsModal({
                 </h3>
                 {templateTitle ? (
                   <span className="hidden truncate text-xs text-slate-400 dark:text-slate-500 sm:inline">
-                    · {templateTitle}
+                    · {formatFormTitleWithCode(templateTitle, templateCode)}
                   </span>
                 ) : null}
               </div>
@@ -169,6 +171,7 @@ export function ViewFormAsModal({
               ) : (
                 <RoleSelection
                   templateTitle={templateTitle}
+                  templateCode={templateCode}
                   onSelect={setSelectedRole}
                 />
               )}
@@ -186,9 +189,11 @@ export function ViewFormAsModal({
 
 function RoleSelection({
   templateTitle,
+  templateCode,
   onSelect,
 }: {
   templateTitle: string;
+  templateCode?: string | null;
   onSelect: (role: FormPreviewRole) => void;
 }) {
   return (
@@ -199,7 +204,7 @@ function RoleSelection({
           <>
             {" "}
             <span className="font-medium text-slate-900 dark:text-white">
-              {templateTitle}
+              {formatFormTitleWithCode(templateTitle, templateCode)}
             </span>
           </>
         ) : null}

@@ -322,6 +322,11 @@ export default function FormAssessmentPreview({
         <div className="min-w-0">
           <h2 className="text-xl font-semibold break-words text-text-primary">
             {template.title}
+            {template.code?.trim() ? (
+              <span className="ml-2 inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 align-middle font-mono text-xs font-medium text-slate-600 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
+                {template.code.trim()}
+              </span>
+            ) : null}
           </h2>
           <FormDescription description={template.description} className="mt-2" />
           <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">

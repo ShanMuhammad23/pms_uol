@@ -13,6 +13,7 @@ export type EmployeeAssessmentEligibilityStatus =
 export interface AssignedFormListItem {
   templateId: number;
   title: string;
+  code: string | null;
   description: string | null;
   questionCount: number;
   /** Workflow status from appraisals.status (dashboard-aligned). */

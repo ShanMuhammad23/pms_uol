@@ -26,7 +26,7 @@ import {
   getEligibilityShortLabel,
   getSubmissionEligibilityDisplayStatus,
 } from "@/app/helpers/dashboard-eligibility";
-import { cn } from "@/lib/utils";
+import { cn, formatFormTitleWithCode } from "@/lib/utils";
 
 type PageSizeOption = 50 | 200 | 1000 | 5000 | "all";
 const PAGE_SIZE_OPTIONS: PageSizeOption[] = [50, 200, 1000, 5000, "all"];
@@ -372,7 +372,11 @@ export default function FormEmployeeAssignment({
     const map = new Map<string, string>();
     for (const sub of submissions ?? []) {
       if (sub.templateId != null) {
-        map.set(sub.employeeId, sub.templateTitle?.trim() || `Form #${sub.templateId}`);
+        map.set(
+          sub.employeeId,
+          formatFormTitleWithCode(sub.templateTitle, sub.templateCode) ||
+            `Form #${sub.templateId}`,
+        );
       }
     }
     for (const e of assignedEmployees ?? []) {

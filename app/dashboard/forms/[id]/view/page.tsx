@@ -7,7 +7,7 @@ import PdfDownloadTrigger from "@/app/components/forms/PdfDownloadTrigger";
 import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
 import PrintFooter from "@/app/components/print/PrintFooter";
-import { cn } from "@/lib/utils";
+import { cn, formatFormTitleWithCode } from "@/lib/utils";
 import { requireModuleViewPage } from "@/lib/auth/require-module-page";
 import { getFormTemplateById } from "@/lib/queries/forms";
 import { withDb } from "@/lib/db-context";
@@ -71,7 +71,7 @@ export default async function ViewFormPage({
         <div className={isPrintMode ? "print-content print-full-width" : ""}>
           {isPrintMode ? (
             <PrintDocumentHeader
-              title={template.title}
+              title={formatFormTitleWithCode(template.title, template.code)}
               description={template.description}
               metaItems={[
                 { label: "Category", value: template.targetCategory ?? "Unassigned" },

@@ -190,6 +190,7 @@ async function listExplicitlyAssignedTemplatesForUser(
   Array<{
     templateId: number;
     title: string;
+    code: string | null;
     description: string | null;
     questionCount: number;
     selfAssessmentEnabled: boolean;
@@ -202,6 +203,7 @@ async function listExplicitlyAssignedTemplatesForUser(
   const result = await executor.query<{
     id: string;
     title: string;
+    code: string | null;
     description: string | null;
     question_count: string;
     self_assessment_disabled: boolean;
@@ -212,6 +214,7 @@ async function listExplicitlyAssignedTemplatesForUser(
     `SELECT
        ft.id,
        ft.title,
+       ft.code,
        ft.description,
        ft.cycle_id,
        efa.self_assessment_disabled,
@@ -236,6 +239,7 @@ async function listExplicitlyAssignedTemplatesForUser(
   return result.rows.map((row) => ({
     templateId: Number(row.id),
     title: row.title,
+    code: row.code,
     description: row.description,
     questionCount: Number(row.question_count),
     selfAssessmentEnabled: !row.self_assessment_disabled,
@@ -886,6 +890,7 @@ export async function listAssignedFormsForUser(
       return {
         templateId: assigned.templateId,
         title: assigned.title,
+        code: assigned.code,
         description: assigned.description,
         questionCount: assigned.questionCount,
         status: resolveAppraisalWorkflowStatus(appraisal, assigned.selfAssessmentEnabled),
@@ -932,6 +937,7 @@ export async function listAssignedFormsForUser(
     items.push({
       templateId: -entry.id,
       title: "Direct Score Entry Assessment",
+      code: null,
       description:
         "Your appraisal for this cycle is completed via direct score entry.",
       questionCount: 0,

@@ -34,6 +34,7 @@ export interface DirectAssessmentOverallRemarks {
 export interface DirectAssessmentData {
   templateId: number;
   templateTitle: string;
+  templateCode: string;
   templateDescription: string | null;
   selfAssessmentEnabled: boolean;
   /** Whether the form template has additional_remarks_enabled = TRUE. */

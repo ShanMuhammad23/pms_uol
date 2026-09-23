@@ -32,7 +32,7 @@ import {
 } from "@/app/components/forms/RatingScoreField";
 import { QuestionRequiredIndicator } from "@/app/components/forms/QuestionRequiredIndicator";
 import { FormDescription } from "@/app/components/forms/FormDescription";
-import { cn } from "@/lib/utils";
+import { cn, formatFormTitleWithCode } from "@/lib/utils";
 import {
   buildFormTableRows,
   type FormTableRow,
@@ -992,7 +992,8 @@ export default function DirectAssessmentSpreadsheet({
           Back to templates
         </button>
         <h2 className="text-lg font-semibold text-text-primary">
-          Direct Assessment {data.templateTitle}
+          Direct Assessment{" "}
+          {formatFormTitleWithCode(data.templateTitle, data.templateCode)}
         </h2>
         <DirectAssessmentFilterBar
           filterState={filters.filterState}
@@ -1066,7 +1067,8 @@ export default function DirectAssessmentSpreadsheet({
         </button>
         <div className="text-right">
           <h2 className="text-lg font-semibold text-text-primary">
-            Direct Assessment {data.templateTitle}
+            Direct Assessment{" "}
+            {formatFormTitleWithCode(data.templateTitle, data.templateCode)}
           </h2>
           {scope === "managed" ? (
             <p className="text-xs text-foreground/60">

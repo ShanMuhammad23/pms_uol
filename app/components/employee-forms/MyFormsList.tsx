@@ -432,7 +432,7 @@ export default function MyFormsList({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="flex justify-between gap-4">
             {data.map((form, index) => {
               const statusConfig = getSubmissionStatusConfig(form);
               const canFill = isFillable(
@@ -466,12 +466,18 @@ export default function MyFormsList({
                     <div className="min-w-0 flex-1">
                       <h3 className=" font-semibold text-text-primary">
                         {form.title}
+                        {form.code?.trim() ? (
+                          <span className="ml-2 inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 align-middle font-mono text-xs font-medium text-slate-600 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
+                            {form.code.trim()}
+                          </span>
+                        ) : null}
                       </h3>
                       {form.description ? (
                         <p className="mt-1 line-clamp-2 text-xs text-foreground/60">
                           {form.description}
                         </p>
                       ) : null}
+                      
                     </div>
                     <span
                       className={cn(
@@ -631,11 +637,7 @@ export default function MyFormsList({
           </div>
         )}
 
-        {data && data.filter((f) => f.formAssigned).length === 1 ? (
-          <p className="text-center text-xs text-foreground/45">
-            More forms will appear here as they are assigned to you.
-          </p>
-        ) : null}
+   
       </section>
     </div>
   );

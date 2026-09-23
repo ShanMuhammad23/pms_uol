@@ -37,7 +37,7 @@ import {
   flattenAllQuestions,
   type FormTemplateRecord,
 } from "@/types/forms";
-import { cn } from "@/lib/utils";
+import { cn, formatFormTitleWithCode } from "@/lib/utils";
 import {
   buildFormTableRows,
 } from "@/app/helpers/form-table-rows";
@@ -749,7 +749,7 @@ export default function EmployeeFormFill({
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       <PrintDocumentHeader
-        title={template.title}
+        title={formatFormTitleWithCode(template.title, template.code)}
         description={template.description}
         metaItems={[
           { label: "Employee", value: data.employeeName ?? "N/A" },
@@ -811,6 +811,11 @@ export default function EmployeeFormFill({
         <div>
           <h2 className="text-xl font-semibold text-text-primary">
             {template.title}
+            {template.code?.trim() ? (
+              <span className="ml-2 inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 align-middle font-mono text-xs font-medium text-slate-600 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
+                {template.code.trim()}
+              </span>
+            ) : null}
           </h2>
           <FormDescription description={template.description} className="mt-2" />
         </div>
