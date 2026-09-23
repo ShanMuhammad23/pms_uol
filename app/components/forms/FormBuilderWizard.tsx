@@ -1078,7 +1078,7 @@ function ModernFormDesignStep({
                 <span className="block font-semibold text-slate-800 dark:text-slate-100">
                   Additional remarks
                 </span>
-                Overall remarks for Manager 1 &amp; Manager 2. Employees never see this.
+                Overall remarks for Manager 1 , Manager 2. Employees never see this.
               </span>
             </label>
 

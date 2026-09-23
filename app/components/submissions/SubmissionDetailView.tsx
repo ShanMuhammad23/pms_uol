@@ -691,7 +691,7 @@ function ScoreAdjustmentsPanel({
   return (
     <div className="border-t border-slate-200 px-4 py-4 dark:border-slate-700">
       <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-        Score Adjustments &amp; Calibration
+        Score Adjustments Calibration
       </h3>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-9">
         <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/30">
@@ -3147,7 +3147,7 @@ export default function SubmissionDetailView({
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-red-400" />
-                  Manager 1 &amp; Manager 2 scores and remarks will be cleared
+                  Manager 1, Manager 2 scores and remarks will be cleared
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-red-400" />
