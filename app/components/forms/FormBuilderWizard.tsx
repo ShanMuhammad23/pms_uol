@@ -2736,11 +2736,7 @@ export default function FormBuilderWizard({
   };
 
   const handleFinish = () => {
-    if (savedTemplateId) {
-      window.location.href = `/dashboard/forms/${savedTemplateId}/view?t=${Date.now()}`;
-    } else {
-      window.location.href = "/dashboard/forms";
-    }
+    window.location.href = "/dashboard/forms";
   };
 
   const handleStructureChange = (

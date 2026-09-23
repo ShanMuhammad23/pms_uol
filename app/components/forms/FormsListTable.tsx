@@ -62,6 +62,7 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
   const [viewAsTarget, setViewAsTarget] = useState<{
     id: number;
     title: string;
+    code: string;
   } | null>(null);
 
   const { data, isLoading, error } = useQuery({
@@ -350,6 +351,7 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
                         setViewAsTarget({
                           id: template.id,
                           title: template.title,
+                          code: template.code,
                         })
                       }
                       title="View Form As"
@@ -379,6 +381,7 @@ export default function FormsListTable({ templates, canEdit = true }: FormsListT
         open={viewAsTarget != null}
         templateId={viewAsTarget?.id ?? null}
         templateTitle={viewAsTarget?.title ?? ""}
+        templateCode={viewAsTarget?.code ?? null}
         onClose={() => setViewAsTarget(null)}
       />
     </div>

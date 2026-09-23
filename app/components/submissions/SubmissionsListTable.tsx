@@ -92,6 +92,11 @@ export default function SubmissionsListTable() {
               </td>
               <td className="px-4 py-3 text-text-primary">
                 {submission.templateTitle ?? "—"}
+                {submission.templateCode?.trim() ? (
+                  <span className="block font-mono text-xs text-foreground/70">
+                    {submission.templateCode.trim()}
+                  </span>
+                ) : null}
               </td>
               <td className="px-4 py-3 font-medium text-text-primary">
                 {submission.rawScore} / {submission.maxRawScore}

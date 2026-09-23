@@ -48,7 +48,7 @@ import {
 import { getPendingManagerReviewConfig } from "@/app/helpers/dashboard-form-state";
 import type { EmployeeFormAnswerRecord } from "@/types/employee-forms";
 import type { FormSubmissionDetail } from "@/types/form-submissions";
-import { cn } from "@/lib/utils";
+import { cn, formatFormTitleWithCode } from "@/lib/utils";
 import {
   buildFormTableRows,
 } from "@/app/helpers/form-table-rows";
@@ -1679,7 +1679,10 @@ export default function SubmissionDetailView({
           { label: "SAP ID", value: data.employeeId ?? "—" },
           { label: "ORG Level 1", value: displayOrgValue(data.orgLevel1Name) },
           { label: "ORG Level 2", value: displayOrgValue(data.orgLevel2Name) },
-          { label: "Form", value: data.templateTitle },
+          {
+            label: "Form",
+            value: formatFormTitleWithCode(data.templateTitle, data.templateCode),
+          },
           { label: "Status", value: statusLabel },
           { label: "Score", value: `${formatScoreValue(displayedFormScore)}/${totalMaxScore} (${displayedFormPercent}%)` },
           {
@@ -1917,7 +1920,10 @@ export default function SubmissionDetailView({
           <HeroMetaSection title="Form">
             <HeroMetaItem
               label="Title"
-              value={data.templateTitle?.trim() || "—"}
+              value={
+                formatFormTitleWithCode(data.templateTitle, data.templateCode) ||
+                "—"
+              }
             />
             <HeroMetaItem label="Submitted" value={formatSubmittedAt(data.submittedAt)} />
           </HeroMetaSection>

@@ -32,3 +32,13 @@ const flattenClasses = (input: ClassValue): string[] => {
 export function cn(...inputs: ClassValue[]): string {
   return inputs.flatMap(flattenClasses).join(" ");
 }
+
+export function formatFormTitleWithCode(
+  title: string | null | undefined,
+  code: string | null | undefined,
+): string {
+  const trimmedTitle = title?.trim() ?? "";
+  const trimmedCode = code?.trim() ?? "";
+  if (trimmedTitle && trimmedCode) return `${trimmedTitle} (${trimmedCode})`;
+  return trimmedTitle || trimmedCode;
+}
