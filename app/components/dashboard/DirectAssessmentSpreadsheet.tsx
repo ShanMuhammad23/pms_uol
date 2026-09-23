@@ -1037,11 +1037,26 @@ export default function DirectAssessmentSpreadsheet({
     (sum, q) => sum + q.totalMarks,
     0,
   );
-  // Open-assessment section marks budget.
+  // Open-assessment section marks: use the largest authored total across
+  // submissions/reviewers once authored, else the configured budget — the
+  // same achievable-max semantics as the submissions API.
   const openSections = data.sections.filter((s) => s.isOpenAssessment);
-  const openAssessmentMaxMarks = openSections.reduce(
-    (sum, s) => sum + (s.openAssessmentTotalMarks ?? 0), 0,
-  );
+  const openAssessmentMaxMarks = openSections.reduce((sum, s) => {
+    const authored = Math.max(
+      0,
+      ...[
+        data.managerAuthoredAnswersBySubmission,
+        data.manager1AuthoredAnswersBySubmission,
+      ].flatMap((map) =>
+        Object.values(map ?? {}).map((answers) =>
+          answers
+            .filter((a) => a.openSectionId === s.id)
+            .reduce((t, a) => t + (Number(a.authoredTotalMarks) || 0), 0),
+        ),
+      ),
+    );
+    return sum + (authored > 0 ? authored : (s.openAssessmentTotalMarks ?? 0));
+  }, 0);
   const totalMaxScore = maxRawScore + openAssessmentMaxMarks;
   // Authored (open-assessment) questions have no per-question scale — use the
   // form's default scale so rating-based forms score them by rating.
