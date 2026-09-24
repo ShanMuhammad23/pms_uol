@@ -54,7 +54,8 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ account, profile }) {
       if (account?.provider !== "google") {
-        return true;
+        // Only Google SSO is permitted — deny any other provider outright.
+        return `/?error=AccessDenied`;
       }
 
       const email = profile?.email?.toString().trim();

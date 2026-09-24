@@ -1727,7 +1727,7 @@ function SaveChecksOverlay({
                           {result.changedRowCount > 0
                             ? ` and save ${result.changedCellCount} update${result.changedCellCount === 1 ? "" : "s"} on ${result.changedRowCount} existing employee${result.changedRowCount === 1 ? "" : "s"}`
                             : ""}
-                          . New logins use Welcome@{"{SAP}"}.
+                          . New employees sign in with Google SSO.
                         </>
                       ) : (
                         <>

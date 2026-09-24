@@ -9,7 +9,7 @@ import { getServerSession } from "next-auth";
 export default async function Home() {
   const session = await getServerSession(authOptions);
 
-  if (session?.user) {
+  if (session?.user?.id && !session.error) {
     redirect(getPostLoginPath(session.user.role));
   }
 

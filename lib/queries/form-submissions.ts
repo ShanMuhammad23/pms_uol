@@ -53,6 +53,7 @@ import {
 } from "@/app/helpers/manager-review";
 import { appendStaffVisibilityClause } from "@/lib/queries/staff-list-scope";
 import { assertManagerEligible } from "@/lib/queries/users";
+import { releaseAwaitingManager2Reviews } from "@/lib/queries/manager-review-release";
 import type { StaffListScope } from "@/lib/queries/staff-list-scope";
 
 export class FormSubmissionError extends Error {
@@ -3118,6 +3119,20 @@ export async function bulkUpdateEmployeeListingFields(
 
   if (updatedUserIds.length === 0) {
     throw new FormSubmissionError("No matching employees found.", 404);
+  }
+
+  // Manager 2 assignment changed: release any level-2 submissions whose
+  // reviewer is now gone to HR Alignment instead of leaving them "Awaiting
+  // Manager" (second-manager review is optional). The query no-ops when the
+  // employee still has a Manager 2.
+  if (updatesManager2) {
+    const userIdResult = await db.query<{ id: string }>(
+      `SELECT id::text AS id FROM users WHERE employee_id = ANY($1::text[])`,
+      [updatedUserIds],
+    );
+    await releaseAwaitingManager2Reviews(
+      userIdResult.rows.map((r) => Number(r.id)),
+    );
   }
 
   // --- Update employee_form_assignments (Form / templateId) ---

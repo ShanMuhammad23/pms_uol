@@ -8,7 +8,7 @@ import { authOptions } from "@/auth";
 export async function requireSession() {
   const session = await getServerSession(authOptions);
 
-  if (!session) {
+  if (!session || session.error || !session.user?.id) {
     redirect("/");
   }
 
@@ -18,7 +18,7 @@ export async function requireSession() {
 export async function requireSessionApi() {
   const session = await getServerSession(authOptions);
 
-  if (!session) {
+  if (!session || session.error || !session.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

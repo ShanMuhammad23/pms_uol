@@ -132,8 +132,9 @@ type StatusRow = {
   selfAssessmentEnabled?: boolean;
   formAssigned?: boolean;
   /**
-   * True when the submission is parked at Manager Review but no manager is
-   * assigned for the current level. Renders as the "Awaiting Manager" badge.
+   * True when the submission is parked at Manager Review but the employee has
+   * no managers assigned at all (neither Manager 1 nor Manager 2). Renders as
+   * the "Awaiting Manager" badge.
    */
   awaitingManagerAssignment?: boolean;
 };

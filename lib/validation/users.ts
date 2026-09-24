@@ -4,7 +4,6 @@ import { USER_ROLES } from "@/types/users";
 const MAX_EMPLOYEE_ID = 30;
 const MAX_EMAIL = 150;
 const MAX_NAME = 50;
-const MIN_PASSWORD = 8;
 
 function isValidEnumValue<T extends string>(
   value: unknown,
@@ -157,14 +156,6 @@ export function validateCreateUserInput(body: unknown): string | null {
     return sharedError;
   }
 
-  if (!input.password || typeof input.password !== "string") {
-    return "Password is required.";
-  }
-
-  if (input.password.length < MIN_PASSWORD) {
-    return `Password must be at least ${MIN_PASSWORD} characters.`;
-  }
-
   return null;
 }
 
@@ -178,16 +169,6 @@ export function validateUpdateUserInput(body: unknown): string | null {
 
   if (sharedError) {
     return sharedError;
-  }
-
-  if (input.password !== undefined) {
-    if (typeof input.password !== "string" || input.password.length === 0) {
-      return "Password must be a non-empty string when provided.";
-    }
-
-    if (input.password.length < MIN_PASSWORD) {
-      return `Password must be at least ${MIN_PASSWORD} characters.`;
-    }
   }
 
   return null;

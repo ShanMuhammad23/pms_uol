@@ -46,9 +46,10 @@ export function hasSecondManagerReview(managers: EmployeeManagers): boolean {
  *
  * Always PENDING_HEAD_REVIEW at level 1 — the Manager Review stage is never
  * bypassed. When the employee has no Manager 1 assigned, the submission is
- * held at level 1 with no eligible reviewer (see isAwaitingManagerAssignment);
- * it self-heals the moment HR assigns a Manager 1, appearing in that
- * manager's queue without a Return action.
+ * held at level 1 with no eligible reviewer (flagged "Awaiting Manager" only
+ * when both managers are missing — see isAwaitingManagerAssignment); it
+ * self-heals the moment HR assigns a Manager 1, appearing in that manager's
+ * queue without a Return action.
  *
  * This is the SINGLE SOURCE OF TRUTH for the self-assessment → next stage
  * transition. All callers must use this function instead of hardcoding the
@@ -66,9 +67,14 @@ export function resolveSelfAssessmentAdvance(): {
 
 /**
  * True when a submission is parked at Manager Review but the employee has no
- * manager assigned for the current level — nobody can review it until HR
- * assigns one. Used to flag "awaiting manager assignment" rows in the staff
- * listing. Rows in this state self-heal once a manager is assigned.
+ * managers assigned at all — neither Manager 1 nor Manager 2 — so nobody can
+ * review it until HR assigns one. Used to flag "awaiting manager assignment"
+ * rows in the staff listing. Rows in this state self-heal once a manager is
+ * assigned.
+ *
+ * Only the both-missing case is flagged: a missing reviewer for the current
+ * level alone does not mark the row (e.g. level-2 submissions release to HR
+ * Alignment when Manager 2 is removed — see releaseAwaitingManager2Reviews).
  */
 export function isAwaitingManagerAssignment(
   submission: Pick<
@@ -80,9 +86,7 @@ export function isAwaitingManagerAssignment(
     return false;
   }
   const managers = toEmployeeManagers(submission);
-  return (
-    getReviewingManagerUserId(managers, submission.managerLevel ?? 1) == null
-  );
+  return managers.manager1Id == null && managers.manager2Id == null;
 }
 
 /**

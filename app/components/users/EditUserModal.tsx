@@ -32,7 +32,6 @@ import {
 interface EditUserFormState {
   employeeId: string;
   email: string;
-  password: string;
   firstName: string;
   lastName: string;
   designation: string;
@@ -54,7 +53,6 @@ function toFormState(user: UserRecord): EditUserFormState {
   return {
     employeeId: user.employeeId,
     email: user.email,
-    password: "",
     firstName: user.firstName,
     lastName: user.lastName,
     designation: user.designation ?? "",
@@ -319,7 +317,6 @@ export function EditUserModal({
         qualificationInstitute: form.qualificationInstitute.trim() || null,
         qualificationCountry: form.qualificationCountry.trim() || null,
         isActive: form.isActive,
-        ...(form.password ? { password: form.password } : {}),
       },
       templatesChanged ? templateIds : undefined,
     );
@@ -736,25 +733,6 @@ export function EditUserModal({
                             : current,
                         )
                       }
-                      disabled={isSubmitting}
-                      className={inputClassName}
-                    />
-                  </Field>
-
-                  <Field label="Password" htmlFor="edit-user-password">
-                    <input
-                      id="edit-user-password"
-                      type="password"
-                      value={form.password}
-                      onChange={(event) =>
-                        setForm((current) =>
-                          current
-                            ? { ...current, password: event.target.value }
-                            : current,
-                        )
-                      }
-                      minLength={8}
-                      placeholder="Leave blank to keep current password"
                       disabled={isSubmitting}
                       className={inputClassName}
                     />

@@ -1,12 +1,10 @@
 import "server-only";
 
-import { db } from "../db";
 import { getDbClient } from "../db-context";
 
 export interface AuthUser {
   id: string;
   email: string;
-  passwordHash: string;
   firstName: string;
   lastName: string;
   systemRole: string;
@@ -19,7 +17,6 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
   const result = await getDbClient().query<{
     id: string;
     email: string;
-    password_hash: string;
     first_name: string;
     last_name: string;
     system_role: string;
@@ -31,7 +28,6 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
       SELECT
         id,
         email,
-        password_hash,
         first_name,
         last_name,
         system_role,
@@ -53,7 +49,6 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
   return {
     id: row.id,
     email: row.email,
-    passwordHash: row.password_hash,
     firstName: row.first_name,
     lastName: row.last_name,
     systemRole: row.system_role,
@@ -71,7 +66,6 @@ export async function getUserByIdForAuth(id: number): Promise<AuthUser | null> {
   const result = await getDbClient().query<{
     id: string;
     email: string;
-    password_hash: string;
     first_name: string;
     last_name: string;
     system_role: string;
@@ -83,7 +77,6 @@ export async function getUserByIdForAuth(id: number): Promise<AuthUser | null> {
       SELECT
         id,
         email,
-        password_hash,
         first_name,
         last_name,
         system_role,
@@ -105,7 +98,6 @@ export async function getUserByIdForAuth(id: number): Promise<AuthUser | null> {
   return {
     id: row.id,
     email: row.email,
-    passwordHash: row.password_hash,
     firstName: row.first_name,
     lastName: row.last_name,
     systemRole: row.system_role,

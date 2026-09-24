@@ -13,7 +13,6 @@ import type { EntityRecord } from "@/types/entities";
 import type { CreateUserInput, UserRecord } from "@/types/users";
 
 export const BULK_EDIT_MAX_EMPLOYEES = 500;
-export const NEW_EMPLOYEE_PASSWORD_PREFIX = "Welcome@";
 
 export type BulkUploadSheetRow = {
   rowKey: string;
@@ -127,10 +126,6 @@ function splitEmployeeName(name: string): { firstName: string; lastName: string 
     firstName: parts[0] ?? "",
     lastName: parts.slice(1).join(" "),
   };
-}
-
-export function defaultNewEmployeePassword(employeeId: string): string {
-  return `${NEW_EMPLOYEE_PASSWORD_PREFIX}${employeeId.trim()}`;
 }
 
 function changed(
@@ -287,7 +282,6 @@ export function collectBulkUploadCreates(
       input: {
         employeeId: sap,
         email: row.values.email.trim(),
-        password: defaultNewEmployeePassword(sap),
         firstName,
         lastName,
         designation: row.values.designation.trim() || null,
