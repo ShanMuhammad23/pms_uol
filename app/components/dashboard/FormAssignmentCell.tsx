@@ -91,7 +91,7 @@ export function FormAssignmentCell({
         }
         aria-label={`View form assigned to ${employeeName}`}
         className={cn(
-          "inline-flex items-center justify-center rounded-md text-xs font-semibold transition-colors",
+          "flex items-center  text-left rounded-md text-xs font-semibold transition-colors",
           templateCode?.trim()
             ? "px-1.5 py-0.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"
             : selfAssessmentEnabled

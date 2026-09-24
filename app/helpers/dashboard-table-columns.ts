@@ -275,6 +275,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
   formAssignment: {
     id: "formAssignment",
     label: "Form",
+    align: "left",
     width: 80,
     getValue: (row) =>
       row.directScoreEntry
