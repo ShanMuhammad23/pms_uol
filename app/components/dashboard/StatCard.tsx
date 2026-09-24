@@ -19,7 +19,12 @@ interface StatCardProps {
   awaitingtitle: string;
   completedtitle: string;
   completed: number;
-  percentageLabel: string;
+  /** Top-right completion badge; hidden when omitted. */
+  percentageLabel?: string;
+  /** Small badge rendered before the awaiting count. */
+  awaitingPercentageLabel?: string;
+  /** Small badge rendered before the completed count. */
+  completedPercentageLabel?: string;
   tone: StatCardTone;
   icon: ElementType;
   delay: number;
@@ -43,6 +48,8 @@ export function StatCard({
   completed,
   completedtitle,
   percentageLabel,
+  awaitingPercentageLabel,
+  completedPercentageLabel,
   tone,
   delay,
   onClick,
@@ -95,48 +102,76 @@ export function StatCard({
           <p className="min-w-0 text-[10px] font-semibold uppercase leading-tight tracking-wider text-white sm:text-xs lg:text-sm">
             {title}
           </p>
-          <span
-            className={cn(
-              "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums sm:px-2 sm:text-xs",
-              t.badge,
-            )}
-            title="Completion percentage"
-          >
-            {percentageLabel}
-          </span>
+          {percentageLabel ? (
+            <span
+              className={cn(
+                "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums sm:px-2 sm:text-xs",
+                t.badge,
+              )}
+              title="Completion percentage"
+            >
+              {percentageLabel}
+            </span>
+          ) : null}
         </div>
         <ul className="space-y-1 sm:space-y-1.5">
           <li className="flex items-center justify-between gap-2">
             <span className="min-w-0 truncate text-[10px] text-white sm:text-xs">
               {awaitingtitle}
             </span>
-            <button
-              type="button"
-              onClick={onAwaitingClick ?? onClick}
-              className={cn(
-                "shrink-0 rounded text-lg font-bold tracking-tight tabular-nums text-white transition-all sm:text-xl lg:text-2xl",
-                onAwaitingClick && "cursor-pointer hover:underline",
-                awaitingActive && "underline ring-1 ring-white/60 rounded px-1",
-              )}
-            >
-              {awaiting}
-            </button>
+            <span className="flex shrink-0 items-center gap-2">
+              {awaitingPercentageLabel ? (
+                <span
+                  className={cn(
+                    "w-11 rounded-md px-1.5 py-0.5 text-center text-[10px] font-semibold tabular-nums sm:text-xs",
+                    t.badge,
+                  )}
+                  title={`${awaitingtitle} percentage`}
+                >
+                  {awaitingPercentageLabel}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={onAwaitingClick ?? onClick}
+                className={cn(
+                  "min-w-9 shrink-0 rounded text-right text-lg font-bold tracking-tight tabular-nums text-white transition-all sm:text-xl lg:text-2xl",
+                  onAwaitingClick && "cursor-pointer hover:underline",
+                  awaitingActive && "underline ring-1 ring-white/60 rounded px-1",
+                )}
+              >
+                {awaiting}
+              </button>
+            </span>
           </li>
           <li className="flex items-center justify-between gap-2">
             <span className="min-w-0 truncate text-[10px] text-white sm:text-xs">
               {completedtitle}
             </span>
-            <button
-              type="button"
-              onClick={onCompletedClick ?? onClick}
-              className={cn(
-                "shrink-0 rounded text-lg font-bold tracking-tight tabular-nums text-white transition-all sm:text-xl lg:text-2xl",
-                onCompletedClick && "cursor-pointer hover:underline",
-                completedActive && "underline ring-1 ring-white/60 rounded px-1",
-              )}
-            >
-              {completed}
-            </button>
+            <span className="flex shrink-0 items-center gap-2">
+              {completedPercentageLabel ? (
+                <span
+                  className={cn(
+                    "w-11 rounded-md px-1.5 py-0.5 text-center text-[10px] font-semibold tabular-nums sm:text-xs",
+                    t.badge,
+                  )}
+                  title={`${completedtitle} percentage`}
+                >
+                  {completedPercentageLabel}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={onCompletedClick ?? onClick}
+                className={cn(
+                  "min-w-9 shrink-0 rounded text-right text-lg font-bold tracking-tight tabular-nums text-white transition-all sm:text-xl lg:text-2xl",
+                  onCompletedClick && "cursor-pointer hover:underline",
+                  completedActive && "underline ring-1 ring-white/60 rounded px-1",
+                )}
+              >
+                {completed}
+              </button>
+            </span>
           </li>
         </ul>
       </div>
