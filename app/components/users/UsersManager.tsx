@@ -62,7 +62,6 @@ type UserSectionTab = "list" | "add";
 interface UserFormState {
   employeeId: string;
   email: string;
-  password: string;
   firstName: string;
   lastName: string;
   designation: string;
@@ -83,7 +82,6 @@ interface UserFormState {
 const emptyForm: UserFormState = {
   employeeId: "",
   email: "",
-  password: "",
   firstName: "",
   lastName: "",
   designation: "",
@@ -423,7 +421,6 @@ export default function UsersManager() {
         qualificationInstitute: form.qualificationInstitute.trim() || null,
         qualificationCountry: form.qualificationCountry.trim() || null,
         isActive: form.isActive,
-        password: form.password,
       },
       templateIds: [...selectedTemplateIds],
       permissions,
@@ -790,24 +787,6 @@ export default function UsersManager() {
                   qualificationCountry: event.target.value,
                 }))
               }
-              disabled={isSubmitting}
-              className={inputClassName}
-            />
-          </Field>
-
-          <Field label="Password" htmlFor="user-password">
-            <input
-              id="user-password"
-              type="password"
-              value={form.password}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  password: event.target.value,
-                }))
-              }
-              required
-              minLength={8}
               disabled={isSubmitting}
               className={inputClassName}
             />

@@ -1,7 +1,7 @@
 import "server-only";
 
+import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
-import { db } from "../db";
 import { getDbClient } from "@/lib/db-context";
 import type {
   CreateUserInput,
@@ -16,6 +16,7 @@ import {
   isManagerEligibleRole,
 } from "@/app/helpers/manager-eligibility";
 import { hasEntitiesCampusColumn } from "@/lib/queries/entities";
+import { releaseAwaitingManager2Reviews } from "@/lib/queries/manager-review-release";
 
 interface UserRow {
   id: string;
@@ -565,7 +566,9 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
   await assertEntityExists(normalized.entityId);
   await assertValidManagers(null, normalized.headId, normalized.manager2Id);
 
-  const passwordHash = await bcrypt.hash(input.password, 10);
+  // Sign-in is Google SSO only — passwords are never verified. Store a random
+  // unusable hash to satisfy the NOT NULL password_hash column.
+  const passwordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
 
   const columns = [
     "employee_id",
@@ -691,10 +694,6 @@ export async function updateUser(
     previousManager2Id: currentUser.manager2Id,
   });
 
-  const passwordHash = input.password
-    ? await bcrypt.hash(input.password, 10)
-    : null;
-
   const setClauses: string[] = [
     "employee_id = $1",
     "email = $2",
@@ -713,11 +712,6 @@ export async function updateUser(
     normalized.empCategory,
     normalized.empSubCategory,
   ];
-
-  if (passwordHash) {
-    values.push(passwordHash);
-    setClauses.push(`password_hash = $${values.length}`);
-  }
 
   values.push(normalized.entityId);
   setClauses.push(
@@ -760,6 +754,13 @@ export async function updateUser(
 
     if (result.rowCount === 0) {
       throw new UserError("User not found.", 404);
+    }
+
+    // Manager 2 was just removed: release any level-2 submissions that lost
+    // their reviewer to HR Alignment instead of leaving them "Awaiting
+    // Manager" (second-manager review is optional).
+    if (currentUser.manager2Id != null && normalized.manager2Id == null) {
+      await releaseAwaitingManager2Reviews([id]);
     }
 
     if (qualsReady) {

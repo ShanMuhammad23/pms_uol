@@ -70,7 +70,6 @@ export interface UserRecord {
 export interface CreateUserInput {
   employeeId: string;
   email: string;
-  password: string;
   firstName: string;
   lastName: string;
   designation?: string | null;
@@ -93,7 +92,6 @@ export interface CreateUserInput {
 export interface UpdateUserInput {
   employeeId: string;
   email: string;
-  password?: string;
   firstName: string;
   lastName: string;
   designation?: string | null;
