@@ -13,6 +13,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Button } from "@/app/components/auth/Button";
+import ConfirmActionModal from "./ConfirmActionModal";
 import FormEmployeeAssignment from "./FormEmployeeAssignment";
 import FormTemplateView from "./FormTemplateView";
 import { FormRatingScalesEditor } from "./FormRatingScalesEditor";
@@ -487,6 +488,12 @@ function ModernFormDesignStep({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(scoringMode == null);
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "section"; clientId: string }
+    | { kind: "question"; clientId: string }
+    | { kind: "subsection"; sectionClientId: string; subsectionClientId: string }
+    | null
+  >(null);
   const { data: campuses = [] } = useCampusesQuery();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -748,6 +755,55 @@ function ModernFormDesignStep({
       questions,
     );
   };
+
+  const confirmPendingDelete = () => {
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === "section") {
+      removeSection(pendingDelete.clientId);
+    } else if (pendingDelete.kind === "subsection") {
+      removeSubsection(pendingDelete.sectionClientId, pendingDelete.subsectionClientId);
+    } else {
+      removeQuestion(pendingDelete.clientId);
+    }
+    setPendingDelete(null);
+  };
+
+  const pendingDeleteCopy = (() => {
+    if (!pendingDelete) return { title: "", message: "" };
+    if (pendingDelete.kind === "section") {
+      const section = sections.find((s) => s.clientId === pendingDelete.clientId);
+      const qCount =
+        (section?.questions.length ?? 0) +
+        (section?.subsections ?? []).reduce((n, sub) => n + sub.questions.length, 0);
+      const subCount = section?.subsections.length ?? 0;
+      return {
+        title: "Delete Section?",
+        message:
+          `This will permanently remove this section` +
+          (subCount > 0 || qCount > 0
+            ? ` along with ${subCount > 0 ? `${subCount} subsection${subCount !== 1 ? "s" : ""} and ` : ""}${qCount} question${qCount !== 1 ? "s" : ""}`
+            : "") +
+          ".",
+      };
+    }
+    if (pendingDelete.kind === "subsection") {
+      const sub = sections
+        .find((s) => s.clientId === pendingDelete.sectionClientId)
+        ?.subsections.find((s) => s.clientId === pendingDelete.subsectionClientId);
+      const qCount = sub?.questions.length ?? 0;
+      return {
+        title: "Delete Subsection?",
+        message:
+          `This will permanently remove this subsection` +
+          (qCount > 0 ? ` and its ${qCount} question${qCount !== 1 ? "s" : ""}` : "") +
+          ".",
+      };
+    }
+    return {
+      title: "Delete Question?",
+      message: "This will permanently remove this question from the form.",
+    };
+  })();
 
   const addQuestionToSubsection = (sectionClientId: string, subsectionClientId: string) => {
     commitStructure(
@@ -1344,16 +1400,16 @@ function ModernFormDesignStep({
                           onToggle={() => toggleSection(section.clientId)}
                           errors={errors}
                           onUpdate={(updates) => updateSection(section.clientId, updates)}
-                          onRemove={() => removeSection(section.clientId)}
+                          onRemove={() => setPendingDelete({ kind: "section", clientId: section.clientId })}
                           onAddQuestion={() => addQuestionToSection(section.clientId)}
                           onAddSubsection={() => addSubsectionToSection(section.clientId)}
-                          onRemoveSubsection={(subId) => removeSubsection(section.clientId, subId)}
+                          onRemoveSubsection={(subId) => setPendingDelete({ kind: "subsection", sectionClientId: section.clientId, subsectionClientId: subId })}
                           onDropSection={(dragSectionClientId, insertIndex) => moveSection(dragSectionClientId, insertIndex)}
                           onDropSubsection={(dragSubsectionClientId, sourceSectionClientId, insertIndex) =>
                             moveSubsection(dragSubsectionClientId, sourceSectionClientId, section.clientId, insertIndex)
                           }
                           onAddQuestionToSubsection={(subId) => addQuestionToSubsection(section.clientId, subId)}
-                          onRemoveQuestion={removeQuestion}
+                          onRemoveQuestion={(qId) => setPendingDelete({ kind: "question", clientId: qId })}
                           onMoveQuestion={moveQuestion}
                           onUpdateQuestion={updateQuestion}
                           formSelfAssessmentEnabled={selfAssessmentEnabled}
@@ -1381,7 +1437,7 @@ function ModernFormDesignStep({
                         errorPrefix={`question-${questionIndex}`}
                         errors={errors}
                         sourceLocation={{ sectionClientId: null, subsectionClientId: null }}
-                        onRemove={() => removeQuestion(question.clientId)}
+                        onRemove={() => setPendingDelete({ kind: "question", clientId: question.clientId })}
                         onChange={(updates) => updateQuestion(question.clientId, updates)}
                         onDropQuestion={(dragData, insertIndex) => {
                           moveQuestion(dragData.questionClientId, dragData.source, {
@@ -1443,6 +1499,16 @@ function ModernFormDesignStep({
           )}
         </div>
       </div>
+
+      <ConfirmActionModal
+        open={pendingDelete !== null}
+        title={pendingDeleteCopy.title}
+        message={pendingDeleteCopy.message}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={confirmPendingDelete}
+        onClose={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
@@ -1712,6 +1778,9 @@ function SectionCard({
 }) {
   const [sectionDragOver, setSectionDragOver] = useState(false);
   const [headerDragPos, setHeaderDragPos] = useState<"before" | "after" | null>(null);
+  const [openTogglePrompt, setOpenTogglePrompt] = useState<
+    "enable" | "disable" | "blocked" | null
+  >(null);
   const hasTitleError = errors[`section-${index}-title`];
   const hasAnyError = Object.keys(errors).some(k => k.startsWith(`section-${index}`));
   const totalQuestions = section.questions.length + section.subsections.reduce((sum, sub) => sum + sub.questions.length, 0);
@@ -1885,20 +1954,19 @@ function SectionCard({
                 type="checkbox"
                 checked={Boolean(section.isOpenAssessment)}
                 onChange={(e) => {
-                  if (e.target.checked) {
-                    onUpdate({
-                      isOpenAssessment: true,
-                      questions: [],
-                      subsections: [],
-                      layout: [],
-                      openAssessmentTotalMarks: section.openAssessmentTotalMarks ?? 100,
-                    });
-                  } else {
-                    onUpdate({
-                      isOpenAssessment: false,
-                      openAssessmentTotalMarks: 0,
-                    });
+                  // Enabling requires an empty section — authored questions
+                  // replace the builder's own questions/subsections.
+                  if (
+                    e.target.checked &&
+                    (section.questions.length > 0 ||
+                      section.subsections.length > 0)
+                  ) {
+                    setOpenTogglePrompt("blocked");
+                    return;
                   }
+                  setOpenTogglePrompt(
+                    e.target.checked ? "enable" : "disable",
+                  );
                 }}
                 className="size-4 rounded border-slate-300 text-primary focus-visible:ring-2 focus-visible:ring-primary dark:border-white/20 dark:bg-slate-800"
               />
@@ -2115,6 +2183,61 @@ function SectionCard({
           )}
         </div>
       )}
+
+      <ConfirmActionModal
+        open={openTogglePrompt !== null}
+        title={
+          openTogglePrompt === "blocked"
+            ? "Cannot Mark as Open Assessment"
+            : openTogglePrompt === "enable"
+              ? "Mark as Open Assessment?"
+              : "Unmark as Open Assessment?"
+        }
+        message={
+          openTogglePrompt === "blocked"
+            ? `This section still contains ${[
+                section.questions.length > 0
+                  ? `${section.questions.length} question${section.questions.length !== 1 ? "s" : ""}`
+                  : null,
+                section.subsections.length > 0
+                  ? `${section.subsections.length} subsection${section.subsections.length !== 1 ? "s" : ""}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" and ")}. Delete them first, then mark the section as open assessment.`
+            : openTogglePrompt === "enable"
+              ? "Questions for this section will be authored by the employee or manager at fill time instead of being defined here."
+              : "The marks budget will be cleared and this section will require its own questions again."
+        }
+        confirmLabel={
+          openTogglePrompt === "blocked"
+            ? "Got it"
+            : openTogglePrompt === "enable"
+              ? "Mark as Open Assessment"
+              : "Unmark"
+        }
+        hideCancel={openTogglePrompt === "blocked"}
+        tone={openTogglePrompt === "enable" ? "primary" : "danger"}
+        onConfirm={() => {
+          if (openTogglePrompt === "enable") {
+            onUpdate({
+              isOpenAssessment: true,
+              questions: [],
+              subsections: [],
+              layout: [],
+              openAssessmentTotalMarks:
+                section.openAssessmentTotalMarks ?? 100,
+            });
+          } else if (openTogglePrompt === "disable") {
+            onUpdate({
+              isOpenAssessment: false,
+              openAssessmentTotalMarks: 0,
+            });
+          }
+          setOpenTogglePrompt(null);
+        }}
+        onClose={() => setOpenTogglePrompt(null)}
+      />
     </div>
   );
 }

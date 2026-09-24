@@ -1379,25 +1379,6 @@ export default function SubmissionDetailView({
 
   // Open-assessment section totals (authored questions).
   const openSections = data.sections.filter((s) => s.isOpenAssessment);
-  const openAssessmentMaxMarks = openSections.reduce((sum, s) => {
-    // The section's static openAssessmentTotalMarks is the budget set during
-    // form building. The actual total marks may differ because managers can
-    // author questions with different weights during assessment. Use the
-    // maximum of the static budget and the actual authored total marks
-    // across all reviewers (self, Manager 1, Manager 2).
-    const staticMax = s.openAssessmentTotalMarks ?? 0;
-    const selfAuthoredTotal = (data.authoredAnswers ?? [])
-      .filter((a) => a.openSectionId === s.id)
-      .reduce((sum, a) => sum + (a.authoredTotalMarks ?? 0), 0);
-    const mgr1AuthoredTotal = (data.manager1AuthoredAnswers ?? [])
-      .filter((a) => a.openSectionId === s.id)
-      .reduce((sum, a) => sum + (a.authoredTotalMarks ?? 0), 0);
-    const mgr2AuthoredTotal = (data.manager2AuthoredAnswers ?? [])
-      .filter((a) => a.openSectionId === s.id)
-      .reduce((sum, a) => sum + (a.authoredTotalMarks ?? 0), 0);
-    const actualMax = Math.max(staticMax, selfAuthoredTotal, mgr1AuthoredTotal, mgr2AuthoredTotal);
-    return sum + actualMax;
-  }, 0);
   const openSelfTotal = (data.authoredAnswers ?? []).reduce(
     (sum, a) => sum + (a.pointsEarned ?? 0), 0,
   );
@@ -1426,16 +1407,10 @@ export default function SubmissionDetailView({
         : manager1Total + openMgr1Total > 0
           ? manager1Total + openMgr1Total
           : selfTotal + openSelfTotal;
-  // data.maxRawScore already includes each open section's static budget
-  // (open_assessment_total_marks). Subtract it before adding the resolved
-  // openAssessmentMaxMarks (which may exceed the budget when managers author
-  // extra marks) so the static marks are not counted twice.
-  const staticOpenBudget = openSections.reduce(
-    (sum, s) => sum + (s.openAssessmentTotalMarks ?? 0),
-    0,
-  );
-  const totalMaxScore =
-    data.maxRawScore - staticOpenBudget + openAssessmentMaxMarks;
+  // maxRawScore already includes each open section's achievable marks
+  // (authored totals once authored, else the configured budget) — the API
+  // computes it per appraisal, so it is used directly as the form total.
+  const totalMaxScore = data.maxRawScore;
   const displayedFormPercent =
     totalMaxScore > 0
       ? Math.round((displayedFormScore / totalMaxScore) * 1000) / 10

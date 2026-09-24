@@ -418,19 +418,28 @@ export async function listDashboardOverview(
      ) assigned_performance_matrix ON TRUE
      LEFT JOIN template_max_marks tm
        ON tm.template_id = COALESCE(ap.template_id, assigned.template_id)
-     -- Open-section questions are authored per appraisal (question_id IS NULL)
-     -- and duplicated per reviewer, so dedupe by section + question text and
-     -- count each authored question's marks once in the achievable total.
+     -- Each open section contributes its authored question marks once a
+     -- reviewer has authored them (taking the largest per-reviewer total,
+     -- since authored answers are duplicated per reviewer). Before anything
+     -- is authored, the section's configured budget is the achievable max.
      LEFT JOIN LATERAL (
-       SELECT SUM(aq.marks) AS authored_max
-       FROM (
-         SELECT MAX(aa.authored_total_marks) AS marks
-         FROM appraisal_answers aa
-         WHERE aa.appraisal_id = ap.id
-           AND aa.open_section_id IS NOT NULL
-           AND aa.authored_total_marks > 0
-         GROUP BY aa.open_section_id, aa.authored_question_text
-       ) aq
+       SELECT SUM(COALESCE(aq.marks, fs.open_assessment_total_marks)) AS authored_max
+       FROM form_sections fs
+       LEFT JOIN (
+         SELECT rt.open_section_id, MAX(rt.reviewer_total) AS marks
+         FROM (
+           SELECT aa.open_section_id, aa.filled_by_id,
+                  SUM(aa.authored_total_marks) AS reviewer_total
+           FROM appraisal_answers aa
+           WHERE aa.appraisal_id = ap.id
+             AND aa.open_section_id IS NOT NULL
+             AND aa.authored_total_marks > 0
+           GROUP BY aa.open_section_id, aa.filled_by_id
+         ) rt
+         GROUP BY rt.open_section_id
+       ) aq ON aq.open_section_id = fs.id
+       WHERE fs.template_id = COALESCE(ap.template_id, assigned.template_id)
+         AND fs.is_open_assessment = TRUE
      ) authored_marks ON TRUE
      LEFT JOIN entities ent ON ent.id = u.entity_id
      LEFT JOIN entities p1 ON p1.id = ent.parent_entity_id
