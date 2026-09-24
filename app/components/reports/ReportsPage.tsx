@@ -1,10 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import * as XLSX from "xlsx";
 import {
   Building2,
   ChevronDown,
   ChevronRight,
+  Download,
   FileBarChart,
   Loader2,
   MapPin,
@@ -13,8 +15,10 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import {
   fetchOrganizationReport,
+  fetchOrganizationReportRecords,
   type OrgReportNode,
 } from "@/lib/queries/organization-report-client";
+import { APPRAISAL_STATUS_LABELS, type AppraisalStatus } from "@/types/forms";
 import { useDashboardEntitiesQuery } from "@/app/queries/organization";
 import { MultiSelectFilterDropdown } from "@/app/components/dashboard/MultiSelectFilterDropdown";
 import type { MultiSelectOption } from "@/app/components/dashboard/MultiSelectFilterDropdown";
@@ -95,6 +99,36 @@ const REPORT_COLUMNS: ColumnDef[] = [
   { id: "assessedByManager2", label: "Manager 2 Review", width: 150 },
   { id: "hrAlignment", label: "HR Alignment", width: 130 },
   { id: "boardApproval", label: "Board Approval", width: 130 },
+];
+
+/** Popup chrome colors — mirrors the CountBadge palette so the modal echoes
+ * the clicked column's badge color. */
+const RECORD_MODAL_VARIANT: Record<CountVariant, string> = {
+  total: "bg-slate-200 text-slate-800 dark:bg-slate-700/60 dark:text-slate-100",
+  eligible: "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-200",
+  forms: "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200",
+  formsNotAssigned: "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200",
+  ds: "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200",
+  ms: "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-200",
+  perfMatrix: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200",
+  incrMatrix: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950/60 dark:text-fuchsia-200",
+  self: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200",
+  manager1: "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200",
+  manager2: "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-200",
+  hr: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200",
+  board: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
+};
+
+/** Records-popup columns — widths persist via useColumnConfig. The manager
+ * column shares one id so its width carries across Manager 1 / Manager 2. */
+const RECORD_MODAL_COLUMNS: ColumnDef[] = [
+  { id: "sap", label: "SAP ID", width: 100 },
+  { id: "name", label: "Name", width: 190 },
+  { id: "email", label: "Email", width: 220 },
+  { id: "org1", label: "Org 1", width: 170 },
+  { id: "org2", label: "Org 2", width: 170 },
+  { id: "manager", label: "Manager", width: 170 },
+  { id: "status", label: "Status", width: 160 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -330,19 +364,21 @@ function pct(value: number, total: number): number {
 // CountBadge component
 // ---------------------------------------------------------------------------
 
-/** Prominent count badge for report columns. */
+/** Prominent count badge for report columns. Clickable when onClick given. */
 function CountBadge({
   value,
   variant,
   depth,
   percentage,
   showPercentage = true,
+  onClick,
 }: {
   value: number;
   variant: CountVariant;
   depth: number;
   percentage?: number;
   showPercentage?: boolean;
+  onClick?: () => void;
 }) {
   const isZero = value === 0;
   const isRoot = depth === 0;
@@ -375,6 +411,35 @@ function CountBadge({
 
   const pctValue = percentage !== undefined ? percentage : 0;
 
+  const badge = (
+    <>
+      <span>{value}{showPercentage ? " -" : ""}</span>
+      {showPercentage ? (
+        <span className="text-[12px] font-medium opacity-75">
+          {pctValue.toFixed(1)}%
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title="View records"
+        className={cn(
+          "inline-flex min-w-[2.5rem] flex-row gap-2 items-center rounded-full px-2 py-0.5 tabular-nums transition-shadow",
+          "hover:ring-2 hover:ring-offset-1 hover:ring-slate-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:ring-white/30",
+          isRoot ? "text-sm font-bold" : "text-sm font-semibold",
+          variantStyles[variant],
+        )}
+      >
+        {badge}
+      </button>
+    );
+  }
+
   return (
     <span
       className={cn(
@@ -383,12 +448,7 @@ function CountBadge({
         variantStyles[variant],
       )}
     >
-      <span>{value}{showPercentage ? " -" : ""}</span>
-      {showPercentage ? (
-        <span className="text-[12px] font-medium opacity-75">
-          {pctValue.toFixed(1)}%
-        </span>
-      ) : null}
+      {badge}
     </span>
   );
 }
@@ -404,6 +464,7 @@ interface ReportRowProps {
   depth: number;
   expandedIds: Set<number>;
   onToggle: (id: number) => void;
+  onBadgeClick: (node: OrgReportNode, columnId: ReportColumnId) => void;
   visibleColumns: ColumnDef[];
   frozenColumnIds: string[];
   stickyOffsets: Record<string, number>;
@@ -416,6 +477,7 @@ function ReportRow({
   depth,
   expandedIds,
   onToggle,
+  onBadgeClick,
   visibleColumns,
   frozenColumnIds,
   stickyOffsets,
@@ -465,6 +527,7 @@ function ReportRow({
           depth={depth}
           percentage={percentage}
           showPercentage={showPct}
+          onClick={value > 0 ? () => onBadgeClick(node, columnId) : undefined}
         />
       </td>
     );
@@ -559,6 +622,7 @@ function ReportRow({
               depth={depth + 1}
               expandedIds={expandedIds}
               onToggle={onToggle}
+              onBadgeClick={onBadgeClick}
               visibleColumns={visibleColumns}
               frozenColumnIds={frozenColumnIds}
               stickyOffsets={stickyOffsets}
@@ -585,6 +649,88 @@ export default function ReportsPage() {
 
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
   const [columnMgmtOpen, setColumnMgmtOpen] = useState(false);
+  // Clicked count badge → show the records behind it. entityId null = org-wide.
+  const [recordsView, setRecordsView] = useState<{
+    entityId: number | null;
+    entityName: string;
+    columnId: ReportColumnId;
+    columnLabel: string;
+  } | null>(null);
+
+  const recordsQuery = useQuery({
+    queryKey: [
+      "org-report-records",
+      recordsView?.entityId ?? "all",
+      recordsView?.columnId,
+    ],
+    queryFn: () =>
+      fetchOrganizationReportRecords(
+        recordsView!.entityId,
+        recordsView!.columnId,
+      ),
+    enabled: recordsView !== null,
+  });
+
+  const openRecords = (node: OrgReportNode | null, columnId: ReportColumnId) => {
+    const columnLabel =
+      REPORT_COLUMNS.find((c) => c.id === columnId)?.label ?? columnId;
+    setRecordsView({
+      entityId: node?.id ?? null,
+      entityName: node?.name ?? "All Organizations",
+      columnId,
+      columnLabel,
+    });
+  };
+
+  // Manager-related columns get a matching manager column in the popup.
+  const recordsManagerCol =
+    recordsView?.columnId === "manager1Assigned" ||
+    recordsView?.columnId === "assessedByManager1"
+      ? "manager1"
+      : recordsView?.columnId === "manager2Assigned" ||
+          recordsView?.columnId === "assessedByManager2"
+        ? "manager2"
+        : null;
+
+  const recordStatusLabel = (status: string | null) =>
+    status
+      ? (APPRAISAL_STATUS_LABELS[status as AppraisalStatus] ?? status)
+      : "—";
+
+  const exportRecordsToExcel = () => {
+    const records = recordsQuery.data ?? [];
+    if (records.length === 0 || !recordsView) return;
+
+    const rows = records.map((r) => ({
+      "SAP ID": r.employeeId,
+      Name: r.employeeName,
+      Email: r.email ?? "",
+      "Org 1": r.orgLevel1Name ?? "",
+      "Org 2": r.orgLevel2Name ?? "",
+      ...(recordsManagerCol === "manager1"
+        ? { "Manager 1": r.manager1Name ?? "" }
+        : recordsManagerCol === "manager2"
+          ? { "Manager 2": r.manager2Name ?? "" }
+          : {}),
+      Status: recordStatusLabel(r.status),
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet["!cols"] = [
+      { wch: 12 },
+      { wch: 28 },
+      { wch: 32 },
+      { wch: 28 },
+      { wch: 28 },
+      { wch: 22 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Records");
+    const filename = `${recordsView.columnLabel} - ${recordsView.entityName}`
+      .replace(/[\\/:*?"<>|]/g, "-")
+      .slice(0, 120);
+    XLSX.writeFile(workbook, `${filename}.xlsx`);
+  };
 
   // Column config (persisted server-side via useColumnConfig).
   const {
@@ -601,6 +747,13 @@ export default function ReportsPage() {
     allColumns: REPORT_COLUMNS,
     hasSelectColumn: false,
   });
+
+  // Records-popup column widths (persisted like the main table).
+  const { getColumnWidth: getRecordColWidth, setColumnWidth: setRecordColWidth } =
+    useColumnConfig("reports-record-popup", {
+      allColumns: RECORD_MODAL_COLUMNS,
+      hasSelectColumn: false,
+    });
 
   // Filter selections per level: "site" (campus ids) then the org category
   // levels C0–C3. null = no filter, [] = none, [ids] = selected.
@@ -953,6 +1106,7 @@ export default function ReportsPage() {
                     depth={0}
                     expandedIds={expandedIds}
                     onToggle={handleToggle}
+                    onBadgeClick={openRecords}
                     visibleColumns={visibleOrderedColumns}
                     frozenColumnIds={frozenColumnIds}
                     stickyOffsets={stickyOffsets}
@@ -1027,6 +1181,11 @@ export default function ReportsPage() {
                           depth={0}
                           percentage={percentage}
                           showPercentage={showPct}
+                          onClick={
+                            value > 0
+                              ? () => openRecords(null, columnId)
+                              : undefined
+                          }
                         />
                       </td>
                     );
@@ -1038,6 +1197,144 @@ export default function ReportsPage() {
         </table>
       </div>
 
+      {/* Records modal — actual employees behind a clicked count badge */}
+      {recordsView ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setRecordsView(null)}
+        >
+          <div
+            className="flex h-[85vh] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-white/10 dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className={cn(
+                "flex items-center justify-between border-b border-black/10 px-5 py-3 dark:border-white/10",
+                RECORD_MODAL_VARIANT[COLUMN_VARIANT[recordsView.columnId]],
+              )}
+            >
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold">
+                  {recordsView.columnLabel} — {recordsView.entityName}
+                </h3>
+                <p className="text-xs opacity-75">
+                  {recordsQuery.data
+                    ? `${recordsQuery.data.length} record${recordsQuery.data.length !== 1 ? "s" : ""}`
+                    : "Loading…"}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={exportRecordsToExcel}
+                  disabled={!recordsQuery.data || recordsQuery.data.length === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecordsView(null)}
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto">
+              {recordsQuery.isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading records…
+                </div>
+              ) : recordsQuery.isError ? (
+                <div className="py-16 text-center text-sm text-red-500">
+                  Failed to load records.
+                </div>
+              ) : (recordsQuery.data?.length ?? 0) === 0 ? (
+                <div className="py-16 text-center text-sm text-slate-500">
+                  No records found.
+                </div>
+              ) : (
+                <table className="w-full table-fixed text-sm">
+                  <thead
+                    className={cn(
+                      "sticky top-0 text-left text-xs font-semibold uppercase tracking-wide",
+                      RECORD_MODAL_VARIANT[COLUMN_VARIANT[recordsView.columnId]],
+                    )}
+                  >
+                    <tr>
+                      {(
+                        [
+                          ["sap", "SAP ID"],
+                          ["name", "Name"],
+                          ["email", "Email"],
+                          ["org1", "Org 1"],
+                          ["org2", "Org 2"],
+                          ...(recordsManagerCol === "manager1"
+                            ? [["manager", "Manager 1"] as const]
+                            : recordsManagerCol === "manager2"
+                              ? [["manager", "Manager 2"] as const]
+                              : []),
+                          ["status", "Status"],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <ResizableHeader
+                          key={id}
+                          columnId={id}
+                          width={getRecordColWidth(id)}
+                          onResize={setRecordColWidth}
+                          className="px-4 py-2.5"
+                        >
+                          {label}
+                        </ResizableHeader>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(recordsQuery.data ?? []).map((r) => (
+                      <tr
+                        key={r.userId}
+                        className="border-t border-slate-100 hover:bg-slate-50 dark:border-white/5 dark:hover:bg-white/[0.04]"
+                      >
+                        <td className="truncate px-4 py-2 font-mono text-xs text-slate-600 dark:text-slate-300">
+                          {r.employeeId}
+                        </td>
+                        <td className="truncate px-4 py-2 text-slate-800 dark:text-slate-100">
+                          {r.employeeName}
+                        </td>
+                        <td className="truncate px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
+                          {r.email ?? "—"}
+                        </td>
+                        <td className="truncate px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
+                          {r.orgLevel1Name ?? "—"}
+                        </td>
+                        <td className="truncate px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
+                          {r.orgLevel2Name ?? "—"}
+                        </td>
+                        {recordsManagerCol === "manager1" ? (
+                          <td className="truncate px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
+                            {r.manager1Name ?? "—"}
+                          </td>
+                        ) : null}
+                        {recordsManagerCol === "manager2" ? (
+                          <td className="truncate px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
+                            {r.manager2Name ?? "—"}
+                          </td>
+                        ) : null}
+                        <td className="truncate px-4 py-2 text-xs text-slate-600 dark:text-slate-300">
+                          {recordStatusLabel(r.status)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

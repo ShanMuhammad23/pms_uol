@@ -74,11 +74,11 @@ export function ResizableHeader({
       {children}
       <div
         onMouseDown={handleMouseDown}
-        className="absolute right-0 top-0 z-50 flex h-full w-1.5 cursor-col-resize items-center justify-center touch-none select-none"
+        className="group absolute right-0 top-0 z-50 flex h-full w-2 cursor-col-resize items-center justify-center touch-none select-none"
         aria-label={`Resize column ${columnId}`}
         role="separator"
       >
-        <div className="h-full w-px bg-white/20 transition-colors hover:bg-white/60 dark:bg-white/10 dark:hover:bg-white/40" />
+        <div className="h-full w-px bg-slate-300 transition-colors group-hover:bg-primary/70 group-active:bg-primary dark:bg-white/20 dark:group-hover:bg-white/50" />
       </div>
     </th>
   );

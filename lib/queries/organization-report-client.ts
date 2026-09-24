@@ -34,3 +34,32 @@ export async function fetchOrganizationReport(): Promise<OrgReportNode[]> {
   const data = await response.json();
   return data.tree as OrgReportNode[];
 }
+
+export interface OrgReportRecord {
+  userId: number;
+  employeeId: string;
+  employeeName: string;
+  email: string | null;
+  orgLevel1Name: string | null;
+  orgLevel2Name: string | null;
+  manager1Name: string | null;
+  manager2Name: string | null;
+  status: string | null;
+}
+
+export async function fetchOrganizationReportRecords(
+  entityId: number | null,
+  column: string,
+): Promise<OrgReportRecord[]> {
+  const params = new URLSearchParams({ column });
+  if (entityId != null) params.set("entityId", String(entityId));
+  const response = await fetch(
+    `/api/reports/organization-hierarchy/records?${params.toString()}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error("Failed to load report records.");
+  }
+  const data = await response.json();
+  return data.records as OrgReportRecord[];
+}

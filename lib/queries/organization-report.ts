@@ -49,6 +49,39 @@ export interface OrgReportNode {
   children: OrgReportNode[];
 }
 
+export type OrgReportRecordColumnId =
+  | "total"
+  | "eligible"
+  | "formsAssigned"
+  | "formsNotAssigned"
+  | "directScoreEntry"
+  | "managerDirectAssessment"
+  | "performanceMatrixAssigned"
+  | "incrementMatrixAssigned"
+  | "selfAssessed"
+  | "manager1Assigned"
+  | "assessedByManager1"
+  | "manager2Assigned"
+  | "assessedByManager2"
+  | "hrAlignment"
+  | "boardApproval";
+
+export interface OrgReportRecord {
+  userId: number;
+  employeeId: string;
+  employeeName: string;
+  email: string | null;
+  /** Nearest C1 ancestor entity name (inclusive of the employee's entity). */
+  orgLevel1Name: string | null;
+  /** Nearest C2 ancestor entity name (inclusive of the employee's entity). */
+  orgLevel2Name: string | null;
+  /** Assigned Manager 1 (users.head_id). */
+  manager1Name: string | null;
+  /** Assigned Manager 2 (users.manager_2_id). */
+  manager2Name: string | null;
+  status: string | null;
+}
+
 interface EntityCountRow {
   entity_id: string;
   direct_staff_count: string;
@@ -105,23 +138,7 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
   //      from date_of_joining to the FY end date is >= 3 months.
   // This mirrors the dashboard's eligibility logic and is applied to every
   // count column except total_employees and eligible.
-  const eligibleCond = `(
-    COALESCE(u.assessment_eligibility, TRUE) = TRUE
-    AND (
-      COALESCE(ap.is_eligible, FALSE) = TRUE
-      OR (
-        u.date_of_joining IS NOT NULL
-        AND $2::text IS NOT NULL
-        AND u.date_of_joining::date <= $2::date
-        AND (
-          (EXTRACT(YEAR FROM $2::date) - EXTRACT(YEAR FROM u.date_of_joining::date)) * 12
-          + (EXTRACT(MONTH FROM $2::date) - EXTRACT(MONTH FROM u.date_of_joining::date))
-          + CASE WHEN EXTRACT(DAY FROM $2::date) >= EXTRACT(DAY FROM u.date_of_joining::date) THEN 1 ELSE 0 END
-          >= 3
-        )
-      )
-    )
-  )`;
+  const eligibleCond = eligibleCondSql("$2::date");
 
   const countRows = await getDbClient().query<EntityCountRow>(
     `WITH RECURSIVE direct_counts AS (
@@ -405,4 +422,208 @@ export async function getOrganizationReport(): Promise<OrgReportNode[]> {
 
   sortNodes(roots);
   return roots;
+}
+
+/**
+ * Eligibility predicate shared by the counts query and the records query.
+ * `fyEndExpr` is a SQL expression yielding the FY end date — a parameter
+ * reference (e.g. "$2::date") or an inline literal (e.g. "'2026-06-30'::date").
+ */
+function eligibleCondSql(fyEndExpr: string): string {
+  return `(
+    COALESCE(u.assessment_eligibility, TRUE) = TRUE
+    AND (
+      COALESCE(ap.is_eligible, FALSE) = TRUE
+      OR (
+        u.date_of_joining IS NOT NULL
+        AND ${fyEndExpr} IS NOT NULL
+        AND u.date_of_joining::date <= ${fyEndExpr}
+        AND (
+          (EXTRACT(YEAR FROM ${fyEndExpr}) - EXTRACT(YEAR FROM u.date_of_joining::date)) * 12
+          + (EXTRACT(MONTH FROM ${fyEndExpr}) - EXTRACT(MONTH FROM u.date_of_joining::date))
+          + CASE WHEN EXTRACT(DAY FROM ${fyEndExpr}) >= EXTRACT(DAY FROM u.date_of_joining::date) THEN 1 ELSE 0 END
+          >= 3
+        )
+      )
+    )
+  )`;
+}
+
+/** Per-column record filter — must mirror the FILTER conditions in the counts CTE. */
+function recordsColumnCondition(
+  columnId: OrgReportRecordColumnId,
+  eligibleCond: string,
+): string {
+  switch (columnId) {
+    case "eligible":
+      return eligibleCond;
+    case "formsAssigned":
+      return `${eligibleCond} AND efa.template_id IS NOT NULL`;
+    case "formsNotAssigned":
+      return `${eligibleCond} AND efa.template_id IS NULL AND dsea.employee_id IS NULL`;
+    case "directScoreEntry":
+      return `${eligibleCond} AND dsea.employee_id IS NOT NULL`;
+    case "managerDirectAssessment":
+      return `${eligibleCond} AND efa.template_id IS NOT NULL AND efa.self_assessment_disabled = TRUE`;
+    case "performanceMatrixAssigned":
+      return `${eligibleCond} AND epma.employee_id IS NOT NULL`;
+    case "incrementMatrixAssigned":
+      return `${eligibleCond} AND eima.employee_id IS NOT NULL`;
+    case "selfAssessed":
+      return `${eligibleCond} AND ap.status IN ('PENDING_HEAD_REVIEW','PENDING_HR_CALIBRATION','PENDING_BOARD_APPROVAL','APPROVED','COMPLETED')`;
+    case "manager1Assigned":
+      return `${eligibleCond} AND u.head_id IS NOT NULL`;
+    case "assessedByManager1":
+      return `${eligibleCond} AND ap.status = 'PENDING_HEAD_REVIEW' AND ap.manager_level = 1`;
+    case "manager2Assigned":
+      return `${eligibleCond} AND u.manager_2_id IS NOT NULL`;
+    case "assessedByManager2":
+      return `${eligibleCond} AND ap.status = 'PENDING_HEAD_REVIEW' AND ap.manager_level = 2`;
+    case "hrAlignment":
+      return `${eligibleCond} AND ap.status IN ('PENDING_BOARD_APPROVAL','APPROVED','COMPLETED')`;
+    case "boardApproval":
+      return `${eligibleCond} AND ap.status IN ('APPROVED','COMPLETED')`;
+    case "total":
+    default:
+      return "TRUE";
+  }
+}
+
+/**
+ * Employee records behind a report count cell — the entity's subtree
+ * (entity + descendants) filtered by the same condition as the count column.
+ * `entityId = null` returns records across the whole organization.
+ */
+export async function getOrganizationReportRecords(
+  entityId: number | null,
+  columnId: OrgReportRecordColumnId,
+): Promise<OrgReportRecord[]> {
+  const entities = await listEntities();
+  const defaultCycle = await getDefaultAppraisalCycle();
+  const cycleId = defaultCycle?.id ?? null;
+
+  const fyResult = await getDbClient().query<{ id: number; year: number }>(
+    `SELECT id, year FROM financial_years WHERE is_active = TRUE ORDER BY year DESC LIMIT 1`,
+  );
+  const financialYearId = fyResult.rows[0]?.id ?? null;
+  const financialYear = fyResult.rows[0]?.year ?? defaultCycle?.fiscalYear ?? null;
+  const fyEndDate = financialYear ? `${financialYear}-06-30` : null;
+
+  // Resolve the entity's subtree ids in JS — the entity list is already loaded.
+  let entityIds: number[] | null = null;
+  if (entityId != null) {
+    const childrenByParent = new Map<number, number[]>();
+    for (const e of entities) {
+      if (e.parentEntityId == null) continue;
+      const list = childrenByParent.get(e.parentEntityId) ?? [];
+      list.push(e.id);
+      childrenByParent.set(e.parentEntityId, list);
+    }
+    entityIds = [entityId];
+    const queue = [entityId];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const childId of childrenByParent.get(current) ?? []) {
+        entityIds.push(childId);
+        queue.push(childId);
+      }
+    }
+  }
+
+  // Inline the FY-end literal — it's server-derived ('YYYY-06-30'), and a
+  // bound-but-unreferenced param ($n) breaks Postgres type inference when the
+  // column condition doesn't need it (e.g. "total").
+  const eligibleCond = eligibleCondSql(
+    fyEndDate ? `'${fyEndDate}'::date` : "NULL::date",
+  );
+  const columnCondition = recordsColumnCondition(columnId, eligibleCond);
+
+  const entityById = new Map(entities.map((e) => [e.id, e]));
+  // Walk the user's entity upward (inclusive) to find the nearest entity
+  // with the given category code — e.g. C1 → "Org 1", C2 → "Org 2".
+  const ancestorNameByCategory = (
+    entityId: number,
+    categoryCode: string,
+  ): string | null => {
+    let current = entityById.get(entityId);
+    while (current) {
+      if (current.categoryCode === categoryCode) return current.name;
+      current =
+        current.parentEntityId != null
+          ? entityById.get(current.parentEntityId)
+          : undefined;
+    }
+    return null;
+  };
+
+  const result = await getDbClient().query<{
+    user_id: string;
+    employee_id: string;
+    employee_name: string;
+    email: string | null;
+    entity_id: string;
+    manager_1_name: string | null;
+    manager_2_name: string | null;
+    status: string | null;
+  }>(
+    `SELECT
+       u.id::text AS user_id,
+       u.employee_id,
+       CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+       u.email,
+       u.entity_id::text AS entity_id,
+       CONCAT(m1.first_name, ' ', m1.last_name) AS manager_1_name,
+       CONCAT(m2.first_name, ' ', m2.last_name) AS manager_2_name,
+       ap.status
+     FROM users u
+     LEFT JOIN users m1 ON m1.id = u.head_id
+     LEFT JOIN users m2 ON m2.id = u.manager_2_id
+     LEFT JOIN LATERAL (
+       SELECT ap_inner.*
+       FROM appraisals ap_inner
+       WHERE ap_inner.employee_id = u.id
+         AND (
+           ap_inner.cycle_id = $1
+           OR ($1::int IS NULL AND ap_inner.cycle_id IS NULL)
+           OR ap_inner.cycle_id IS NULL
+         )
+       ORDER BY
+         (ap_inner.template_id IS NULL)::int,
+         CASE WHEN ap_inner.cycle_id = $1 THEN 0 ELSE 1 END,
+         ap_inner.updated_at DESC NULLS LAST,
+         ap_inner.id DESC
+       LIMIT 1
+     ) ap ON TRUE
+     LEFT JOIN employee_form_assignments efa ON efa.employee_id = u.id
+     LEFT JOIN direct_score_entry_assignments dsea
+       ON dsea.employee_id = u.id
+       AND ($1::int IS NULL
+         OR dsea.cycle_id = $1
+         OR ($1::int IS NULL AND dsea.cycle_id IS NULL))
+     LEFT JOIN employee_performance_matrix_assignments epma
+       ON epma.employee_id = u.id
+       AND ($2::int IS NULL OR epma.financial_year_id = $2)
+     LEFT JOIN employee_increment_matrix_assignments eima
+       ON eima.employee_id = u.id
+       AND ($2::int IS NULL OR eima.financial_year_id = $2)
+     WHERE u.is_active = TRUE
+       AND u.employee_id <> 'EMP-0001'
+       AND u.entity_id IS NOT NULL
+       AND ($3::bigint[] IS NULL OR u.entity_id = ANY($3::bigint[]))
+       AND ${columnCondition}
+     ORDER BY u.first_name ASC, u.last_name ASC, u.employee_id ASC`,
+    [cycleId, financialYearId, entityIds],
+  );
+
+  return result.rows.map((row) => ({
+    userId: Number(row.user_id),
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    email: row.email,
+    orgLevel1Name: ancestorNameByCategory(Number(row.entity_id), "C1"),
+    orgLevel2Name: ancestorNameByCategory(Number(row.entity_id), "C2"),
+    manager1Name: row.manager_1_name,
+    manager2Name: row.manager_2_name,
+    status: row.status,
+  }));
 }
