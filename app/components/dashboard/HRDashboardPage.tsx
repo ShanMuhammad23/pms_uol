@@ -119,17 +119,17 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
   return (
     <div className="relative min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 p-2 dark:bg-slate-950">
       <div className="flex justify-between items-center">
-      <h2 className="text-2xl font-bold ">UOL- Performance Management System</h2>
+      <h2 className="text-2xl font-bold glowing-title"> UOL - Performance Management System</h2>
       {canAccessDirectAssessment ? (
-        <div className="mb-2 flex items-center justify-between gap-1 border-b border-slate-200 dark:border-slate-800">
+        <div className="mb-2 flex items-center justify-between gap-1 ">
           <div className="flex items-center gap-1">
             <button
               onClick={() => setActiveTab("overview")}
               className={cn(
-                "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+                "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors rounded-md cursor-pointer",
                 activeTab === "overview"
-                  ? "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300"
-                  : "border-transparent text-foreground/60 hover:text-text-primary",
+                  ? " dark:border-violet-400 dark:text-violet-300 bg-primary text-white"
+                  : "border text-foreground/60 hover:text-text-primary",
               )}
             >
               <LayoutDashboard className="size-3.5" />
@@ -138,10 +138,10 @@ export default function HRDashboardPage({ role }: HRDashboardPageProps) {
             <button
               onClick={() => setActiveTab("direct-assessment")}
               className={cn(
-                "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+                "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors rounded-md cursor-pointer",
                 activeTab === "direct-assessment"
-                  ? "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300"
-                  : "border-transparent text-foreground/60 hover:text-text-primary",
+                  ? " dark:border-violet-400 dark:text-violet-300 bg-primary text-white"
+                  : "border text-foreground/60 hover:text-text-primary",
               )}
             >
               <ClipboardList className="size-3.5" />
