@@ -23,11 +23,7 @@ import type { AdditionalAccessModule } from "@/types/additional-access";
 
 export type HrApprovalStatus = "pending" | "approved" | "review_required";
 
-/**
- * Maps an AdditionalAccessModule to the dashboard column IDs that should
- * become visible when a user has view or edit access to that module.
- * Used to extend the Head (MANAGER) role's base column set.
- */
+
 export const ADDITIONAL_ACCESS_MODULE_COLUMNS: Record<
   AdditionalAccessModule,
   DashboardTableColumnId[]
@@ -561,7 +557,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     numeric: true,
     getValue: (row) => {
       if (row.currentSalary == null || row.previousSalary == null) return "—";
-      return formatNumber(row.currentSalary - row.previousSalary);
+      return formatWholeCurrency(row.currentSalary - row.previousSalary);
     },
   },
   applicableSalaryForIncrement: {
@@ -569,7 +565,7 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     label: "Applicable Sal",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(getApplicableSalary(row)),
+    getValue: (row) => formatWholeCurrency(getApplicableSalary(row)),
   },
   applicableMatrix: {
     id: "applicableMatrix",
@@ -590,28 +586,28 @@ const COLUMN_BY_ID: Record<DashboardTableColumnId, DashboardTableColumnDef> = {
     label: "Incr. Per Matrix",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(getIncrementPerMatrix(row)),
+    getValue: (row) => formatWholeCurrency(getIncrementPerMatrix(row)),
   },
   incrementAdjusted: {
     id: "incrementAdjusted",
     label: "Increment Adj.",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(getIncrementAdjusted(row)),
+    getValue: (row) => formatWholeCurrency(getIncrementAdjusted(row)),
   },
   revisedSalary: {
     id: "revisedSalary",
     label: "Revised Salary",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(getRevisedSalary(row)),
+    getValue: (row) => formatWholeCurrency(getRevisedSalary(row)),
   },
   revisedSalaryRo: {
     id: "revisedSalaryRo",
     label: "Revised Salary (RO)",
     align: "right",
     numeric: true,
-    getValue: (row) => formatNumber(getRevisedSalaryRo(row)),
+    getValue: (row) => formatWholeCurrency(getRevisedSalaryRo(row)),
   },
   remarksCompensation: {
     id: "remarksCompensation",
