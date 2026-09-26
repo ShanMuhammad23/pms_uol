@@ -136,6 +136,16 @@ export function TableColumnHeaderFilter({
     });
   }, [columnCounts, isText, selectedValues]);
 
+  // Count of rows with no value for this column (missing renders as "—";
+  // unassigned relations like form/matrix render as "✖"). Comes from the same
+  // server facet counts as the filter options, so it respects other filters.
+  const missingCount = useMemo(() => {
+    if (isText) return 0;
+    return (columnCounts ?? [])
+      .filter((option) => option.value === "—" || option.value === "✖")
+      .reduce((sum, option) => sum + option.count, 0);
+  }, [columnCounts, isText]);
+
   const draftSyncKey =
     open && isText
       ? `${column.id}:${filters.text[column.id as MasterFilterTextColumnId] ?? ""}`
@@ -415,6 +425,14 @@ export function TableColumnHeaderFilter({
   return (
     <div className="flex items-center justify-center gap-1">
       <span>{column.label}</span>
+      {missingCount > 0 ? (
+        <span
+          title={`${missingCount} employee(s) with no value`}
+          className="inline-flex items-center rounded bg-amber-400/25 px-1 py-px text-[9px] font-semibold tabular-nums text-amber-100"
+        >
+          ∅{missingCount}
+        </span>
+      ) : null}
       <button
         ref={triggerRef}
         type="button"

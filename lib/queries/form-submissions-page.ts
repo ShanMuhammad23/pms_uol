@@ -62,12 +62,19 @@ function buildColumnCounts(
       masterFilters,
       masterFilters.multi[column.id] ?? null,
     );
-    columnCounts[column.id] = options.slice(0, MAX_OPTIONS_PER_COLUMN).map(
-      (option) => ({
-        value: option.value,
-        count: option.count,
-      }),
-    );
+    // Missing markers sort last, so high-cardinality columns can lose them to
+    // the cap — always retain them (headers display their counts).
+    const isMissingMarker = (v: string) => v === "—" || v === "✖";
+    const capped = options.slice(0, MAX_OPTIONS_PER_COLUMN);
+    columnCounts[column.id] = [
+      ...capped,
+      ...options.filter(
+        (option) => isMissingMarker(option.value) && !capped.includes(option),
+      ),
+    ].map((option) => ({
+      value: option.value,
+      count: option.count,
+    }));
   }
 
   return columnCounts;

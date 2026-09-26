@@ -14,6 +14,11 @@ import {
 import { queryKeys } from "@/app/queries/keys";
 import { bulkUpdateEmployeeListingFields } from "@/lib/queries/form-submissions-client";
 import { assignFormTemplateToEmployees, fetchFormTemplatesForDashboard } from "@/lib/queries/forms-client";
+import {
+  assignIncrementMatrixToEmployees,
+  fetchIncrementMatrixSummaries,
+  unassignIncrementMatrixFromEmployees,
+} from "@/lib/queries/sub-category-increment-matrices-client";
 import { fetchDashboardEntities } from "@/lib/queries/entities-client";
 import { fetchUsersOverview } from "@/lib/queries/users-client";
 import type { UserRecord } from "@/types/users";
@@ -98,6 +103,7 @@ export function BulkEditStaffModal({
   const [selectedFormTemplateIds, setSelectedFormTemplateIds] = useState<Set<number>>(new Set());
   const [formSearch, setFormSearch] = useState("");
   const [assessmentEligibility, setAssessmentEligibility] = useState<"" | "true" | "false">("");
+  const [incrementMatrixValue, setIncrementMatrixValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const canEditScores = canReviewSubmissions(role ?? undefined);
@@ -120,6 +126,13 @@ export function BulkEditStaffModal({
     enabled: open,
   });
 
+  const { data: incrementMatrixSummaries } = useQuery({
+    queryKey: ["increment-matrix-summaries"],
+    queryFn: fetchIncrementMatrixSummaries,
+    enabled: open,
+    retry: false,
+  });
+
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
@@ -130,6 +143,7 @@ export function BulkEditStaffModal({
       setSelectedFormTemplateIds(new Set());
       setFormSearch("");
       setAssessmentEligibility("");
+      setIncrementMatrixValue("");
       setError(null);
     }
   }
@@ -176,6 +190,32 @@ export function BulkEditStaffModal({
         label: USER_ROLE_LABELS[role],
       })),
     [],
+  );
+
+  const activeIncrementFinancialYearId = useMemo(
+    () =>
+      (incrementMatrixSummaries ?? []).find((s) => s.isActiveYear)
+        ?.financialYearId ?? null,
+    [incrementMatrixSummaries],
+  );
+
+  const incrementMatrixSelectOptions = useMemo(
+    () => [
+      { value: NONE_SENTINEL, label: "— Remove assignment —" },
+      ...(incrementMatrixSummaries ?? [])
+        .filter(
+          (s) =>
+            s.isActiveYear &&
+            s.financialYearId === activeIncrementFinancialYearId,
+        )
+        .map((s) => ({
+          value: s.matrixLabel,
+          label: s.title && s.title !== s.matrixLabel
+            ? `${s.matrixLabel} — ${s.title}`
+            : s.matrixLabel,
+        })),
+    ],
+    [incrementMatrixSummaries, activeIncrementFinancialYearId],
   );
 
   const filteredFormTemplates = useMemo(() => {
@@ -246,9 +286,34 @@ export function BulkEditStaffModal({
     mutationFn: async () => {
       const fields = buildFields();
       const hasFormSelection = selectedFormTemplateIds.size > 0;
+      const hasIncrementMatrixSelection = incrementMatrixValue !== "";
 
-      if (Object.keys(fields).length === 0 && !hasFormSelection) {
+      if (
+        Object.keys(fields).length === 0 &&
+        !hasFormSelection &&
+        !hasIncrementMatrixSelection
+      ) {
         throw new Error("Enter a value for at least one field.");
+      }
+
+      if (hasIncrementMatrixSelection) {
+        if (activeIncrementFinancialYearId === null) {
+          throw new Error(
+            "No increment matrix is defined for the active financial year.",
+          );
+        }
+        if (incrementMatrixValue === NONE_SENTINEL) {
+          await unassignIncrementMatrixFromEmployees({
+            financialYearId: activeIncrementFinancialYearId,
+            employeeCodes: selectedEmployeeIds,
+          });
+        } else {
+          await assignIncrementMatrixToEmployees({
+            financialYearId: activeIncrementFinancialYearId,
+            matrixLabel: incrementMatrixValue,
+            employeeCodes: selectedEmployeeIds,
+          });
+        }
       }
 
       if (Object.keys(fields).length > 0) {
@@ -358,6 +423,12 @@ export function BulkEditStaffModal({
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
       void queryClient.invalidateQueries({ queryKey: ["form-templates"] });
       void queryClient.invalidateQueries({ queryKey: ["employee-assigned-forms"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["increment-matrix-summaries"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["increment-matrix-assignments"],
+      });
       onSuccess();
       onClose();
     },
@@ -602,6 +673,27 @@ export function BulkEditStaffModal({
                       saveMutation.isPending && "opacity-70",
                     )}
                   />
+                </label>
+
+                <label className="block">
+                  <span className={labelClassName}>Increment matrix</span>
+                  <SearchableSelect
+                    value={incrementMatrixValue}
+                    options={incrementMatrixSelectOptions}
+                    onChange={(next) => setIncrementMatrixValue(next)}
+                    disabled={saveMutation.isPending}
+                    placeholder="— Keep existing —"
+                    emptyOptionLabel="— Keep existing —"
+                    className={cn(
+                      "[&_button]:h-8 [&_button]:rounded [&_button]:px-2.5 [&_button]:py-0 [&_button]:text-xs",
+                      saveMutation.isPending && "opacity-70",
+                    )}
+                  />
+                  {incrementMatrixSelectOptions.length <= 1 ? (
+                    <span className="mt-1 block text-[11px] text-slate-400">
+                      No increment matrices defined for the active year.
+                    </span>
+                  ) : null}
                 </label>
 
                 <label className="block">

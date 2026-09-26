@@ -30,8 +30,9 @@ import {
   type UserOrgFilterValues,
 } from "@/app/helpers/user-org-filters";
 import { fetchUsers } from "@/lib/queries/users-client";
+import { fetchFormSubmissions } from "@/lib/queries/form-submissions-client";
 import type { UserRecord } from "@/types/users";
-import { cn } from "@/lib/utils";
+import { cn, formatFormTitleWithCode } from "@/lib/utils";
 import { useResettingPage } from "@/app/hooks/use-resetting-page";
 import PrintButton from "@/app/components/forms/PrintButton";
 import PrintDocumentHeader from "@/app/components/print/PrintDocumentHeader";
@@ -50,7 +51,8 @@ type MultiFilterId =
   | "roleCategory"
   | "headName"
   | "manager2Name"
-  | "assignmentStatus";
+  | "assignmentLabel"
+  | "assignedForm";
 
 type TextFilterId = "employeeId" | "name";
 
@@ -65,7 +67,8 @@ const FILTER_CONFIG: { id: MultiFilterId; label: string }[] = [
   { id: "site", label: "Site" },
   { id: "orgLevel1", label: "Org Level 1" },
   { id: "orgLevel2", label: "Org Level 2" },
-  { id: "assignmentStatus", label: "Assignment Status" },
+  { id: "assignmentLabel", label: "Assignment" },
+  { id: "assignedForm", label: "Assigned Form" },
   { id: "entityName", label: "Entity" },
   { id: "designation", label: "Designation" },
   { id: "roleCategory", label: "Role Category" },
@@ -79,7 +82,8 @@ const EMPTY_FILTERS: FilterState = {
     site: null,
     orgLevel1: null,
     orgLevel2: null,
-    assignmentStatus: null,
+    assignmentLabel: null,
+    assignedForm: null,
     entityName: null,
     designation: null,
     roleCategory: null,
@@ -98,8 +102,30 @@ type UserColumn = {
   getValue: (user: UserRecord) => string;
 };
 
-function getAssignmentStatus(user: UserRecord, assignedIds: Set<string>): string {
-  return assignedIds.has(user.employeeId) ? "Assigned" : "Unassigned";
+/**
+ * Compact assignment label shown next to the employee name:
+ * "DS" when marked for direct score entry, the form code when a form is
+ * assigned, "Unassigned" when neither applies.
+ */
+function getAssignmentLabel(
+  user: UserRecord,
+  assignedIds: Set<string>,
+  assignedFormCodeMap: Map<string, string>,
+): string {
+  if (assignedIds.has(user.employeeId)) return "DS";
+  return assignedFormCodeMap.get(user.employeeId) ?? "Unassigned";
+}
+
+/**
+ * Returns the title of the form currently assigned to the employee. Mirrors
+ * the form assignment page's "Assigned Form" label — "None" when no form is
+ * attached.
+ */
+function getAssignedFormLabel(
+  user: UserRecord,
+  assignedFormMap: Map<string, string>,
+): string {
+  return assignedFormMap.get(user.employeeId) ?? "None";
 }
 
 function getFilterValue(
@@ -107,8 +133,13 @@ function getFilterValue(
   field: UserColumnId,
   assignedIds: Set<string>,
   orgLookup: Map<string, UserOrgFilterValues>,
+  assignedFormMap: Map<string, string>,
+  assignedFormCodeMap: Map<string, string>,
 ): string {
-  if (field === "assignmentStatus") return getAssignmentStatus(user, assignedIds);
+  if (field === "assignmentLabel") {
+    return getAssignmentLabel(user, assignedIds, assignedFormCodeMap);
+  }
+  if (field === "assignedForm") return getAssignedFormLabel(user, assignedFormMap);
   if (field === "employeeId") return user.employeeId;
   if (field === "name") return `${user.firstName} ${user.lastName}`.trim();
   if (field === "site" || field === "orgLevel1" || field === "orgLevel2") {
@@ -133,12 +164,14 @@ function userMatchesFiltersExcluding(
   assignedEmployeeIds: Set<string>,
   excludeField: UserColumnId | null,
   orgLookup: Map<string, UserOrgFilterValues>,
+  assignedFormMap: Map<string, string>,
+  assignedFormCodeMap: Map<string, string>,
 ): boolean {
   for (const id of ["employeeId", "name"] as const) {
     if (excludeField === id) continue;
     const query = filters.text[id];
     if (!query?.trim()) continue;
-    const value = getFilterValue(user, id, assignedEmployeeIds, orgLookup);
+    const value = getFilterValue(user, id, assignedEmployeeIds, orgLookup, assignedFormMap, assignedFormCodeMap);
     if (!matchesTextQuery(value, query)) return false;
   }
 
@@ -147,7 +180,7 @@ function userMatchesFiltersExcluding(
     const sel = filters.multi[f.id];
     if (sel === null || sel === undefined) continue;
     if (sel.length === 0) return false;
-    const val = getFilterValue(user, f.id, assignedEmployeeIds, orgLookup);
+    const val = getFilterValue(user, f.id, assignedEmployeeIds, orgLookup, assignedFormMap, assignedFormCodeMap);
     if (!sel.includes(val)) return false;
   }
   return true;
@@ -160,15 +193,17 @@ function buildOptions(
   selected: FilterSelection,
   assignedEmployeeIds: Set<string>,
   orgLookup: Map<string, UserOrgFilterValues>,
+  assignedFormMap: Map<string, string>,
+  assignedFormCodeMap: Map<string, string>,
 ): MultiSelectOption[] {
   const counts = new Map<string, number>();
 
   for (const user of users) {
-    if (!userMatchesFiltersExcluding(user, filters, assignedEmployeeIds, field, orgLookup)) {
+    if (!userMatchesFiltersExcluding(user, filters, assignedEmployeeIds, field, orgLookup, assignedFormMap, assignedFormCodeMap)) {
       continue;
     }
 
-    const value = getFilterValue(user, field, assignedEmployeeIds, orgLookup);
+    const value = getFilterValue(user, field, assignedEmployeeIds, orgLookup, assignedFormMap, assignedFormCodeMap);
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
 
@@ -194,8 +229,10 @@ function userMatchesFilters(
   filters: FilterState,
   assignedEmployeeIds: Set<string>,
   orgLookup: Map<string, UserOrgFilterValues>,
+  assignedFormMap: Map<string, string>,
+  assignedFormCodeMap: Map<string, string>,
 ): boolean {
-  return userMatchesFiltersExcluding(user, filters, assignedEmployeeIds, null, orgLookup);
+  return userMatchesFiltersExcluding(user, filters, assignedEmployeeIds, null, orgLookup, assignedFormMap, assignedFormCodeMap);
 }
 
 function countActiveFilters(filters: FilterState): number {
@@ -231,6 +268,14 @@ export default function DirectScoreEntryAssignment() {
   });
   const { data: entities = [] } = useDashboardEntitiesQuery();
 
+  // Fetch submissions to build the "Assigned Form" label — mirrors the form
+  // assignment page: the actual form title, or "None" when no form is attached.
+  const { data: submissions } = useQuery({
+    queryKey: ["form-submissions-all"],
+    queryFn: fetchFormSubmissions,
+    ...DASHBOARD_QUERY_CACHE,
+  });
+
   const allUsers = useMemo(() => users ?? [], [users]);
   const orgLookup = useMemo(
     () => buildUserOrgFilterLookup(allUsers, entities),
@@ -243,21 +288,51 @@ export default function DirectScoreEntryAssignment() {
     [assignedEmployees],
   );
 
+  // employeeId → assigned form title (from submissions). Employees with no
+  // form get "None" via getAssignedFormLabel.
+  const assignedFormMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const sub of submissions ?? []) {
+      if (sub.templateId != null) {
+        map.set(
+          sub.employeeId,
+          formatFormTitleWithCode(sub.templateTitle, sub.templateCode) ||
+            `Form #${sub.templateId}`,
+        );
+      }
+    }
+    return map;
+  }, [submissions]);
+
+  // employeeId → assigned form code — compact label shown next to the name.
+  const assignedFormCodeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const sub of submissions ?? []) {
+      if (sub.templateId != null) {
+        map.set(
+          sub.employeeId,
+          sub.templateCode || `Form #${sub.templateId}`,
+        );
+      }
+    }
+    return map;
+  }, [submissions]);
+
   const optionsByFilter = useMemo(() => {
     const map = new Map<MultiFilterId, MultiSelectOption[]>();
     for (const f of FILTER_CONFIG) {
       map.set(
         f.id,
-        buildOptions(allUsers, f.id, filters, filters.multi[f.id], assignedEmployeeIds, orgLookup),
+        buildOptions(allUsers, f.id, filters, filters.multi[f.id], assignedEmployeeIds, orgLookup, assignedFormMap, assignedFormCodeMap),
       );
     }
     return map;
-  }, [allUsers, filters, assignedEmployeeIds, orgLookup]);
+  }, [allUsers, filters, assignedEmployeeIds, orgLookup, assignedFormMap, assignedFormCodeMap]);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allUsers.filter((user) => {
-      if (!userMatchesFilters(user, filters, assignedEmployeeIds, orgLookup)) return false;
+      if (!userMatchesFilters(user, filters, assignedEmployeeIds, orgLookup, assignedFormMap, assignedFormCodeMap)) return false;
       if (!query) return true;
       const name = `${user.firstName} ${user.lastName}`.toLowerCase();
       return (
@@ -265,7 +340,7 @@ export default function DirectScoreEntryAssignment() {
         name.includes(query)
       );
     });
-  }, [search, allUsers, filters, assignedEmployeeIds, orgLookup]);
+  }, [search, allUsers, filters, assignedEmployeeIds, orgLookup, assignedFormMap, assignedFormCodeMap]);
 
   const totalCount = filteredUsers.length;
   const displayPageSize = pageSize === "all" ? Math.max(totalCount, 1) : pageSize;
@@ -418,11 +493,11 @@ export default function DirectScoreEntryAssignment() {
     { id: "headName", label: "Manager 1", width: 160, mode: "multi", getValue: (u) => u.headName ?? "—" },
     { id: "manager2Name", label: "Manager 2", width: 160, mode: "multi", getValue: (u) => u.manager2Name ?? "—" },
     {
-      id: "assignmentStatus",
-      label: "Status",
-      width: 140,
+      id: "assignedForm",
+      label: "Assigned Form",
+      width: 220,
       mode: "multi",
-      getValue: (u) => getAssignmentStatus(u, assignedEmployeeIds),
+      getValue: (u) => getAssignedFormLabel(u, assignedFormMap),
     },
   ];
 
@@ -718,29 +793,51 @@ export default function DirectScoreEntryAssignment() {
                           className="whitespace-nowrap border-b border-primary/10 px-2 py-1.5 align-middle dark:border-white/5"
                           style={column.width ? { maxWidth: column.width } : undefined}
                         >
-                          {column.id === "assignmentStatus" ? (
-                            <span
-                              className={cn(
-                                "inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
-                                value === "Assigned"
-                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                                  : "bg-primary/10 text-primary",
-                              )}
-                            >
+                          {column.id === "name" ? (
+                            <span className="flex items-center gap-1.5">
                               <span
-                                aria-hidden="true"
-                                className={cn(
-                                  "size-1.5 rounded-full",
-                                  value === "Assigned" ? "bg-emerald-500" : "bg-primary/50",
-                                )}
-                              />
-                              {value}
+                                className="truncate font-semibold text-text-primary"
+                                title={value === "—" ? undefined : value}
+                              >
+                                {value}
+                              </span>
+                              {(() => {
+                                const label = getAssignmentLabel(
+                                  user,
+                                  assignedEmployeeIds,
+                                  assignedFormCodeMap,
+                                );
+                                return (
+                                  <span
+                                    className={cn(
+                                      "inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                                      label === "DS"
+                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                        : label === "Unassigned"
+                                          ? "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400"
+                                          : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+                                    )}
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      className={cn(
+                                        "size-1.5 rounded-full",
+                                        label === "DS"
+                                          ? "bg-emerald-500"
+                                          : label === "Unassigned"
+                                            ? "bg-slate-400"
+                                            : "bg-amber-500",
+                                      )}
+                                    />
+                                    {label}
+                                  </span>
+                                );
+                              })()}
                             </span>
                           ) : (
                             <span
                               className={cn(
                                 "block truncate text-text-primary",
-                                column.id === "name" && "font-semibold",
                               )}
                               title={value === "—" ? undefined : value}
                             >
