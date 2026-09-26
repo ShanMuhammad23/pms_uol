@@ -144,7 +144,7 @@ export function DashboardPrimaryCharts({
                 >
                   <LabelList
                     dataKey="actual"
-                    position="top"
+                    position="bottom"
                     offset={8}
                     style={{
                       fontSize: 11,

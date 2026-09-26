@@ -26,6 +26,8 @@ import {
   hasExplicitNumericScore,
   hasProvidedAnswerScore,
   hydrateAnswerPoints,
+  inferAuthoredRatingValueFromPoints,
+  inferRatingValueFromPoints,
   ratingRequiresRemarks,
   resolveAnswerScore,
   resolveDisplayedAnswerPoints,
@@ -1624,6 +1626,12 @@ export async function saveBulkReviewQuestionScores(
     );
   }
 
+  const isRatingQuestion = usesRatingScore(
+    question,
+    ratingContext.ratingBased,
+    ratingContext.ratingScales,
+  );
+
   const validEntries: Array<{
     submissionId: number;
     pointsEarned: number;
@@ -1649,6 +1657,26 @@ export async function saveBulkReviewQuestionScores(
       typeof entry.remarks === "string"
         ? entry.remarks.trim() || null
         : null;
+
+    // A 4/5 or 5/5 rating must be justified in remarks — enforced on save,
+    // not just at approval, so an unjustified high rating can never persist.
+    if (
+      isRatingQuestion &&
+      ratingRequiresRemarks(resolved.ratingValue) &&
+      !remarks
+    ) {
+      const employee = await db.query<{ employee_id: string }>(
+        `SELECT u.employee_id
+         FROM appraisals ap
+         INNER JOIN users u ON u.id = ap.employee_id
+         WHERE ap.id = $1`,
+        [entry.submissionId],
+      );
+      const who = employee.rows[0]?.employee_id ?? `submission ${entry.submissionId}`;
+      throw new FormSubmissionError(
+        `Add remarks justifying the ${resolved.ratingValue}-point rating for ${who} on "${question.questionText.slice(0, 80)}".`,
+      );
+    }
 
     if (
       resolved.ratingValue == null &&
@@ -1724,6 +1752,43 @@ export async function saveBulkAuthoredAnswers(
   const ratingBased = Boolean(options?.ratingBased);
   const ratingScales = options?.ratingScales ?? [];
   let savedCount = 0;
+
+  // A 4/5 or 5/5 authored rating must be justified in remarks — validated up
+  // front so a failure never wipes previously saved rows (the per-submission
+  // delete below runs before the inserts).
+  if (ratingBased) {
+    for (const entry of entries) {
+      for (const authored of entry.authoredQuestions) {
+        const questionText = (authored.authoredQuestionText ?? "").trim();
+        const totalMarks = Number(authored.authoredTotalMarks) || 0;
+        const remarks = authored.remarks?.trim() || null;
+        const rating =
+          authored.ratingValue == null ? null : Number(authored.ratingValue);
+        const points =
+          rating != null && Number.isFinite(rating)
+            ? computeAuthoredRatingPoints(rating, totalMarks, ratingScales)
+            : Number(authored.pointsEarned) || 0;
+        const isBlank = !questionText && !totalMarks && !points && !remarks;
+        const effectiveRating =
+          rating ??
+          inferAuthoredRatingValueFromPoints(totalMarks, ratingScales, points);
+        if (!isBlank && ratingRequiresRemarks(effectiveRating) && !remarks) {
+          const employee = await db.query<{ employee_id: string }>(
+            `SELECT u.employee_id
+             FROM appraisals ap
+             INNER JOIN users u ON u.id = ap.employee_id
+             WHERE ap.id = $1`,
+            [entry.submissionId],
+          );
+          const who =
+            employee.rows[0]?.employee_id ?? `submission ${entry.submissionId}`;
+          throw new FormSubmissionError(
+            `Add remarks justifying the ${effectiveRating}-point rating for "${(questionText || "authored question").slice(0, 80)}" (${who}).`,
+          );
+        }
+      }
+    }
+  }
 
   for (const entry of entries) {
     const { submissionId, authoredQuestions } = entry;
@@ -1991,6 +2056,14 @@ export async function saveManagerReviewAnswers(
       continue;
     }
 
+    // A 4/5 or 5/5 rating must be justified in remarks — enforced on save,
+    // not just at approval, so an unjustified high rating can never persist.
+    if (ratingRequiresRemarks(resolved.ratingValue) && !remarks) {
+      throw new FormSubmissionError(
+        `Add remarks justifying the ${resolved.ratingValue}-point rating for "${question.questionText.slice(0, 80)}".`,
+      );
+    }
+
     validAnswers.push({
       questionId: answer.questionId,
       pointsEarned: resolved.pointsEarned,
@@ -2031,6 +2104,46 @@ export async function saveManagerReviewAnswers(
   // Strategy: delete existing authored rows for this appraisal + reviewer +
   // the relevant open sections, then insert the new set.
   if (authoredAnswers.length > 0) {
+    const authoredRatingBased = Boolean(options?.ratingBased);
+
+    // A 4/5 or 5/5 authored rating must be justified in remarks — enforced on
+    // save, and validated BEFORE the delete+reinsert below so a failure never
+    // wipes previously saved authored rows.
+    if (authoredRatingBased) {
+      for (const authored of authoredAnswers) {
+        const questionText = (authored.authoredQuestionText ?? "").trim();
+        const totalMarks = Number(authored.authoredTotalMarks) || 0;
+        const remarks = authored.remarks?.trim() || null;
+        const rating =
+          authored.ratingValue == null ? null : Number(authored.ratingValue);
+        const points =
+          rating != null && Number.isFinite(rating)
+            ? computeAuthoredRatingPoints(
+                rating,
+                totalMarks,
+                options?.ratingScales,
+              )
+            : Number(authored.pointsEarned) || 0;
+        const isBlank = !questionText && !totalMarks && !points && !remarks;
+        const effectiveRating =
+          rating ??
+          inferAuthoredRatingValueFromPoints(
+            totalMarks,
+            options?.ratingScales,
+            points,
+          );
+        if (
+          !isBlank &&
+          ratingRequiresRemarks(effectiveRating) &&
+          !remarks
+        ) {
+          throw new FormSubmissionError(
+            `Add remarks justifying the ${effectiveRating}-point rating for "${(questionText || "authored question").slice(0, 80)}".`,
+          );
+        }
+      }
+    }
+
     const openSectionIds = [...new Set(
       authoredAnswers.map((a) => a.openSectionId!).filter(Boolean),
     )];
@@ -2162,15 +2275,62 @@ async function assertRequiredManagerRatingsComplete(
       );
     }
     // A 4/5 or 5/5 rating must be justified in remarks — applies to every
-    // scored question, required or optional.
-    if (
-      usesRatingScore(question, template.ratingBased, template.ratingScales) &&
-      ratingRequiresRemarks(answer?.ratingValue) &&
-      !answer?.remarks?.trim()
-    ) {
+    // scored question, required or optional. rating_value can be NULL when
+    // the score was stored as absolute points, so fall back to inferring the
+    // rating from points_earned.
+    const rating = usesRatingScore(
+      question,
+      template.ratingBased,
+      template.ratingScales,
+    )
+      ? (answer?.ratingValue ??
+        inferRatingValueFromPoints(
+          question,
+          template.ratingScales,
+          Number(answer?.pointsEarned),
+        ))
+      : null;
+    if (ratingRequiresRemarks(rating) && !answer?.remarks?.trim()) {
       throw new FormSubmissionError(
-        `Add remarks justifying the ${answer?.ratingValue}-point rating for "${question.questionText.slice(0, 80)}".`,
+        `Add remarks justifying the ${rating}-point rating for "${question.questionText.slice(0, 80)}".`,
       );
+    }
+  }
+
+  // Authored (open-assessment) answers live in appraisal_answers with
+  // question_id NULL, so they are invisible to the question loop above —
+  // enforce the same high-rating remarks rule on them.
+  if (template.ratingBased) {
+    const authoredRows = await db.query<{
+      authored_question_text: string | null;
+      rating_value: string | null;
+      points_earned: string;
+      authored_total_marks: string;
+      remarks: string | null;
+    }>(
+      `SELECT authored_question_text, rating_value::text, points_earned::text,
+              authored_total_marks::text, remarks
+       FROM appraisal_answers
+       WHERE appraisal_id = $1
+         AND filled_by_id = $2
+         AND question_id IS NULL`,
+      [appraisalId, filledById],
+    );
+
+    for (const row of authoredRows.rows) {
+      const rating =
+        row.rating_value != null && row.rating_value !== ""
+          ? Number(row.rating_value)
+          : inferAuthoredRatingValueFromPoints(
+              Number(row.authored_total_marks),
+              template.ratingScales,
+              Number(row.points_earned),
+            );
+      if (ratingRequiresRemarks(rating) && !row.remarks?.trim()) {
+        throw new FormSubmissionError(
+          `Add remarks justifying the ${rating}-point rating for "${(row.authored_question_text ?? "an authored question").slice(0, 80)}".`,
+        );
+      }
     }
   }
 }

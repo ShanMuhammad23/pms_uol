@@ -4,9 +4,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRightLeft,
+  Building2,
   Check,
   CheckCircle2,
+  Database,
   Download,
+  Eye,
   FileSpreadsheet,
   Loader2,
   Plus,
@@ -18,6 +22,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BulkExcelExportPanel } from "@/app/components/dashboard/BulkExcelExportPanel";
+import {
+  ExcelOpsLegend,
+  ExcelOpsStepHeader,
+} from "@/app/components/dashboard/ExcelOpsStepHeader";
 import { SearchableSelect } from "@/app/components/common/SearchableSelect";
 import { filterManagerEligibleUsers } from "@/app/helpers/manager-eligibility";
 import {
@@ -1263,19 +1271,33 @@ export function BulkUploadStaffModal({
 
           {mode === "import" ? (
             <div className="space-y-3">
-              <section className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-                <EmployeeStep
-                  fileName={importFileName}
-                  parsing={importParsing}
-                  loadingStaff={loadingStaff}
-                  dragOver={importDragOver}
-                  matchedPeople={matchedPeople}
-                  unmatchedSaps={importUnmatched}
-                  alreadyExistSaps={importAlreadyExist}
-                  createMode={isCreateUsers}
-                  onDragOverChange={setImportDragOver}
-                  onFile={handleExcelFile}
+              <ExcelOpsLegend />
+              <section className="overflow-hidden rounded-md border border-[#217346]/30 dark:border-[#3f9c6b]/40">
+                <ExcelOpsStepHeader
+                  step={1}
+                  tone="sheet"
+                  icon={<FileSpreadsheet className="size-3.5" />}
+                  title={
+                    isCreateUsers
+                      ? "Upload the Excel file of new staff"
+                      : "Upload your Excel file"
+                  }
+                  hint="The sheet must have a SAP column so each row can be matched"
                 />
+                <div className="px-3 py-2">
+                  <EmployeeStep
+                    fileName={importFileName}
+                    parsing={importParsing}
+                    loadingStaff={loadingStaff}
+                    dragOver={importDragOver}
+                    matchedPeople={matchedPeople}
+                    unmatchedSaps={importUnmatched}
+                    alreadyExistSaps={importAlreadyExist}
+                    createMode={isCreateUsers}
+                    onDragOverChange={setImportDragOver}
+                    onFile={handleExcelFile}
+                  />
+                </div>
               </section>
               {hasImportedSheet && isCreateUsers && createImportPhase === "org" ? (
                 <OrgLevelMappingStep
@@ -1316,12 +1338,13 @@ export function BulkUploadStaffModal({
                 <>
                   <div className="grid items-start gap-3 lg:grid-cols-2">
                     <ColumnStep
+                      step={isCreateUsers ? 3 : 2}
                       selectedIds={selectedColumnIds}
                       columns={selectableColumns}
                       title={
                         isCreateUsers
-                          ? "Columns to import"
-                          : "Columns to update"
+                          ? "PMS fields to import"
+                          : "PMS fields to update"
                       }
                       onToggle={toggleColumn}
                       onSelectAll={selectAllColumns}
@@ -1329,6 +1352,7 @@ export function BulkUploadStaffModal({
                       onToggleGroup={toggleColumnGroup}
                     />
                     <MappingStep
+                      step={isCreateUsers ? 4 : 3}
                       columns={excelSheet?.columns ?? []}
                       mapping={columnMapping}
                       targets={selectedColumns}
@@ -1336,6 +1360,7 @@ export function BulkUploadStaffModal({
                     />
                   </div>
                   <SheetStep
+                    step={isCreateUsers ? 5 : 4}
                     rows={sheetRows}
                     columns={previewColumns}
                     issuesBySap={issuesBySap}
@@ -1826,13 +1851,13 @@ function EmployeeStep({
         }}
         className={cn(
           "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded px-1 py-0.5",
-          dragOver && "bg-slate-100 dark:bg-slate-800",
+          dragOver && "bg-emerald-50 dark:bg-emerald-950/40",
         )}
       >
         {parsing ? (
-          <Loader2 className="size-4 shrink-0 animate-spin text-slate-500" aria-hidden="true" />
+          <Loader2 className="size-4 shrink-0 animate-spin text-[#217346]" aria-hidden="true" />
         ) : (
-          <FileSpreadsheet className="size-4 shrink-0 text-slate-500" aria-hidden="true" />
+          <FileSpreadsheet className="size-4 shrink-0 text-[#217346]" aria-hidden="true" />
         )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -1844,7 +1869,7 @@ function EmployeeStep({
               : "Requires a SAP column · .xlsx, .xls"}
           </span>
         </span>
-        <span className="shrink-0 text-xs font-medium text-slate-600 underline-offset-2 hover:underline dark:text-slate-300">
+        <span className="shrink-0 rounded-md bg-[#217346]/10 px-2.5 py-1 text-xs font-semibold text-[#185C37] hover:bg-[#217346]/20 dark:bg-[#217346]/25 dark:text-[#8fd4ad] dark:hover:bg-[#217346]/35">
           Browse
         </span>
         <input
@@ -1892,14 +1917,16 @@ function EmployeeStep({
 }
 
 function ColumnStep({
+  step,
   selectedIds,
   columns,
-  title = "Columns to update",
+  title = "PMS fields to update",
   onToggle,
   onSelectAll,
   onClearAll,
   onToggleGroup,
 }: {
+  step: number;
   selectedIds: Set<BulkUploadColumnId>;
   columns: readonly BulkUploadColumnDef[];
   title?: string;
@@ -1909,28 +1936,29 @@ function ColumnStep({
   onToggleGroup: (group: BulkUploadColumnGroup) => void;
 }) {
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          {title}
-        </h3>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onSelectAll}
-            className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-          >
-            All
-          </button>
-          <button
-            type="button"
-            onClick={onClearAll}
-            className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-          >
-            None
-          </button>
-        </div>
-      </div>
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-sky-300/70 dark:border-sky-800">
+      <ExcelOpsStepHeader
+        step={step}
+        tone="pms"
+        icon={<Database className="size-3.5" />}
+        title={title}
+        hint="Staff details stored in the database — tick what this file should change"
+      >
+        <button
+          type="button"
+          onClick={onSelectAll}
+          className="rounded px-2 py-0.5 text-[11px] font-semibold text-white/90 hover:bg-white/15"
+        >
+          All
+        </button>
+        <button
+          type="button"
+          onClick={onClearAll}
+          className="rounded px-2 py-0.5 text-[11px] font-semibold text-white/90 hover:bg-white/15"
+        >
+          None
+        </button>
+      </ExcelOpsStepHeader>
 
       <div className="flex flex-1 flex-col">
         {BULK_UPLOAD_COLUMN_GROUPS.map((group) => {
@@ -1994,11 +2022,13 @@ function ColumnStep({
 }
 
 function MappingStep({
+  step,
   columns,
   mapping,
   targets,
   onChange,
 }: {
+  step: number;
   columns: ExcelSheetColumn[];
   mapping: ExcelColumnMapping;
   targets: readonly BulkUploadColumnDef[];
@@ -2012,23 +2042,24 @@ function MappingStep({
 
   return (
     <section className="flex h-56 flex-col overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Map Excel columns
-        </h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {mappedCount} mapped
-        </p>
-      </div>
+      <ExcelOpsStepHeader
+        step={step}
+        tone="mixed"
+        icon={<ArrowRightLeft className="size-3.5" />}
+        title="Match each Excel column to a PMS field"
+        hint="Green = your sheet · Blue = PMS database"
+      >
+        <span>{mappedCount} mapped</span>
+      </ExcelOpsStepHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <table className="min-w-full text-left text-sm">
-          <thead className="sticky top-0 bg-slate-50 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          <thead className="sticky top-0 text-xs">
             <tr>
-              <th className="border-b border-slate-200 px-3 py-1.5 font-medium dark:border-slate-700">
-                Excel
+              <th className="border-b border-slate-200 bg-emerald-50 px-3 py-1.5 font-semibold text-emerald-800 dark:border-slate-700 dark:bg-emerald-950 dark:text-emerald-200">
+                Excel column
               </th>
-              <th className="border-b border-slate-200 px-3 py-1.5 font-medium dark:border-slate-700">
-                Maps to
+              <th className="border-b border-slate-200 bg-sky-50 px-3 py-1.5 font-semibold text-sky-800 dark:border-slate-700 dark:bg-sky-950 dark:text-sky-200">
+                PMS field (database)
               </th>
             </tr>
           </thead>
@@ -2038,15 +2069,15 @@ function MappingStep({
                 key={column.index}
                 className="border-b border-slate-200 last:border-b-0 dark:border-slate-700"
               >
-                <td className="px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100">
+                <td className="border-l-2 border-l-emerald-300 px-3 py-1.5 text-xs text-slate-800 dark:border-l-emerald-700 dark:text-slate-100">
                   <span className="font-medium">{column.header}</span>
                   {column.isSap ? (
-                    <span className="ml-1.5 text-[10px] font-medium uppercase text-slate-400">
-                      Match
+                    <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
+                      Match key
                     </span>
                   ) : null}
                 </td>
-                <td className="px-3 py-1.5">
+                <td className="border-l-2 border-l-sky-300 px-3 py-1.5 dark:border-l-sky-700">
                   {column.isSap ? (
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Used to match staff
@@ -2108,19 +2139,18 @@ function OrgLevelMappingStep({
 
   return (
     <section className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
+      <ExcelOpsStepHeader
+        step={2}
+        tone="mixed"
+        icon={<Building2 className="size-3.5" />}
+        title="Match sheet departments to PMS org levels"
+        hint="Map each unique sheet value to an org level in the database — or choose Don't import to skip those employees. Parents fill automatically."
+      />
       <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Map organization from sheet
-        </h3>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Select the site first, then the sheet department column. Map each unique
-          value to an org level at that site, or choose Don&apos;t import to skip
-          those employees. Parent org levels are filled automatically.
-        </p>
-        <div className="mt-3 grid max-w-3xl gap-3 sm:grid-cols-2">
+        <div className="grid max-w-3xl gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
-              Site
+            <label className="mb-1 block text-xs font-semibold text-sky-700 dark:text-sky-300">
+              Site (PMS database)
             </label>
             <SearchableSelect
               value={selectedCampusId}
@@ -2132,8 +2162,8 @@ function OrgLevelMappingStep({
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
-              Org level column from sheet
+            <label className="mb-1 block text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+              Department column (your sheet)
             </label>
             <SearchableSelect
               value={selectedColumnIndex != null ? String(selectedColumnIndex) : ""}
@@ -2152,14 +2182,14 @@ function OrgLevelMappingStep({
         <div className="overflow-auto">
           <table className="min-w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                <th className="border-b border-slate-200 px-4 py-2 text-xs font-semibold dark:border-slate-700">
+              <tr>
+                <th className="border-b border-slate-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800 dark:border-slate-700 dark:bg-emerald-950 dark:text-emerald-200">
                   Sheet value
                 </th>
-                <th className="border-b border-slate-200 px-4 py-2 text-xs font-semibold dark:border-slate-700">
+                <th className="border-b border-slate-200 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 dark:border-slate-700 dark:bg-sky-950 dark:text-sky-200">
                   Map to org level (database)
                 </th>
-                <th className="border-b border-slate-200 px-4 py-2 text-xs font-semibold dark:border-slate-700">
+                <th className="border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                   Auto-filled parents
                 </th>
               </tr>
@@ -2525,6 +2555,7 @@ function CreateOrgLevelDialog({
 }
 
 function SheetStep({
+  step,
   rows,
   columns,
   issuesBySap,
@@ -2537,6 +2568,7 @@ function SheetStep({
   disabled,
   createMode = false,
 }: {
+  step: number;
   rows: SheetRow[];
   columns: readonly BulkUploadColumnDef[];
   issuesBySap: Map<string, BulkUploadIssue[]>;
@@ -2562,21 +2594,28 @@ function SheetStep({
 
   return (
     <section className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Preview
-        </h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+      <ExcelOpsStepHeader
+        step={step}
+        tone="mixed"
+        icon={<Eye className="size-3.5" />}
+        title={
+          createMode
+            ? "Review new staff before creating"
+            : "Review the values before saving to PMS"
+        }
+        hint="Fix any red-highlighted cells, then save"
+      >
+        <span>
           {createMode
-            ? `${rows.length} new staff · Org levels from sheet mapping`
-            : `${rows.length} staff · ${changedCount} with changes`}
-          {issueRowCount > 0 ? (
-            <span className="ml-1 font-semibold text-red-600 dark:text-red-400">
-              · {issueRowCount} row{issueRowCount === 1 ? "" : "s"} with issues
-            </span>
-          ) : null}
-        </p>
-      </div>
+            ? `${rows.length} new staff`
+            : `${rows.length} staff · ${changedCount} changed`}
+        </span>
+        {issueRowCount > 0 ? (
+          <span className="rounded bg-white px-1.5 py-0.5 font-semibold text-red-700">
+            {issueRowCount} row{issueRowCount === 1 ? "" : "s"} with issues
+          </span>
+        ) : null}
+      </ExcelOpsStepHeader>
       <div className="overflow-auto">
         <table className="min-w-full border-collapse text-left text-sm">
           <thead>

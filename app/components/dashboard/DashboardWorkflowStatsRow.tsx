@@ -8,9 +8,10 @@ import { ManagerReviewStatCard } from "@/app/components/dashboard/ManagerReviewS
 import { StatCard } from "@/app/components/dashboard/StatCard";
 import { containerVariants } from "@/app/helpers/dashboard-animations";
 import type { CardFilterId } from "@/app/helpers/dashboard-types";
-import type {
-  ManagerReviewDualStats,
-  WorkflowStageStats,
+import {
+  formatWorkflowPercentage,
+  type ManagerReviewDualStats,
+  type WorkflowStageStats,
 } from "@/app/helpers/dashboard-workflow-stats";
 import { isHeadRole } from "@/lib/auth/home-path";
 
@@ -89,7 +90,11 @@ export function DashboardWorkflowStatsRow({
             title="HR Alignment"
             awaiting={hrAlignmentStats.awaiting}
             completed={hrAlignmentStats.completed}
-            percentageLabel={hrAlignmentStats.percentageLabel}
+            awaitingPercentageLabel={formatWorkflowPercentage(
+              hrAlignmentStats.awaiting,
+              selfAssessmentStats.awaiting,
+            )}
+            completedPercentageLabel={hrAlignmentStats.percentageLabel}
             awaitingtitle="Submitted"
             completedtitle="Aligned"
             tone="orange"

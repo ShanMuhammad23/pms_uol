@@ -2,7 +2,6 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 import { computeAppraisalEligibility } from "@/lib/appraisal-eligibility";
-import { db } from "@/lib/db";
 import { getDbClient, withTransaction } from "@/lib/db-context";
 import { resolveSelfAssessmentAdvance } from "@/app/helpers/manager-review";
 import { getFormTemplateById } from "@/lib/queries/forms";
@@ -33,6 +32,8 @@ import type {
 import { APPRAISAL_STATUSES, flattenAllQuestions } from "@/types/forms";
 import {
   computeAuthoredRatingPoints,
+  inferAuthoredRatingValueFromPoints,
+  inferRatingValueFromPoints,
   isValidAuthoredRating,
   ratingRequiresRemarks,
   resolveAnswerScore,
@@ -655,14 +656,25 @@ function validateAnswers(
         answer.pointsEarned !== null;
       const hasText = Boolean(answer.textResponse?.trim());
 
+      // A rating can arrive as raw points — infer the rating from them so a
+      // 4/5 or 5/5 cannot slip through with ratingValue unset.
+      const effectiveRating = isRating
+        ? (answer.ratingValue ??
+          inferRatingValueFromPoints(
+            question,
+            template.ratingScales,
+            Number(answer.pointsEarned),
+          ))
+        : null;
+
       const needsRemarks = isRating
-        ? ratingRequiresRemarks(answer.ratingValue)
+        ? ratingRequiresRemarks(effectiveRating)
         : hasScore || hasText || question.isRequired;
 
       if (needsRemarks) {
         throw new EmployeeFormError(
           isRating
-            ? `Add remarks justifying the ${answer.ratingValue}-point rating for "${question.questionText.slice(0, 80)}".`
+            ? `Add remarks justifying the ${effectiveRating}-point rating for "${question.questionText.slice(0, 80)}".`
             : `Remarks are required for "${question.questionText.slice(0, 80)}".`,
         );
       }
@@ -721,18 +733,6 @@ function validateAnswers(
         }
       }
 
-      // A 4/5 or 5/5 self-rating must be justified in remarks — applies to
-      // required and optional questions alike on rating-based forms.
-      if (
-        submit &&
-        ratingQuestion &&
-        ratingRequiresRemarks(answer.ratingValue) &&
-        !answer.remarks?.trim()
-      ) {
-        throw new EmployeeFormError(
-          `Add remarks justifying the ${answer.ratingValue}-point rating for "${question.questionText.slice(0, 80)}".`,
-        );
-      }
     } else if (question.inputType === "NUMBER") {
       const value = answer.pointsEarned ?? Number(answer.textResponse);
       if (Number.isNaN(value)) {
@@ -754,6 +754,41 @@ function validateAnswers(
 
     if (question.inputType === "CHECKBOX") {
       continue;
+    }
+  }
+
+  // Authored (open-assessment) answers carry questionId = 0 and were filtered
+  // out of the answer map, so they never reach the question loop. On submit,
+  // enforce the same 4/5-or-5/5 remarks rule on employee-authored rows.
+  if (submit && template.ratingBased && formSelfAssessmentEnabled) {
+    const authorableSectionIds = new Set(
+      template.sections
+        .filter(
+          (section) =>
+            section.isOpenAssessment && section.selfAssessmentEnabled !== false,
+        )
+        .map((section) => section.id),
+    );
+
+    for (const answer of answers) {
+      if (answer.questionId !== 0 || answer.openSectionId == null) {
+        continue;
+      }
+      if (!authorableSectionIds.has(answer.openSectionId)) {
+        continue;
+      }
+      const rating =
+        answer.ratingValue ??
+        inferAuthoredRatingValueFromPoints(
+          Number(answer.authoredTotalMarks) || 0,
+          template.ratingScales,
+          Number(answer.pointsEarned),
+        );
+      if (ratingRequiresRemarks(rating) && !answer.remarks?.trim()) {
+        throw new EmployeeFormError(
+          `Add remarks justifying the ${rating}-point rating for "${(answer.authoredQuestionText ?? "an authored question").slice(0, 80)}".`,
+        );
+      }
     }
   }
 

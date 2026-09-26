@@ -1,12 +1,19 @@
 "use client";
 
 import {
+  ArrowRightLeft,
+  Database,
   Download,
+  Eye,
   FileSpreadsheet,
   Loader2,
   Upload,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  ExcelOpsLegend,
+  ExcelOpsStepHeader,
+} from "@/app/components/dashboard/ExcelOpsStepHeader";
 import { useQuery } from "@tanstack/react-query";
 import {
   applyDashboardExportToWorkbook,
@@ -298,27 +305,26 @@ export function BulkExcelExportPanel({
 
   return (
     <div className="space-y-3">
-      <section className="rounded-md border border-[#217346]/25 bg-[#217346]/[0.04] px-3 py-3 dark:border-[#3f9c6b]/30 dark:bg-[#217346]/10">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-              Export to Sheet
-            </h3>
-            <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
-              Upload a sheet with SAP IDs, map Staff Listing columns onto sheet
-              columns, then download the filled file.
-            </p>
-          </div>
+      <ExcelOpsLegend />
+      <section className="overflow-hidden rounded-md border border-[#217346]/25 bg-[#217346]/[0.04] dark:border-[#3f9c6b]/30 dark:bg-[#217346]/10">
+        <ExcelOpsStepHeader
+          step={1}
+          tone="sheet"
+          icon={<FileSpreadsheet className="size-3.5" />}
+          title="Upload the sheet to fill"
+          hint="Rows are matched by the SAP column — then you pick which PMS values to write in"
+        >
           {fileName ? (
-            <span className="rounded-full bg-[#217346]/15 px-2.5 py-1 text-[11px] font-medium text-[#185C37] dark:bg-[#217346]/25 dark:text-[#8fd4ad]">
+            <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-medium text-white">
               {fileName}
             </span>
           ) : null}
-        </div>
+        </ExcelOpsStepHeader>
 
-        <label
+        <div className="px-3 pt-3">
+          <label
           className={cn(
-            "mt-3 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center transition-colors",
+            "flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center transition-colors",
             dragOver
               ? "border-[#217346] bg-[#217346]/10"
               : "border-[#217346]/35 bg-white hover:border-[#217346] hover:bg-[#217346]/[0.06] dark:border-[#3f9c6b]/40 dark:bg-slate-900/40 dark:hover:bg-[#217346]/15",
@@ -386,41 +392,43 @@ export function BulkExcelExportPanel({
             </span>
           </div>
         ) : null}
+        </div>
       </section>
 
       {workbookData ? (
         <>
           <div className="grid items-start gap-3 lg:grid-cols-2">
-            <section className="rounded-md border border-slate-200 px-3 py-3 dark:border-slate-700">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Staff Listing columns
-                </h4>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSelectedColumnIds(
-                        new Set(EXPORTABLE_COLUMNS.map((column) => column.id)),
-                      )
-                    }
-                    className="rounded px-2 py-1 text-[11px] font-medium text-[#217346] hover:bg-[#217346]/10"
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedColumnIds(new Set());
-                      setMapping({});
-                    }}
-                    className="rounded px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"
-                  >
-                    None
-                  </button>
-                </div>
-              </div>
-              <div className="max-h-72 space-y-3 overflow-auto pr-1">
+            <section className="overflow-hidden rounded-md border border-sky-300/70 dark:border-sky-800">
+              <ExcelOpsStepHeader
+                step={2}
+                tone="pms"
+                icon={<Database className="size-3.5" />}
+                title="Pick the PMS columns to write"
+                hint="These are the staff details stored in the PMS database"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedColumnIds(
+                      new Set(EXPORTABLE_COLUMNS.map((column) => column.id)),
+                    )
+                  }
+                  className="rounded px-2 py-0.5 text-[11px] font-semibold text-white/90 hover:bg-white/15"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedColumnIds(new Set());
+                    setMapping({});
+                  }}
+                  className="rounded px-2 py-0.5 text-[11px] font-semibold text-white/90 hover:bg-white/15"
+                >
+                  None
+                </button>
+              </ExcelOpsStepHeader>
+              <div className="max-h-72 space-y-3 overflow-auto p-3 pr-2">
                 {DASHBOARD_COLUMN_SECTIONS.map((section) => {
                   const sectionColumns = EXPORTABLE_COLUMNS.filter((column) =>
                     section.columnIds.includes(column.id),
@@ -428,7 +436,7 @@ export function BulkExcelExportPanel({
                   if (sectionColumns.length === 0) return null;
                   return (
                     <div key={section.id}>
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-sky-700/80 dark:text-sky-400/80">
                         {section.label}
                       </p>
                       <div className="space-y-1">
@@ -441,7 +449,7 @@ export function BulkExcelExportPanel({
                               type="checkbox"
                               checked={selectedColumnIds.has(column.id)}
                               onChange={() => toggleColumn(column.id)}
-                              className="size-3.5 rounded border-slate-300 text-[#217346] focus:ring-[#217346]"
+                              className="size-3.5 rounded border-slate-300 text-sky-600 focus:ring-sky-600"
                             />
                             <span className="text-slate-800 dark:text-slate-100">
                               {column.label}
@@ -455,29 +463,34 @@ export function BulkExcelExportPanel({
               </div>
             </section>
 
-            <section className="rounded-md border border-slate-200 px-3 py-3 dark:border-slate-700">
-              <h4 className="mb-2 text-sm font-semibold text-slate-900 dark:text-white">
-                Map to sheet columns
-              </h4>
-              <p className="mb-3 text-[11px] text-slate-500 dark:text-slate-400">
-                Map to an existing sheet column, or choose{" "}
-                <span className="font-medium text-[#185C37] dark:text-[#8fd4ad]">
-                  Insert as New
-                </span>{" "}
-                to create and fill a new column. Matching is by SAP ID.
-              </p>
-              <div className="max-h-72 space-y-2 overflow-auto pr-1">
+            <section className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
+              <ExcelOpsStepHeader
+                step={3}
+                tone="mixed"
+                icon={<ArrowRightLeft className="size-3.5" />}
+                title="Match each PMS column to a sheet column"
+                hint="Pick a sheet column to fill, or Insert as New to add one. Matching is by SAP ID."
+              />
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-2 px-3 pt-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                  PMS column
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                  Sheet column
+                </span>
+              </div>
+              <div className="max-h-72 space-y-2 overflow-auto p-3 pr-2">
                 {selectedColumns.length === 0 ? (
                   <p className="text-xs text-slate-500">
-                    Select at least one Staff Listing column.
+                    Select at least one PMS column in the previous step.
                   </p>
                 ) : (
                   selectedColumns.map((column) => (
                     <div
                       key={column.id}
-                      className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-center gap-2 rounded-md border border-slate-100 px-2 py-1.5 dark:border-white/10"
+                      className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-center gap-2 rounded-md border border-slate-100 border-l-2 border-l-sky-400 px-2 py-1.5 dark:border-white/10 dark:border-l-sky-600"
                     >
-                      <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+                      <span className="truncate text-xs font-medium text-sky-900 dark:text-sky-200">
                         {column.label}
                       </span>
                       <select
@@ -536,17 +549,20 @@ export function BulkExcelExportPanel({
             </section>
           ) : null}
 
-          <section className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                Preview
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {previewRows.length} sheet rows · {matchStats.matched} matched ·{" "}
+          <section className="overflow-hidden rounded-md border border-[#217346]/30 dark:border-[#3f9c6b]/40">
+            <ExcelOpsStepHeader
+              step={4}
+              tone="sheet"
+              icon={<Eye className="size-3.5" />}
+              title="Preview — what will be written to your sheet"
+              hint="Check the values below, then download the filled file"
+            >
+              <span>
+                {previewRows.length} rows · {matchStats.matched} matched ·{" "}
                 {previewColumns.length} column
                 {previewColumns.length === 1 ? "" : "s"}
-              </p>
-            </div>
+              </span>
+            </ExcelOpsStepHeader>
             <div className="overflow-auto">
               <table className="min-w-full border-collapse text-left text-sm">
                 <thead>
